@@ -16,6 +16,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
+  int _calendarKey = 0; // Add a key to force rebuild
 
   @override
   void initState() {
@@ -47,10 +48,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
           return Column(
             children: [
               TableCalendar<Note>(
+                key: ValueKey(_calendarKey),
                 firstDay: DateTime.utc(2020, 1, 1),
                 lastDay: DateTime.utc(2030, 12, 31),
                 focusedDay: _focusedDay,
                 calendarFormat: _calendarFormat,
+                availableCalendarFormats: const {
+                  CalendarFormat.month: 'Month',
+                  CalendarFormat.twoWeeks: '2 Weeks',
+                  CalendarFormat.week: 'Week',
+                },
                 selectedDayPredicate: (day) {
                   return isSameDay(_selectedDay, day);
                 },
@@ -63,9 +70,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 onFormatChanged: (format) {
                   setState(() {
                     _calendarFormat = format;
+                    // Force a complete rebuild by updating the key
+                    _calendarKey++;
                     // Ensure focused day is properly set when format changes
                     if (_selectedDay != null) {
                       _focusedDay = _selectedDay!;
+                    } else {
+                      _focusedDay = DateTime.now();
                     }
                   });
                 },
@@ -88,6 +99,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 headerStyle: HeaderStyle(
                   formatButtonVisible: true,
                   titleCentered: true,
+                  formatButtonShowsNext: false,
                 ),
               ),
               const Divider(),
