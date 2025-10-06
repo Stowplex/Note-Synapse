@@ -18,12 +18,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
   int _calendarKey = 0; // Add a key to force rebuild
+  String _selectedTag = 'all';
+  List<String> _availableTags = [];
 
   @override
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
     _focusedDay = DateTime.now();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTags();
+    });
+  }
+
+  void _loadTags() {
+    final appProvider = context.read<AppProvider>();
+    final allTags = appProvider.getAllAvailableTags();
+    setState(() {
+      _availableTags = ['all', ...allTags];
+    });
   }
 
   @override
@@ -32,6 +45,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
       appBar: AppBar(
         title: const Text('Calendar'),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              setState(() {
+                _selectedTag = value;
+                _calendarKey++; // Force calendar rebuild
+              });
+            },
+            itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
+              value: tag,
+              child: Text(tag == 'all' ? 'All Notes' : tag),
+            )).toList(),
+            icon: const Icon(Icons.filter_list),
+          ),
           IconButton(
             icon: const Icon(Icons.today),
             onPressed: () {
@@ -87,7 +113,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   });
                 },
                 eventLoader: (day) {
-                  return appProvider.getTasksForDate(day);
+                  final tasks = appProvider.getTasksForDate(day);
+                  if (_selectedTag == 'all') {
+                    return tasks;
+                  }
+                  return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
                 },
                 calendarStyle: CalendarStyle(
                   outsideDaysVisible: true,
@@ -120,8 +150,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildTabbedDayContent(AppProvider appProvider) {
     final selectedDate = _selectedDay!;
-    final tasks = appProvider.getTasksForDate(selectedDate);
-    final notes = appProvider.getNotesForDate(selectedDate);
+    final allTasks = appProvider.getTasksForDate(selectedDate);
+    final allNotes = appProvider.getNotesForDate(selectedDate);
+    
+    // Filter by selected tag
+    final tasks = _selectedTag == 'all' 
+        ? allTasks 
+        : allTasks.where((task) => task.tags.contains(_selectedTag)).toList();
+    final notes = _selectedTag == 'all' 
+        ? allNotes 
+        : allNotes.where((note) => note.tags.contains(_selectedTag)).toList();
 
     return DefaultTabController(
       length: 2,
@@ -191,14 +229,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'No tasks for this day',
+              _selectedTag == 'all' ? 'No tasks for this day' : 'No tasks with this tag for this day',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Create a task to get started',
+              _selectedTag == 'all' ? 'Create a task to get started' : 'Try selecting a different tag',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -244,14 +282,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.note, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'No notes for this day',
+              _selectedTag == 'all' ? 'No notes for this day' : 'No notes with this tag for this day',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Create a note to get started',
+              _selectedTag == 'all' ? 'Create a note to get started' : 'Try selecting a different tag',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),

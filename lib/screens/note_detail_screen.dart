@@ -248,15 +248,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             )),
           ],
-          if (currentNote.tags.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(
-              'Tags',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Text(
+                'Tags',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _showAddTagDialog(currentNote),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Tag'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (currentNote.tags.isNotEmpty)
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -264,9 +274,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 label: Text(tag),
                 backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
                 labelStyle: TextStyle(color: Theme.of(context).primaryColor),
+                deleteIcon: const Icon(Icons.close, size: 16),
+                onDeleted: () => _removeTag(currentNote, tag),
               )).toList(),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.label_outline, color: Colors.grey[400]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'No tags yet. Tap "Add Tag" to add some.',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
             ),
-          ],
           if (currentNote.attachmentPaths.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
@@ -1153,6 +1182,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
   }
+
+  void _removeTag(Note currentNote, String tagName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Tag'),
+        content: Text('Are you sure you want to remove the tag "$tagName" from this note?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await context.read<AppProvider>().removeTagFromNote(currentNote.id, tagName);
+            },
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddTagDialog(Note currentNote) {
+    showDialog(
+      context: context,
+      builder: (context) => _AddTagDialog(
+        currentNote: currentNote,
+        onAddTag: (tagName) async {
+          Navigator.pop(context);
+          await context.read<AppProvider>().addTagToNote(currentNote.id, tagName);
+        },
+      ),
+    );
+  }
 }
 
 class _AddLinkedNoteDialog extends StatefulWidget {
@@ -1303,5 +1368,125 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
         ),
       ],
     );
+  }
+}
+
+class _AddTagDialog extends StatefulWidget {
+  final Note currentNote;
+  final Function(String tagName) onAddTag;
+
+  const _AddTagDialog({
+    required this.currentNote,
+    required this.onAddTag,
+  });
+
+  @override
+  State<_AddTagDialog> createState() => _AddTagDialogState();
+}
+
+class _AddTagDialogState extends State<_AddTagDialog> {
+  final TextEditingController _tagController = TextEditingController();
+  String? _selectedExistingTag;
+  List<String> _availableTags = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableTags();
+  }
+
+  @override
+  void dispose() {
+    _tagController.dispose();
+    super.dispose();
+  }
+
+  void _loadAvailableTags() {
+    final appProvider = context.read<AppProvider>();
+    final allTags = appProvider.getAllAvailableTags();
+    // Filter out tags that are already on this note
+    final availableTags = allTags.where((tag) => !widget.currentNote.tags.contains(tag)).toList();
+    setState(() {
+      _availableTags = availableTags;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Tag'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add a tag to "${widget.currentNote.title}":',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _tagController,
+              decoration: const InputDecoration(
+                labelText: 'New Tag',
+                border: OutlineInputBorder(),
+                hintText: 'Enter tag name',
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _selectedExistingTag = null;
+                });
+              },
+            ),
+            if (_availableTags.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Or select from existing tags:',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _availableTags.map((tag) => FilterChip(
+                  label: Text(tag),
+                  selected: _selectedExistingTag == tag,
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedExistingTag = tag;
+                        _tagController.clear();
+                      } else {
+                        _selectedExistingTag = null;
+                      }
+                    });
+                  },
+                )).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _canAddTag() ? () {
+            final tagName = _selectedExistingTag ?? _tagController.text.trim();
+            if (tagName.isNotEmpty) {
+              widget.onAddTag(tagName);
+            }
+          } : null,
+          child: const Text('Add Tag'),
+        ),
+      ],
+    );
+  }
+
+  bool _canAddTag() {
+    final tagName = _selectedExistingTag ?? _tagController.text.trim();
+    return tagName.isNotEmpty && !widget.currentNote.tags.contains(tagName);
   }
 }

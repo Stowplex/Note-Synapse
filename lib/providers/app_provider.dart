@@ -270,6 +270,60 @@ class AppProvider extends ChangeNotifier {
     return _notes.where((note) => note.tags.contains(tagName)).toList();
   }
 
+  Future<void> addTagToNote(String noteId, String tagName) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      if (note.tags.contains(tagName)) return; // Tag already exists
+      
+      final updatedTags = List<String>.from(note.tags)..add(tagName);
+      final updatedNote = note.copyWith(
+        tags: updatedTags,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeTagFromNote(String noteId, String tagName) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
+      
+      final updatedTags = List<String>.from(note.tags)..remove(tagName);
+      final updatedNote = note.copyWith(
+        tags: updatedTags,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  List<String> getAllAvailableTags() {
+    final allTags = <String>{};
+    for (final note in _notes) {
+      allTags.addAll(note.tags);
+    }
+    return allTags.toList()..sort();
+  }
+
   List<Note> getTasksForDate(DateTime date) {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return _notes.where((note) => 

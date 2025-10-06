@@ -18,11 +18,29 @@ class _NotesScreenState extends State<NotesScreen> {
   final _searchController = TextEditingController();
   List<Note> _selectedNotes = [];
   bool _isMultiSelectMode = false;
+  String _selectedTag = 'all';
+  List<String> _availableTags = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTags();
+    });
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _loadTags() {
+    final appProvider = context.read<AppProvider>();
+    final allTags = appProvider.getAllAvailableTags();
+    setState(() {
+      _availableTags = ['all', ...allTags];
+    });
   }
 
   @override
@@ -51,6 +69,18 @@ class _NotesScreenState extends State<NotesScreen> {
               onPressed: _exitMultiSelectMode,
             ),
           ] else ...[
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                setState(() {
+                  _selectedTag = value;
+                });
+              },
+              itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
+                value: tag,
+                child: Text(tag == 'all' ? 'All Notes' : tag),
+              )).toList(),
+              icon: const Icon(Icons.filter_list),
+            ),
             IconButton(
               icon: const Icon(Icons.search),
               onPressed: _toggleSearch,
@@ -59,6 +89,7 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 context.read<AppProvider>().loadData();
+                _loadTags();
               },
             ),
           ],
@@ -127,15 +158,17 @@ class _NotesScreenState extends State<NotesScreen> {
                   Icon(Icons.note_add, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
-                    _searchController.text.isNotEmpty
+                    _searchController.text.isNotEmpty || _selectedTag != 'all'
                         ? 'No notes found'
                         : 'No notes yet',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _searchController.text.isNotEmpty
-                        ? 'Try adjusting your search terms'
+                    _searchController.text.isNotEmpty || _selectedTag != 'all'
+                        ? _searchController.text.isNotEmpty
+                            ? 'Try adjusting your search terms'
+                            : 'Try selecting a different tag'
                         : 'Tap the + button to create your first note',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[600],
@@ -176,16 +209,24 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   List<Note> _filterNotes(List<Note> notes) {
-    if (_searchController.text.isEmpty) {
-      return notes;
+    List<Note> filteredNotes = notes;
+    
+    // Filter by tag
+    if (_selectedTag != 'all') {
+      filteredNotes = filteredNotes.where((note) => note.tags.contains(_selectedTag)).toList();
     }
     
-    final query = _searchController.text.toLowerCase();
-    return notes.where((note) {
-      return note.title.toLowerCase().contains(query) ||
-             note.content.toLowerCase().contains(query) ||
-             note.tags.any((tag) => tag.toLowerCase().contains(query));
-    }).toList();
+    // Filter by search query
+    if (_searchController.text.isNotEmpty) {
+      final query = _searchController.text.toLowerCase();
+      filteredNotes = filteredNotes.where((note) {
+        return note.title.toLowerCase().contains(query) ||
+               note.content.toLowerCase().contains(query) ||
+               note.tags.any((tag) => tag.toLowerCase().contains(query));
+      }).toList();
+    }
+    
+    return filteredNotes;
   }
 
   void _handleNoteTap(Note note) {
