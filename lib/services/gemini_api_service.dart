@@ -8,8 +8,8 @@ import 'secure_storage_service.dart';
 class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
-  // Multi-note Q&A
-  static Future<String> answerMultiNoteQuestion(
+  // Note Q&A
+  static Future<String> answerNoteQuestion(
     String question,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,

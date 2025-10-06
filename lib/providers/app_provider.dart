@@ -106,13 +106,13 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> answerMultiNoteQuestion(
+  Future<String> answerNoteQuestion(
     String question, 
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
-      final response = await GeminiApiService.answerMultiNoteQuestion(
+      final response = await GeminiApiService.answerNoteQuestion(
         question, 
         contextNotes,
         attachedFiles: attachedFiles,
@@ -121,7 +121,7 @@ class AppProvider extends ChangeNotifier {
       // Save AI interaction
       final interaction = AIInteraction(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: AIInteractionType.multiNoteQa,
+        type: AIInteractionType.noteQa,
         prompt: question,
         response: response,
         contextNoteIds: contextNotes.map((n) => n.id).toList(),

@@ -13,7 +13,7 @@ A local note-taking application with integrated AI features, built with Flutter 
 - **Tag System**: Organize notes with custom tags and filtering
 
 ### AI Features
-- **Multi-Note Q&A**: Ask questions across multiple notes for comprehensive answers
+- **Note Q&A**: Ask questions about your notes for comprehensive answers
 - **Note Transformation**: Rewrite, reorganize, or modify notes using AI
 - **New Note Creation**: Generate new notes based on prompts and context
 - **Configurable Prompts**: Customize AI behavior for different use cases
@@ -76,7 +76,7 @@ A local note-taking application with integrated AI features, built with Flutter 
 4. **File Attachments**: Use "Attachment" to add documents
 
 ### AI Features
-1. **Multi-Note Q&A**: Select multiple notes and use AI to answer questions
+1. **Note Q&A**: Select one or more notes and use AI to answer questions
 2. **Note Transformation**: Select a single note and ask AI to rewrite or reorganize it
 3. **New Note Creation**: Use AI to generate new notes based on prompts and context
 

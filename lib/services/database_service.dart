@@ -425,7 +425,7 @@ class DatabaseService {
         id: maps[i]['id'],
         type: AIInteractionType.values.firstWhere(
           (e) => e.toString().split('.').last == maps[i]['type'],
-          orElse: () => AIInteractionType.multiNoteQa,
+          orElse: () => AIInteractionType.noteQa,
         ),
         prompt: maps[i]['prompt'],
         response: maps[i]['response'],

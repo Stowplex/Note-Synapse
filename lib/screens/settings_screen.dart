@@ -278,7 +278,7 @@ class AIHistoryScreen extends StatelessWidget {
 
   IconData _getInteractionIcon(AIInteractionType type) {
     switch (type) {
-      case AIInteractionType.multiNoteQa:
+      case AIInteractionType.noteQa:
         return Icons.quiz;
       case AIInteractionType.noteTransformation:
         return Icons.transform;
@@ -289,8 +289,8 @@ class AIHistoryScreen extends StatelessWidget {
 
   String _getInteractionTitle(AIInteractionType type) {
     switch (type) {
-      case AIInteractionType.multiNoteQa:
-        return 'Multi-Note Q&A';
+      case AIInteractionType.noteQa:
+        return 'Note Q&A';
       case AIInteractionType.noteTransformation:
         return 'Note Transformation';
       case AIInteractionType.newNoteCreation:

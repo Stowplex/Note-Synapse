@@ -61,15 +61,13 @@ class _AIActionScreenState extends State<AIActionScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (widget.selectedNotes.length > 1) ...[
-            _buildActionCard(
-              icon: Icons.quiz,
-              title: 'Multi-Note Q&A',
-              description: 'Ask questions about your selected notes',
-              action: AIInteractionType.multiNoteQa,
-            ),
-            const SizedBox(height: 12),
-          ],
+          _buildActionCard(
+            icon: Icons.quiz,
+            title: 'Note Q&A',
+            description: 'Ask questions about your selected notes',
+            action: AIInteractionType.noteQa,
+          ),
+          const SizedBox(height: 12),
           if (widget.selectedNotes.length == 1) ...[
             _buildActionCard(
               icon: Icons.transform,
@@ -287,8 +285,10 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
   String _getPromptHint() {
     switch (_selectedAction) {
-      case AIInteractionType.multiNoteQa:
-        return 'Ask a question about your selected notes...';
+      case AIInteractionType.noteQa:
+        return widget.selectedNotes.length == 1 
+            ? 'Ask a question about this note...'
+            : 'Ask a question about your selected notes...';
       case AIInteractionType.noteTransformation:
         return 'Describe how you want to transform this note...';
       case AIInteractionType.newNoteCreation:
@@ -315,8 +315,8 @@ class _AIActionScreenState extends State<AIActionScreen> {
       String response;
 
       switch (_selectedAction) {
-        case AIInteractionType.multiNoteQa:
-          response = await appProvider.answerMultiNoteQuestion(
+        case AIInteractionType.noteQa:
+          response = await appProvider.answerNoteQuestion(
             _promptController.text.trim(),
             widget.selectedNotes,
             attachedFiles: _attachedFiles,

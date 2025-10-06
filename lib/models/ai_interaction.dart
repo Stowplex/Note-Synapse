@@ -3,8 +3,8 @@ import 'package:json_annotation/json_annotation.dart';
 part 'ai_interaction.g.dart';
 
 enum AIInteractionType {
-  @JsonValue('multi_note_qa')
-  multiNoteQa,
+  @JsonValue('note_qa')
+  noteQa,
   @JsonValue('note_transformation')
   noteTransformation,
   @JsonValue('new_note_creation')

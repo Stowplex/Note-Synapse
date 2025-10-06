@@ -73,7 +73,7 @@ void main() {
     test('should create AI interaction', () {
       final interaction = AIInteraction(
         id: 'ai-1',
-        type: AIInteractionType.multiNoteQa,
+        type: AIInteractionType.noteQa,
         prompt: 'Test prompt',
         response: 'Test response',
         contextNoteIds: ['note-1', 'note-2'],
@@ -82,7 +82,7 @@ void main() {
       );
 
       expect(interaction.id, 'ai-1');
-      expect(interaction.type, AIInteractionType.multiNoteQa);
+      expect(interaction.type, AIInteractionType.noteQa);
       expect(interaction.prompt, 'Test prompt');
       expect(interaction.response, 'Test response');
       expect(interaction.contextNoteIds, contains('note-1'));
@@ -114,7 +114,7 @@ void main() {
     test('should check if AI interaction is expired', () {
       final expiredInteraction = AIInteraction(
         id: 'ai-1',
-        type: AIInteractionType.multiNoteQa,
+        type: AIInteractionType.noteQa,
         prompt: 'Test',
         response: 'Test',
         contextNoteIds: [],
@@ -124,7 +124,7 @@ void main() {
 
       final validInteraction = AIInteraction(
         id: 'ai-2',
-        type: AIInteractionType.multiNoteQa,
+        type: AIInteractionType.noteQa,
         prompt: 'Test',
         response: 'Test',
         contextNoteIds: [],

@@ -37,7 +37,7 @@ Map<String, dynamic> _$AIInteractionToJson(AIInteraction instance) =>
     };
 
 const _$AIInteractionTypeEnumMap = {
-  AIInteractionType.multiNoteQa: 'multi_note_qa',
+  AIInteractionType.noteQa: 'note_qa',
   AIInteractionType.noteTransformation: 'note_transformation',
   AIInteractionType.newNoteCreation: 'new_note_creation',
 };

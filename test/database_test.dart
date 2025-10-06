@@ -160,7 +160,7 @@ void main() {
     test('should insert and retrieve AI interaction', () async {
       final interaction = AIInteraction(
         id: 'ai-1',
-        type: AIInteractionType.multiNoteQa,
+        type: AIInteractionType.noteQa,
         prompt: 'Test prompt',
         response: 'Test response',
         contextNoteIds: ['note-1', 'note-2'],
@@ -175,7 +175,7 @@ void main() {
       // Retrieve AI interactions
       final interactions = await databaseService.getAllAIInteractions();
       expect(interactions.length, 1);
-      expect(interactions.first.type, AIInteractionType.multiNoteQa);
+      expect(interactions.first.type, AIInteractionType.noteQa);
       expect(interactions.first.prompt, 'Test prompt');
       expect(interactions.first.contextNoteIds, contains('note-1'));
     });
