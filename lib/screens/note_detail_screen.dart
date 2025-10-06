@@ -399,12 +399,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Status: ${_getStatusText()}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: _getStatusColor(),
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Status: ',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: _getStatusColor(),
+                        ),
+                      ),
+                      _buildStatusDropdown(currentNote),
+                    ],
                   ),
                   if (currentNote.scheduledAt != null)
                     Text(
@@ -515,11 +520,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     switch (currentNote.status) {
       case TaskStatus.complete:
         return Colors.green;
+      case TaskStatus.inProgress:
+        return Colors.orange;
       case TaskStatus.abandoned:
         return Colors.red;
       case TaskStatus.todo:
       default:
-        return Colors.orange;
+        return Colors.grey;
     }
   }
 
@@ -532,6 +539,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     switch (currentNote.status) {
       case TaskStatus.complete:
         return Icons.check_circle;
+      case TaskStatus.inProgress:
+        return Icons.play_circle;
       case TaskStatus.abandoned:
         return Icons.cancel;
       case TaskStatus.todo:
@@ -549,8 +558,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     switch (currentNote.status) {
       case TaskStatus.complete:
         return 'Complete';
+      case TaskStatus.inProgress:
+        return 'In Progress';
       case TaskStatus.abandoned:
-        return 'Abandoned';
+        return 'Cancelled';
       case TaskStatus.todo:
       default:
         return 'To Do';
@@ -688,5 +699,76 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _addAttachment() {
     // TODO: Implement attachment functionality
+  }
+
+  Widget _buildStatusDropdown(Note currentNote) {
+    return PopupMenuButton<TaskStatus>(
+      onSelected: (TaskStatus status) {
+        context.read<AppProvider>().updateTaskStatus(currentNote.id, status);
+      },
+      itemBuilder: (BuildContext context) => [
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.todo,
+          child: Row(
+            children: [
+              Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 20),
+              const SizedBox(width: 8),
+              const Text('To Do'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.inProgress,
+          child: Row(
+            children: [
+              Icon(Icons.play_circle, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              const Text('In Progress'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.complete,
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const SizedBox(width: 8),
+              const Text('Complete'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.abandoned,
+          child: Row(
+            children: [
+              Icon(Icons.cancel, color: Colors.red, size: 20),
+              const SizedBox(width: 8),
+              const Text('Cancelled'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _getStatusText(),
+              style: TextStyle(
+                color: _getStatusColor(),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 16),
+          ],
+        ),
+      ),
+    );
   }
 }

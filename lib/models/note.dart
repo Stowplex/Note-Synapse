@@ -14,6 +14,8 @@ enum TaskStatus {
   abandoned,
   @JsonValue('complete')
   complete,
+  @JsonValue('in_progress')
+  inProgress,
   @JsonValue('todo')
   todo,
 }
@@ -88,6 +90,8 @@ class Note {
   bool get isTask => type == NoteType.task;
   bool get isCompleted => status == TaskStatus.complete;
   bool get isAbandoned => status == TaskStatus.abandoned;
+  bool get isInProgress => status == TaskStatus.inProgress;
+  bool get isTodo => status == TaskStatus.todo;
 }
 
 @JsonSerializable()

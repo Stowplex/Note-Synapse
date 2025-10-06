@@ -53,6 +53,7 @@ const _$NoteTypeEnumMap = {NoteType.note: 'note', NoteType.task: 'task'};
 const _$TaskStatusEnumMap = {
   TaskStatus.abandoned: 'abandoned',
   TaskStatus.complete: 'complete',
+  TaskStatus.inProgress: 'in_progress',
   TaskStatus.todo: 'todo',
 };
 

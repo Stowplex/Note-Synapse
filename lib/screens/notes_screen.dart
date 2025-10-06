@@ -159,6 +159,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     isSelected: isSelected,
                     onTap: () => _handleNoteTap(note),
                     onLongPress: () => _handleNoteLongPress(note),
+                    onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
                   ),
                 ),
               );
@@ -252,5 +253,9 @@ class _NotesScreenState extends State<NotesScreen> {
 
   void _toggleSearch() {
     // Search is always visible in the app bar
+  }
+
+  void _updateTaskStatus(String noteId, TaskStatus status) {
+    context.read<AppProvider>().updateTaskStatus(noteId, status);
   }
 }

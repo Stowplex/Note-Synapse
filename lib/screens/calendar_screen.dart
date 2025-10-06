@@ -136,10 +136,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: Icon(
-                      task.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                      color: task.isCompleted ? Colors.green : Colors.grey,
-                    ),
+                    leading: _buildStatusIcon(task),
                     title: Text(
                       task.title,
                       style: TextStyle(
@@ -147,6 +144,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       ),
                     ),
                     subtitle: Text(task.content),
+                    trailing: _buildStatusDropdown(task, appProvider),
                     onTap: () => _openNoteDetail(task),
                   ),
                 );
@@ -200,5 +198,118 @@ class _CalendarScreenState extends State<CalendarScreen> {
         builder: (context) => NoteDetailScreen(note: note),
       ),
     );
+  }
+
+  Widget _buildStatusIcon(Note task) {
+    IconData iconData;
+    Color iconColor;
+    
+    switch (task.status) {
+      case TaskStatus.complete:
+        iconData = Icons.check_circle;
+        iconColor = Colors.green;
+        break;
+      case TaskStatus.inProgress:
+        iconData = Icons.play_circle;
+        iconColor = Colors.orange;
+        break;
+      case TaskStatus.abandoned:
+        iconData = Icons.cancel;
+        iconColor = Colors.red;
+        break;
+      case TaskStatus.todo:
+      default:
+        iconData = Icons.radio_button_unchecked;
+        iconColor = Colors.grey;
+        break;
+    }
+    
+    return Icon(
+      iconData,
+      color: iconColor,
+      size: 24,
+    );
+  }
+
+  Widget _buildStatusDropdown(Note task, AppProvider appProvider) {
+    return PopupMenuButton<TaskStatus>(
+      onSelected: (TaskStatus status) {
+        appProvider.updateTaskStatus(task.id, status);
+      },
+      itemBuilder: (BuildContext context) => [
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.todo,
+          child: Row(
+            children: [
+              Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 20),
+              const SizedBox(width: 8),
+              const Text('To Do'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.inProgress,
+          child: Row(
+            children: [
+              Icon(Icons.play_circle, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              const Text('In Progress'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.complete,
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const SizedBox(width: 8),
+              const Text('Complete'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.abandoned,
+          child: Row(
+            children: [
+              Icon(Icons.cancel, color: Colors.red, size: 20),
+              const SizedBox(width: 8),
+              const Text('Cancelled'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _getStatusText(task.status),
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getStatusText(TaskStatus? status) {
+    switch (status) {
+      case TaskStatus.complete:
+        return 'Complete';
+      case TaskStatus.inProgress:
+        return 'In Progress';
+      case TaskStatus.abandoned:
+        return 'Cancelled';
+      case TaskStatus.todo:
+      default:
+        return 'To Do';
+    }
   }
 }

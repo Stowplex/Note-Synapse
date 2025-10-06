@@ -6,6 +6,7 @@ class NoteCard extends StatelessWidget {
   final bool isSelected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Function(TaskStatus)? onStatusChanged;
 
   const NoteCard({
     super.key,
@@ -13,6 +14,7 @@ class NoteCard extends StatelessWidget {
     this.isSelected = false,
     this.onTap,
     this.onLongPress,
+    this.onStatusChanged,
   });
 
   @override
@@ -32,11 +34,7 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   if (note.isTask) ...[
-                    Icon(
-                      note.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                      color: note.isCompleted ? Colors.green : Colors.grey,
-                      size: 20,
-                    ),
+                    _buildStatusIcon(note),
                     const SizedBox(width: 8),
                   ],
                   Expanded(
@@ -50,6 +48,8 @@ class NoteCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (note.isTask && onStatusChanged != null)
+                    _buildStatusDropdown(note),
                   if (isSelected)
                     Icon(
                       Icons.check_circle,
@@ -170,6 +170,123 @@ class NoteCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildStatusIcon(Note note) {
+    if (!note.isTask) return const SizedBox.shrink();
+    
+    IconData iconData;
+    Color iconColor;
+    
+    switch (note.status) {
+      case TaskStatus.complete:
+        iconData = Icons.check_circle;
+        iconColor = Colors.green;
+        break;
+      case TaskStatus.inProgress:
+        iconData = Icons.play_circle;
+        iconColor = Colors.orange;
+        break;
+      case TaskStatus.abandoned:
+        iconData = Icons.cancel;
+        iconColor = Colors.red;
+        break;
+      case TaskStatus.todo:
+      default:
+        iconData = Icons.radio_button_unchecked;
+        iconColor = Colors.grey;
+        break;
+    }
+    
+    return Icon(
+      iconData,
+      color: iconColor,
+      size: 20,
+    );
+  }
+
+  Widget _buildStatusDropdown(Note note) {
+    if (!note.isTask || onStatusChanged == null) return const SizedBox.shrink();
+    
+    return PopupMenuButton<TaskStatus>(
+      onSelected: (TaskStatus status) {
+        onStatusChanged!(status);
+      },
+      itemBuilder: (BuildContext context) => [
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.todo,
+          child: Row(
+            children: [
+              Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 16),
+              const SizedBox(width: 8),
+              const Text('To Do'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.inProgress,
+          child: Row(
+            children: [
+              Icon(Icons.play_circle, color: Colors.orange, size: 16),
+              const SizedBox(width: 8),
+              const Text('In Progress'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.complete,
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 16),
+              const SizedBox(width: 8),
+              const Text('Complete'),
+            ],
+          ),
+        ),
+        PopupMenuItem<TaskStatus>(
+          value: TaskStatus.abandoned,
+          child: Row(
+            children: [
+              Icon(Icons.cancel, color: Colors.red, size: 16),
+              const SizedBox(width: 8),
+              const Text('Cancelled'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _getStatusText(note.status),
+              style: const TextStyle(fontSize: 10),
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down, size: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getStatusText(TaskStatus? status) {
+    switch (status) {
+      case TaskStatus.complete:
+        return 'Complete';
+      case TaskStatus.inProgress:
+        return 'In Progress';
+      case TaskStatus.abandoned:
+        return 'Cancelled';
+      case TaskStatus.todo:
+      default:
+        return 'To Do';
+    }
   }
 
   String _formatDate(DateTime date) {

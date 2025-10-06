@@ -246,8 +246,14 @@ class DatabaseService {
 
     final List<Note> notes = [];
     for (final map in maps) {
-      final note = await _mapToNote(map);
-      notes.add(note);
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        print('Error mapping note with id ${map['id']}: $e');
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
     }
     return notes;
   }
@@ -444,6 +450,7 @@ class DatabaseService {
       content: map['content'],
       type: NoteType.values.firstWhere(
         (e) => e.toString().split('.').last == map['type'],
+        orElse: () => NoteType.note,
       ),
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
@@ -455,6 +462,7 @@ class DatabaseService {
       status: map['status'] != null
           ? TaskStatus.values.firstWhere(
               (e) => e.toString().split('.').last == map['status'],
+              orElse: () => TaskStatus.todo,
             )
           : null,
       completionPercentage: map['completionPercentage'],

@@ -293,6 +293,7 @@ If creating multiple notes, ensure they are related and useful based on the cont
           status: noteJson['status'] != null 
               ? TaskStatus.values.firstWhere(
                   (e) => e.toString().split('.').last == noteJson['status'],
+                  orElse: () => TaskStatus.todo,
                 )
               : null,
         );

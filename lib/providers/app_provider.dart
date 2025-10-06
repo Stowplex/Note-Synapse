@@ -34,7 +34,8 @@ class AppProvider extends ChangeNotifier {
       
       _error = null;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Error loading data: ${e.toString()}';
+      print('Error in loadData: $e'); // Debug logging
     } finally {
       _setLoading(false);
     }
@@ -54,6 +55,31 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.updateNote(note);
       await loadData();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateTaskStatus(String noteId, TaskStatus status) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      if (!note.isTask) return;
+      
+      final updatedNote = note.copyWith(
+        status: status,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Update the note in the database
+      await _databaseService.updateNote(updatedNote);
+      
+      // Update the local state immediately
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
     } catch (e) {
       _error = e.toString();
       notifyListeners();
