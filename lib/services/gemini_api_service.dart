@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
+import '../models/relationship.dart';
 import 'secure_storage_service.dart';
+import 'database_service.dart';
 
 class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
@@ -210,79 +212,160 @@ class GeminiApiService {
 
   static Future<List<PlatformFile>> _convertNoteAttachmentsToPlatformFiles(List<Note> notes) async {
     final platformFiles = <PlatformFile>[];
+    final processedFiles = <String>{}; // To avoid duplicate files
     
     for (final note in notes) {
-      for (final attachmentPath in note.attachmentPaths) {
-        try {
-          final file = File(attachmentPath);
-          if (file.existsSync()) {
-            final bytes = await file.readAsBytes();
-            final fileName = attachmentPath.split('/').last;
-            
-            final platformFile = PlatformFile(
-              name: fileName,
-              path: attachmentPath,
-              size: bytes.length,
-              bytes: bytes,
-            );
-            
-            platformFiles.add(platformFile);
+      // Add attachments from the main note
+      await _addNoteAttachments(platformFiles, note, processedFiles);
+      
+      // Add attachments from linked notes
+      try {
+        final databaseService = DatabaseService();
+        final relationships = await databaseService.getRelationships(note.id);
+        
+        for (final relationship in relationships) {
+          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
+          final linkedNote = await databaseService.getNote(linkedNoteId);
+          
+          if (linkedNote != null) {
+            await _addNoteAttachments(platformFiles, linkedNote, processedFiles);
           }
-        } catch (e) {
-          print('Error reading attachment file $attachmentPath: $e');
-          // Continue with other files even if one fails
         }
+      } catch (e) {
+        print('Error loading linked note attachments for ${note.title}: $e');
+        // Continue with other files even if one fails
       }
     }
     
     return platformFiles;
   }
 
+  static Future<void> _addNoteAttachments(List<PlatformFile> platformFiles, Note note, Set<String> processedFiles) async {
+    for (final attachmentPath in note.attachmentPaths) {
+      // Skip if we've already processed this file
+      if (processedFiles.contains(attachmentPath)) continue;
+      processedFiles.add(attachmentPath);
+      
+      try {
+        final file = File(attachmentPath);
+        if (file.existsSync()) {
+          final bytes = await file.readAsBytes();
+          final fileName = attachmentPath.split('/').last;
+          
+          final platformFile = PlatformFile(
+            name: fileName,
+            path: attachmentPath,
+            size: bytes.length,
+            bytes: bytes,
+          );
+          
+          platformFiles.add(platformFile);
+        }
+      } catch (e) {
+        print('Error reading attachment file $attachmentPath: $e');
+        // Continue with other files even if one fails
+      }
+    }
+  }
+
   static Future<String> _buildContextFromNotes(List<Note> notes) async {
     if (notes.isEmpty) return '';
 
     final buffer = StringBuffer();
+    final processedNoteIds = <String>{};
+    
     for (final note in notes) {
-      buffer.writeln('--- Note: ${note.title} ---');
-      buffer.writeln(note.content);
+      await _addNoteToContext(buffer, note, processedNoteIds, 0);
+    }
+    
+    return buffer.toString();
+  }
+
+  static Future<void> _addNoteToContext(StringBuffer buffer, Note note, Set<String> processedNoteIds, int depth) async {
+    // Avoid infinite loops and duplicate processing
+    if (processedNoteIds.contains(note.id) || depth > 3) return;
+    processedNoteIds.add(note.id);
+    
+    // Add indentation based on depth
+    final indent = '  ' * depth;
+    
+    buffer.writeln('${indent}--- Note: ${note.title} ---');
+    buffer.writeln('${indent}${note.content}');
+    
+    // Add file attachment info if any (files will be sent as binary data separately)
+    if (note.attachmentPaths.isNotEmpty) {
+      buffer.writeln('${indent}File Attachments:');
+      for (final attachmentPath in note.attachmentPaths) {
+        final fileName = attachmentPath.split('/').last;
+        final file = File(attachmentPath);
+        if (file.existsSync()) {
+          final fileSize = file.lengthSync();
+          buffer.writeln('${indent}- $fileName (${_formatFileSize(fileSize)})');
+        } else {
+          buffer.writeln('${indent}- $fileName (file not found)');
+        }
+      }
+    }
+    
+    if (note.subNotes.isNotEmpty) {
+      buffer.writeln('${indent}Sub-notes:');
+      for (final subNote in note.subNotes) {
+        buffer.writeln('${indent}- ${subNote.name}: ${subNote.content}');
+      }
+    }
+    
+    if (note.tags.isNotEmpty) {
+      buffer.writeln('${indent}Tags: ${note.tags.join(', ')}');
+    }
+    
+    // Add linked notes with relationships
+    try {
+      final databaseService = DatabaseService();
+      final relationships = await databaseService.getRelationships(note.id);
       
-      // Add file attachment info if any (files will be sent as binary data separately)
-      if (note.attachmentPaths.isNotEmpty) {
-        buffer.writeln('File Attachments:');
-        for (final attachmentPath in note.attachmentPaths) {
-          final fileName = attachmentPath.split('/').last;
-          final file = File(attachmentPath);
-          if (file.existsSync()) {
-            final fileSize = file.lengthSync();
-            buffer.writeln('- $fileName (${_formatFileSize(fileSize)})');
-          } else {
-            buffer.writeln('- $fileName (file not found)');
+      if (relationships.isNotEmpty) {
+        buffer.writeln('${indent}Linked Notes:');
+        for (final relationship in relationships) {
+          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
+          final linkedNote = await databaseService.getNote(linkedNoteId);
+          
+          if (linkedNote != null) {
+            final isOutgoing = relationship.fromNoteId == note.id;
+            final direction = isOutgoing ? '→' : '←';
+            final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
+            
+            buffer.writeln('${indent}  ${direction} $relationshipDisplay: ${linkedNote.title}');
+            
+            // Recursively add linked note content (with depth limit)
+            if (depth < 2) {
+              buffer.writeln('${indent}  Linked Note Content:');
+              await _addNoteToContext(buffer, linkedNote, processedNoteIds, depth + 2);
+            }
           }
         }
       }
-      
-      if (note.subNotes.isNotEmpty) {
-        buffer.writeln('Sub-notes:');
-        for (final subNote in note.subNotes) {
-          buffer.writeln('- ${subNote.name}: ${subNote.content}');
-        }
-      }
-      if (note.tags.isNotEmpty) {
-        buffer.writeln('Tags: ${note.tags.join(', ')}');
-      }
-      buffer.writeln();
+    } catch (e) {
+      // If there's an error loading relationships, continue without them
+      print('Error loading linked notes for ${note.title}: $e');
     }
-    return buffer.toString();
+    
+    buffer.writeln();
   }
 
   static String _buildMultiNoteQAPrompt(String question, String context) {
     return '''
-Based on the following notes, please answer the question: "$question"
+Based on the following notes and their linked relationships, please answer the question: "$question"
 
-Context Notes:
+Context Notes (including linked notes and their relationships):
 $context
 
-Please provide a comprehensive answer based on the information in the notes. If the answer cannot be found in the provided context, please state that clearly.
+Please provide a comprehensive answer based on the information in the notes and their relationships. Consider:
+- The hierarchical structure shown (indented linked notes)
+- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
+- How linked notes might provide additional context or clarification
+- The direction of relationships (→ for outgoing, ← for incoming)
+
+If the answer cannot be found in the provided context, please state that clearly.
 ''';
   }
 
@@ -310,11 +393,51 @@ Please provide a comprehensive answer based on the information in the notes. If 
       }
     }
     
+    if (note.subNotes.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Sub-notes:');
+      buffer.writeln(note.subNotes.map((sn) => '- ${sn.name}: ${sn.content}').join('\n'));
+    }
+    
+    if (note.tags.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Tags: ${note.tags.join(', ')}');
+    }
+    
+    // Add linked notes context
+    try {
+      final databaseService = DatabaseService();
+      final relationships = await databaseService.getRelationships(note.id);
+      
+      if (relationships.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln('Linked Notes Context:');
+        for (final relationship in relationships) {
+          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
+          final linkedNote = await databaseService.getNote(linkedNoteId);
+          
+          if (linkedNote != null) {
+            final isOutgoing = relationship.fromNoteId == note.id;
+            final direction = isOutgoing ? '→' : '←';
+            final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
+            
+            buffer.writeln('  ${direction} $relationshipDisplay: ${linkedNote.title}');
+            buffer.writeln('  Content: ${linkedNote.content}');
+            
+            if (linkedNote.tags.isNotEmpty) {
+              buffer.writeln('  Tags: ${linkedNote.tags.join(', ')}');
+            }
+            buffer.writeln();
+          }
+        }
+      }
+    } catch (e) {
+      // If there's an error loading relationships, continue without them
+      print('Error loading linked notes for transformation: $e');
+    }
+    
     buffer.writeln();
-    buffer.writeln('Sub-notes:');
-    buffer.writeln(note.subNotes.map((sn) => '- ${sn.name}: ${sn.content}').join('\n'));
-    buffer.writeln();
-    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied.');
+    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.');
     
     return buffer.toString();
   }
@@ -323,12 +446,15 @@ Please provide a comprehensive answer based on the information in the notes. If 
     return '''
 Based on the following context and prompt, please create one or more new notes.
 
-Context Notes:
+Context Notes (including linked notes and their relationships):
 $context
 
 User Prompt: "$prompt"
 
-IMPORTANT: When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
+IMPORTANT: 
+- When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
+- Consider the relationships between notes in the context when creating new notes. If the context shows linked notes with specific relationship types (answers, causality, related, subnote, parent, references, expands, contradicts, supports), consider how your new notes might relate to existing ones.
+- Pay attention to the hierarchical structure shown in the context (indented linked notes) to understand the note relationships.
 
 Please create the new note(s) in the following JSON format:
 {
@@ -351,7 +477,7 @@ Please create the new note(s) in the following JSON format:
   ]
 }
 
-If creating multiple notes, ensure they are related and useful based on the context and prompt. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
+If creating multiple notes, ensure they are related and useful based on the context and prompt. Consider how the new notes might fit into the existing network of relationships shown in the context. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
 ''';
   }
 
