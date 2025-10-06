@@ -90,7 +90,8 @@ void main() {
         type: NoteType.task,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        dueDate: '2024-12-31',
+        scheduledAt: '2024-12-31',
+        completeBy: '2024-12-31',
         status: TaskStatus.todo,
         completionPercentage: 0.0,
         tags: ['work', 'urgent'],
@@ -103,7 +104,8 @@ void main() {
       final retrievedTask = await databaseService.getNote('test-task-1');
       expect(retrievedTask, isNotNull);
       expect(retrievedTask!.type, NoteType.task);
-      expect(retrievedTask.dueDate, '2024-12-31');
+      expect(retrievedTask.scheduledAt, '2024-12-31');
+      expect(retrievedTask.completeBy, '2024-12-31');
       expect(retrievedTask.status, TaskStatus.todo);
       expect(retrievedTask.completionPercentage, 0.0);
     });
@@ -196,7 +198,8 @@ void main() {
           type: NoteType.task,
           createdAt: DateTime.now().subtract(const Duration(hours: 1)),
           updatedAt: DateTime.now().subtract(const Duration(hours: 1)),
-          dueDate: '2024-12-31',
+          scheduledAt: '2024-12-31',
+        completeBy: '2024-12-31',
           status: TaskStatus.todo,
           tags: ['tag2'],
         ),

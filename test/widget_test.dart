@@ -71,7 +71,8 @@ void main() {
         type: NoteType.task,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        dueDate: '2024-12-31',
+        scheduledAt: '2024-12-31',
+        completeBy: '2024-12-31',
         status: TaskStatus.todo,
         tags: ['work', 'urgent'],
         subNotes: [

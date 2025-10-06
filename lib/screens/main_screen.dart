@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'notes_screen.dart';
@@ -19,6 +23,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  final SpeechToText _speechToText = SpeechToText();
+  bool _isListening = false;
+  String _recognizedText = '';
 
   final List<Widget> _screens = [
     const NotesScreen(),
@@ -104,7 +111,16 @@ class _MainScreenState extends State<MainScreen> {
               subtitle: const Text('Create a regular note'),
               onTap: () {
                 Navigator.pop(context);
-                _navigateToNewNote(context);
+                _createNewNote(NoteType.note);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.task),
+              title: const Text('New Task'),
+              subtitle: const Text('Create a new task'),
+              onTap: () {
+                Navigator.pop(context);
+                _createNewNote(NoteType.task);
               },
             ),
             ListTile(
@@ -150,13 +166,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  void _navigateToNewNote(BuildContext context) {
-    // Create a new note and navigate to note creation screen
+
+  void _createNewNote(NoteType type) {
     final newNote = Note(
       id: const Uuid().v4(),
       title: '',
       content: '',
-      type: NoteType.note,
+      type: type,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -170,23 +186,298 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _navigateToVoiceNote(BuildContext context) {
-    // TODO: Implement voice note recording
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Voice recording feature coming soon!')),
+    _showVoiceRecordingDialog(context);
+  }
+
+  void _showVoiceRecordingDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Voice Note Recording'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isListening)
+                const CircularProgressIndicator()
+              else
+                const Icon(Icons.mic, size: 48, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                _isListening ? 'Listening...' : 'Tap to start recording',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              if (_recognizedText.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _recognizedText,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            if (_isListening)
+              TextButton(
+                onPressed: () => _stopListening(),
+                child: const Text('Stop'),
+              )
+            else
+              TextButton(
+                onPressed: () => _startListening(),
+                child: const Text('Start Recording'),
+              ),
+            if (_recognizedText.isNotEmpty)
+              TextButton(
+                onPressed: () => _saveVoiceNote(context),
+                child: const Text('Save Note'),
+              ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _resetVoiceRecording();
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<void> _startListening() async {
+    // Request microphone permission
+    final permission = await Permission.microphone.request();
+    if (permission != PermissionStatus.granted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Microphone permission is required for voice recording')),
+      );
+      return;
+    }
+
+    // Initialize speech to text if not already done
+    if (!_speechToText.isAvailable) {
+      await _speechToText.initialize();
+    }
+
+    if (_speechToText.isAvailable) {
+      setState(() {
+        _isListening = true;
+        _recognizedText = '';
+      });
+
+      await _speechToText.listen(
+        onResult: (result) {
+          setState(() {
+            _recognizedText = result.recognizedWords;
+          });
+        },
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+        localeId: 'en_US',
+        onSoundLevelChange: (level) {
+          // Optional: Handle sound level changes
+        },
+      );
+    }
+  }
+
+  Future<void> _stopListening() async {
+    await _speechToText.stop();
+    setState(() {
+      _isListening = false;
+    });
+  }
+
+  void _saveVoiceNote(BuildContext context) {
+    if (_recognizedText.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No speech detected. Please try again.')),
+      );
+      return;
+    }
+
+    final voiceNote = Note(
+      id: const Uuid().v4(),
+      title: 'Voice Note - ${DateTime.now().toString().substring(0, 16)}',
+      content: _recognizedText,
+      type: NoteType.note,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    context.read<AppProvider>().addNote(voiceNote);
+    Navigator.pop(context);
+    _resetVoiceRecording();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Voice note saved successfully!')),
+    );
+  }
+
+  void _resetVoiceRecording() {
+    setState(() {
+      _isListening = false;
+      _recognizedText = '';
+    });
   }
 
   void _navigateToImageNote(BuildContext context) {
-    // TODO: Implement image picker
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Image picker feature coming soon!')),
+    _showImageSourceDialog(context);
+  }
+
+  void _showImageSourceDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Image Source'),
+        content: const Text('Choose how you want to add an image'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage(ImageSource.camera, context);
+            },
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Camera'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage(ImageSource.gallery, context);
+            },
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Gallery'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
     );
   }
 
+  Future<void> _pickImage(ImageSource source, BuildContext context) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        await _createImageNote(image, context);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _createImageNote(XFile image, BuildContext context) async {
+    try {
+      // Get the file path
+      final String imagePath = image.path;
+      
+      // Create a note with the image attachment
+      final imageNote = Note(
+        id: const Uuid().v4(),
+        title: 'Image Note - ${DateTime.now().toString().substring(0, 16)}',
+        content: 'Image captured from ${image.name}',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        attachmentPaths: [imagePath],
+      );
+
+      context.read<AppProvider>().addNote(imageNote);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image note created successfully!')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating image note: $e')),
+        );
+      }
+    }
+  }
+
   void _navigateToFileAttachment(BuildContext context) {
-    // TODO: Implement file picker
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('File attachment feature coming soon!')),
-    );
+    _pickFile(context);
+  }
+
+  Future<void> _pickFile(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = result.files.first;
+        await _createFileNote(file, context);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking file: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _createFileNote(PlatformFile file, BuildContext context) async {
+    try {
+      // Create a note with the file attachment
+      final fileNote = Note(
+        id: const Uuid().v4(),
+        title: 'File Note - ${file.name}',
+        content: 'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        attachmentPaths: [file.path!],
+      );
+
+      context.read<AppProvider>().addNote(fileNote);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File note created successfully!')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating file note: $e')),
+        );
+      }
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

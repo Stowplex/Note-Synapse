@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
@@ -79,9 +80,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> answerMultiNoteQuestion(String question, List<Note> contextNotes) async {
+  Future<String> answerMultiNoteQuestion(
+    String question, 
+    List<Note> contextNotes, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     try {
-      final response = await GeminiApiService.answerMultiNoteQuestion(question, contextNotes);
+      final response = await GeminiApiService.answerMultiNoteQuestion(
+        question, 
+        contextNotes,
+        attachedFiles: attachedFiles,
+      );
       
       // Save AI interaction
       final interaction = AIInteraction(
@@ -104,9 +113,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> transformNote(Note note, String transformationPrompt) async {
+  Future<String> transformNote(
+    Note note, 
+    String transformationPrompt, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     try {
-      final response = await GeminiApiService.transformNote(note, transformationPrompt);
+      final response = await GeminiApiService.transformNote(
+        note, 
+        transformationPrompt,
+        attachedFiles: attachedFiles,
+      );
       
       // Save AI interaction
       final interaction = AIInteraction(
@@ -129,9 +146,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<Note>> createNewNotes(String prompt, List<Note> contextNotes) async {
+  Future<List<Note>> createNewNotes(
+    String prompt, 
+    List<Note> contextNotes, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     try {
-      final newNotes = await GeminiApiService.createNewNotes(prompt, contextNotes);
+      final newNotes = await GeminiApiService.createNewNotes(
+        prompt, 
+        contextNotes,
+        attachedFiles: attachedFiles,
+      );
       
       // Save all new notes
       for (final note in newNotes) {
@@ -168,8 +193,21 @@ class AppProvider extends ChangeNotifier {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return _notes.where((note) => 
       note.isTask && 
-      note.dueDate == dateStr
+      (note.scheduledAt == dateStr || note.completeBy == dateStr ||
+       (note.scheduledAt != null && note.completeBy != null &&
+        _isDateInRange(dateStr, note.scheduledAt!, note.completeBy!)))
     ).toList();
+  }
+
+  bool _isDateInRange(String dateStr, String startDate, String endDate) {
+    final date = DateTime.tryParse(dateStr);
+    final start = DateTime.tryParse(startDate);
+    final end = DateTime.tryParse(endDate);
+    
+    if (date == null || start == null || end == null) return false;
+    
+    return date.isAfter(start.subtract(const Duration(days: 1))) && 
+           date.isBefore(end.add(const Duration(days: 1)));
   }
 
   List<Note> getNotesForDate(DateTime date) {
@@ -197,5 +235,27 @@ class AppProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  Future<void> clearAllData() async {
+    _setLoading(true);
+    try {
+      // Clear all data from the database
+      await _databaseService.clearAllData();
+      
+      // Reset local state
+      _notes = [];
+      _tags = [];
+      _aiInteractions = [];
+      _error = null;
+      
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
   }
 }

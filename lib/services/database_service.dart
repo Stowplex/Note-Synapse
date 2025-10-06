@@ -39,8 +39,9 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -54,7 +55,8 @@ class DatabaseService {
         type TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
-        dueDate TEXT,
+        scheduledAt TEXT,
+        completeBy TEXT,
         status TEXT,
         completionPercentage REAL
       )
@@ -139,10 +141,68 @@ class DatabaseService {
     // Create indexes for better performance
     await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
     await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
-    await db.execute('CREATE INDEX idx_notes_dueDate ON notes(dueDate)');
+    await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
+    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
     await db.execute('CREATE INDEX idx_ai_interactions_expiresAt ON ai_interactions(expiresAt)');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Migration from version 1 to 2: Remove dueDate column and add scheduledAt, completeBy columns
+      try {
+        // Check if dueDate column exists
+        final columns = await db.rawQuery("PRAGMA table_info(notes)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (columnNames.contains('dueDate')) {
+          // Create a new table with the updated schema
+          await db.execute('''
+            CREATE TABLE notes_new(
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              content TEXT NOT NULL,
+              type TEXT NOT NULL,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL,
+              scheduledAt TEXT,
+              completeBy TEXT,
+              status TEXT,
+              completionPercentage REAL
+            )
+          ''');
+          
+          // Copy data from old table to new table, migrating dueDate to completeBy
+          await db.execute('''
+            INSERT INTO notes_new (id, title, content, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage)
+            SELECT id, title, content, type, createdAt, updatedAt, NULL, dueDate, status, completionPercentage
+            FROM notes
+          ''');
+          
+          // Drop old table and rename new table
+          await db.execute('DROP TABLE notes');
+          await db.execute('ALTER TABLE notes_new RENAME TO notes');
+          
+          // Recreate indexes
+          await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
+          await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
+          await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
+          await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
+        }
+      } catch (e) {
+        // If migration fails, drop and recreate the database
+        print('Migration failed, recreating database: $e');
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await _onCreate(db, newVersion);
+      }
+    }
   }
 
   // Notes CRUD
@@ -390,7 +450,8 @@ class DatabaseService {
       subNotes: subNotes,
       tags: tags,
       attachmentPaths: attachments,
-      dueDate: map['dueDate'],
+      scheduledAt: map['scheduledAt'],
+      completeBy: map['completeBy'],
       status: map['status'] != null
           ? TaskStatus.values.firstWhere(
               (e) => e.toString().split('.').last == map['status'],
@@ -483,6 +544,20 @@ class DatabaseService {
       where: 'expiresAt < ?',
       whereArgs: [now],
     );
+  }
+
+  // Clear all data
+  Future<void> clearAllData() async {
+    final db = await database;
+    
+    // Delete all data from all tables
+    await db.delete('ai_interactions');
+    await db.delete('relationships');
+    await db.delete('attachments');
+    await db.delete('note_tags');
+    await db.delete('subnotes');
+    await db.delete('notes');
+    await db.delete('tags');
   }
 
   // Utility methods

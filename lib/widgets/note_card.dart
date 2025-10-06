@@ -122,21 +122,39 @@ class NoteCard extends StatelessWidget {
                       color: Colors.grey[500],
                     ),
                   ),
-                  if (note.isTask && note.dueDate != null) ...[
+                  if (note.isTask && (note.scheduledAt != null || note.completeBy != null)) ...[
                     const SizedBox(width: 16),
-                    Icon(
-                      Icons.schedule,
-                      size: 14,
-                      color: Colors.orange[600],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Due: ${note.dueDate}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.orange[600],
-                        fontWeight: FontWeight.bold,
+                    if (note.scheduledAt != null) ...[
+                      Icon(
+                        Icons.play_arrow,
+                        size: 14,
+                        color: Colors.green[600],
                       ),
-                    ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Start: ${note.scheduledAt}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.green[600],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                    if (note.completeBy != null) ...[
+                      const SizedBox(width: 16),
+                      Icon(
+                        Icons.schedule,
+                        size: 14,
+                        color: Colors.orange[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Due: ${note.completeBy}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.orange[600],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ],
                   const Spacer(),
                   if (note.attachmentPaths.isNotEmpty)

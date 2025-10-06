@@ -135,21 +135,43 @@ class _TodoScreenState extends State<TodoScreen> {
                                   ),
                                 ),
                               ),
-                              if (task.dueDate != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _isOverdue(task.dueDate!) ? Colors.red[100] : Colors.blue[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    task.dueDate!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: _isOverdue(task.dueDate!) ? Colors.red[700] : Colors.blue[700],
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                              if (task.scheduledAt != null || task.completeBy != null)
+                                Row(
+                                  children: [
+                                    if (task.scheduledAt != null)
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green[100],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          'Start: ${task.scheduledAt}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.green[700],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    if (task.completeBy != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          'Due: ${task.completeBy}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                             ],
                           ),
@@ -233,8 +255,8 @@ class _TodoScreenState extends State<TodoScreen> {
     return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
   }
 
-  bool _isOverdue(String dueDate) {
-    final due = DateTime.tryParse(dueDate);
+  bool _isOverdue(String completeBy) {
+    final due = DateTime.tryParse(completeBy);
     if (due == null) return false;
     return due.isBefore(DateTime.now());
   }

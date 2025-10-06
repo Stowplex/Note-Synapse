@@ -50,11 +50,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.delete_forever),
+              leading: _isLoading 
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_forever),
               title: const Text('Clear All Data'),
               subtitle: const Text('Delete all notes and data'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: _showClearDataDialog,
+              onTap: _isLoading ? null : _showClearDataDialog,
             ),
           ),
           const SizedBox(height: 16),
@@ -180,11 +186,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _clearAllData() {
-    // TODO: Implement clear all data functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Clear data functionality not implemented yet')),
-    );
+  void _clearAllData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Clear all data from the app provider
+      await context.read<AppProvider>().clearAllData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All data has been cleared successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _showAIHistory() {

@@ -21,12 +21,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _isEditing = false;
   bool _hasChanges = false;
   Timer? _autoSaveTimer;
+  DateTime? _scheduledAt;
+  DateTime? _completeBy;
+  String? _dateValidationError;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note.title);
     _contentController = TextEditingController(text: widget.note.content);
+    
+    // Initialize date fields for tasks
+    if (widget.note.isTask) {
+      _scheduledAt = widget.note.scheduledAt != null 
+          ? DateTime.tryParse(widget.note.scheduledAt!) 
+          : null;
+      _completeBy = widget.note.completeBy != null 
+          ? DateTime.tryParse(widget.note.completeBy!) 
+          : null;
+    }
     
     _titleController.addListener(_onTextChanged);
     _contentController.addListener(_onTextChanged);
@@ -61,11 +74,36 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
   }
 
+  void _onDateChanged() {
+    _validateDates();
+    if (!_hasChanges) {
+      setState(() {
+        _hasChanges = true;
+      });
+    }
+    
+    // Auto-save after 2 seconds of no changes
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 2), () {
+      if (_hasChanges) {
+        _autoSave();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.note.title),
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, child) {
+        // Get the latest version of the note from the provider
+        final currentNote = appProvider.notes.firstWhere(
+          (note) => note.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+        
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(currentNote.title),
         actions: [
           if (_isEditing) ...[
             IconButton(
@@ -131,33 +169,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
         ],
       ),
-      body: _isEditing ? _buildEditingView() : _buildViewingView(),
-      bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
+          body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote),
+          bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
+        );
+      },
     );
   }
 
-  Widget _buildViewingView() {
+  Widget _buildViewingView(Note currentNote) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.note.isTask) ...[
-            _buildTaskStatus(),
+          if (currentNote.isTask) ...[
+            _buildTaskStatus(currentNote),
             const SizedBox(height: 16),
           ],
           Text(
-            widget.note.title,
+            currentNote.title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            widget.note.content,
+            currentNote.content,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
-          if (widget.note.subNotes.isNotEmpty) ...[
+          if (currentNote.subNotes.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
               'Sub-notes',
@@ -166,7 +206,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            ...widget.note.subNotes.map((subNote) => Card(
+            ...currentNote.subNotes.map((subNote) => Card(
               child: ListTile(
                 leading: Icon(
                   subNote.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
@@ -178,7 +218,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             )),
           ],
-          if (widget.note.tags.isNotEmpty) ...[
+          if (currentNote.tags.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
               'Tags',
@@ -190,14 +230,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: widget.note.tags.map((tag) => Chip(
+              children: currentNote.tags.map((tag) => Chip(
                 label: Text(tag),
                 backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
                 labelStyle: TextStyle(color: Theme.of(context).primaryColor),
               )).toList(),
             ),
           ],
-          if (widget.note.attachmentPaths.isNotEmpty) ...[
+          if (currentNote.attachmentPaths.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
               'Attachments',
@@ -206,7 +246,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            ...widget.note.attachmentPaths.map((path) => Card(
+            ...currentNote.attachmentPaths.map((path) => Card(
               child: ListTile(
                 leading: const Icon(Icons.attach_file),
                 title: Text(path.split('/').last),
@@ -216,14 +256,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
           const SizedBox(height: 24),
           Text(
-            'Created: ${_formatDate(widget.note.createdAt)}',
+            'Created: ${_formatDate(currentNote.createdAt)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.grey[600],
             ),
           ),
-          if (widget.note.updatedAt != widget.note.createdAt)
+          if (currentNote.updatedAt != currentNote.createdAt)
             Text(
-              'Updated: ${_formatDate(widget.note.updatedAt)}',
+              'Updated: ${_formatDate(currentNote.updatedAt)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -247,6 +287,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
+          if (widget.note.isTask) ...[
+            _buildDateSelectionFields(),
+            const SizedBox(height: 16),
+          ],
           Expanded(
             child: TextField(
               controller: _contentController,
@@ -265,8 +309,79 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  Widget _buildTaskStatus() {
-    if (!widget.note.isTask) return const SizedBox.shrink();
+  Widget _buildDateSelectionFields() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () => _selectScheduledAt(),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Schedule At',
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: _dateValidationError != null ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    _scheduledAt != null 
+                        ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year}'
+                        : 'Select date',
+                    style: _scheduledAt != null 
+                        ? null 
+                        : TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: InkWell(
+                onTap: () => _selectCompleteBy(),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Complete By',
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: _dateValidationError != null ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    _completeBy != null 
+                        ? '${_completeBy!.day}/${_completeBy!.month}/${_completeBy!.year}'
+                        : 'Select date',
+                    style: _completeBy != null 
+                        ? null 
+                        : TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_dateValidationError != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _dateValidationError!,
+              style: TextStyle(
+                color: Colors.red[600],
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTaskStatus(Note currentNote) {
+    if (!currentNote.isTask) return const SizedBox.shrink();
     
     return Card(
       color: _getStatusColor().withOpacity(0.1),
@@ -291,9 +406,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       color: _getStatusColor(),
                     ),
                   ),
-                  if (widget.note.dueDate != null)
+                  if (currentNote.scheduledAt != null)
                     Text(
-                      'Due: ${widget.note.dueDate}',
+                      'Scheduled: ${_formatDate(DateTime.parse(currentNote.scheduledAt!))}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  if (currentNote.completeBy != null)
+                    Text(
+                      'Due: ${_formatDate(DateTime.parse(currentNote.completeBy!))}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                 ],
@@ -303,6 +423,56 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _selectScheduledAt() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _scheduledAt ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _scheduledAt = picked;
+      });
+      _onDateChanged();
+    }
+  }
+
+  Future<void> _selectCompleteBy() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _completeBy ?? (_scheduledAt ?? DateTime.now()),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _completeBy = picked;
+      });
+      _onDateChanged();
+    }
+  }
+
+  void _validateDates() {
+    if (_scheduledAt != null && _completeBy != null) {
+      if (_completeBy!.isBefore(_scheduledAt!)) {
+        setState(() {
+          _dateValidationError = 'Complete By must be no earlier than Schedule At';
+        });
+      } else {
+        setState(() {
+          _dateValidationError = null;
+        });
+      }
+    } else {
+      setState(() {
+        _dateValidationError = null;
+      });
+    }
   }
 
   Widget _buildBottomBar() {
@@ -337,7 +507,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Color _getStatusColor() {
-    switch (widget.note.status) {
+    // Get the current note from the provider
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    switch (currentNote.status) {
       case TaskStatus.complete:
         return Colors.green;
       case TaskStatus.abandoned:
@@ -349,7 +524,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   IconData _getStatusIcon() {
-    switch (widget.note.status) {
+    // Get the current note from the provider
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    switch (currentNote.status) {
       case TaskStatus.complete:
         return Icons.check_circle;
       case TaskStatus.abandoned:
@@ -361,7 +541,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   String _getStatusText() {
-    switch (widget.note.status) {
+    // Get the current note from the provider
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    switch (currentNote.status) {
       case TaskStatus.complete:
         return 'Complete';
       case TaskStatus.abandoned:
@@ -389,6 +574,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _hasChanges = false;
       _titleController.text = widget.note.title;
       _contentController.text = widget.note.content;
+      _dateValidationError = null;
+      
+      // Reset date fields for tasks
+      if (widget.note.isTask) {
+        _scheduledAt = widget.note.scheduledAt != null 
+            ? DateTime.tryParse(widget.note.scheduledAt!) 
+            : null;
+        _completeBy = widget.note.completeBy != null 
+            ? DateTime.tryParse(widget.note.completeBy!) 
+            : null;
+      }
     });
   }
 
@@ -397,10 +593,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       return; // Don't save empty notes
     }
     
+    // Don't save if there are validation errors
+    if (_dateValidationError != null) {
+      return;
+    }
+    
     final updatedNote = widget.note.copyWith(
       title: _titleController.text.trim().isEmpty ? 'Untitled' : _titleController.text.trim(),
       content: _contentController.text.trim(),
       updatedAt: DateTime.now(),
+      scheduledAt: _scheduledAt?.toIso8601String(),
+      completeBy: _completeBy?.toIso8601String(),
     );
     
     if (widget.isNewNote) {
@@ -417,6 +620,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _saveChanges() {
+    // Validate dates before saving
+    _validateDates();
+    
+    if (_dateValidationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_dateValidationError!),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     _autoSave();
     setState(() {
       _isEditing = false;

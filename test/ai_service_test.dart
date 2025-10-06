@@ -42,13 +42,15 @@ void main() {
         type: NoteType.task,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        dueDate: '2024-12-31',
+        scheduledAt: '2024-12-31',
+        completeBy: '2024-12-31',
         status: TaskStatus.todo,
         completionPercentage: 0.0,
       );
 
       expect(task.isTask, isTrue);
-      expect(task.dueDate, '2024-12-31');
+      expect(task.scheduledAt, '2024-12-31');
+      expect(task.completeBy, '2024-12-31');
       expect(task.status, TaskStatus.todo);
       expect(task.completionPercentage, 0.0);
     });

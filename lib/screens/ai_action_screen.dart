@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/ai_interaction.dart';
@@ -21,6 +23,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   AIInteractionType? _selectedAction;
   bool _isProcessing = false;
   String? _response;
+  List<PlatformFile> _attachedFiles = [];
 
   @override
   void dispose() {
@@ -97,11 +100,33 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 hintText: _getPromptHint(),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.edit),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.attach_file),
+                  onPressed: _attachFiles,
+                  tooltip: 'Attach files',
+                ),
               ),
-              maxLines: 4,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _processAction(),
+              maxLines: 6,
+              minLines: 3,
+              textInputAction: TextInputAction.newline,
+              onSubmitted: (value) {
+                // Only submit if there's content and user presses Enter
+                // For now, we'll rely on the Process button for submission
+                // Ctrl+Enter handling would require more complex keyboard event handling
+              },
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Tip: Use Enter for new lines, click Process to submit',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            if (_attachedFiles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildAttachedFilesSection(),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -150,16 +175,28 @@ class _AIActionScreenState extends State<AIActionScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 32,
-                color: isSelected ? Theme.of(context).primaryColor : Colors.grey[600],
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isSelected 
+                      ? Theme.of(context).primaryColor.withOpacity(0.1)
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: isSelected ? Theme.of(context).primaryColor : Colors.grey[600],
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       title,
@@ -179,9 +216,18 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 ),
               ),
               if (isSelected)
-                Icon(
-                  Icons.check_circle,
-                  color: Theme.of(context).primaryColor,
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
             ],
           ),
@@ -273,18 +319,21 @@ class _AIActionScreenState extends State<AIActionScreen> {
           response = await appProvider.answerMultiNoteQuestion(
             _promptController.text.trim(),
             widget.selectedNotes,
+            attachedFiles: _attachedFiles,
           );
           break;
         case AIInteractionType.noteTransformation:
           response = await appProvider.transformNote(
             widget.selectedNotes.first,
             _promptController.text.trim(),
+            attachedFiles: _attachedFiles,
           );
           break;
         case AIInteractionType.newNoteCreation:
           final newNotes = await appProvider.createNewNotes(
             _promptController.text.trim(),
             widget.selectedNotes,
+            attachedFiles: _attachedFiles,
           );
           response = 'Created ${newNotes.length} new notes successfully!';
           break;
@@ -315,7 +364,148 @@ class _AIActionScreenState extends State<AIActionScreen> {
       _response = null;
       _selectedAction = null;
       _promptController.clear();
+      _attachedFiles.clear();
     });
+  }
+
+  Future<void> _attachFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+        withData: true, // Load file data into memory
+      );
+
+      if (result != null) {
+        setState(() {
+          _attachedFiles.addAll(result.files);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking files: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _removeAttachedFile(int index) {
+    setState(() {
+      _attachedFiles.removeAt(index);
+    });
+  }
+
+  Widget _buildAttachedFilesSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.attach_file, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Text(
+                'Attached Files (${_attachedFiles.length})',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(_attachedFiles.length, (index) {
+            final file = _attachedFiles[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _getFileIcon(file.extension),
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      file.name,
+                      style: Theme.of(context).textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    _formatFileSize(file.size),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _removeAttachedFile(index),
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: Colors.red[600],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  IconData _getFileIcon(String? extension) {
+    if (extension == null) return Icons.insert_drive_file;
+    
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp':
+      case 'webp':
+        return Icons.image;
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'txt':
+        return Icons.text_snippet;
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return Icons.video_file;
+      case 'mp3':
+      case 'wav':
+      case 'aac':
+        return Icons.audio_file;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   void _saveResponse() async {

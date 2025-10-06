@@ -26,7 +26,8 @@ Note _$NoteFromJson(Map<String, dynamic> json) => Note(
           ?.map((e) => e as String)
           .toList() ??
       const [],
-  dueDate: json['dueDate'] as String?,
+  scheduledAt: json['scheduledAt'] as String?,
+  completeBy: json['completeBy'] as String?,
   status: $enumDecodeNullable(_$TaskStatusEnumMap, json['status']),
   completionPercentage: (json['completionPercentage'] as num?)?.toDouble(),
 );
@@ -41,7 +42,8 @@ Map<String, dynamic> _$NoteToJson(Note instance) => <String, dynamic>{
   'subNotes': instance.subNotes,
   'tags': instance.tags,
   'attachmentPaths': instance.attachmentPaths,
-  'dueDate': instance.dueDate,
+  'scheduledAt': instance.scheduledAt,
+  'completeBy': instance.completeBy,
   'status': _$TaskStatusEnumMap[instance.status],
   'completionPercentage': instance.completionPercentage,
 };

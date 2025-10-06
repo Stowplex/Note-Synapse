@@ -1,8 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
-import '../models/ai_interaction.dart';
 import 'secure_storage_service.dart';
 
 class GeminiApiService {
@@ -11,8 +10,9 @@ class GeminiApiService {
   // Multi-note Q&A
   static Future<String> answerMultiNoteQuestion(
     String question,
-    List<Note> contextNotes,
-  ) async {
+    List<Note> contextNotes, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
       throw Exception('API key not found');
@@ -21,30 +21,32 @@ class GeminiApiService {
     final contextText = _buildContextFromNotes(contextNotes);
     final prompt = _buildMultiNoteQAPrompt(question, contextText);
 
-    final response = await _makeGeminiRequest(apiKey, prompt);
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: attachedFiles);
     return response;
   }
 
   // Note transformation
   static Future<String> transformNote(
     Note note,
-    String transformationPrompt,
-  ) async {
+    String transformationPrompt, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
       throw Exception('API key not found');
     }
 
     final prompt = _buildNoteTransformationPrompt(note, transformationPrompt);
-    final response = await _makeGeminiRequest(apiKey, prompt);
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: attachedFiles);
     return response;
   }
 
   // New note creation
   static Future<List<Note>> createNewNotes(
     String prompt,
-    List<Note> contextNotes,
-  ) async {
+    List<Note> contextNotes, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
       throw Exception('API key not found');
@@ -53,17 +55,46 @@ class GeminiApiService {
     final contextText = _buildContextFromNotes(contextNotes);
     final aiPrompt = _buildNewNoteCreationPrompt(prompt, contextText);
 
-    final response = await _makeGeminiRequest(apiKey, aiPrompt);
+    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: attachedFiles);
     return _parseNewNotesResponse(response);
   }
 
-  static Future<String> _makeGeminiRequest(String apiKey, String prompt) async {
+  static Future<String> _makeGeminiRequest(
+    String apiKey, 
+    String prompt, {
+    List<PlatformFile>? attachedFiles,
+  }) async {
+    // Add today's date context to the prompt
+    final today = DateTime.now();
+    final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
+    final enhancedPrompt = prompt + todayContext;
+
+    final parts = <Map<String, dynamic>>[
+      {'text': enhancedPrompt}
+    ];
+
+    // Add file attachments if any
+    if (attachedFiles != null && attachedFiles.isNotEmpty) {
+      for (final file in attachedFiles) {
+        if (file.bytes != null) {
+          // Convert file to base64 for Gemini API
+          final base64Data = base64Encode(file.bytes!);
+          final mimeType = _getMimeType(file.extension);
+          
+          parts.add({
+            'inline_data': {
+              'mime_type': mimeType,
+              'data': base64Data,
+            }
+          });
+        }
+      }
+    }
+
     final requestBody = {
       'contents': [
         {
-          'parts': [
-            {'text': prompt}
-          ]
+          'parts': parts
         }
       ],
       'generationConfig': {
@@ -95,6 +126,51 @@ class GeminiApiService {
       throw Exception('No content in Gemini API response');
     } else {
       throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  static String _getDayOfWeek(DateTime date) {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return days[date.weekday - 1];
+  }
+
+  static String _getMimeType(String? extension) {
+    if (extension == null) return 'application/octet-stream';
+    
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'bmp':
+        return 'image/bmp';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'mp4':
+        return 'video/mp4';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'mov':
+        return 'video/quicktime';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'aac':
+        return 'audio/aac';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -154,6 +230,8 @@ $context
 
 User Prompt: "$prompt"
 
+IMPORTANT: When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
+
 Please create the new note(s) in the following JSON format:
 {
   "notes": [
@@ -168,13 +246,14 @@ Please create the new note(s) in the following JSON format:
           "content": "Sub-note content"
         }
       ],
-      "dueDate": "YYYY-MM-DD" (only for tasks),
+      "scheduledAt": "YYYY-MM-DD" (only for tasks - when the task should start),
+      "completeBy": "YYYY-MM-DD" (only for tasks - when the task should be completed),
       "status": "todo" (only for tasks)
     }
   ]
 }
 
-If creating multiple notes, ensure they are related and useful based on the context and prompt.
+If creating multiple notes, ensure they are related and useful based on the context and prompt. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
 ''';
   }
 
@@ -209,7 +288,8 @@ If creating multiple notes, ensure they are related and useful based on the cont
             content: sn['content'] as String,
             createdAt: DateTime.now(),
           )).toList() ?? [],
-          dueDate: noteJson['dueDate'] as String?,
+          scheduledAt: noteJson['scheduledAt'] as String?,
+          completeBy: noteJson['completeBy'] as String?,
           status: noteJson['status'] != null 
               ? TaskStatus.values.firstWhere(
                   (e) => e.toString().split('.').last == noteJson['status'],

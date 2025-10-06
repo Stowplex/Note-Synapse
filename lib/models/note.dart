@@ -29,7 +29,8 @@ class Note {
   final List<SubNote> subNotes;
   final List<String> tags;
   final List<String> attachmentPaths;
-  final String? dueDate; // For tasks only
+  final String? scheduledAt; // For tasks only - when the task is scheduled to start
+  final String? completeBy; // For tasks only - when the task needs to be completed
   final TaskStatus? status; // For tasks only
   final double? completionPercentage; // For tasks only
 
@@ -43,7 +44,8 @@ class Note {
     this.subNotes = const [],
     this.tags = const [],
     this.attachmentPaths = const [],
-    this.dueDate,
+    this.scheduledAt,
+    this.completeBy,
     this.status,
     this.completionPercentage,
   });
@@ -61,7 +63,8 @@ class Note {
     List<SubNote>? subNotes,
     List<String>? tags,
     List<String>? attachmentPaths,
-    String? dueDate,
+    String? scheduledAt,
+    String? completeBy,
     TaskStatus? status,
     double? completionPercentage,
   }) {
@@ -75,7 +78,8 @@ class Note {
       subNotes: subNotes ?? this.subNotes,
       tags: tags ?? this.tags,
       attachmentPaths: attachmentPaths ?? this.attachmentPaths,
-      dueDate: dueDate ?? this.dueDate,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      completeBy: completeBy ?? this.completeBy,
       status: status ?? this.status,
       completionPercentage: completionPercentage ?? this.completionPercentage,
     );
