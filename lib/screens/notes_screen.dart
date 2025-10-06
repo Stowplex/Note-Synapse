@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/relationship.dart';
 import '../widgets/note_card.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
@@ -33,6 +34,10 @@ class _NotesScreenState extends State<NotesScreen> {
             : const Text('Notes'),
         actions: [
           if (_isMultiSelectMode) ...[
+            IconButton(
+              icon: const Icon(Icons.link),
+              onPressed: _selectedNotes.length >= 2 ? _linkSelectedNotes : null,
+            ),
             IconButton(
               icon: const Icon(Icons.delete),
               onPressed: _selectedNotes.isNotEmpty ? _deleteSelectedNotes : null,
@@ -257,5 +262,154 @@ class _NotesScreenState extends State<NotesScreen> {
 
   void _updateTaskStatus(String noteId, TaskStatus status) {
     context.read<AppProvider>().updateTaskStatus(noteId, status);
+  }
+
+  void _linkSelectedNotes() {
+    if (_selectedNotes.length < 2) return;
+    
+    final firstNote = _selectedNotes.first;
+    final otherNotes = _selectedNotes.skip(1).toList();
+    
+    showDialog(
+      context: context,
+      builder: (context) => _LinkNotesDialog(
+        fromNote: firstNote,
+        toNotes: otherNotes,
+        onLink: (relationshipType) {
+          Navigator.pop(context);
+          context.read<AppProvider>().createNoteRelationships(
+            firstNote.id,
+            otherNotes.map((n) => n.id).toList(),
+            relationshipType,
+          );
+          _exitMultiSelectMode();
+        },
+      ),
+    );
+  }
+}
+
+class _LinkNotesDialog extends StatefulWidget {
+  final Note fromNote;
+  final List<Note> toNotes;
+  final Function(String) onLink;
+
+  const _LinkNotesDialog({
+    required this.fromNote,
+    required this.toNotes,
+    required this.onLink,
+  });
+
+  @override
+  State<_LinkNotesDialog> createState() => _LinkNotesDialogState();
+}
+
+class _LinkNotesDialogState extends State<_LinkNotesDialog> {
+  String _selectedRelationshipType = RelationshipType.related;
+  final TextEditingController _customTypeController = TextEditingController();
+
+  @override
+  void dispose() {
+    _customTypeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Link Notes'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Link "${widget.fromNote.title}" to:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...widget.toNotes.map((note) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                '• ${note.title}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )),
+            const SizedBox(height: 16),
+            Text(
+              'Relationship Type:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _selectedRelationshipType,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: [
+                ...RelationshipType.predefined.map((type) => DropdownMenuItem(
+                  value: type,
+                  child: Row(
+                    children: [
+                      Icon(RelationshipType.getIcon(type), size: 20),
+                      const SizedBox(width: 8),
+                      Text(RelationshipType.getDisplayName(type)),
+                    ],
+                  ),
+                )),
+                const DropdownMenuItem(
+                  value: 'custom',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      Text('Custom...'),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedRelationshipType = value!;
+                });
+              },
+            ),
+            if (_selectedRelationshipType == 'custom') ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _customTypeController,
+                decoration: const InputDecoration(
+                  labelText: 'Custom Relationship Type',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedRelationshipType = value;
+                  });
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final relationshipType = _selectedRelationshipType == 'custom' 
+                ? _customTypeController.text.trim()
+                : _selectedRelationshipType;
+            if (relationshipType.isNotEmpty) {
+              widget.onLink(relationshipType);
+            }
+          },
+          child: const Text('Link'),
+        ),
+      ],
+    );
   }
 }

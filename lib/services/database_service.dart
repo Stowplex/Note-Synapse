@@ -399,6 +399,66 @@ class DatabaseService {
     });
   }
 
+  Future<List<Relationship>> getOutgoingRelationships(String noteId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'relationships',
+      where: 'fromNoteId = ?',
+      whereArgs: [noteId],
+      orderBy: 'createdAt DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return Relationship(
+        id: maps[i]['id'],
+        fromNoteId: maps[i]['fromNoteId'],
+        toNoteId: maps[i]['toNoteId'],
+        type: maps[i]['type'],
+        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
+      );
+    });
+  }
+
+  Future<List<Relationship>> getIncomingRelationships(String noteId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'relationships',
+      where: 'toNoteId = ?',
+      whereArgs: [noteId],
+      orderBy: 'createdAt DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return Relationship(
+        id: maps[i]['id'],
+        fromNoteId: maps[i]['fromNoteId'],
+        toNoteId: maps[i]['toNoteId'],
+        type: maps[i]['type'],
+        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
+      );
+    });
+  }
+
+  Future<void> deleteRelationship(String relationshipId) async {
+    final db = await database;
+    await db.delete('relationships', where: 'id = ?', whereArgs: [relationshipId]);
+  }
+
+  Future<void> deleteRelationshipsForNote(String noteId) async {
+    final db = await database;
+    await db.delete('relationships', where: 'fromNoteId = ? OR toNoteId = ?', whereArgs: [noteId, noteId]);
+  }
+
+  Future<bool> relationshipExists(String fromNoteId, String toNoteId, String type) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'relationships',
+      where: 'fromNoteId = ? AND toNoteId = ? AND type = ?',
+      whereArgs: [fromNoteId, toNoteId, type],
+    );
+    return maps.isNotEmpty;
+  }
+
   // AI Interactions CRUD
   Future<String> insertAIInteraction(AIInteraction interaction) async {
     final db = await database;

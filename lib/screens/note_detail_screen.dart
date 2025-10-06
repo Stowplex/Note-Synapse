@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/relationship.dart';
 import 'ai_action_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -28,6 +29,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   DateTime? _scheduledAt;
   DateTime? _completeBy;
   String? _dateValidationError;
+  List<Relationship> _relationships = [];
+  List<Note> _linkedNotes = [];
 
   @override
   void initState() {
@@ -52,6 +55,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (widget.isNewNote) {
       _isEditing = true;
     }
+    
+    // Load relationships
+    _loadRelationships();
   }
 
   @override
@@ -93,6 +99,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _autoSave();
       }
     });
+  }
+
+  Future<void> _loadRelationships() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      final relationships = await appProvider.getNoteRelationships(widget.note.id);
+      final linkedNotes = await appProvider.getLinkedNotes(widget.note.id);
+      
+      if (mounted) {
+        setState(() {
+          _relationships = relationships;
+          _linkedNotes = linkedNotes;
+        });
+      }
+    } catch (e) {
+      print('Error loading relationships: $e');
+    }
   }
 
   @override
@@ -254,6 +277,61 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
             const SizedBox(height: 8),
             ...currentNote.attachmentPaths.map((path) => _buildAttachmentCard(path, currentNote)),
+          ],
+          if (_linkedNotes.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text(
+                  'Linked Notes',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _addLinkedNote,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Link'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ..._buildLinkedNotesList(currentNote),
+          ] else ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text(
+                  'Linked Notes',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _addLinkedNote,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Link'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.link_off, color: Colors.grey[400]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'No linked notes yet',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 24),
           Text(
@@ -982,6 +1060,248 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  List<Widget> _buildLinkedNotesList(Note currentNote) {
+    return _relationships.map((relationship) {
+      final linkedNote = _linkedNotes.firstWhere(
+        (note) => note.id == (relationship.fromNoteId == currentNote.id ? relationship.toNoteId : relationship.fromNoteId),
+        orElse: () => Note(
+          id: 'unknown',
+          title: 'Unknown Note',
+          content: '',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      
+      final isOutgoing = relationship.fromNoteId == currentNote.id;
+      
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: Icon(
+            RelationshipType.getIcon(relationship.type),
+            color: Theme.of(context).primaryColor,
+          ),
+          title: Text(linkedNote.title),
+          subtitle: Text(
+            '${RelationshipType.getDisplayName(relationship.type)} ${isOutgoing ? '→' : '←'}',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.remove_circle, color: Colors.red),
+            onPressed: () => _removeLinkedNote(relationship.id),
+          ),
+          onTap: () {
+            if (linkedNote.id != 'unknown') {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: linkedNote),
+                ),
+              );
+            }
+          },
+        ),
+      );
+    }).toList();
+  }
+
+  void _addLinkedNote() {
+    showDialog(
+      context: context,
+      builder: (context) => _AddLinkedNoteDialog(
+        currentNote: widget.note,
+        onLink: (noteId, relationshipType) async {
+          Navigator.pop(context);
+          await context.read<AppProvider>().createNoteRelationships(
+            widget.note.id,
+            [noteId],
+            relationshipType,
+          );
+          await _loadRelationships();
+        },
+      ),
+    );
+  }
+
+  void _removeLinkedNote(String relationshipId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Link'),
+        content: const Text('Are you sure you want to remove this link?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await context.read<AppProvider>().deleteRelationship(relationshipId);
+              await _loadRelationships();
+            },
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddLinkedNoteDialog extends StatefulWidget {
+  final Note currentNote;
+  final Function(String noteId, String relationshipType) onLink;
+
+  const _AddLinkedNoteDialog({
+    required this.currentNote,
+    required this.onLink,
+  });
+
+  @override
+  State<_AddLinkedNoteDialog> createState() => _AddLinkedNoteDialogState();
+}
+
+class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
+  String _selectedRelationshipType = RelationshipType.related;
+  Note? _selectedNote;
+  final TextEditingController _customTypeController = TextEditingController();
+  List<Note> _availableNotes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableNotes();
+  }
+
+  @override
+  void dispose() {
+    _customTypeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAvailableNotes() async {
+    final appProvider = context.read<AppProvider>();
+    final allNotes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
+    setState(() {
+      _availableNotes = allNotes;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Link Note'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select a note to link to "${widget.currentNote.title}":',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            if (_availableNotes.isEmpty)
+              const Text('No other notes available to link.')
+            else
+              DropdownButtonFormField<Note>(
+                value: _selectedNote,
+                decoration: const InputDecoration(
+                  labelText: 'Select Note',
+                  border: OutlineInputBorder(),
+                ),
+                items: _availableNotes.map((note) => DropdownMenuItem(
+                  value: note,
+                  child: Text(note.title),
+                )).toList(),
+                onChanged: (note) {
+                  setState(() {
+                    _selectedNote = note;
+                  });
+                },
+              ),
+            const SizedBox(height: 16),
+            Text(
+              'Relationship Type:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _selectedRelationshipType,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: [
+                ...RelationshipType.predefined.map((type) => DropdownMenuItem(
+                  value: type,
+                  child: Row(
+                    children: [
+                      Icon(RelationshipType.getIcon(type), size: 20),
+                      const SizedBox(width: 8),
+                      Text(RelationshipType.getDisplayName(type)),
+                    ],
+                  ),
+                )),
+                const DropdownMenuItem(
+                  value: 'custom',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      Text('Custom...'),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedRelationshipType = value!;
+                });
+              },
+            ),
+            if (_selectedRelationshipType == 'custom') ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _customTypeController,
+                decoration: const InputDecoration(
+                  labelText: 'Custom Relationship Type',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedRelationshipType = value;
+                  });
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selectedNote != null ? () {
+            final relationshipType = _selectedRelationshipType == 'custom' 
+                ? _customTypeController.text.trim()
+                : _selectedRelationshipType;
+            if (relationshipType.isNotEmpty) {
+              widget.onLink(_selectedNote!.id, relationshipType);
+            }
+          } : null,
+          child: const Text('Link'),
+        ),
+      ],
     );
   }
 }

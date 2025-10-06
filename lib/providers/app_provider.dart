@@ -106,6 +106,61 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteRelationship(String relationshipId) async {
+    try {
+      await _databaseService.deleteRelationship(relationshipId);
+      await loadData();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> createNoteRelationships(String fromNoteId, List<String> toNoteIds, String relationshipType) async {
+    try {
+      for (final toNoteId in toNoteIds) {
+        // Check if relationship already exists
+        final exists = await _databaseService.relationshipExists(fromNoteId, toNoteId, relationshipType);
+        if (!exists) {
+          final relationship = Relationship(
+            id: DateTime.now().millisecondsSinceEpoch.toString() + '_${toNoteId}',
+            fromNoteId: fromNoteId,
+            toNoteId: toNoteId,
+            type: relationshipType,
+            createdAt: DateTime.now(),
+          );
+          await _databaseService.insertRelationship(relationship);
+        }
+      }
+      await loadData();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<List<Relationship>> getNoteRelationships(String noteId) async {
+    try {
+      return await _databaseService.getRelationships(noteId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return [];
+    }
+  }
+
+  Future<List<Note>> getLinkedNotes(String noteId) async {
+    try {
+      final relationships = await _databaseService.getRelationships(noteId);
+      final linkedNoteIds = relationships.map((r) => r.fromNoteId == noteId ? r.toNoteId : r.fromNoteId).toList();
+      return _notes.where((note) => linkedNoteIds.contains(note.id)).toList();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return [];
+    }
+  }
+
   Future<String> answerNoteQuestion(
     String question, 
     List<Note> contextNotes, {
