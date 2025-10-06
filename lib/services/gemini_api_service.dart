@@ -87,6 +87,151 @@ class GeminiApiService {
     return _parseNewNotesResponse(response);
   }
 
+  // Audio transcription
+  static Future<String> transcribeAudio(String audioFilePath) async {
+    final apiKey = await SecureStorageService.getApiKey();
+    if (apiKey == null) {
+      throw Exception('API key not found');
+    }
+
+    try {
+      final file = File(audioFilePath);
+      if (!await file.exists()) {
+        throw Exception('Audio file not found');
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Data = base64Encode(bytes);
+      final fileName = audioFilePath.split('/').last;
+      final extension = fileName.split('.').last.toLowerCase();
+      final mimeType = _getAudioMimeType(extension);
+
+      final prompt = "Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.";
+
+      final parts = <Map<String, dynamic>>[
+        {'text': prompt},
+        {
+          'inline_data': {
+            'mime_type': mimeType,
+            'data': base64Data,
+          }
+        }
+      ];
+
+      final requestBody = {
+        'contents': [
+          {
+            'parts': parts
+          }
+        ],
+        'generationConfig': {
+          'temperature': 0.1,
+          'topK': 32,
+          'topP': 1,
+          'maxOutputTokens': 4096,
+        }
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final candidate = data['candidates'][0];
+          final content = candidate['content'];
+          
+          if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+            return content['parts'][0]['text'].trim();
+          }
+        }
+        throw Exception('No transcription content in Gemini API response');
+      } else {
+        throw Exception('Failed to transcribe audio: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Error transcribing audio: $e');
+    }
+  }
+
+  // Audio summarization
+  static Future<String> summarizeAudio(String audioFilePath, {String? context}) async {
+    final apiKey = await SecureStorageService.getApiKey();
+    if (apiKey == null) {
+      throw Exception('API key not found');
+    }
+
+    try {
+      final file = File(audioFilePath);
+      if (!await file.exists()) {
+        throw Exception('Audio file not found');
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Data = base64Encode(bytes);
+      final fileName = audioFilePath.split('/').last;
+      final extension = fileName.split('.').last.toLowerCase();
+      final mimeType = _getAudioMimeType(extension);
+
+      final contextText = context != null ? "\n\nContext: $context" : "";
+      final prompt = "Please listen to the following audio file and provide a concise summary of its main points and key information.$contextText";
+
+      final parts = <Map<String, dynamic>>[
+        {'text': prompt},
+        {
+          'inline_data': {
+            'mime_type': mimeType,
+            'data': base64Data,
+          }
+        }
+      ];
+
+      final requestBody = {
+        'contents': [
+          {
+            'parts': parts
+          }
+        ],
+        'generationConfig': {
+          'temperature': 0.3,
+          'topK': 32,
+          'topP': 1,
+          'maxOutputTokens': 2048,
+        }
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final candidate = data['candidates'][0];
+          final content = candidate['content'];
+          
+          if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+            return content['parts'][0]['text'].trim();
+          }
+        }
+        throw Exception('No summary content in Gemini API response');
+      } else {
+        throw Exception('Failed to summarize audio: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Error summarizing audio: $e');
+    }
+  }
+
   static Future<String> _makeGeminiRequest(
     String apiKey, 
     String prompt, {
@@ -200,6 +345,27 @@ class GeminiApiService {
         return 'audio/aac';
       default:
         return 'application/octet-stream';
+    }
+  }
+
+  static String _getAudioMimeType(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'aac':
+        return 'audio/aac';
+      case 'm4a':
+        return 'audio/mp4';
+      case 'ogg':
+        return 'audio/ogg';
+      case 'flac':
+        return 'audio/flac';
+      case 'wma':
+        return 'audio/x-ms-wma';
+      default:
+        return 'audio/mpeg'; // Default to MP3 for unknown audio formats
     }
   }
 

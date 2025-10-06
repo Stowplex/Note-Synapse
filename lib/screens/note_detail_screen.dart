@@ -8,6 +8,8 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
+import '../services/audio_recording_service.dart';
+import '../services/gemini_api_service.dart';
 import 'ai_action_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -31,6 +33,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String? _dateValidationError;
   List<Relationship> _relationships = [];
   List<Note> _linkedNotes = [];
+  
+  // Audio recording state
+  final AudioRecordingService _audioService = AudioRecordingService();
+  bool _isRecording = false;
+  bool _isPlaying = false;
+  String? _currentPlayingPath;
+  Duration _recordingDuration = Duration.zero;
+  Duration _playingPosition = Duration.zero;
+  Duration _playingDuration = Duration.zero;
 
   @override
   void initState() {
@@ -58,6 +69,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     
     // Load relationships
     _loadRelationships();
+    
+    // Set up audio service listeners
+    _setupAudioListeners();
   }
 
   @override
@@ -65,7 +79,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _autoSaveTimer?.cancel();
     _titleController.dispose();
     _contentController.dispose();
+    _audioService.dispose();
     super.dispose();
+  }
+
+  void _setupAudioListeners() {
+    _audioService.recordingStateStream.listen((isRecording) {
+      if (mounted) {
+        setState(() {
+          _isRecording = isRecording;
+        });
+      }
+    });
+
+    _audioService.playingStateStream.listen((isPlaying) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = isPlaying;
+        });
+      }
+    });
+
+    _audioService.playingPositionStream.listen((position) {
+      if (mounted) {
+        setState(() {
+          _playingPosition = position;
+        });
+      }
+    });
+
+    _audioService.playingDurationStream.listen((duration) {
+      if (mounted) {
+        setState(() {
+          _playingDuration = duration;
+        });
+      }
+    });
   }
 
   void _onTextChanged() {
@@ -597,22 +646,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           top: BorderSide(color: Colors.grey[300]!),
         ),
       ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isRecording) _buildRecordingIndicator(),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openAIAction,
+                  icon: const Icon(Icons.psychology),
+                  label: const Text('AI Actions'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _addAttachment,
+                  icon: const Icon(Icons.attach_file),
+                  label: const Text('Attach'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isRecording ? _stopRecording : _startRecording,
+                  icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                  label: Text(_isRecording ? 'Stop' : 'Record'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _isRecording ? Colors.red : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordingIndicator() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
       child: Row(
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _openAIAction,
-              icon: const Icon(Icons.psychology),
-              label: const Text('AI Actions'),
+          Icon(Icons.mic, color: Colors.red),
+          const SizedBox(width: 8),
+          Text(
+            'Recording...',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _addAttachment,
-              icon: const Icon(Icons.attach_file),
-              label: const Text('Attach'),
-            ),
+          const Spacer(),
+          TextButton(
+            onPressed: _cancelRecording,
+            child: Text('Cancel', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -809,6 +905,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final fileName = attachmentPath.split('/').last;
     final file = File(attachmentPath);
     final fileExists = file.existsSync();
+    final isAudioFile = _isAudioFile(fileName);
+    final isCurrentlyPlaying = _isPlaying && _currentPlayingPath == attachmentPath;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -823,16 +921,36 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             color: fileExists ? null : Colors.grey,
           ),
         ),
-        subtitle: Text(
-          fileExists ? _formatFileSize(file.lengthSync()) : 'File not found',
-          style: TextStyle(
-            color: fileExists ? Colors.grey[600] : Colors.red,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              fileExists ? _formatFileSize(file.lengthSync()) : 'File not found',
+              style: TextStyle(
+                color: fileExists ? Colors.grey[600] : Colors.red,
+              ),
+            ),
+            if (isAudioFile && fileExists) ...[
+              const SizedBox(height: 4),
+              _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
+            ],
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (fileExists)
+            if (isAudioFile && fileExists) ...[
+              IconButton(
+                icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
+                onPressed: () => _toggleAudioPlayback(attachmentPath),
+                tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
+              ),
+              IconButton(
+                icon: const Icon(Icons.text_fields),
+                onPressed: () => _transcribeAudio(attachmentPath),
+                tooltip: 'Transcribe with AI',
+              ),
+            ] else if (fileExists)
               IconButton(
                 icon: const Icon(Icons.open_in_new),
                 onPressed: () => _openAttachment(attachmentPath),
@@ -845,8 +963,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
         ),
-        onTap: fileExists ? () => _openAttachment(attachmentPath) : null,
+        onTap: fileExists && !isAudioFile ? () => _openAttachment(attachmentPath) : null,
       ),
+    );
+  }
+
+  Widget _buildAudioPlayer(String attachmentPath, bool isCurrentlyPlaying) {
+    return Column(
+      children: [
+        if (isCurrentlyPlaying) ...[
+          Slider(
+            value: _playingDuration.inMilliseconds > 0 
+                ? _playingPosition.inMilliseconds / _playingDuration.inMilliseconds 
+                : 0.0,
+            onChanged: (value) {
+              final newPosition = Duration(
+                milliseconds: (value * _playingDuration.inMilliseconds).round(),
+              );
+              _audioService.seekTo(newPosition);
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_formatDuration(_playingPosition)),
+              Text(_formatDuration(_playingDuration)),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
@@ -1217,6 +1362,214 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         },
       ),
     );
+  }
+
+  // Audio recording methods
+  Future<void> _startRecording() async {
+    try {
+      final success = await _audioService.startRecording();
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recording started'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to start recording. Please check microphone permissions.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error starting recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      final audioPath = await _audioService.stopRecording();
+      if (audioPath != null) {
+        // Add the recorded audio as an attachment
+        final currentNote = context.read<AppProvider>().notes.firstWhere(
+          (note) => note.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+
+        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        updatedAttachmentPaths.add(audioPath);
+
+        final updatedNote = currentNote.copyWith(
+          attachmentPaths: updatedAttachmentPaths,
+          updatedAt: DateTime.now(),
+        );
+
+        await context.read<AppProvider>().updateNote(updatedNote);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recording saved as attachment'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error stopping recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    await _audioService.cancelRecording();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Recording cancelled'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  // Audio playback methods
+  Future<void> _toggleAudioPlayback(String audioPath) async {
+    try {
+      if (_isPlaying && _currentPlayingPath == audioPath) {
+        await _audioService.pausePlaying();
+      } else if (_isPlaying) {
+        await _audioService.stopPlaying();
+        await _audioService.startPlaying(audioPath);
+      } else {
+        await _audioService.startPlaying(audioPath);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error playing audio: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Audio transcription methods
+  Future<void> _transcribeAudio(String audioPath) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Transcribing audio...'),
+            ],
+          ),
+        ),
+      );
+
+      final transcription = await GeminiApiService.transcribeAudio(audioPath);
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show transcription dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Audio Transcription'),
+          content: SingleChildScrollView(
+            child: Text(transcription),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addTranscriptionToNote(transcription);
+              },
+              child: const Text('Add to Note'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Close loading dialog if it's open
+      Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error transcribing audio: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _addTranscriptionToNote(String transcription) async {
+    try {
+      final currentNote = context.read<AppProvider>().notes.firstWhere(
+        (note) => note.id == widget.note.id,
+        orElse: () => widget.note,
+      );
+
+      final updatedContent = currentNote.content.isEmpty 
+          ? transcription 
+          : '${currentNote.content}\n\n--- Audio Transcription ---\n$transcription';
+
+      final updatedNote = currentNote.copyWith(
+        content: updatedContent,
+        updatedAt: DateTime.now(),
+      );
+
+      await context.read<AppProvider>().updateNote(updatedNote);
+
+      // Update the content controller if we're in editing mode
+      if (_isEditing) {
+        _contentController.text = updatedContent;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Transcription added to note'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding transcription: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Helper methods
+  bool _isAudioFile(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    return ['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'wma'].contains(extension);
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
   }
 }
 
