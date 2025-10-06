@@ -12,15 +12,23 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class _CalendarScreenState extends State<CalendarScreen> with TickerProviderStateMixin {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,7 +96,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ? const Center(
                         child: Text('Select a day to view notes and tasks'),
                       )
-                    : _buildDayContent(appProvider),
+                    : _buildTabbedDayContent(appProvider),
               ),
             ],
           );

@@ -28,8 +28,11 @@ class _TimelineScreenState extends State<TimelineScreen> {
     final appProvider = context.read<AppProvider>();
     final allTags = <String>{};
     
+    // Only load tags from tasks since we're only showing tasks
     for (final note in appProvider.notes) {
-      allTags.addAll(note.tags);
+      if (note.isTask) {
+        allTags.addAll(note.tags);
+      }
     }
     
     setState(() {
@@ -51,7 +54,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
             },
             itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
               value: tag,
-              child: Text(tag == 'all' ? 'All Notes' : tag),
+              child: Text(tag == 'all' ? 'All Tasks' : tag),
             )).toList(),
             icon: const Icon(Icons.filter_list),
           ),
@@ -81,13 +84,13 @@ class _TimelineScreenState extends State<TimelineScreen> {
                   Icon(Icons.timeline, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
-                    _selectedTag == 'all' ? 'No notes yet' : 'No notes with this tag',
+                    _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _selectedTag == 'all'
-                        ? 'Create your first note'
+                        ? 'Create your first task'
                         : 'Try selecting a different tag',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[600],
@@ -143,18 +146,36 @@ class _TimelineScreenState extends State<TimelineScreen> {
   }
 
   List<Note> _filterNotes(List<Note> notes) {
+    // Filter to only show tasks
+    final tasks = notes.where((note) => note.isTask).toList();
+    
     if (_selectedTag == 'all') {
-      return notes;
+      return tasks;
     }
     
-    return notes.where((note) => note.tags.contains(_selectedTag)).toList();
+    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
   }
 
   Map<DateTime, List<Note>> _groupNotesByDate(List<Note> notes) {
     final Map<DateTime, List<Note>> grouped = {};
     
     for (final note in notes) {
-      final date = DateTime(note.createdAt.year, note.createdAt.month, note.createdAt.day);
+      DateTime dateToUse;
+      
+      // Use scheduledAt if available, otherwise fall back to createdAt
+      if (note.scheduledAt != null && note.scheduledAt!.isNotEmpty) {
+        try {
+          dateToUse = DateTime.parse(note.scheduledAt!);
+        } catch (e) {
+          // If parsing fails, use createdAt
+          dateToUse = note.createdAt;
+        }
+      } else {
+        // If no scheduledAt, use createdAt
+        dateToUse = note.createdAt;
+      }
+      
+      final date = DateTime(dateToUse.year, dateToUse.month, dateToUse.day);
       if (grouped[date] == null) {
         grouped[date] = [];
       }
