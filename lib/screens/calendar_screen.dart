@@ -12,23 +12,16 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> with TickerProviderStateMixin {
+class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
-  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+    _focusedDay = DateTime.now();
   }
 
   @override
@@ -41,8 +34,9 @@ class _CalendarScreenState extends State<CalendarScreen> with TickerProviderStat
             icon: const Icon(Icons.today),
             onPressed: () {
               setState(() {
-                _focusedDay = DateTime.now();
-                _selectedDay = DateTime.now();
+                final now = DateTime.now();
+                _focusedDay = now;
+                _selectedDay = now;
               });
             },
           ),
@@ -69,16 +63,22 @@ class _CalendarScreenState extends State<CalendarScreen> with TickerProviderStat
                 onFormatChanged: (format) {
                   setState(() {
                     _calendarFormat = format;
+                    // Ensure focused day is properly set when format changes
+                    if (_selectedDay != null) {
+                      _focusedDay = _selectedDay!;
+                    }
                   });
                 },
                 onPageChanged: (focusedDay) {
-                  _focusedDay = focusedDay;
+                  setState(() {
+                    _focusedDay = focusedDay;
+                  });
                 },
                 eventLoader: (day) {
                   return appProvider.getTasksForDate(day);
                 },
                 calendarStyle: CalendarStyle(
-                  outsideDaysVisible: false,
+                  outsideDaysVisible: true,
                   markersMaxCount: 3,
                   markerDecoration: BoxDecoration(
                     color: Colors.red,
@@ -105,98 +105,161 @@ class _CalendarScreenState extends State<CalendarScreen> with TickerProviderStat
     );
   }
 
-  Widget _buildDayContent(AppProvider appProvider) {
+  Widget _buildTabbedDayContent(AppProvider appProvider) {
     final selectedDate = _selectedDay!;
     final tasks = appProvider.getTasksForDate(selectedDate);
     final notes = appProvider.getNotesForDate(selectedDate);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // Date header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
+          // Tab bar
+          Container(
+            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            child: TabBar(
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.task_alt, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Tasks (${tasks.length})'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.note, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Notes (${notes.length})'),
+                    ],
+                  ),
+                ),
+              ],
+              labelColor: Theme.of(context).primaryColor,
+              unselectedLabelColor: Colors.grey[600],
+              indicatorColor: Theme.of(context).primaryColor,
+            ),
+          ),
+          // Tab content
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildTasksTab(tasks, appProvider),
+                _buildNotesTab(notes),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTasksTab(List<Note> tasks, AppProvider appProvider) {
+    if (tasks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No tasks for this day',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Create a task to get started',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
         ),
-        if (tasks.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Tasks (${tasks.length})',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.red[700],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: _buildStatusIcon(task),
+            title: Text(
+              task.title,
+              style: TextStyle(
+                decoration: task.isCompleted ? TextDecoration.lineThrough : null,
               ),
             ),
+            subtitle: Text(task.content),
+            trailing: _buildStatusDropdown(task, appProvider),
+            onTap: () => _openNoteDetail(task),
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: tasks.length,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: tasks.length,
-              itemBuilder: (context, index) {
-                final task = tasks[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: _buildStatusIcon(task),
-                    title: Text(
-                      task.title,
-                      style: TextStyle(
-                        decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    subtitle: Text(task.content),
-                    trailing: _buildStatusDropdown(task, appProvider),
-                    onTap: () => _openNoteDetail(task),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-        if (notes.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Notes (${notes.length})',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
+        );
+      },
+    );
+  }
+
+  Widget _buildNotesTab(List<Note> notes) {
+    if (notes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.note, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No notes for this day',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.grey[600],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: notes.length,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: notes.length,
-              itemBuilder: (context, index) {
-                final note = notes[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.note),
-                    title: Text(note.title),
-                    subtitle: Text(note.content),
-                    onTap: () => _openNoteDetail(note),
-                  ),
-                );
-              },
+            const SizedBox(height: 8),
+            Text(
+              'Create a note to get started',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[500],
+              ),
             ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: notes.length,
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: const Icon(Icons.note),
+            title: Text(note.title),
+            subtitle: Text(note.content),
+            onTap: () => _openNoteDetail(note),
           ),
-        ],
-        if (tasks.isEmpty && notes.isEmpty)
-          const Center(
-            child: Text('No notes or tasks for this day'),
-          ),
-      ],
+        );
+      },
     );
   }
 
