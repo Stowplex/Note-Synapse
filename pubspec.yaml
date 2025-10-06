@@ -74,6 +74,9 @@ dependencies:
   # File handling
   file_picker: ^6.1.1
   
+  # File text extraction
+  # Note: For PDF text extraction, consider adding pdf_text or similar package
+  
   # Calendar widget
   table_calendar: ^3.0.9
 

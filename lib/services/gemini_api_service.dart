@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
@@ -18,10 +19,18 @@ class GeminiApiService {
       throw Exception('API key not found');
     }
 
-    final contextText = _buildContextFromNotes(contextNotes);
+    final contextText = await _buildContextFromNotes(contextNotes);
     final prompt = _buildMultiNoteQAPrompt(question, contextText);
 
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: attachedFiles);
+    // Convert note attachments to PlatformFile objects
+    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(contextNotes);
+    
+    // Combine with any additional attached files
+    final allAttachedFiles = <PlatformFile>[];
+    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
+    allAttachedFiles.addAll(noteAttachments);
+
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles);
     return response;
   }
 
@@ -36,8 +45,17 @@ class GeminiApiService {
       throw Exception('API key not found');
     }
 
-    final prompt = _buildNoteTransformationPrompt(note, transformationPrompt);
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: attachedFiles);
+    final prompt = await _buildNoteTransformationPrompt(note, transformationPrompt);
+    
+    // Convert note attachments to PlatformFile objects
+    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles([note]);
+    
+    // Combine with any additional attached files
+    final allAttachedFiles = <PlatformFile>[];
+    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
+    allAttachedFiles.addAll(noteAttachments);
+    
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles);
     return response;
   }
 
@@ -52,10 +70,18 @@ class GeminiApiService {
       throw Exception('API key not found');
     }
 
-    final contextText = _buildContextFromNotes(contextNotes);
+    final contextText = await _buildContextFromNotes(contextNotes);
     final aiPrompt = _buildNewNoteCreationPrompt(prompt, contextText);
 
-    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: attachedFiles);
+    // Convert note attachments to PlatformFile objects
+    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(contextNotes);
+    
+    // Combine with any additional attached files
+    final allAttachedFiles = <PlatformFile>[];
+    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
+    allAttachedFiles.addAll(noteAttachments);
+
+    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: allAttachedFiles);
     return _parseNewNotesResponse(response);
   }
 
@@ -79,7 +105,8 @@ class GeminiApiService {
         if (file.bytes != null) {
           // Convert file to base64 for Gemini API
           final base64Data = base64Encode(file.bytes!);
-          final mimeType = _getMimeType(file.extension);
+          final extension = file.name.split('.').last;
+          final mimeType = _getMimeType(extension);
           
           parts.add({
             'inline_data': {
@@ -174,13 +201,66 @@ class GeminiApiService {
     }
   }
 
-  static String _buildContextFromNotes(List<Note> notes) {
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  static Future<List<PlatformFile>> _convertNoteAttachmentsToPlatformFiles(List<Note> notes) async {
+    final platformFiles = <PlatformFile>[];
+    
+    for (final note in notes) {
+      for (final attachmentPath in note.attachmentPaths) {
+        try {
+          final file = File(attachmentPath);
+          if (file.existsSync()) {
+            final bytes = await file.readAsBytes();
+            final fileName = attachmentPath.split('/').last;
+            
+            final platformFile = PlatformFile(
+              name: fileName,
+              path: attachmentPath,
+              size: bytes.length,
+              bytes: bytes,
+            );
+            
+            platformFiles.add(platformFile);
+          }
+        } catch (e) {
+          print('Error reading attachment file $attachmentPath: $e');
+          // Continue with other files even if one fails
+        }
+      }
+    }
+    
+    return platformFiles;
+  }
+
+  static Future<String> _buildContextFromNotes(List<Note> notes) async {
     if (notes.isEmpty) return '';
 
     final buffer = StringBuffer();
     for (final note in notes) {
       buffer.writeln('--- Note: ${note.title} ---');
       buffer.writeln(note.content);
+      
+      // Add file attachment info if any (files will be sent as binary data separately)
+      if (note.attachmentPaths.isNotEmpty) {
+        buffer.writeln('File Attachments:');
+        for (final attachmentPath in note.attachmentPaths) {
+          final fileName = attachmentPath.split('/').last;
+          final file = File(attachmentPath);
+          if (file.existsSync()) {
+            final fileSize = file.lengthSync();
+            buffer.writeln('- $fileName (${_formatFileSize(fileSize)})');
+          } else {
+            buffer.writeln('- $fileName (file not found)');
+          }
+        }
+      }
+      
       if (note.subNotes.isNotEmpty) {
         buffer.writeln('Sub-notes:');
         for (final subNote in note.subNotes) {
@@ -206,19 +286,37 @@ Please provide a comprehensive answer based on the information in the notes. If 
 ''';
   }
 
-  static String _buildNoteTransformationPrompt(Note note, String transformationPrompt) {
-    return '''
-Please transform the following note according to the instruction: "$transformationPrompt"
-
-Original Note:
-Title: ${note.title}
-Content: ${note.content}
-
-Sub-notes:
-${note.subNotes.map((sn) => '- ${sn.name}: ${sn.content}').join('\n')}
-
-Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied.
-''';
+  static Future<String> _buildNoteTransformationPrompt(Note note, String transformationPrompt) async {
+    final buffer = StringBuffer();
+    buffer.writeln('Please transform the following note according to the instruction: "$transformationPrompt"');
+    buffer.writeln();
+    buffer.writeln('Original Note:');
+    buffer.writeln('Title: ${note.title}');
+    buffer.writeln('Content: ${note.content}');
+    
+    // Add file attachment info if any (files will be sent as binary data separately)
+    if (note.attachmentPaths.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('File Attachments:');
+      for (final attachmentPath in note.attachmentPaths) {
+        final fileName = attachmentPath.split('/').last;
+        final file = File(attachmentPath);
+        if (file.existsSync()) {
+          final fileSize = file.lengthSync();
+          buffer.writeln('- $fileName (${_formatFileSize(fileSize)})');
+        } else {
+          buffer.writeln('- $fileName (file not found)');
+        }
+      }
+    }
+    
+    buffer.writeln();
+    buffer.writeln('Sub-notes:');
+    buffer.writeln(note.subNotes.map((sn) => '- ${sn.name}: ${sn.content}').join('\n'));
+    buffer.writeln();
+    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied.');
+    
+    return buffer.toString();
   }
 
   static String _buildNewNoteCreationPrompt(String prompt, String context) {
