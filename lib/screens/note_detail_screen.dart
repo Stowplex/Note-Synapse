@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'ai_action_screen.dart';
@@ -246,13 +249,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            ...currentNote.attachmentPaths.map((path) => Card(
-              child: ListTile(
-                leading: const Icon(Icons.attach_file),
-                title: Text(path.split('/').last),
-                subtitle: Text(path),
-              ),
-            )),
+            ...currentNote.attachmentPaths.map((path) => _buildAttachmentCard(path, currentNote)),
           ],
           const SizedBox(height: 24),
           Text(
@@ -697,8 +694,220 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  void _addAttachment() {
-    // TODO: Implement attachment functionality
+  Widget _buildAttachmentCard(String attachmentPath, Note currentNote) {
+    final fileName = attachmentPath.split('/').last;
+    final file = File(attachmentPath);
+    final fileExists = file.existsSync();
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(
+          _getFileIcon(fileName),
+          color: fileExists ? null : Colors.grey,
+        ),
+        title: Text(
+          fileName,
+          style: TextStyle(
+            color: fileExists ? null : Colors.grey,
+          ),
+        ),
+        subtitle: Text(
+          fileExists ? _formatFileSize(file.lengthSync()) : 'File not found',
+          style: TextStyle(
+            color: fileExists ? Colors.grey[600] : Colors.red,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (fileExists)
+              IconButton(
+                icon: const Icon(Icons.open_in_new),
+                onPressed: () => _openAttachment(attachmentPath),
+                tooltip: 'Open with default application',
+              ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _removeAttachment(attachmentPath, currentNote),
+              tooltip: 'Remove attachment',
+            ),
+          ],
+        ),
+        onTap: fileExists ? () => _openAttachment(attachmentPath) : null,
+      ),
+    );
+  }
+
+  IconData _getFileIcon(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp':
+      case 'webp':
+        return Icons.image;
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return Icons.videocam;
+      case 'mp3':
+      case 'wav':
+      case 'aac':
+        return Icons.audiotrack;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'txt':
+      case 'md':
+        return Icons.text_snippet;
+      default:
+        return Icons.attach_file;
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  Future<void> _openAttachment(String attachmentPath) async {
+    try {
+      final file = File(attachmentPath);
+      if (!file.existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File not found'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final uri = Uri.file(attachmentPath);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot open file'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error opening file: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeAttachment(String attachmentPath, Note currentNote) async {
+    try {
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove Attachment'),
+          content: Text('Are you sure you want to remove "${attachmentPath.split('/').last}" from this note?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        // Remove attachment from note
+        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        updatedAttachmentPaths.remove(attachmentPath);
+        
+        final updatedNote = currentNote.copyWith(
+          attachmentPaths: updatedAttachmentPaths,
+          updatedAt: DateTime.now(),
+        );
+
+        // Update the note in the database
+        await context.read<AppProvider>().updateNote(updatedNote);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Attachment removed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error removing attachment: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _addAttachment() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final currentNote = context.read<AppProvider>().notes.firstWhere(
+          (note) => note.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+
+        // Get existing attachment paths
+        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        
+        // Add new attachment paths
+        for (final file in result.files) {
+          if (file.path != null) {
+            updatedAttachmentPaths.add(file.path!);
+          }
+        }
+
+        // Update the note
+        final updatedNote = currentNote.copyWith(
+          attachmentPaths: updatedAttachmentPaths,
+          updatedAt: DateTime.now(),
+        );
+
+        await context.read<AppProvider>().updateNote(updatedNote);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${result.files.length} attachment(s)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding attachment: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildStatusDropdown(Note currentNote) {
