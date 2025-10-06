@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'ai_action_screen.dart';
@@ -196,7 +197,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
+          GptMarkdown(
             currentNote.content,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
@@ -216,7 +217,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   color: subNote.isCompleted ? Colors.green : Colors.grey,
                 ),
                 title: Text(subNote.name),
-                subtitle: Text(subNote.content),
+                subtitle: GptMarkdown(
+                  subNote.content,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 onTap: () => _toggleSubNoteCompletion(subNote),
               ),
             )),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/ai_interaction.dart';
@@ -252,7 +253,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: SingleChildScrollView(
-                  child: Text(
+                  child: GptMarkdown(
                     _response!,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),

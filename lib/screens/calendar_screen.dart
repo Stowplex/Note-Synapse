@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'note_detail_screen.dart';
@@ -222,7 +223,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 decoration: task.isCompleted ? TextDecoration.lineThrough : null,
               ),
             ),
-            subtitle: Text(task.content),
+            subtitle: GptMarkdown(
+              task.content,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             trailing: _buildStatusDropdown(task, appProvider),
             onTap: () => _openNoteDetail(task),
           ),
@@ -267,7 +271,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: ListTile(
             leading: const Icon(Icons.note),
             title: Text(note.title),
-            subtitle: Text(note.content),
+            subtitle: GptMarkdown(
+              note.content,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             onTap: () => _openNoteDetail(note),
           ),
         );

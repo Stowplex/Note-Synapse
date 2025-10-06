@@ -79,6 +79,9 @@ dependencies:
   
   # Calendar widget
   table_calendar: ^3.0.9
+  
+  # Markdown rendering
+  gpt_markdown: ^1.1.4
 
 dev_dependencies:
   flutter_test:
