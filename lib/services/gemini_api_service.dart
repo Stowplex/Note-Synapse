@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import 'secure_storage_service.dart';
 import 'database_service.dart';
+import 'logger_service.dart';
 
 class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
@@ -16,8 +17,17 @@ class GeminiApiService {
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
   }) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting note Q&A request', error: {
+      'question': question,
+      'contextNotesCount': contextNotes.length,
+      'attachedFilesCount': attachedFiles?.length ?? 0,
+      'requestId': requestId,
+    });
+
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
+      LoggerService.error('API key not found for note Q&A', error: {'requestId': requestId});
       throw Exception('API key not found');
     }
 
@@ -32,7 +42,13 @@ class GeminiApiService {
     if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
     allAttachedFiles.addAll(noteAttachments);
 
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles);
+    LoggerService.debug('Note Q&A context built', error: {
+      'contextLength': contextText.length,
+      'totalAttachedFiles': allAttachedFiles.length,
+      'requestId': requestId,
+    });
+
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
     return response;
   }
 
@@ -42,8 +58,18 @@ class GeminiApiService {
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
   }) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting note transformation request', error: {
+      'noteId': note.id,
+      'noteTitle': note.title,
+      'transformationPrompt': transformationPrompt,
+      'attachedFilesCount': attachedFiles?.length ?? 0,
+      'requestId': requestId,
+    });
+
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
+      LoggerService.error('API key not found for note transformation', error: {'requestId': requestId});
       throw Exception('API key not found');
     }
 
@@ -57,7 +83,13 @@ class GeminiApiService {
     if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
     allAttachedFiles.addAll(noteAttachments);
     
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles);
+    LoggerService.debug('Note transformation prompt built', error: {
+      'promptLength': prompt.length,
+      'totalAttachedFiles': allAttachedFiles.length,
+      'requestId': requestId,
+    });
+    
+    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
     return response;
   }
 
@@ -67,8 +99,17 @@ class GeminiApiService {
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
   }) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting new note creation request', error: {
+      'prompt': prompt,
+      'contextNotesCount': contextNotes.length,
+      'attachedFilesCount': attachedFiles?.length ?? 0,
+      'requestId': requestId,
+    });
+
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
+      LoggerService.error('API key not found for new note creation', error: {'requestId': requestId});
       throw Exception('API key not found');
     }
 
@@ -83,20 +124,38 @@ class GeminiApiService {
     if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
     allAttachedFiles.addAll(noteAttachments);
 
-    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: allAttachedFiles);
+    LoggerService.debug('New note creation prompt built', error: {
+      'promptLength': aiPrompt.length,
+      'contextLength': contextText.length,
+      'totalAttachedFiles': allAttachedFiles.length,
+      'requestId': requestId,
+    });
+
+    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: allAttachedFiles, requestId: requestId);
     return _parseNewNotesResponse(response);
   }
 
   // Audio transcription
   static Future<String> transcribeAudio(String audioFilePath) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting audio transcription request', error: {
+      'audioFilePath': audioFilePath,
+      'requestId': requestId,
+    });
+
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
+      LoggerService.error('API key not found for audio transcription', error: {'requestId': requestId});
       throw Exception('API key not found');
     }
 
     try {
       final file = File(audioFilePath);
       if (!await file.exists()) {
+        LoggerService.error('Audio file not found', error: {
+          'audioFilePath': audioFilePath,
+          'requestId': requestId,
+        });
         throw Exception('Audio file not found');
       }
 
@@ -105,6 +164,13 @@ class GeminiApiService {
       final fileName = audioFilePath.split('/').last;
       final extension = fileName.split('.').last.toLowerCase();
       final mimeType = _getAudioMimeType(extension);
+
+      LoggerService.debug('Audio file processed for transcription', error: {
+        'fileName': fileName,
+        'fileSize': bytes.length,
+        'mimeType': mimeType,
+        'requestId': requestId,
+      });
 
       final prompt = "Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.";
 
@@ -128,16 +194,26 @@ class GeminiApiService {
           'temperature': 0.1,
           'topK': 32,
           'topP': 1,
-          'maxOutputTokens': 4096,
+          'maxOutputTokens': 60000,
         }
       };
 
+      final startTime = DateTime.now();
       final response = await http.post(
         Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
         headers: {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(requestBody),
+      );
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
+        requestId: requestId,
+        duration: duration,
       );
 
       if (response.statusCode == 200) {
@@ -147,28 +223,60 @@ class GeminiApiService {
           final content = candidate['content'];
           
           if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-            return content['parts'][0]['text'].trim();
+            final transcription = content['parts'][0]['text'].trim();
+            LoggerService.debug('Audio transcription completed', error: {
+              'transcriptionLength': transcription.length,
+              'requestId': requestId,
+            });
+            return transcription;
           }
         }
+        LoggerService.error('No transcription content in Gemini API response', error: {
+          'responseData': data,
+          'requestId': requestId,
+        });
         throw Exception('No transcription content in Gemini API response');
       } else {
+        LoggerService.logAiError(
+          error: 'Failed to transcribe audio: ${response.statusCode} - ${response.body}',
+          endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+          requestId: requestId,
+          duration: duration,
+        );
         throw Exception('Failed to transcribe audio: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
+      LoggerService.error('Error transcribing audio', error: {
+        'error': e.toString(),
+        'audioFilePath': audioFilePath,
+        'requestId': requestId,
+      });
       throw Exception('Error transcribing audio: $e');
     }
   }
 
   // Audio summarization
   static Future<String> summarizeAudio(String audioFilePath, {String? context}) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting audio summarization request', error: {
+      'audioFilePath': audioFilePath,
+      'context': context,
+      'requestId': requestId,
+    });
+
     final apiKey = await SecureStorageService.getApiKey();
     if (apiKey == null) {
+      LoggerService.error('API key not found for audio summarization', error: {'requestId': requestId});
       throw Exception('API key not found');
     }
 
     try {
       final file = File(audioFilePath);
       if (!await file.exists()) {
+        LoggerService.error('Audio file not found for summarization', error: {
+          'audioFilePath': audioFilePath,
+          'requestId': requestId,
+        });
         throw Exception('Audio file not found');
       }
 
@@ -177,6 +285,13 @@ class GeminiApiService {
       final fileName = audioFilePath.split('/').last;
       final extension = fileName.split('.').last.toLowerCase();
       final mimeType = _getAudioMimeType(extension);
+
+      LoggerService.debug('Audio file processed for summarization', error: {
+        'fileName': fileName,
+        'fileSize': bytes.length,
+        'mimeType': mimeType,
+        'requestId': requestId,
+      });
 
       final contextText = context != null ? "\n\nContext: $context" : "";
       final prompt = "Please listen to the following audio file and provide a concise summary of its main points and key information.$contextText";
@@ -201,16 +316,26 @@ class GeminiApiService {
           'temperature': 0.3,
           'topK': 32,
           'topP': 1,
-          'maxOutputTokens': 2048,
+          'maxOutputTokens': 60000,
         }
       };
 
+      final startTime = DateTime.now();
       final response = await http.post(
         Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
         headers: {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(requestBody),
+      );
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
+        requestId: requestId,
+        duration: duration,
       );
 
       if (response.statusCode == 200) {
@@ -220,14 +345,34 @@ class GeminiApiService {
           final content = candidate['content'];
           
           if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-            return content['parts'][0]['text'].trim();
+            final summary = content['parts'][0]['text'].trim();
+            LoggerService.debug('Audio summarization completed', error: {
+              'summaryLength': summary.length,
+              'requestId': requestId,
+            });
+            return summary;
           }
         }
+        LoggerService.error('No summary content in Gemini API response', error: {
+          'responseData': data,
+          'requestId': requestId,
+        });
         throw Exception('No summary content in Gemini API response');
       } else {
+        LoggerService.logAiError(
+          error: 'Failed to summarize audio: ${response.statusCode} - ${response.body}',
+          endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+          requestId: requestId,
+          duration: duration,
+        );
         throw Exception('Failed to summarize audio: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
+      LoggerService.error('Error summarizing audio', error: {
+        'error': e.toString(),
+        'audioFilePath': audioFilePath,
+        'requestId': requestId,
+      });
       throw Exception('Error summarizing audio: $e');
     }
   }
@@ -236,7 +381,11 @@ class GeminiApiService {
     String apiKey, 
     String prompt, {
     List<PlatformFile>? attachedFiles,
+    String? requestId,
   }) async {
+    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    
     // Add today's date context to the prompt
     final today = DateTime.now();
     final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
@@ -275,9 +424,19 @@ class GeminiApiService {
         'temperature': 0.1,
         'topK': 32,
         'topP': 1,
-        'maxOutputTokens': 8192,
+        'maxOutputTokens': 60000,
       }
     };
+
+    // Log the request
+    LoggerService.logAiRequest(
+      endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
 
     final response = await http.post(
       Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
@@ -285,6 +444,17 @@ class GeminiApiService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode(requestBody),
+    );
+    
+    final duration = DateTime.now().difference(startTime);
+
+    // Log the response
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: actualRequestId,
+      duration: duration,
     );
 
     if (response.statusCode == 200) {
@@ -294,11 +464,27 @@ class GeminiApiService {
         final content = candidate['content'];
         
         if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-          return content['parts'][0]['text'];
+          final responseText = content['parts'][0]['text'];
+          LoggerService.debug('Gemini API request completed successfully', error: {
+            'responseLength': responseText.length,
+            'requestId': actualRequestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+          return responseText;
         }
       }
+      LoggerService.error('No content in Gemini API response', error: {
+        'responseData': data,
+        'requestId': actualRequestId,
+      });
       throw Exception('No content in Gemini API response');
     } else {
+      LoggerService.logAiError(
+        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+        requestId: actualRequestId,
+        duration: duration,
+      );
       throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
     }
   }
@@ -398,7 +584,7 @@ class GeminiApiService {
           }
         }
       } catch (e) {
-        print('Error loading linked note attachments for ${note.title}: $e');
+        LoggerService.warning('Error loading linked note attachments for ${note.title}: $e');
         // Continue with other files even if one fails
       }
     }
@@ -428,7 +614,7 @@ class GeminiApiService {
           platformFiles.add(platformFile);
         }
       } catch (e) {
-        print('Error reading attachment file $attachmentPath: $e');
+        LoggerService.warning('Error reading attachment file $attachmentPath: $e');
         // Continue with other files even if one fails
       }
     }
@@ -512,7 +698,7 @@ class GeminiApiService {
       }
     } catch (e) {
       // If there's an error loading relationships, continue without them
-      print('Error loading linked notes for ${note.title}: $e');
+      LoggerService.warning('Error loading linked notes for ${note.title}: $e');
     }
     
     buffer.writeln();
@@ -599,7 +785,7 @@ If the answer cannot be found in the provided context, please state that clearly
       }
     } catch (e) {
       // If there's an error loading relationships, continue without them
-      print('Error loading linked notes for transformation: $e');
+      LoggerService.warning('Error loading linked notes for transformation: $e');
     }
     
     buffer.writeln();

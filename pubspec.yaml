@@ -87,6 +87,9 @@ dependencies:
   
   # Markdown rendering
   gpt_markdown: ^1.1.4
+  
+  # Logging
+  logger: ^2.0.2+1
 
 dev_dependencies:
   flutter_test:
