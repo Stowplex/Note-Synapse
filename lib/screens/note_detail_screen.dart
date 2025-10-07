@@ -13,6 +13,7 @@ import '../services/audio_recording_service.dart';
 import '../services/gemini_api_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import 'ai_action_screen.dart';
+import 'subnote_edit_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -314,11 +315,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text(
-              'Sub-notes',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Sub-notes',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () => _addSubNote(currentNote),
+                  tooltip: 'Add sub-note',
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             ...currentNote.subNotes.map((subNote) => Card(
@@ -335,9 +346,77 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onLinkTap: _handleLinkTap,
                   ),
                 ),
+                trailing: PopupMenuButton(
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.edit, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle',
+                      child: Row(
+                        children: [
+                          Icon(
+                            subNote.isCompleted ? Icons.undo : Icons.check,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(subNote.isCompleted ? 'Mark Incomplete' : 'Mark Complete'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red, size: 16),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'edit':
+                        _editSubNote(currentNote, subNote);
+                        break;
+                      case 'toggle':
+                        _toggleSubNoteCompletion(subNote);
+                        break;
+                      case 'delete':
+                        _deleteSubNote(currentNote, subNote);
+                        break;
+                    }
+                  },
+                ),
                 onTap: () => _toggleSubNoteCompletion(subNote),
               ),
             )),
+          ] else if (!_isEditing) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text(
+                  'Sub-notes',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () => _addSubNote(currentNote),
+                  tooltip: 'Add sub-note',
+                ),
+              ],
+            ),
           ],
           const SizedBox(height: 24),
           Row(
@@ -1053,8 +1132,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _toggleSubNoteCompletion(SubNote subNote) {
-    // TODO: Implement sub-note completion toggle
+    context.read<AppProvider>().toggleSubNoteCompletion(widget.note.id, subNote.id);
   }
+
+  void _addSubNote(Note note) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SubNoteEditScreen(parentNote: note),
+      ),
+    );
+  }
+
+  void _editSubNote(Note note, SubNote subNote) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SubNoteEditScreen(
+          parentNote: note,
+          subNote: subNote,
+        ),
+      ),
+    );
+  }
+
+  void _deleteSubNote(Note note, SubNote subNote) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Sub-note'),
+        content: Text('Are you sure you want to delete "${subNote.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.read<AppProvider>().deleteSubNoteFromNote(note.id, subNote.id);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void _openAIAction() {
     Navigator.of(context).push(
@@ -2108,3 +2230,4 @@ class _AddTagDialogState extends State<_AddTagDialog> {
     return tagName.isNotEmpty && !widget.currentNote.tags.contains(tagName);
   }
 }
+

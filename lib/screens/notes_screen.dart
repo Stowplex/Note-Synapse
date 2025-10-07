@@ -6,6 +6,7 @@ import '../models/relationship.dart';
 import '../widgets/note_card.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
+import 'subnote_edit_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -198,6 +199,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     onTap: () => _handleNoteTap(note),
                     onLongPress: () => _handleNoteLongPress(note),
                     onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
+                    onAddSubNote: () => _addSubNote(note),
                   ),
                 ),
               );
@@ -328,6 +330,15 @@ class _NotesScreenState extends State<NotesScreen> {
       ),
     );
   }
+
+  void _addSubNote(Note note) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SubNoteEditScreen(parentNote: note),
+      ),
+    );
+  }
+
 }
 
 class _LinkNotesDialog extends StatefulWidget {
@@ -454,3 +465,4 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
     );
   }
 }
+

@@ -399,4 +399,99 @@ class AppProvider extends ChangeNotifier {
       _setLoading(false);
     }
   }
+
+  // SubNote management methods
+  Future<void> addSubNoteToNote(String noteId, SubNote subNote) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
+      final updatedNote = note.copyWith(
+        subNotes: updatedSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateSubNoteInNote(String noteId, SubNote updatedSubNote) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final updatedSubNotes = note.subNotes.map((sn) => 
+        sn.id == updatedSubNote.id ? updatedSubNote : sn
+      ).toList();
+      
+      final updatedNote = note.copyWith(
+        subNotes: updatedSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteSubNoteFromNote(String noteId, String subNoteId) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final updatedSubNotes = note.subNotes.where((sn) => sn.id != subNoteId).toList();
+      
+      final updatedNote = note.copyWith(
+        subNotes: updatedSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleSubNoteCompletion(String noteId, String subNoteId) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final updatedSubNotes = note.subNotes.map((sn) {
+        if (sn.id == subNoteId) {
+          return sn.copyWith(isCompleted: !sn.isCompleted);
+        }
+        return sn;
+      }).toList();
+      
+      final updatedNote = note.copyWith(
+        subNotes: updatedSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }

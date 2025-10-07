@@ -9,6 +9,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final Function(TaskStatus)? onStatusChanged;
+  final VoidCallback? onAddSubNote;
 
   const NoteCard({
     super.key,
@@ -17,6 +18,7 @@ class NoteCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.onStatusChanged,
+    this.onAddSubNote,
   });
 
   @override
@@ -160,6 +162,14 @@ class NoteCard extends StatelessWidget {
                     ],
                   ],
                   const Spacer(),
+                  if (onAddSubNote != null)
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 16),
+                      onPressed: onAddSubNote,
+                      tooltip: 'Add sub-note',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   if (note.attachmentPaths.isNotEmpty)
                     Icon(
                       Icons.attach_file,
