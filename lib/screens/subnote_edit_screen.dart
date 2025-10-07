@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
@@ -22,6 +23,9 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   late TextEditingController _nameController;
   late TextEditingController _contentController;
   bool _hasChanges = false;
+  bool _hasBeenSaved = false; // Track if subnote has been saved to database
+  Timer? _autoSaveTimer;
+  String? _currentSubNoteId; // Track the current subnote ID for upsert operations
 
   @override
   void initState() {
@@ -31,10 +35,20 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
     
     _nameController.addListener(_onTextChanged);
     _contentController.addListener(_onTextChanged);
+    
+    // Set up subnote ID and save state
+    if (widget.isNewSubNote) {
+      _hasBeenSaved = false;
+      _currentSubNoteId = DateTime.now().millisecondsSinceEpoch.toString();
+    } else {
+      _hasBeenSaved = true;
+      _currentSubNoteId = widget.subNote!.id;
+    }
   }
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
     _nameController.dispose();
     _contentController.dispose();
     super.dispose();
@@ -46,6 +60,38 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
         _hasChanges = true;
       });
     }
+    
+    // Auto-save after 2 seconds of no typing
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 2), () {
+      if (_hasChanges) {
+        _autoSave();
+      }
+    });
+  }
+
+  void _autoSave() {
+    if (_nameController.text.trim().isEmpty && _contentController.text.trim().isEmpty) {
+      return; // Don't save empty subnotes
+    }
+    
+    final appProvider = context.read<AppProvider>();
+    
+    // Create subnote with current ID (stable for new subnotes, original for existing)
+    final subNote = SubNote(
+      id: _currentSubNoteId!,
+      name: _nameController.text.trim().isEmpty ? 'Untitled' : _nameController.text.trim(),
+      content: _contentController.text.trim(),
+      createdAt: widget.isNewSubNote ? DateTime.now() : widget.subNote!.createdAt,
+    );
+    
+    // Use upsert to either add new or update existing
+    appProvider.upsertSubNoteInNote(widget.parentNote.id, subNote);
+    
+    setState(() {
+      _hasBeenSaved = true; // Mark as saved
+      _hasChanges = false;
+    });
   }
 
   @override
@@ -204,36 +250,19 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
       return;
     }
 
-    final appProvider = context.read<AppProvider>();
+    // Cancel any pending auto-save
+    _autoSaveTimer?.cancel();
     
-    if (widget.isNewSubNote) {
-      // Create new subnote
-      final newSubNote = SubNote(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text.trim(),
-        content: _contentController.text.trim(),
-        createdAt: DateTime.now(),
-      );
-      
-      appProvider.addSubNoteToNote(widget.parentNote.id, newSubNote);
-    } else {
-      // Update existing subnote
-      final updatedSubNote = widget.subNote!.copyWith(
-        name: _nameController.text.trim(),
-        content: _contentController.text.trim(),
-      );
-      
-      appProvider.updateSubNoteInNote(widget.parentNote.id, updatedSubNote);
-    }
-    
-    setState(() {
-      _hasChanges = false;
-    });
+    // Force save immediately
+    _autoSave();
     
     Navigator.pop(context);
   }
 
   void _cancelEditing() {
+    // Cancel any pending auto-save
+    _autoSaveTimer?.cancel();
+    
     if (_hasChanges) {
       showDialog(
         context: context,

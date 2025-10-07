@@ -494,4 +494,37 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // Upsert subnote - either add new or update existing
+  Future<void> upsertSubNoteInNote(String noteId, SubNote subNote) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final existingSubNoteIndex = note.subNotes.indexWhere((sn) => sn.id == subNote.id);
+      
+      List<SubNote> updatedSubNotes;
+      if (existingSubNoteIndex >= 0) {
+        // Update existing subnote
+        updatedSubNotes = List<SubNote>.from(note.subNotes);
+        updatedSubNotes[existingSubNoteIndex] = subNote;
+      } else {
+        // Add new subnote
+        updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
+      }
+      
+      final updatedNote = note.copyWith(
+        subNotes: updatedSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }

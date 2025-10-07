@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
@@ -307,10 +306,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           const SizedBox(height: 16),
           SelectionArea(
             child: InteractiveCheckboxList(
+              key: ValueKey('note_${currentNote.id}'),
               originalContent: currentNote.content,
               onContentChanged: _updateNoteContent,
               style: Theme.of(context).textTheme.bodyLarge,
               textDirection: TextDirection.ltr,
+              onLinkTap: _handleLinkTap,
             ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
@@ -339,12 +340,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   color: subNote.isCompleted ? Colors.green : Colors.grey,
                 ),
                 title: SelectableText(subNote.name),
-                subtitle: SelectionArea(
-                  child: GptMarkdown(
-                    subNote.content,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    onLinkTap: _handleLinkTap,
-                  ),
+                subtitle: InteractiveCheckboxList(
+                  key: ValueKey('subnote_${subNote.id}'),
+                  originalContent: subNote.content,
+                  onContentChanged: (newContent) => _updateSubNoteContent(subNote, newContent),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textDirection: TextDirection.ltr,
+                  onLinkTap: _handleLinkTap,
                 ),
                 trailing: PopupMenuButton(
                   itemBuilder: (context) => [
@@ -1922,6 +1924,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       final updatedNote = widget.note.copyWith(content: newContent);
       await appProvider.updateNote(updatedNote);
+    }
+  }
+
+  // Update subnote content when checkboxes are toggled
+  void _updateSubNoteContent(SubNote subNote, String newContent) async {
+    if (mounted) {
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      final updatedSubNote = subNote.copyWith(content: newContent);
+      await appProvider.updateSubNoteInNote(widget.note.id, updatedSubNote);
     }
   }
 

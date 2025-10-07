@@ -6,6 +6,7 @@ class InteractiveCheckboxList extends StatefulWidget {
   final Function(String) onContentChanged;
   final TextStyle? style;
   final TextDirection textDirection;
+  final Function(String, String)? onLinkTap;
 
   const InteractiveCheckboxList({
     super.key,
@@ -13,6 +14,7 @@ class InteractiveCheckboxList extends StatefulWidget {
     required this.onContentChanged,
     this.style,
     this.textDirection = TextDirection.ltr,
+    this.onLinkTap,
   });
 
   @override
@@ -45,7 +47,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
-      final checkboxMatch = RegExp(r'^(\s*)\[([ x])\]\s+(.+)$').firstMatch(line);
+      final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
       
       if (checkboxMatch != null) {
         _checkboxItems.add(CheckboxItem(
@@ -73,7 +75,10 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     
     for (final item in _checkboxItems) {
       final newCheckbox = item.isChecked ? 'x' : ' ';
-      lines[item.lineIndex] = '${item.indent}[$newCheckbox] ${item.text}';
+      // Check if the original line had a dash prefix
+      final hasDashPrefix = item.originalLine.trim().startsWith('-');
+      final dashPrefix = hasDashPrefix ? '- ' : '';
+      lines[item.lineIndex] = '${item.indent}$dashPrefix[$newCheckbox] ${item.text}';
     }
     
     _currentContent = lines.join('\n');
@@ -94,7 +99,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
-      final checkboxMatch = RegExp(r'^(\s*)\[([ x])\]\s+(.+)$').firstMatch(line);
+      final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
       
       if (checkboxMatch != null) {
         // This is a checkbox line - create interactive checkbox
@@ -140,9 +145,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
                     text,
                     style: widget.style,
                     textDirection: widget.textDirection,
-                    onLinkTap: (url, title) {
-                      // Handle link taps if needed
-                    },
+                    onLinkTap: widget.onLinkTap,
                   ),
                 ),
               ],
@@ -154,14 +157,12 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: GptMarkdown(
-              line,
-              style: widget.style,
-              textDirection: widget.textDirection,
-              onLinkTap: (url, title) {
-                // Handle link taps if needed
-              },
-            ),
+          child: GptMarkdown(
+            line,
+            style: widget.style,
+            textDirection: widget.textDirection,
+            onLinkTap: widget.onLinkTap,
+          ),
           ),
         );
       }
