@@ -306,6 +306,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             child: GptMarkdown(
               currentNote.content,
               style: Theme.of(context).textTheme.bodyLarge,
+              onLinkTap: _handleLinkTap,
             ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
@@ -328,6 +329,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   child: GptMarkdown(
                     subNote.content,
                     style: Theme.of(context).textTheme.bodySmall,
+                    onLinkTap: _handleLinkTap,
                   ),
                 ),
                 onTap: () => _toggleSubNoteCompletion(subNote),
@@ -1680,6 +1682,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$minutes:$seconds';
+  }
+
+  // Link handling function
+  void _handleLinkTap(String url, String text) {
+    // Note: gpt_markdown passes parameters in reverse order
+    // First parameter is the actual URL, second is the display text
+    _launchUrl(url);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cannot open link: $url'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening link: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

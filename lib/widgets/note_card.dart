@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/note.dart';
 
 class NoteCard extends StatelessWidget {
@@ -66,6 +67,7 @@ class NoteCard extends StatelessWidget {
                 ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
+                onLinkTap: _handleLinkTap,
               ),
               if (note.subNotes.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -302,6 +304,30 @@ class NoteCard extends StatelessWidget {
       return '${difference.inDays} days ago';
     } else {
       return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  // Link handling function
+  void _handleLinkTap(String url, String text) {
+    // Note: gpt_markdown passes parameters in reverse order
+    // First parameter is the actual URL, second is the display text
+    _launchUrl(url);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        // Note: We can't show a snackbar here since this is a stateless widget
+        // The error will be silently handled
+        print('Cannot open link: $url');
+      }
+    } catch (e) {
+      // Note: We can't show a snackbar here since this is a stateless widget
+      // The error will be silently handled
+      print('Error opening link: $e');
     }
   }
 }

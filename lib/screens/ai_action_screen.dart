@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/ai_interaction.dart';
@@ -259,6 +260,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                     child: GptMarkdown(
                       _response!,
                       style: Theme.of(context).textTheme.bodyLarge,
+                      onLinkTap: _handleLinkTap,
                     ),
                   ),
                 ),
@@ -571,5 +573,39 @@ class _AIActionScreenState extends State<AIActionScreen> {
     }
     
     return firstLine.isEmpty ? 'AI Response' : firstLine;
+  }
+
+  // Link handling function
+  void _handleLinkTap(String url, String text) {
+    // Note: gpt_markdown passes parameters in reverse order
+    // First parameter is the actual URL, second is the display text
+    _launchUrl(url);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cannot open link: $url'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening link: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
