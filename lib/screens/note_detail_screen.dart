@@ -27,6 +27,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   late TextEditingController _contentController;
   bool _isEditing = false;
   bool _hasChanges = false;
+  bool _hasBeenSaved = false; // Track if note has been saved to database
   Timer? _autoSaveTimer;
   DateTime? _scheduledAt;
   DateTime? _completeBy;
@@ -35,11 +36,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   List<Note> _linkedNotes = [];
   
   // Audio recording state
-  final AudioRecordingService _audioService = AudioRecordingService();
+  AudioRecordingService? _audioService;
   bool _isRecording = false;
   bool _isPlaying = false;
   String? _currentPlayingPath;
-  Duration _recordingDuration = Duration.zero;
   Duration _playingPosition = Duration.zero;
   Duration _playingDuration = Duration.zero;
 
@@ -65,13 +65,37 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     // Start in editing mode for new notes
     if (widget.isNewNote) {
       _isEditing = true;
+      _hasBeenSaved = false; // New notes haven't been saved yet
+    } else {
+      _hasBeenSaved = true; // Existing notes are already in the database
     }
     
     // Load relationships
     _loadRelationships();
     
-    // Set up audio service listeners
+    // Initialize audio service on all platforms (including Linux)
+    _initializeAudioService();
+  }
+
+  void _initializeAudioService() {
+    _audioService = AudioRecordingService();
     _setupAudioListeners();
+    
+    // Reset audio state
+    _isRecording = false;
+    _isPlaying = false;
+    _currentPlayingPath = null;
+    _playingPosition = Duration.zero;
+    _playingDuration = Duration.zero;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reinitialize audio service if it was disposed
+    if (_audioService == null) {
+      _initializeAudioService();
+    }
   }
 
   @override
@@ -79,12 +103,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _autoSaveTimer?.cancel();
     _titleController.dispose();
     _contentController.dispose();
-    _audioService.dispose();
+    // Reset audio state but don't dispose the service (it's a singleton)
+    _audioService?.resetState();
     super.dispose();
   }
 
   void _setupAudioListeners() {
-    _audioService.recordingStateStream.listen((isRecording) {
+    if (_audioService == null) return;
+    
+    _audioService!.recordingStateStream.listen((isRecording) {
       if (mounted) {
         setState(() {
           _isRecording = isRecording;
@@ -92,15 +119,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
     });
 
-    _audioService.playingStateStream.listen((isPlaying) {
+    _audioService!.playingStateStream.listen((isPlaying) {
+      print('Audio playing state changed: $isPlaying');
       if (mounted) {
         setState(() {
           _isPlaying = isPlaying;
+          if (isPlaying) {
+            _currentPlayingPath = _audioService!.currentPlayingPath;
+          } else {
+            _currentPlayingPath = null;
+          }
         });
       }
     });
 
-    _audioService.playingPositionStream.listen((position) {
+    _audioService!.playingPositionStream.listen((position) {
       if (mounted) {
         setState(() {
           _playingPosition = position;
@@ -108,7 +141,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
     });
 
-    _audioService.playingDurationStream.listen((duration) {
+    _audioService!.playingDurationStream.listen((duration) {
       if (mounted) {
         setState(() {
           _playingDuration = duration;
@@ -649,7 +682,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_isRecording) _buildRecordingIndicator(),
+          if (_audioService != null && _isRecording) _buildRecordingIndicator(),
           Row(
             children: [
               Expanded(
@@ -667,17 +700,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   label: const Text('Attach'),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _isRecording ? _stopRecording : _startRecording,
-                  icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                  label: Text(_isRecording ? 'Stop' : 'Record'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _isRecording ? Colors.red : null,
+              if (_audioService != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isRecording ? _stopRecording : _startRecording,
+                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                    label: Text(_isRecording ? 'Stop Recording' : 'Record Audio'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _isRecording ? Colors.red : null,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -688,27 +723,54 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Widget _buildRecordingIndicator() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.5), width: 2),
       ),
       child: Row(
         children: [
-          Icon(Icons.mic, color: Colors.red),
-          const SizedBox(width: 8),
-          Text(
-            'Recording...',
-            style: TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(Icons.mic, color: Colors.red, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recording in progress...',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap "Stop Recording" when you\'re done',
+                  style: TextStyle(
+                    color: Colors.red[700],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
-          const Spacer(),
-          TextButton(
+          const SizedBox(width: 8),
+          TextButton.icon(
             onPressed: _cancelRecording,
-            child: Text('Cancel', style: TextStyle(color: Colors.red)),
+            icon: Icon(Icons.cancel, color: Colors.red, size: 18),
+            label: Text('Cancel', style: TextStyle(color: Colors.red)),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.withOpacity(0.1),
+            ),
           ),
         ],
       ),
@@ -821,11 +883,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       completeBy: _completeBy?.toIso8601String(),
     );
     
-    if (widget.isNewNote) {
-      // Add new note to the database
+    if (!_hasBeenSaved) {
+      // First save: Add new note to the database
       context.read<AppProvider>().addNote(updatedNote);
+      setState(() {
+        _hasBeenSaved = true; // Mark as saved after first insert
+      });
     } else {
-      // Update existing note
+      // Subsequent saves: Update existing note
       context.read<AppProvider>().updateNote(updatedNote);
     }
     
@@ -930,7 +995,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 color: fileExists ? Colors.grey[600] : Colors.red,
               ),
             ),
-            if (isAudioFile && fileExists) ...[
+            if (isAudioFile && fileExists && _audioService != null) ...[
               const SizedBox(height: 4),
               _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
             ],
@@ -939,12 +1004,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isAudioFile && fileExists) ...[
+            if (isAudioFile && fileExists && _audioService != null) ...[
               IconButton(
                 icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
                 onPressed: () => _toggleAudioPlayback(attachmentPath),
                 tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
               ),
+              if (isCurrentlyPlaying)
+                IconButton(
+                  icon: const Icon(Icons.stop),
+                  onPressed: () => _stopAudioPlayback(),
+                  tooltip: 'Stop',
+                ),
               IconButton(
                 icon: const Icon(Icons.text_fields),
                 onPressed: () => _transcribeAudio(attachmentPath),
@@ -980,7 +1051,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               final newPosition = Duration(
                 milliseconds: (value * _playingDuration.inMilliseconds).round(),
               );
-              _audioService.seekTo(newPosition);
+              _audioService?.seekTo(newPosition);
             },
           ),
           Row(
@@ -1366,8 +1437,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Audio recording methods
   Future<void> _startRecording() async {
+    if (_audioService == null) return;
+    
     try {
-      final success = await _audioService.startRecording();
+      final success = await _audioService!.startRecording();
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1394,8 +1467,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _stopRecording() async {
+    if (_audioService == null) return;
+    
     try {
-      final audioPath = await _audioService.stopRecording();
+      final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
         // Add the recorded audio as an attachment
         final currentNote = context.read<AppProvider>().notes.firstWhere(
@@ -1431,7 +1506,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _cancelRecording() async {
-    await _audioService.cancelRecording();
+    if (_audioService == null) return;
+    
+    await _audioService!.cancelRecording();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Recording cancelled'),
@@ -1442,19 +1519,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Audio playback methods
   Future<void> _toggleAudioPlayback(String audioPath) async {
+    if (_audioService == null) return;
+    
     try {
       if (_isPlaying && _currentPlayingPath == audioPath) {
-        await _audioService.pausePlaying();
+        await _audioService!.pausePlaying();
       } else if (_isPlaying) {
-        await _audioService.stopPlaying();
-        await _audioService.startPlaying(audioPath);
+        await _audioService!.stopPlaying();
+        await _audioService!.startPlaying(audioPath);
+        setState(() {
+          _currentPlayingPath = audioPath;
+        });
       } else {
-        await _audioService.startPlaying(audioPath);
+        final success = await _audioService!.startPlaying(audioPath);
+        if (success) {
+          setState(() {
+            _currentPlayingPath = audioPath;
+          });
+        }
       }
     } catch (e) {
+      print('Error playing audio: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error playing audio: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopAudioPlayback() async {
+    if (_audioService == null) return;
+    
+    try {
+      await _audioService!.stopPlaying();
+      setState(() {
+        _currentPlayingPath = null;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error stopping audio: $e'),
           backgroundColor: Colors.red,
         ),
       );

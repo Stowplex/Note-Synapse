@@ -10,8 +10,10 @@ class AudioRecordingService {
   factory AudioRecordingService() => _instance;
   AudioRecordingService._internal();
 
-  final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer _player = AudioPlayer();
+  // Only initialize audio services on supported platforms
+  AudioRecorder? _recorder;
+  AudioPlayer? _player;
+  bool? _isSupported;
   
   bool _isRecording = false;
   bool _isPlaying = false;
@@ -22,8 +24,40 @@ class AudioRecordingService {
   StreamSubscription<RecordState>? _recordStateSubscription;
   StreamSubscription<Duration>? _playerPositionSubscription;
   StreamSubscription<Duration>? _playerDurationSubscription;
+  
+  // Linux-specific recording variables
+  Process? _linuxRecordingProcess;
+  Timer? _recordingTimer;
+  Duration _recordingDuration = Duration.zero;
+
+  // Initialize audio services only on supported platforms
+  void _initializeAudioServices() {
+    // Check if we're on a supported platform (Android, iOS, macOS, Windows, Linux)
+    _isSupported = true; // Now supporting all platforms including Linux
+    
+    if (_isSupported!) {
+      try {
+        _recorder = AudioRecorder();
+        _player = AudioPlayer();
+      } catch (e) {
+        print('Failed to initialize audio services: $e');
+        _isSupported = false;
+        _recorder = null;
+        _player = null;
+      }
+    } else {
+      _recorder = null;
+      _player = null;
+    }
+  }
 
   // Getters
+  bool get isSupported {
+    if (_isSupported == null) {
+      _initializeAudioServices();
+    }
+    return _isSupported!;
+  }
   bool get isRecording => _isRecording;
   bool get isPlaying => _isPlaying;
   String? get currentRecordingPath => _currentRecordingPath;
@@ -44,19 +78,47 @@ class AudioRecordingService {
 
   /// Request microphone permission
   Future<bool> requestPermission() async {
-    final status = await Permission.microphone.request();
-    return status == PermissionStatus.granted;
+    if (!isSupported) return false;
+    
+    // On Linux, we don't need to request permissions
+    if (Platform.isLinux) {
+      return true;
+    }
+    
+    try {
+      final status = await Permission.microphone.request();
+      return status == PermissionStatus.granted;
+    } catch (e) {
+      print('Permission request failed: $e');
+      return false;
+    }
   }
 
   /// Check if microphone permission is granted
   Future<bool> hasPermission() async {
-    final status = await Permission.microphone.status;
-    return status == PermissionStatus.granted;
+    if (!isSupported) return false;
+    
+    // On Linux, we don't need to check permissions
+    if (Platform.isLinux) {
+      return true;
+    }
+    
+    try {
+      final status = await Permission.microphone.status;
+      return status == PermissionStatus.granted;
+    } catch (e) {
+      print('Permission check failed: $e');
+      return false;
+    }
   }
 
   /// Start recording audio
   Future<bool> startRecording() async {
     try {
+      if (!isSupported) {
+        return false;
+      }
+
       if (_isRecording) {
         return false;
       }
@@ -69,11 +131,6 @@ class AudioRecordingService {
         }
       }
 
-      // Check if recorder is available
-      if (!await _recorder.hasPermission()) {
-        return false;
-      }
-
       // Get the documents directory
       final directory = await getApplicationDocumentsDirectory();
       final audioDir = Directory('${directory.path}/audio_recordings');
@@ -83,25 +140,40 @@ class AudioRecordingService {
 
       // Generate unique filename
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      _currentRecordingPath = '${audioDir.path}/recording_$timestamp.m4a';
+      _currentRecordingPath = '${audioDir.path}/recording_$timestamp.wav';
 
-      // Start recording
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path: _currentRecordingPath!,
-      );
+      // Platform-specific recording implementation
+      if (Platform.isLinux) {
+        return await _startLinuxRecording();
+      } else {
+        // Use the record package for other platforms
+        if (_recorder == null) {
+          return false;
+        }
 
-      _isRecording = true;
-      _recordingStateController.add(true);
+        // Check if recorder is available
+        if (!await _recorder!.hasPermission()) {
+          return false;
+        }
 
-      // Start duration tracking
-      _startDurationTracking();
+        // Start recording
+        await _recorder!.start(
+          const RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 128000,
+            sampleRate: 44100,
+          ),
+          path: _currentRecordingPath!,
+        );
 
-      return true;
+        _isRecording = true;
+        _recordingStateController.add(true);
+
+        // Start duration tracking
+        _startDurationTracking();
+
+        return true;
+      }
     } catch (e) {
       print('Error starting recording: $e');
       return false;
@@ -111,16 +183,28 @@ class AudioRecordingService {
   /// Stop recording audio
   Future<String?> stopRecording() async {
     try {
+      if (!isSupported) {
+        return null;
+      }
+
       if (!_isRecording) {
         return null;
       }
 
-      final path = await _recorder.stop();
-      _isRecording = false;
-      _recordingStateController.add(false);
-      _recordStateSubscription?.cancel();
+      if (Platform.isLinux) {
+        return await _stopLinuxRecording();
+      } else {
+        if (_recorder == null) {
+          return null;
+        }
 
-      return path;
+        final path = await _recorder!.stop();
+        _isRecording = false;
+        _recordingStateController.add(false);
+        _recordStateSubscription?.cancel();
+
+        return path;
+      }
     } catch (e) {
       print('Error stopping recording: $e');
       return null;
@@ -130,11 +214,22 @@ class AudioRecordingService {
   /// Cancel current recording
   Future<void> cancelRecording() async {
     try {
+      if (!isSupported) {
+        return;
+      }
+
       if (_isRecording) {
-        await _recorder.cancel();
+        if (Platform.isLinux) {
+          await _cancelLinuxRecording();
+        } else {
+          if (_recorder != null) {
+            await _recorder!.cancel();
+            _recordStateSubscription?.cancel();
+          }
+        }
+        
         _isRecording = false;
         _recordingStateController.add(false);
-        _recordStateSubscription?.cancel();
         
         // Delete the partial recording file
         if (_currentRecordingPath != null) {
@@ -153,6 +248,10 @@ class AudioRecordingService {
   /// Start playing audio
   Future<bool> startPlaying(String filePath) async {
     try {
+      if (!isSupported || _player == null) {
+        return false;
+      }
+
       if (_isPlaying && _currentPlayingPath == filePath) {
         // Already playing this file, pause it
         await pausePlaying();
@@ -169,9 +268,10 @@ class AudioRecordingService {
         return false;
       }
 
-      await _player.play(DeviceFileSource(filePath));
+      await _player!.play(DeviceFileSource(filePath));
       _isPlaying = true;
       _currentPlayingPath = filePath;
+      print('Audio playback started: $filePath');
       _playingStateController.add(true);
 
       // Start position tracking
@@ -187,21 +287,33 @@ class AudioRecordingService {
   /// Pause playing audio
   Future<void> pausePlaying() async {
     try {
+      if (!isSupported || _player == null) {
+        return;
+      }
+
       if (_isPlaying) {
-        await _player.pause();
+        await _player!.pause();
         _isPlaying = false;
+        print('Audio playback paused');
         _playingStateController.add(false);
       }
     } catch (e) {
       print('Error pausing playback: $e');
+      // Reset state if player is disposed
+      _isPlaying = false;
+      _playingStateController.add(false);
     }
   }
 
   /// Resume playing audio
   Future<void> resumePlaying() async {
     try {
+      if (!isSupported || _player == null) {
+        return;
+      }
+
       if (!_isPlaying && _currentPlayingPath != null) {
-        await _player.resume();
+        await _player!.resume();
         _isPlaying = true;
         _playingStateController.add(true);
       }
@@ -213,14 +325,25 @@ class AudioRecordingService {
   /// Stop playing audio
   Future<void> stopPlaying() async {
     try {
-      await _player.stop();
+      if (!isSupported || _player == null) {
+        return;
+      }
+
+      await _player!.stop();
       _isPlaying = false;
       _currentPlayingPath = null;
+      print('Audio playback stopped');
       _playingStateController.add(false);
       _playerPositionSubscription?.cancel();
       _playerDurationSubscription?.cancel();
     } catch (e) {
       print('Error stopping playback: $e');
+      // Reset state if player is disposed
+      _isPlaying = false;
+      _currentPlayingPath = null;
+      _playingStateController.add(false);
+      _playerPositionSubscription?.cancel();
+      _playerDurationSubscription?.cancel();
     }
   }
 
@@ -233,7 +356,11 @@ class AudioRecordingService {
   /// Seek to specific position
   Future<void> seekTo(Duration position) async {
     try {
-      await _player.seek(position);
+      if (!isSupported || _player == null) {
+        return;
+      }
+
+      await _player!.seek(position);
     } catch (e) {
       print('Error seeking: $e');
     }
@@ -254,14 +381,122 @@ class AudioRecordingService {
 
   /// Start position tracking for playback
   void _startPositionTracking() {
-    _playerPositionSubscription = _player.onPositionChanged.listen((position) {
+    if (!isSupported || _player == null) {
+      return;
+    }
+
+    _playerPositionSubscription = _player!.onPositionChanged.listen((position) {
       _playingPosition = position;
       _playingPositionController.add(position);
     });
 
-    _playerDurationSubscription = _player.onDurationChanged.listen((duration) {
+    _playerDurationSubscription = _player!.onDurationChanged.listen((duration) {
       _playingDuration = duration;
       _playingDurationController.add(duration);
+    });
+  }
+
+  /// Linux-specific recording implementation using gstreamer
+  Future<bool> _startLinuxRecording() async {
+    try {
+      // First check if gstreamer is available
+      final gstCheck = await Process.run('which', ['gst-launch-1.0']);
+      if (gstCheck.exitCode != 0) {
+        print('gst-launch-1.0 not found. Please install gstreamer1.0-tools');
+        return false;
+      }
+
+      // Use gstreamer to record audio
+      final args = [
+        'gst-launch-1.0',
+        'pulsesrc',
+        '!',
+        'audioconvert',
+        '!',
+        'wavenc',
+        '!',
+        'filesink',
+        'location=${_currentRecordingPath}',
+      ];
+
+      _linuxRecordingProcess = await Process.start(args[0], args.sublist(1));
+      
+      // Wait a moment to ensure the process started successfully
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Check if the process is still running by checking if it has exited
+      try {
+        final exitCode = await _linuxRecordingProcess!.exitCode.timeout(
+          const Duration(milliseconds: 100),
+        );
+        // If we get here, the process has already exited
+        print('Failed to start gstreamer recording process, exit code: $exitCode');
+        return false;
+      } catch (e) {
+        // Timeout means the process is still running, which is what we want
+        // Continue with recording setup
+      }
+
+      _isRecording = true;
+      _recordingStateController.add(true);
+      _recordingDuration = Duration.zero;
+
+      // Start duration tracking
+      _startLinuxDurationTracking();
+
+      return true;
+    } catch (e) {
+      print('Error starting Linux recording: $e');
+      return false;
+    }
+  }
+
+  /// Stop Linux recording
+  Future<String?> _stopLinuxRecording() async {
+    try {
+      if (_linuxRecordingProcess != null) {
+        _linuxRecordingProcess!.kill();
+        await _linuxRecordingProcess!.exitCode;
+        _linuxRecordingProcess = null;
+      }
+
+      _recordingTimer?.cancel();
+      _recordingTimer = null;
+      _isRecording = false;
+      _recordingStateController.add(false);
+
+      return _currentRecordingPath;
+    } catch (e) {
+      print('Error stopping Linux recording: $e');
+      return null;
+    }
+  }
+
+  /// Cancel Linux recording
+  Future<void> _cancelLinuxRecording() async {
+    try {
+      if (_linuxRecordingProcess != null) {
+        _linuxRecordingProcess!.kill();
+        await _linuxRecordingProcess!.exitCode;
+        _linuxRecordingProcess = null;
+      }
+
+      _recordingTimer?.cancel();
+      _recordingTimer = null;
+    } catch (e) {
+      print('Error canceling Linux recording: $e');
+    }
+  }
+
+  /// Start duration tracking for Linux recording
+  void _startLinuxDurationTracking() {
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isRecording) {
+        timer.cancel();
+        return;
+      }
+      _recordingDuration = Duration(seconds: _recordingDuration.inSeconds + 1);
+      _recordingDurationController.add(_recordingDuration);
     });
   }
 
@@ -275,7 +510,45 @@ class AudioRecordingService {
     _recordStateSubscription?.cancel();
     _playerPositionSubscription?.cancel();
     _playerDurationSubscription?.cancel();
-    _recorder.dispose();
-    _player.dispose();
+    _recordingTimer?.cancel();
+    _linuxRecordingProcess?.kill();
+    _recorder?.dispose();
+    _player?.dispose();
+    
+    // Reset state
+    _isRecording = false;
+    _isPlaying = false;
+    _currentRecordingPath = null;
+    _currentPlayingPath = null;
+    _recordingDuration = Duration.zero;
+    _playingPosition = Duration.zero;
+    _playingDuration = Duration.zero;
+  }
+
+  /// Reset audio state without disposing resources
+  void resetState() {
+    _isRecording = false;
+    _isPlaying = false;
+    _currentRecordingPath = null;
+    _currentPlayingPath = null;
+    _recordingDuration = Duration.zero;
+    _playingPosition = Duration.zero;
+    _playingDuration = Duration.zero;
+    
+    // Cancel any active subscriptions
+    _recordStateSubscription?.cancel();
+    _playerPositionSubscription?.cancel();
+    _playerDurationSubscription?.cancel();
+    _recordingTimer?.cancel();
+    
+    // Stop any active processes
+    _linuxRecordingProcess?.kill();
+    
+    // Stop any active playback
+    try {
+      _player?.stop();
+    } catch (e) {
+      print('Error stopping player during reset: $e');
+    }
   }
 }
