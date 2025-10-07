@@ -502,9 +502,98 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               textAlignVertical: TextAlignVertical.top,
             ),
           ),
+          const SizedBox(height: 8),
+          _buildMarkdownButtons(),
         ],
       ),
     );
+  }
+
+  Widget _buildMarkdownButtons() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildMarkdownButton(
+            icon: Icons.check_box_outline_blank,
+            label: 'Checkbox',
+            onPressed: _insertCheckbox,
+          ),
+          _buildMarkdownButton(
+            icon: Icons.title,
+            label: 'Title',
+            onPressed: _insertTitle,
+          ),
+          _buildMarkdownButton(
+            icon: Icons.format_bold,
+            label: 'Bold',
+            onPressed: _insertBold,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarkdownButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: const Size(0, 36),
+      ),
+    );
+  }
+
+  void _insertCheckbox() {
+    _insertTextAtCursor('\n\n[ ] \n\n');
+  }
+
+  void _insertTitle() {
+    _insertTextAtCursor('\n\n** \n\n');
+  }
+
+  void _insertBold() {
+    _insertTextAtCursor('****', selectMiddle: true);
+  }
+
+  void _insertTextAtCursor(String text, {bool selectMiddle = false}) {
+    final textEditingValue = _contentController.value;
+    final selection = textEditingValue.selection;
+    
+    if (selection.isValid) {
+      final newText = textEditingValue.text.replaceRange(
+        selection.start,
+        selection.end,
+        text,
+      );
+      
+      int newCursorPosition;
+      if (selectMiddle && text.length > 0) {
+        // For bold text, place cursor between the ** markers
+        newCursorPosition = selection.start + (text.length ~/ 2);
+      } else {
+        // For other text, place cursor at the end
+        newCursorPosition = selection.start + text.length;
+      }
+      
+      _contentController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: newCursorPosition),
+      );
+    } else {
+      // If no selection, append to the end
+      _contentController.text += text;
+      _contentController.selection = TextSelection.collapsed(
+        offset: _contentController.text.length,
+      );
+    }
   }
 
   Widget _buildDateSelectionFields() {
