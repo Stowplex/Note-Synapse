@@ -261,11 +261,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
               style: TextStyle(
                 decoration: task.isCompleted ? TextDecoration.lineThrough : null,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             subtitle: SelectionArea(
               child: GptMarkdown(
                 task.content,
                 style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
                 onLinkTap: _handleLinkTap,
               ),
             ),
@@ -312,11 +316,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: const Icon(Icons.note),
-            title: Text(note.title),
+            title: Text(
+              note.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
             subtitle: SelectionArea(
               child: GptMarkdown(
                 note.content,
                 style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
                 onLinkTap: _handleLinkTap,
               ),
             ),

@@ -133,6 +133,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                     child: NoteCard(
                       note: note,
                       onTap: () => _openNoteDetail(note),
+                      onStatusChanged: note.isTask ? (status) {
+                        appProvider.updateTaskStatus(note.id, status);
+                      } : null,
                     ),
                   )),
                   const SizedBox(height: 16),

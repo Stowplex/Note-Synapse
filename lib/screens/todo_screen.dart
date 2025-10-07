@@ -120,7 +120,7 @@ class _TodoScreenState extends State<TodoScreen> {
                           Row(
                             children: [
                               _buildStatusIcon(task),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   task.title,
@@ -128,47 +128,11 @@ class _TodoScreenState extends State<TodoScreen> {
                                     fontWeight: FontWeight.bold,
                                     decoration: task.isCompleted ? TextDecoration.lineThrough : null,
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               _buildStatusDropdown(task, appProvider),
-                              if (task.scheduledAt != null || task.completeBy != null)
-                                Row(
-                                  children: [
-                                    if (task.scheduledAt != null)
-                                      Container(
-                                        margin: const EdgeInsets.only(right: 8),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green[100],
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          'Start: ${task.scheduledAt}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.green[700],
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    if (task.completeBy != null)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          'Due: ${task.completeBy}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -177,9 +141,49 @@ class _TodoScreenState extends State<TodoScreen> {
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey[600],
                             ),
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (task.scheduledAt != null || task.completeBy != null) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                if (task.scheduledAt != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green[100],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Start: ${task.scheduledAt}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.green[700],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (task.completeBy != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Due: ${task.completeBy}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                           if (task.subNotes.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             LinearProgressIndicator(
@@ -216,7 +220,7 @@ class _TodoScreenState extends State<TodoScreen> {
                             Wrap(
                               spacing: 4,
                               runSpacing: 4,
-                              children: task.tags.map((tag) => Chip(
+                              children: task.tags.take(3).map((tag) => Chip(
                                 label: Text(
                                   tag,
                                   style: const TextStyle(fontSize: 12),
