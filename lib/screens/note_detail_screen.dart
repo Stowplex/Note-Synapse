@@ -10,6 +10,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/gemini_api_service.dart';
+import '../widgets/interactive_checkbox_list.dart';
 import 'ai_action_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -303,10 +304,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           const SizedBox(height: 16),
           SelectionArea(
-            child: GptMarkdown(
-              currentNote.content,
+            child: InteractiveCheckboxList(
+              originalContent: currentNote.content,
+              onContentChanged: _updateNoteContent,
               style: Theme.of(context).textTheme.bodyLarge,
-              onLinkTap: _handleLinkTap,
+              textDirection: TextDirection.ltr,
             ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
@@ -1682,6 +1684,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$minutes:$seconds';
+  }
+
+  // Update note content when checkboxes are toggled
+  void _updateNoteContent(String newContent) async {
+    if (mounted) {
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      final updatedNote = widget.note.copyWith(content: newContent);
+      await appProvider.updateNote(updatedNote);
+    }
   }
 
   // Link handling function
