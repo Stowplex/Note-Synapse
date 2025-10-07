@@ -374,23 +374,26 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 16),
           ],
 
-          // Content preview
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Content Preview',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildContentPreview(),
-                ],
+          // Content preview (only for create new note)
+          if (_action == 'create') ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Content Preview',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildContentPreview(),
+                  ],
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 16),
+          ],
 
           const SizedBox(height: 24),
 
@@ -399,7 +402,7 @@ class _ShareScreenState extends State<ShareScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false),
                   child: const Text('Cancel'),
                 ),
               ),
@@ -438,96 +441,122 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 8),
             
-            // Selected tags
-            if (_selectedTags.isNotEmpty) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _selectedTags.map((tag) {
-                  return Chip(
-                    label: Text(tag),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                    onDeleted: () {
-                      setState(() {
-                        _selectedTags.remove(tag);
-                        _updatePreparedNoteTags();
-                      });
-                    },
-                  );
-                }).toList(),
+            // Scrollable tags container with constrained height
+            Container(
+              height: 200, // Fixed height for scrollable area
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(height: 12),
-            ],
-            
-            // Add new tag
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _newTagController,
-                    decoration: const InputDecoration(
-                      labelText: 'Add new tag',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.add),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Selected tags
+                    if (_selectedTags.isNotEmpty) ...[
+                      Text(
+                        'Selected tags:',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _selectedTags.map((tag) {
+                          return Chip(
+                            label: Text(tag),
+                            deleteIcon: const Icon(Icons.close, size: 18),
+                            onDeleted: () {
+                              setState(() {
+                                _selectedTags.remove(tag);
+                                _updatePreparedNoteTags();
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    
+                    // Add new tag
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _newTagController,
+                            decoration: const InputDecoration(
+                              labelText: 'Add new tag',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.add),
+                              isDense: true,
+                            ),
+                            onSubmitted: (value) {
+                              if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
+                                setState(() {
+                                  _selectedTags.add(value.trim());
+                                  _newTagController.clear();
+                                  _updatePreparedNoteTags();
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () {
+                            final value = _newTagController.text.trim();
+                            if (value.isNotEmpty && !_selectedTags.contains(value)) {
+                              setState(() {
+                                _selectedTags.add(value);
+                                _newTagController.clear();
+                                _updatePreparedNoteTags();
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.add),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
+                      ],
                     ),
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
-                        setState(() {
-                          _selectedTags.add(value.trim());
-                          _newTagController.clear();
-                          _updatePreparedNoteTags();
-                        });
-                      }
-                    },
-                  ),
+                    
+                    // Available tags to select from
+                    if (availableTags.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Available tags:',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: availableTags.map((tag) {
+                          return ActionChip(
+                            label: Text(tag),
+                            onPressed: () {
+                              setState(() {
+                                _selectedTags.add(tag);
+                                _updatePreparedNoteTags();
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () {
-                    final value = _newTagController.text.trim();
-                    if (value.isNotEmpty && !_selectedTags.contains(value)) {
-                      setState(() {
-                        _selectedTags.add(value);
-                        _newTagController.clear();
-                        _updatePreparedNoteTags();
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.add),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  ),
-                ),
-              ],
+              ),
             ),
-            
-            // Available tags to select from
-            if (availableTags.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Available tags:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: availableTags.map((tag) {
-                  return ActionChip(
-                    label: Text(tag),
-                    onPressed: () {
-                      setState(() {
-                        _selectedTags.add(tag);
-                        _updatePreparedNoteTags();
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
           ],
         );
       },
