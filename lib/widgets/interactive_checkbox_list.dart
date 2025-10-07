@@ -97,8 +97,46 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     final lines = _currentContent.split('\n');
     final widgets = <Widget>[];
     
+    // Track if we're inside a code block
+    bool inCodeBlock = false;
+    final List<String> codeBlockLines = [];
+    
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
+      
+      // Check for code block markers
+      if (line.trim().startsWith('```')) {
+        if (inCodeBlock) {
+          // End of code block - render the accumulated code block
+          codeBlockLines.add(line);
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: GptMarkdown(
+                codeBlockLines.join('\n'),
+                style: widget.style,
+                textDirection: widget.textDirection,
+                onLinkTap: widget.onLinkTap,
+              ),
+            ),
+          );
+          codeBlockLines.clear();
+          inCodeBlock = false;
+        } else {
+          // Start of code block
+          inCodeBlock = true;
+          codeBlockLines.add(line);
+        }
+        continue;
+      }
+      
+      if (inCodeBlock) {
+        // We're inside a code block - accumulate lines
+        codeBlockLines.add(line);
+        continue;
+      }
+      
+      // Not in a code block - check for checkboxes
       final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
       
       if (checkboxMatch != null) {
@@ -157,15 +195,30 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: GptMarkdown(
+              line,
+              style: widget.style,
+              textDirection: widget.textDirection,
+              onLinkTap: widget.onLinkTap,
+            ),
+          ),
+        );
+      }
+    }
+    
+    // If we ended while still in a code block, render it
+    if (inCodeBlock && codeBlockLines.isNotEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
           child: GptMarkdown(
-            line,
+            codeBlockLines.join('\n'),
             style: widget.style,
             textDirection: widget.textDirection,
             onLinkTap: widget.onLinkTap,
           ),
-          ),
-        );
-      }
+        ),
+      );
     }
     
     return widgets;
