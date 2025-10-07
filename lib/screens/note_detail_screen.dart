@@ -295,16 +295,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             _buildTaskStatus(currentNote),
             const SizedBox(height: 16),
           ],
-          Text(
+          SelectableText(
             currentNote.title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 16),
-          GptMarkdown(
-            currentNote.content,
-            style: Theme.of(context).textTheme.bodyLarge,
+          SelectionArea(
+            child: GptMarkdown(
+              currentNote.content,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -321,10 +323,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   subNote.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
                   color: subNote.isCompleted ? Colors.green : Colors.grey,
                 ),
-                title: Text(subNote.name),
-                subtitle: GptMarkdown(
-                  subNote.content,
-                  style: Theme.of(context).textTheme.bodySmall,
+                title: SelectableText(subNote.name),
+                subtitle: SelectionArea(
+                  child: GptMarkdown(
+                    subNote.content,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
                 onTap: () => _toggleSubNoteCompletion(subNote),
               ),
@@ -445,14 +449,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          Text(
+          SelectableText(
             'Created: ${_formatDate(currentNote.createdAt)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.grey[600],
             ),
           ),
           if (currentNote.updatedAt != currentNote.createdAt)
-            Text(
+            SelectableText(
               'Updated: ${_formatDate(currentNote.updatedAt)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
@@ -602,12 +606,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ],
                   ),
                   if (currentNote.scheduledAt != null)
-                    Text(
+                    SelectableText(
                       'Scheduled: ${_formatDate(DateTime.parse(currentNote.scheduledAt!))}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (currentNote.completeBy != null)
-                    Text(
+                    SelectableText(
                       'Due: ${_formatDate(DateTime.parse(currentNote.completeBy!))}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
@@ -1331,7 +1335,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             RelationshipType.getIcon(relationship.type),
             color: Theme.of(context).primaryColor,
           ),
-          title: Text(linkedNote.title),
+          title: SelectableText(linkedNote.title),
           subtitle: Text(
             '${RelationshipType.getDisplayName(relationship.type)} ${isOutgoing ? '→' : '←'}',
             style: TextStyle(

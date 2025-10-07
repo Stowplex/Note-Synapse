@@ -62,13 +62,15 @@ class _AIActionScreenState extends State<AIActionScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildActionCard(
-            icon: Icons.quiz,
-            title: 'Note Q&A',
-            description: 'Ask questions about your selected notes',
-            action: AIInteractionType.noteQa,
-          ),
-          const SizedBox(height: 12),
+          if (widget.selectedNotes.isNotEmpty) ...[
+            _buildActionCard(
+              icon: Icons.quiz,
+              title: 'Note Q&A',
+              description: 'Ask questions about your selected notes',
+              action: AIInteractionType.noteQa,
+            ),
+            const SizedBox(height: 12),
+          ],
           if (widget.selectedNotes.length == 1) ...[
             _buildActionCard(
               icon: Icons.transform,
@@ -253,9 +255,11 @@ class _AIActionScreenState extends State<AIActionScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: SingleChildScrollView(
-                  child: GptMarkdown(
-                    _response!,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                  child: SelectionArea(
+                    child: GptMarkdown(
+                      _response!,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
                 ),
               ),

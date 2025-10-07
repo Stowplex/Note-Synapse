@@ -261,9 +261,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 decoration: task.isCompleted ? TextDecoration.lineThrough : null,
               ),
             ),
-            subtitle: GptMarkdown(
-              task.content,
-              style: Theme.of(context).textTheme.bodySmall,
+            subtitle: SelectionArea(
+              child: GptMarkdown(
+                task.content,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
             trailing: _buildStatusDropdown(task, appProvider),
             onTap: () => _openNoteDetail(task),
@@ -309,9 +311,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: ListTile(
             leading: const Icon(Icons.note),
             title: Text(note.title),
-            subtitle: GptMarkdown(
-              note.content,
-              style: Theme.of(context).textTheme.bodySmall,
+            subtitle: SelectionArea(
+              child: GptMarkdown(
+                note.content,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
             onTap: () => _openNoteDetail(note),
           ),
