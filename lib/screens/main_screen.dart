@@ -2,8 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:speech_to_text/speech_to_text.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/app_provider.dart';
@@ -25,13 +23,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final SpeechToText _speechToText = SpeechToText();
-  bool _isListening = false;
-  String _recognizedText = '';
   
   // Audio recording service
   AudioRecordingService? _audioService;
-  bool _isRecording = false;
 
   final List<Widget> _screens = [
     const NotesScreen(),
@@ -57,15 +51,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _setupAudioListeners() {
-    if (_audioService == null) return;
-    
-    _audioService!.recordingStateStream.listen((isRecording) {
-      if (mounted) {
-        setState(() {
-          _isRecording = isRecording;
-        });
-      }
-    });
+    // Audio listeners are now managed by the dialog
   }
 
   @override
@@ -219,133 +205,15 @@ class _MainScreenState extends State<MainScreen> {
     showDialog(
       context: context,
       builder: (context) => _VoiceRecordingDialog(
-        isListening: _isListening,
-        isRecording: _isRecording,
-        recognizedText: _recognizedText,
-        onStartListening: _startListening,
-        onStopListening: _stopListening,
         onStartAudioRecording: _startAudioRecording,
         onStopAudioRecording: _stopAudioRecording,
-        onSaveVoiceNote: _saveVoiceNote,
         onReset: _resetVoiceRecording,
       ),
     );
   }
 
-  Future<void> _startListening() async {
-    // Request microphone permission (skip on Linux)
-    if (!Platform.isLinux) {
-      try {
-        final permission = await Permission.microphone.request();
-        if (permission != PermissionStatus.granted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Microphone permission is required for voice recording')),
-          );
-          return;
-        }
-      } catch (e) {
-        print('Permission request failed: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to request microphone permission')),
-        );
-        return;
-      }
-    }
-
-    // Initialize speech to text if not already done
-    if (!_speechToText.isAvailable) {
-      await _speechToText.initialize();
-    }
-
-    if (_speechToText.isAvailable) {
-      setState(() {
-        _isListening = true;
-        _recognizedText = '';
-      });
-      
-      // Close and reopen dialog to show listening state
-      Navigator.of(context).pop();
-      _showVoiceRecordingDialog(context);
-
-      await _speechToText.listen(
-        onResult: (result) {
-          setState(() {
-            _recognizedText = result.recognizedWords;
-          });
-        },
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-        partialResults: true,
-        localeId: 'en_US',
-        onSoundLevelChange: (level) {
-          // Optional: Handle sound level changes
-        },
-      );
-    }
-  }
-
-  Future<void> _stopListening() async {
-    await _speechToText.stop();
-    setState(() {
-      _isListening = false;
-    });
-  }
-
-  Future<void> _saveVoiceNote(BuildContext context) async {
-    if (_recognizedText.trim().isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No speech detected. Please try again.')),
-        );
-      }
-      return;
-    }
-
-    try {
-      // Capture the AppProvider reference before the context might become invalid
-      final appProvider = context.read<AppProvider>();
-      
-      final voiceNote = Note(
-        id: const Uuid().v4(),
-        title: 'Voice Note - ${DateTime.now().toString().substring(0, 16)}',
-        content: _recognizedText,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      await appProvider.addNote(voiceNote);
-      
-      if (mounted && context.mounted) {
-        Navigator.pop(context);
-        _resetVoiceRecording();
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Voice note saved successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error saving voice note: $e'); // Debug logging
-      if (mounted && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving voice note: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   void _resetVoiceRecording() {
-    setState(() {
-      _isListening = false;
-      _recognizedText = '';
-      _isRecording = false;
-    });
+    // Reset any audio recording state if needed
   }
 
   // Audio recording methods
@@ -355,35 +223,35 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final success = await _audioService!.startRecording();
       if (success) {
-        setState(() {
-          _isRecording = true;
-        });
-        // Close and reopen dialog to show recording state
-        Navigator.of(context).pop();
-        _showVoiceRecordingDialog(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Recording started'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recording started'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(Platform.isLinux 
+                  ? 'Failed to start recording. Please check if gstreamer and PulseAudio are installed.'
+                  : 'Failed to start recording. Please check microphone permissions.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(Platform.isLinux 
-                ? 'Failed to start recording. Please check if gstreamer and PulseAudio are installed.'
-                : 'Failed to start recording. Please check microphone permissions.'),
+            content: Text('Error starting recording: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error starting recording: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -393,10 +261,6 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
-        setState(() {
-          _isRecording = false;
-        });
-        
         // Create a note with the audio attachment
         final audioNote = Note(
           id: const Uuid().v4(),
@@ -412,7 +276,7 @@ class _MainScreenState extends State<MainScreen> {
         final appProvider = context.read<AppProvider>();
         await appProvider.addNote(audioNote);
         
-        if (mounted && context.mounted) {
+        if (mounted) {
           Navigator.pop(context);
           _resetVoiceRecording();
           
@@ -425,12 +289,14 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error stopping recording: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error stopping recording: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -687,25 +553,13 @@ class _MainScreenState extends State<MainScreen> {
 }
 
 class _VoiceRecordingDialog extends StatefulWidget {
-  final bool isListening;
-  final bool isRecording;
-  final String recognizedText;
-  final VoidCallback onStartListening;
-  final VoidCallback onStopListening;
   final VoidCallback onStartAudioRecording;
   final Function(BuildContext) onStopAudioRecording;
-  final Future<void> Function(BuildContext) onSaveVoiceNote;
   final VoidCallback onReset;
 
   const _VoiceRecordingDialog({
-    required this.isListening,
-    required this.isRecording,
-    required this.recognizedText,
-    required this.onStartListening,
-    required this.onStopListening,
     required this.onStartAudioRecording,
     required this.onStopAudioRecording,
-    required this.onSaveVoiceNote,
     required this.onReset,
   });
 
@@ -714,14 +568,34 @@ class _VoiceRecordingDialog extends StatefulWidget {
 }
 
 class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
+  bool _isRecording = false;
+
+  Future<void> _startRecording() async {
+    widget.onStartAudioRecording();
+    if (mounted) {
+      setState(() {
+        _isRecording = true;
+      });
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    await widget.onStopAudioRecording(context);
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.isRecording ? 'Recording...' : 'Voice Note Recording'),
+      title: Text(_isRecording ? 'Recording...' : 'Voice Note Recording'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (widget.isListening || widget.isRecording) ...[
+          if (_isRecording) ...[
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -729,102 +603,54 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
                 borderRadius: BorderRadius.circular(50),
                 border: Border.all(color: Colors.red.withOpacity(0.3)),
               ),
-              child: Icon(
-                widget.isListening ? Icons.record_voice_over : Icons.mic,
+              child: const Icon(
+                Icons.mic,
                 size: 48,
                 color: Colors.red,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              widget.isListening ? 'Listening... Speak now' : 'Recording... Tap stop when done',
+              'Recording... Tap stop when done',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.red,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (widget.isRecording) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Recording will continue until you tap "Stop Recording"',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
+            const SizedBox(height: 8),
+            Text(
+              'Recording will continue until you tap "Stop Recording"',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey[600],
               ),
-            ],
+              textAlign: TextAlign.center,
+            ),
           ] else ...[
             const Icon(Icons.mic, size: 48, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text('Choose recording method'),
+            const Text('Start recording your voice note'),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: widget.onStartListening,
-                    icon: const Icon(Icons.record_voice_over),
-                    label: const Text('Speech-to-Text'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: widget.onStartAudioRecording,
-                    icon: const Icon(Icons.mic),
-                    label: const Text('Audio Record'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (widget.recognizedText.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
+            SizedBox(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                widget.recognizedText,
-                style: Theme.of(context).textTheme.bodyMedium,
+              child: OutlinedButton.icon(
+                onPressed: _startRecording,
+                icon: const Icon(Icons.mic),
+                label: const Text('Start Recording'),
               ),
             ),
           ],
         ],
       ),
       actions: [
-        if (widget.isListening) ...[
+        if (_isRecording) ...[
           ElevatedButton.icon(
-            onPressed: widget.onStopListening,
-            icon: const Icon(Icons.stop),
-            label: const Text('Stop Listening'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-          ),
-          if (widget.recognizedText.isNotEmpty)
-            ElevatedButton(
-              onPressed: () => widget.onSaveVoiceNote(context),
-              child: const Text('Save Note'),
-            ),
-        ] else if (widget.isRecording) ...[
-          ElevatedButton.icon(
-            onPressed: () => widget.onStopAudioRecording(context),
+            onPressed: _stopRecording,
             icon: const Icon(Icons.stop),
             label: const Text('Stop Recording'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-          ),
-        ] else ...[
-          TextButton(
-            onPressed: widget.onStartListening,
-            child: const Text('Start Speech-to-Text'),
           ),
         ],
         TextButton(
@@ -838,3 +664,4 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
     );
   }
 }
+
