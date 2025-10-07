@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:html2md/html2md.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
+import '../services/gemini_api_service.dart';
+import '../services/secure_storage_service.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -23,9 +29,13 @@ class _ShareScreenState extends State<ShareScreen> {
   String? _error;
   bool _isLoading = true;
   bool _isCreating = false;
+  bool _isExtracting = false;
+  bool _hasApiKey = false;
   String _action = 'create'; // 'create' or 'append'
   Note? _selectedNote;
   String _searchQuery = '';
+  String? _detectedUrl;
+  String? _contentType;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
@@ -36,10 +46,77 @@ class _ShareScreenState extends State<ShareScreen> {
   void initState() {
     super.initState();
     _processSharedData();
+    _initializeAndCheckApiKey();
     // Load notes when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
     });
+  }
+
+  Future<void> _initializeAndCheckApiKey() async {
+    // Ensure storage is properly initialized before checking
+    await _ensureStorageInitialized();
+    await _checkApiKeyStatus();
+  }
+
+  Future<void> _ensureStorageInitialized() async {
+    try {
+      // Initialize secure storage
+      await SecureStorageService.initialize();
+      print('ShareScreen: Storage initialized successfully');
+    } catch (e) {
+      print('ShareScreen: Storage initialization failed: $e');
+      // Add a delay and try again
+      await Future.delayed(const Duration(milliseconds: 500));
+      try {
+        await SecureStorageService.initialize();
+        print('ShareScreen: Storage initialized on retry');
+      } catch (e2) {
+        print('ShareScreen: Storage initialization failed on retry: $e2');
+      }
+    }
+  }
+
+  Future<void> _checkApiKeyStatus() async {
+    try {
+      print('ShareScreen: Checking API key status...');
+      
+      // Add a small delay to ensure storage is properly initialized
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      bool hasApiKey = await SecureStorageService.hasApiKey();
+      print('ShareScreen: API key available: $hasApiKey');
+      
+      
+      if (hasApiKey) {
+        final apiKey = await SecureStorageService.getApiKey();
+        print('ShareScreen: API key length: ${apiKey?.length ?? 0}');
+        
+        // If we got a key, verify it's not empty
+        if (apiKey == null || apiKey.isEmpty) {
+          print('ShareScreen: API key is empty, treating as unavailable');
+          if (mounted) {
+            setState(() {
+              _hasApiKey = false;
+            });
+          }
+          return;
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _hasApiKey = hasApiKey;
+        });
+      }
+    } catch (e) {
+      print('ShareScreen: Error checking API key: $e');
+      if (mounted) {
+        setState(() {
+          _hasApiKey = false;
+        });
+      }
+    }
   }
 
   @override
@@ -61,15 +138,27 @@ class _ShareScreenState extends State<ShareScreen> {
       final result = await ShareServiceExtension.processSharedContent(widget.sharedData);
       
       if (result['success'] == true) {
-        final note = Note.fromJson(result['note']);
         setState(() {
-          _preparedNote = note;
+          _contentType = result['contentType'];
+          _detectedUrl = result['url'];
           _isLoading = false;
         });
-        // Initialize the text controllers with the prepared note's data
-        _titleController.text = note.title;
-        _tagsController.text = note.tags.join(', ');
-        _selectedTags.addAll(note.tags);
+        
+        if (result['note'] != null) {
+          final note = Note.fromJson(result['note']);
+          setState(() {
+            _preparedNote = note;
+          });
+          // Initialize the text controllers with the prepared note's data
+          _titleController.text = note.title;
+          _tagsController.text = note.tags.join(', ');
+          _selectedTags.addAll(note.tags);
+        } else if (result['contentType'] == 'image' || result['contentType'] == 'pdf') {
+          // For images and PDFs, show extraction options
+          setState(() {
+            _preparedNote = null; // Will be created after extraction
+          });
+        }
       } else {
         setState(() {
           _error = result['error'] ?? 'Unknown error processing shared content';
@@ -135,8 +224,23 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Widget _buildContentWidget() {
-    if (_preparedNote == null) {
+    if (_preparedNote == null && _contentType != 'url' && _contentType != 'image' && _contentType != 'pdf') {
       return const Center(child: Text('No content to share'));
+    }
+
+    // Show URL detection and extraction option
+    if (_contentType == 'url' && _detectedUrl != null && _preparedNote == null) {
+      return _buildUrlExtractionWidget();
+    }
+
+    // Show image extraction options
+    if (_contentType == 'image' && _preparedNote == null) {
+      return _buildImageExtractionWidget();
+    }
+
+    // Show PDF extraction options
+    if (_contentType == 'pdf' && _preparedNote == null) {
+      return _buildPdfExtractionWidget();
     }
 
     return SingleChildScrollView(
@@ -409,8 +513,8 @@ class _ShareScreenState extends State<ShareScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isCreating ? null : _handleAction,
-                  child: _isCreating
+                  onPressed: (_isCreating || _isExtracting) ? null : _handleAction,
+                  child: (_isCreating || _isExtracting)
                       ? const SizedBox(
                           height: 20,
                           width: 20,
@@ -566,6 +670,506 @@ class _ShareScreenState extends State<ShareScreen> {
   void _updatePreparedNoteTags() {
     if (_preparedNote != null) {
       _preparedNote = _preparedNote!.copyWith(tags: _selectedTags.toList());
+    }
+  }
+
+  Widget _buildUrlExtractionWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.link,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'URL Detected',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _detectedUrl!,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            if (Platform.isLinux) ...[
+              Card(
+                color: Colors.orange[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.warning,
+                        color: Colors.orange[700],
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Web content extraction is not supported on Linux.',
+                        style: TextStyle(
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Please use Android, iOS, or Web to extract web content.',
+                        style: TextStyle(
+                          color: Colors.orange[600],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            // Extract options
+            Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: Platform.isLinux ? null : () => _extractWebContent(false),
+                    icon: _isExtracting 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.web),
+                    label: Text(_isExtracting ? 'Extracting...' : 'Extract Web Content'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: Tooltip(
+                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    child: ElevatedButton.icon(
+                      onPressed: (Platform.isLinux || !_hasApiKey) ? null : () => _extractWebContent(true),
+                      icon: _isExtracting 
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.psychology),
+                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _extractWebContent(bool useAI) async {
+    if (_detectedUrl == null) return;
+
+    setState(() {
+      _isExtracting = true;
+      _error = null;
+    });
+
+    try {
+      // Show a dialog with the WebView for content extraction
+      final result = await _showWebExtractionDialog(_detectedUrl!, useAI);
+      
+      if (result['success'] == true) {
+        final note = Note.fromJson(result['note']);
+        setState(() {
+          _preparedNote = note;
+          _isExtracting = false;
+        });
+        // Initialize the text controllers with the extracted note's data
+        _titleController.text = note.title;
+        _tagsController.text = note.tags.join(', ');
+        _selectedTags.addAll(note.tags);
+      } else {
+        setState(() {
+          _error = result['error'] ?? 'Failed to extract web content';
+          _isExtracting = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error extracting web content: $e';
+        _isExtracting = false;
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _showWebExtractionDialog(String url, bool useAI) async {
+    final completer = Completer<Map<String, dynamic>>();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _WebExtractionDialog(
+        url: url,
+        useAI: useAI,
+        onComplete: (result) {
+          completer.complete(result);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+    
+    return completer.future;
+  }
+
+  void _showApiKeyRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API Key Required'),
+        content: const Text('To use AI extraction, you need to configure your Gemini API key in the app settings first.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pushNamed('/settings');
+            },
+            child: const Text('Go to Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageExtractionWidget() {
+    final fileName = widget.sharedData['fileName'] as String?;
+    
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.image,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Image Detected',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              fileName ?? 'Unknown image',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            // Extract options
+            Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _extractImageContent(false),
+                    icon: _isExtracting 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.image),
+                    label: Text(_isExtracting ? 'Extracting...' : 'Extract Image Content'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: Tooltip(
+                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    child: ElevatedButton.icon(
+                      onPressed: !_hasApiKey ? null : () => _extractImageContent(true),
+                      icon: _isExtracting 
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.psychology),
+                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPdfExtractionWidget() {
+    final fileName = widget.sharedData['fileName'] as String?;
+    
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.picture_as_pdf,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'PDF Detected',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              fileName ?? 'Unknown PDF',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            // Extract options
+            Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _extractPdfContent(false),
+                    icon: _isExtracting 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.picture_as_pdf),
+                    label: Text(_isExtracting ? 'Extracting...' : 'Extract PDF Content'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: Tooltip(
+                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    child: ElevatedButton.icon(
+                      onPressed: !_hasApiKey ? null : () => _extractPdfContent(true),
+                      icon: _isExtracting 
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.psychology),
+                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _extractImageContent(bool useAI) async {
+    final filePath = widget.sharedData['filePath'] as String?;
+    final fileName = widget.sharedData['fileName'] as String?;
+    
+    if (filePath == null) return;
+
+    setState(() {
+      _isExtracting = true;
+      _error = null;
+    });
+
+    try {
+      String content;
+      List<String> tags = ['shared', 'image'];
+      
+      if (useAI) {
+        // Check if API key is available before attempting AI extraction
+        final hasApiKey = await SecureStorageService.hasApiKey();
+        if (!hasApiKey) {
+          setState(() {
+            _isExtracting = false;
+          });
+          _showApiKeyRequiredDialog();
+          return;
+        }
+        
+        // Extract content using AI
+        final result = await GeminiApiService.extractContentFromImage(filePath);
+        if (result['success'] == true) {
+          content = result['content'] ?? 'Image content extracted with AI';
+          tags.add('ai_processed');
+        } else {
+          content = 'Image shared from ${fileName ?? 'unknown source'}';
+        }
+      } else {
+        // Basic image note
+        content = 'Image shared from ${fileName ?? 'unknown source'}';
+      }
+
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
+        content: content,
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        attachmentPaths: [filePath],
+        tags: tags,
+      );
+
+      setState(() {
+        _preparedNote = note;
+        _isExtracting = false;
+      });
+      
+      // Initialize the text controllers with the extracted note's data
+      _titleController.text = note.title;
+      _tagsController.text = note.tags.join(', ');
+      _selectedTags.addAll(note.tags);
+    } catch (e) {
+      setState(() {
+        _error = 'Error extracting image content: $e';
+        _isExtracting = false;
+      });
+    }
+  }
+
+  Future<void> _extractPdfContent(bool useAI) async {
+    final filePath = widget.sharedData['filePath'] as String?;
+    final fileName = widget.sharedData['fileName'] as String?;
+    
+    if (filePath == null) return;
+
+    setState(() {
+      _isExtracting = true;
+      _error = null;
+    });
+
+    try {
+      String content;
+      List<String> tags = ['shared', 'pdf'];
+      
+      if (useAI) {
+        // Check if API key is available before attempting AI extraction
+        final hasApiKey = await SecureStorageService.hasApiKey();
+        if (!hasApiKey) {
+          setState(() {
+            _isExtracting = false;
+          });
+          _showApiKeyRequiredDialog();
+          return;
+        }
+        
+        // Extract content using AI
+        final result = await GeminiApiService.extractContentFromPdf(filePath);
+        if (result['success'] == true) {
+          content = result['content'] ?? 'PDF content extracted with AI';
+          tags.add('ai_processed');
+        } else {
+          content = 'PDF shared from ${fileName ?? 'unknown source'}';
+        }
+      } else {
+        // Basic PDF note
+        content = 'PDF shared from ${fileName ?? 'unknown source'}';
+      }
+
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
+        content: content,
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        attachmentPaths: [filePath],
+        tags: tags,
+      );
+
+      setState(() {
+        _preparedNote = note;
+        _isExtracting = false;
+      });
+      
+      // Initialize the text controllers with the extracted note's data
+      _titleController.text = note.title;
+      _tagsController.text = note.tags.join(', ');
+      _selectedTags.addAll(note.tags);
+    } catch (e) {
+      setState(() {
+        _error = 'Error extracting PDF content: $e';
+        _isExtracting = false;
+      });
     }
   }
 
@@ -735,6 +1339,18 @@ extension ShareServiceExtension on ShareService {
 
   static Future<Map<String, dynamic>> _processTextContent(String text) async {
     try {
+      // Check if the text is a URL
+      final url = _extractUrl(text);
+      if (url != null) {
+        return {
+          'success': true,
+          'note': null, // Will be created after web extraction
+          'contentType': 'url',
+          'url': url,
+          'preview': 'URL detected: $url',
+        };
+      }
+
       final note = Note(
         id: const Uuid().v4(),
         title: 'Shared Text - ${DateTime.now().toString().substring(0, 16)}',
@@ -758,6 +1374,25 @@ extension ShareServiceExtension on ShareService {
       };
     }
   }
+
+  static String? _extractUrl(String text) {
+    final trimmedText = text.trim();
+    final uriPattern = RegExp(r'^https?://[^\s]+$');
+    
+    if (uriPattern.hasMatch(trimmedText)) {
+      try {
+        final uri = Uri.parse(trimmedText);
+        if (uri.scheme == 'http' || uri.scheme == 'https') {
+          return trimmedText;
+        }
+      } catch (e) {
+        // Invalid URI
+      }
+    }
+    
+    return null;
+  }
+
 
   static Future<Map<String, dynamic>> _processImageContent(String filePath, String? fileName) async {
     try {
@@ -829,5 +1464,238 @@ extension ShareServiceExtension on ShareService {
         'error': 'Error processing PDF content: $e',
       };
     }
+  }
+}
+
+class _WebExtractionDialog extends StatefulWidget {
+  final String url;
+  final bool useAI;
+  final Function(Map<String, dynamic>) onComplete;
+
+  const _WebExtractionDialog({
+    required this.url,
+    required this.useAI,
+    required this.onComplete,
+  });
+
+  @override
+  State<_WebExtractionDialog> createState() => _WebExtractionDialogState();
+}
+
+class _WebExtractionDialogState extends State<_WebExtractionDialog> {
+  bool _isLoading = true;
+  String _status = 'Loading web page...';
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.8,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.web, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Extracting Web Content',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      widget.onComplete({
+                        'success': false,
+                        'error': 'Extraction cancelled by user',
+                      });
+                    },
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            // Status
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  if (_isLoading) const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_status)),
+                ],
+              ),
+            ),
+            // WebView
+            Expanded(
+              child: InAppWebView(
+                initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+                onLoadStart: (controller, url) {
+                  setState(() {
+                    _status = 'Loading web page...';
+                    _isLoading = true;
+                  });
+                },
+                onLoadStop: (controller, url) async {
+                  setState(() {
+                    _status = 'Extracting content...';
+                  });
+                  
+                  try {
+                    // Load Readability.js from assets
+                    final jsLib = await rootBundle.loadString('assets/scripts/Readability.min.js');
+                    
+                    // Inject Readability.js
+                    await controller.evaluateJavascript(source: jsLib);
+                    
+                    // Extract content using Readability
+                    final result = await controller.evaluateJavascript(source: '''
+                      (function() {
+                        try {
+                          const article = new Readability(document).parse();
+                          if (article) {
+                            return {
+                              title: article.title || document.title || '',
+                              content: article.content || '',
+                              textContent: article.textContent || '',
+                              excerpt: article.excerpt || ''
+                            };
+                          }
+                          return null;
+                        } catch (e) {
+                          return { error: e.toString() };
+                        }
+                      })();
+                    ''');
+                    
+                    if (result != null && result is Map) {
+                      if (result.containsKey('error')) {
+                        widget.onComplete({
+                          'success': false,
+                          'error': 'Readability extraction failed: ${result['error']}',
+                        });
+                        return;
+                      }
+                      
+                      final extractedTitle = result['title']?.toString();
+                      final extractedContent = result['content']?.toString();
+
+                      if (extractedContent == null || extractedContent.isEmpty) {
+                        widget.onComplete({
+                          'success': false,
+                          'error': 'Failed to extract content from the web page',
+                        });
+                        return;
+                      }
+
+                      // Process content based on extraction method
+                      String finalContent;
+                      List<String> tags = ['shared', 'web', 'extracted'];
+                      
+                      if (widget.useAI) {
+                        setState(() {
+                          _status = 'Checking API key...';
+                        });
+                        
+                        // Check if API key is available before attempting AI extraction
+                        final hasApiKey = await SecureStorageService.hasApiKey();
+                        if (!hasApiKey) {
+                          widget.onComplete({
+                            'success': false,
+                            'error': 'API key not configured. Please configure your Gemini API key in settings first.',
+                          });
+                          return;
+                        }
+                        
+                        setState(() {
+                          _status = 'Processing with AI...';
+                        });
+                        
+                        // Convert HTML to markdown first
+                        final markdownContent = convert(extractedContent);
+                        
+                        // Send to AI for better extraction
+                        final aiResult = await GeminiApiService.extractContentFromText(
+                          markdownContent,
+                          'web_content',
+                          extractedTitle ?? 'Web Content',
+                        );
+                        
+                        if (aiResult['success'] == true) {
+                          finalContent = aiResult['content'] ?? markdownContent;
+                          tags.add('ai_processed');
+                        } else {
+                          // Fallback to markdown if AI fails
+                          finalContent = markdownContent;
+                        }
+                      } else {
+                        // Convert HTML to markdown
+                        finalContent = convert(extractedContent);
+                        tags.add('markdown');
+                      }
+
+                      final note = Note(
+                        id: const Uuid().v4(),
+                        title: (extractedTitle?.isNotEmpty == true) 
+                            ? extractedTitle! 
+                            : 'Web Content - ${DateTime.now().toString().substring(0, 16)}',
+                        content: finalContent,
+                        type: NoteType.note,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                        tags: tags,
+                      );
+
+                      widget.onComplete({
+                        'success': true,
+                        'note': note.toJson(),
+                        'contentType': 'web',
+                        'preview': (extractedTitle?.isNotEmpty == true) 
+                            ? extractedTitle! 
+                            : 'Web content extracted from ${widget.url}',
+                        'url': widget.url,
+                      });
+                    } else {
+                      widget.onComplete({
+                        'success': false,
+                        'error': 'Failed to extract content from the web page',
+                      });
+                    }
+                  } catch (e) {
+                    widget.onComplete({
+                      'success': false,
+                      'error': 'Failed to extract web content: $e',
+                    });
+                  }
+                },
+                onLoadError: (controller, url, code, message) {
+                  widget.onComplete({
+                    'success': false,
+                    'error': 'Failed to load web page: $message',
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

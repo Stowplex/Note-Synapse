@@ -11,6 +11,13 @@ import 'logger_service.dart';
 class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
+  // Helper method to get API key
+  static Future<String?> _getApiKeyWithFallback() async {
+    String? apiKey = await SecureStorageService.getApiKey();
+    print('GeminiApiService: Retrieved API key length: ${apiKey?.length ?? 0}');
+    return apiKey;
+  }
+
   // Note Q&A
   static Future<String> answerNoteQuestion(
     String question,
@@ -25,7 +32,7 @@ class GeminiApiService {
       'requestId': requestId,
     });
 
-    final apiKey = await SecureStorageService.getApiKey();
+    final apiKey = await _getApiKeyWithFallback();
     if (apiKey == null) {
       LoggerService.error('API key not found for note Q&A', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -67,7 +74,7 @@ class GeminiApiService {
       'requestId': requestId,
     });
 
-    final apiKey = await SecureStorageService.getApiKey();
+    final apiKey = await _getApiKeyWithFallback();
     if (apiKey == null) {
       LoggerService.error('API key not found for note transformation', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -107,7 +114,7 @@ class GeminiApiService {
       'requestId': requestId,
     });
 
-    final apiKey = await SecureStorageService.getApiKey();
+    final apiKey = await _getApiKeyWithFallback();
     if (apiKey == null) {
       LoggerService.error('API key not found for new note creation', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -143,7 +150,7 @@ class GeminiApiService {
       'requestId': requestId,
     });
 
-    final apiKey = await SecureStorageService.getApiKey();
+    final apiKey = await _getApiKeyWithFallback();
     if (apiKey == null) {
       LoggerService.error('API key not found for audio transcription', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -264,7 +271,7 @@ class GeminiApiService {
       'requestId': requestId,
     });
 
-    final apiKey = await SecureStorageService.getApiKey();
+    final apiKey = await _getApiKeyWithFallback();
     if (apiKey == null) {
       LoggerService.error('API key not found for audio summarization', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -879,6 +886,265 @@ If creating multiple notes, ensure they are related and useful based on the cont
       return notes;
     } catch (e) {
       throw Exception('Failed to parse AI response: $e');
+    }
+  }
+
+  // Content extraction methods
+  static Future<Map<String, dynamic>> extractContentFromText(
+    String text,
+    String contentType,
+    String title,
+  ) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting text content extraction', error: {
+      'contentType': contentType,
+      'title': title,
+      'textLength': text.length,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    
+    if (apiKey == null || apiKey.isEmpty) {
+      LoggerService.error('API key not found for content extraction', error: {'requestId': requestId});
+      print('GeminiApiService: API key is null or empty');
+      return {
+        'success': false,
+        'error': 'API key not found',
+      };
+    }
+    print('GeminiApiService: API key found, proceeding with request');
+
+    try {
+      final prompt = _buildContentExtractionPrompt(text, contentType, title);
+      final response = await _makeGeminiRequest(
+        apiKey,
+        prompt,
+        requestId: requestId,
+      );
+
+      LoggerService.debug('Content extraction completed', error: {
+        'requestId': requestId,
+        'responseLength': response.length,
+      });
+
+      return {
+        'success': true,
+        'content': response,
+      };
+    } catch (e) {
+      LoggerService.error('Content extraction failed', error: {
+        'requestId': requestId,
+        'error': e.toString(),
+      });
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> extractContentFromImage(String imagePath) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting image content extraction', error: {
+      'imagePath': imagePath,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for image extraction', error: {'requestId': requestId});
+      return {
+        'success': false,
+        'error': 'API key not found',
+      };
+    }
+
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) {
+        return {
+          'success': false,
+          'error': 'Image file not found',
+        };
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Image = base64Encode(bytes);
+      final mimeType = _getImageMimeType(imagePath);
+
+      final prompt = 'Extract and summarize the content from this image. Provide a detailed description of what you see, including any text, objects, people, or important visual elements.';
+
+      final response = await _makeGeminiRequestWithImage(
+        prompt,
+        base64Image,
+        mimeType,
+        apiKey,
+        requestId: requestId,
+      );
+
+      LoggerService.debug('Image content extraction completed', error: {
+        'requestId': requestId,
+        'responseLength': response.length,
+      });
+
+      return {
+        'success': true,
+        'content': response,
+      };
+    } catch (e) {
+      LoggerService.error('Image content extraction failed', error: {
+        'requestId': requestId,
+        'error': e.toString(),
+      });
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> extractContentFromPdf(String pdfPath) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting PDF content extraction', error: {
+      'pdfPath': pdfPath,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for PDF extraction', error: {'requestId': requestId});
+      return {
+        'success': false,
+        'error': 'API key not found',
+      };
+    }
+
+    try {
+      final file = File(pdfPath);
+      if (!await file.exists()) {
+        return {
+          'success': false,
+          'error': 'PDF file not found',
+        };
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Pdf = base64Encode(bytes);
+
+      final prompt = 'Extract and summarize the content from this PDF document. Provide a detailed summary of the main topics, key points, and important information contained in the document.';
+
+      final response = await _makeGeminiRequestWithImage(
+        prompt,
+        base64Pdf,
+        'application/pdf',
+        apiKey,
+        requestId: requestId,
+      );
+
+      LoggerService.debug('PDF content extraction completed', error: {
+        'requestId': requestId,
+        'responseLength': response.length,
+      });
+
+      return {
+        'success': true,
+        'content': response,
+      };
+    } catch (e) {
+      LoggerService.error('PDF content extraction failed', error: {
+        'requestId': requestId,
+        'error': e.toString(),
+      });
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  static String _buildContentExtractionPrompt(String text, String contentType, String title) {
+    return '''
+Please analyze and extract the key content from this $contentType. 
+
+Title: $title
+
+Content:
+$text
+
+Please provide a well-structured summary that includes:
+1. Main topics and themes
+2. Key points and important information
+3. Any actionable items or insights
+4. Relevant context or background information
+
+Format the response in a clear, organized manner that would be useful for note-taking and future reference.
+''';
+  }
+
+  static String _getImageMimeType(String imagePath) {
+    final extension = imagePath.toLowerCase().split('.').last;
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  static Future<String> _makeGeminiRequestWithImage(
+    String prompt,
+    String base64Image,
+    String mimeType,
+    String apiKey, {
+    String? requestId,
+  }) async {
+    final url = '$_baseUrl/models/gemini-1.5-flash:generateContent?key=$apiKey';
+    
+    final requestBody = {
+      'contents': [
+        {
+          'parts': [
+            {
+              'text': prompt,
+            },
+            {
+              'inline_data': {
+                'mime_type': mimeType,
+                'data': base64Image,
+              },
+            },
+          ],
+        },
+      ],
+      'generationConfig': {
+        'temperature': 0.7,
+        'topK': 40,
+        'topP': 0.95,
+        'maxOutputTokens': 8192,
+      },
+    };
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(requestBody),
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return responseData['candidates'][0]['content']['parts'][0]['text'];
+    } else {
+      throw Exception('API request failed: ${response.statusCode} - ${response.body}');
     }
   }
 }
