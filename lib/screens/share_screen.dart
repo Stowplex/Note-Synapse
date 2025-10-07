@@ -29,6 +29,8 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
+  final Set<String> _selectedTags = <String>{};
+  final TextEditingController _newTagController = TextEditingController();
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _ShareScreenState extends State<ShareScreen> {
     _searchController.dispose();
     _titleController.dispose();
     _tagsController.dispose();
+    _newTagController.dispose();
     super.dispose();
   }
 
@@ -66,6 +69,7 @@ class _ShareScreenState extends State<ShareScreen> {
         // Initialize the text controllers with the prepared note's data
         _titleController.text = note.title;
         _tagsController.text = note.tags.join(', ');
+        _selectedTags.addAll(note.tags);
       } else {
         setState(() {
           _error = result['error'] ?? 'Unknown error processing shared content';
@@ -318,73 +322,57 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 16),
           ],
 
-          // Editable note details
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Note Details',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (_titleController.text != _preparedNote?.title || 
-                          _tagsController.text != (_preparedNote?.tags.join(', ') ?? ''))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+          // Editable note details (only for create new note)
+          if (_action == 'create') ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Note Details',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.title),
+                        if (_titleController.text != _preparedNote?.title || 
+                            _selectedTags.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Icon(
+                              Icons.edit,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                      ],
                     ),
-                    onChanged: (value) {
-                      setState(() {
-                        // Update the prepared note with new title
-                        if (_preparedNote != null) {
-                          _preparedNote = _preparedNote!.copyWith(title: value);
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _tagsController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tags (comma-separated)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.tag),
-                      helperText: 'Enter tags separated by commas',
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Title',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.title),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          // Update the prepared note with new title
+                          if (_preparedNote != null) {
+                            _preparedNote = _preparedNote!.copyWith(title: value);
+                          }
+                        });
+                      },
                     ),
-                    onChanged: (value) {
-                      setState(() {
-                        // Update the prepared note with new tags
-                        if (_preparedNote != null) {
-                          final tags = value.split(',').map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).toList();
-                          _preparedNote = _preparedNote!.copyWith(tags: tags);
-                        }
-                      });
-                    },
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    _buildTagSelection(),
+                  ],
+                ),
               ),
             ),
-          ),
-
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
 
           // Content preview
           Card(
@@ -435,6 +423,123 @@ class _ShareScreenState extends State<ShareScreen> {
     );
   }
 
+  Widget _buildTagSelection() {
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, child) {
+        final allTags = appProvider.tags.map((tag) => tag.name).toList();
+        final availableTags = allTags.where((tag) => !_selectedTags.contains(tag)).toList();
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tags',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            
+            // Selected tags
+            if (_selectedTags.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _selectedTags.map((tag) {
+                  return Chip(
+                    label: Text(tag),
+                    deleteIcon: const Icon(Icons.close, size: 18),
+                    onDeleted: () {
+                      setState(() {
+                        _selectedTags.remove(tag);
+                        _updatePreparedNoteTags();
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+            ],
+            
+            // Add new tag
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _newTagController,
+                    decoration: const InputDecoration(
+                      labelText: 'Add new tag',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.add),
+                    ),
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
+                        setState(() {
+                          _selectedTags.add(value.trim());
+                          _newTagController.clear();
+                          _updatePreparedNoteTags();
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    final value = _newTagController.text.trim();
+                    if (value.isNotEmpty && !_selectedTags.contains(value)) {
+                      setState(() {
+                        _selectedTags.add(value);
+                        _newTagController.clear();
+                        _updatePreparedNoteTags();
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.add),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ],
+            ),
+            
+            // Available tags to select from
+            if (availableTags.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Available tags:',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: availableTags.map((tag) {
+                  return ActionChip(
+                    label: Text(tag),
+                    onPressed: () {
+                      setState(() {
+                        _selectedTags.add(tag);
+                        _updatePreparedNoteTags();
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  void _updatePreparedNoteTags() {
+    if (_preparedNote != null) {
+      _preparedNote = _preparedNote!.copyWith(tags: _selectedTags.toList());
+    }
+  }
+
   Widget _buildContentPreview() {
     final note = _preparedNote!;
     
@@ -478,10 +583,10 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
           )),
         ],
-        if (_tagsController.text.isNotEmpty || note.tags.isNotEmpty) ...[
+        if (_selectedTags.isNotEmpty || note.tags.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
-            'Tags: ${_tagsController.text.isNotEmpty ? _tagsController.text : note.tags.join(', ')}',
+            'Tags: ${_selectedTags.isNotEmpty ? _selectedTags.join(', ') : note.tags.join(', ')}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -510,9 +615,7 @@ class _ShareScreenState extends State<ShareScreen> {
         // Create note with edited title and tags
         final finalNote = _preparedNote!.copyWith(
           title: _titleController.text.isNotEmpty ? _titleController.text : _preparedNote!.title,
-          tags: _tagsController.text.isNotEmpty 
-              ? _tagsController.text.split(',').map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).toList()
-              : _preparedNote!.tags,
+          tags: _selectedTags.isNotEmpty ? _selectedTags.toList() : _preparedNote!.tags,
         );
         await appProvider.addNote(finalNote);
         if (mounted) {
