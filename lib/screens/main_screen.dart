@@ -291,30 +291,53 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  void _saveVoiceNote(BuildContext context) {
+  Future<void> _saveVoiceNote(BuildContext context) async {
     if (_recognizedText.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No speech detected. Please try again.')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No speech detected. Please try again.')),
+        );
+      }
       return;
     }
 
-    final voiceNote = Note(
-      id: const Uuid().v4(),
-      title: 'Voice Note - ${DateTime.now().toString().substring(0, 16)}',
-      content: _recognizedText,
-      type: NoteType.note,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
+    try {
+      // Capture the AppProvider reference before the context might become invalid
+      final appProvider = context.read<AppProvider>();
+      
+      final voiceNote = Note(
+        id: const Uuid().v4(),
+        title: 'Voice Note - ${DateTime.now().toString().substring(0, 16)}',
+        content: _recognizedText,
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
-    context.read<AppProvider>().addNote(voiceNote);
-    Navigator.pop(context);
-    _resetVoiceRecording();
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Voice note saved successfully!')),
-    );
+      await appProvider.addNote(voiceNote);
+      
+      if (mounted && context.mounted) {
+        Navigator.pop(context);
+        _resetVoiceRecording();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Voice note saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error saving voice note: $e'); // Debug logging
+      if (mounted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving voice note: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _resetVoiceRecording() {
@@ -385,16 +408,21 @@ class _MainScreenState extends State<MainScreen> {
           attachmentPaths: [audioPath],
         );
 
-        context.read<AppProvider>().addNote(audioNote);
-        Navigator.pop(context);
-        _resetVoiceRecording();
+        // Capture the AppProvider reference before the context might become invalid
+        final appProvider = context.read<AppProvider>();
+        await appProvider.addNote(audioNote);
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Audio note saved successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted && context.mounted) {
+          Navigator.pop(context);
+          _resetVoiceRecording();
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Audio note saved successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -407,34 +435,43 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _navigateToImageNote(BuildContext context) {
-    _showImageSourceDialog(context);
+    // Capture the main screen context and AppProvider before showing dialog
+    final mainContext = context;
+    final appProvider = context.read<AppProvider>();
+    _showImageSourceDialog(mainContext, appProvider);
   }
 
-  void _showImageSourceDialog(BuildContext context) {
+  void _showImageSourceDialog(BuildContext mainContext, AppProvider appProvider) {
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
+      context: mainContext,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Select Image Source'),
         content: const Text('Choose how you want to add an image'),
         actions: [
           TextButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.camera, context);
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              // Use a small delay to ensure the dialog is fully dismissed
+              await Future.delayed(const Duration(milliseconds: 100));
+              _pickImage(ImageSource.camera, mainContext, appProvider);
             },
             icon: const Icon(Icons.camera_alt),
             label: const Text('Camera'),
           ),
           TextButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _pickImage(ImageSource.gallery, context);
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              // Use a small delay to ensure the dialog is fully dismissed
+              await Future.delayed(const Duration(milliseconds: 100));
+              _pickImage(ImageSource.gallery, mainContext, appProvider);
             },
             icon: const Icon(Icons.photo_library),
             label: const Text('Gallery'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+            },
             child: const Text('Cancel'),
           ),
         ],
@@ -442,9 +479,10 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Future<void> _pickImage(ImageSource source, BuildContext context) async {
+  Future<void> _pickImage(ImageSource source, BuildContext context, AppProvider appProvider) async {
     try {
       final ImagePicker picker = ImagePicker();
+      
       final XFile? image = await picker.pickImage(
         source: source,
         maxWidth: 1920,
@@ -453,21 +491,34 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       if (image != null) {
-        await _createImageNote(image, context);
+        await _createImageNote(image, context, appProvider);
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
+      // Try to show error message if context is still valid
+      try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error picking image: $e')),
+          );
+        }
+      } catch (contextError) {
+        // Context issue - error logged silently
       }
     }
   }
 
-  Future<void> _createImageNote(XFile image, BuildContext context) async {
+  Future<void> _createImageNote(XFile image, BuildContext context, AppProvider appProvider) async {
     try {
       // Get the file path
       final String imagePath = image.path;
+      
+      // Verify the file exists
+      final file = File(imagePath);
+      final fileExists = await file.exists();
+      
+      if (!fileExists) {
+        throw Exception('Image file does not exist at path: $imagePath');
+      }
       
       // Create a note with the image attachment
       final imageNote = Note(
@@ -480,18 +531,35 @@ class _MainScreenState extends State<MainScreen> {
         attachmentPaths: [imagePath],
       );
 
-      context.read<AppProvider>().addNote(imageNote);
+      // Use the captured AppProvider reference instead of context.read
+      await appProvider.addNote(imageNote);
       
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image note created successfully!')),
-        );
+      // Try to show success message if context is still valid
+      try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image note created successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (contextError) {
+        // Context issue - note was still created successfully
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating image note: $e')),
-        );
+      // Try to show error message if context is still valid
+      try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error creating image note: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (contextError) {
+        // Context issue - error logged silently
       }
     }
   }
@@ -553,13 +621,20 @@ class _MainScreenState extends State<MainScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File note created successfully!')),
+          const SnackBar(
+            content: Text('File note created successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
+      print('Error creating file note: $e'); // Debug logging
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating file note: $e')),
+          SnackBar(
+            content: Text('Error creating file note: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -584,13 +659,20 @@ class _MainScreenState extends State<MainScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File note created successfully!')),
+          const SnackBar(
+            content: Text('File note created successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
+      print('Error creating file note from bytes: $e'); // Debug logging
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating file note: $e')),
+          SnackBar(
+            content: Text('Error creating file note: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -612,7 +694,7 @@ class _VoiceRecordingDialog extends StatefulWidget {
   final VoidCallback onStopListening;
   final VoidCallback onStartAudioRecording;
   final Function(BuildContext) onStopAudioRecording;
-  final Function(BuildContext) onSaveVoiceNote;
+  final Future<void> Function(BuildContext) onSaveVoiceNote;
   final VoidCallback onReset;
 
   const _VoiceRecordingDialog({

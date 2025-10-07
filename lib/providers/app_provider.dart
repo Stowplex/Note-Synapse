@@ -45,9 +45,11 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.insertNote(note);
       await loadData();
+      _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      rethrow; // Rethrow the error so the calling code can handle it
     }
   }
 
@@ -55,9 +57,11 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.updateNote(note);
       await loadData();
+      _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      rethrow; // Rethrow the error so the calling code can handle it
     }
   }
 
@@ -90,9 +94,11 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.deleteNote(noteId);
       await loadData();
+      _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      rethrow; // Rethrow the error so the calling code can handle it
     }
   }
 
