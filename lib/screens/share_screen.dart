@@ -782,13 +782,45 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 16),
             OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              onPressed: () => _createUrlAsIs(),
+              child: const Text('As-Is'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _createUrlAsIs() async {
+    if (_detectedUrl == null) return;
+
+    setState(() {
+      _isExtracting = true;
+      _error = null;
+    });
+
+    try {
+      // Prepare a note with the URL as-is (don't save yet)
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared URL',
+        content: _detectedUrl!,
+        type: NoteType.note,
+        tags: ['shared', 'url'],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      setState(() {
+        _preparedNote = note;
+        _isExtracting = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to prepare note: $e';
+        _isExtracting = false;
+      });
+    }
   }
 
   Future<void> _extractWebContent(bool useAI) async {
