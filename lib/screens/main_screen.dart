@@ -9,8 +9,6 @@ import '../models/note.dart';
 import '../services/audio_recording_service.dart';
 import 'notes_screen.dart';
 import 'calendar_screen.dart';
-import 'todo_screen.dart';
-import 'timeline_screen.dart';
 import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
 
@@ -30,8 +28,6 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const NotesScreen(),
     const CalendarScreen(),
-    const TodoScreen(),
-    const TimelineScreen(),
   ];
 
   @override
@@ -74,14 +70,6 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: 'Calendar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.checklist),
-            label: 'Todo',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.timeline),
-            label: 'Timeline',
           ),
         ],
       ),

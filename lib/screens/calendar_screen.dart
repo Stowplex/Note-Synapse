@@ -21,6 +21,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   int _calendarKey = 0; // Add a key to force rebuild
   String _selectedTag = 'all';
   List<String> _availableTags = [];
+  String _selectedView = 'calendar'; // 'calendar', 'timeline', 'todo'
 
   @override
   void initState() {
@@ -44,13 +45,58 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calendar'),
+        title: Text(_getViewTitle()),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
               setState(() {
+                _selectedView = value;
+                if (value == 'calendar') {
+                  _calendarKey++; // Force calendar rebuild
+                }
+              });
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'calendar',
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Calendar'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'timeline',
+                child: Row(
+                  children: [
+                    Icon(Icons.timeline, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Timeline'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'todo',
+                child: Row(
+                  children: [
+                    Icon(Icons.checklist, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Todo'),
+                  ],
+                ),
+              ),
+            ],
+            icon: const Icon(Icons.view_module),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              setState(() {
                 _selectedTag = value;
-                _calendarKey++; // Force calendar rebuild
+                if (_selectedView == 'calendar') {
+                  _calendarKey++; // Force calendar rebuild
+                }
               });
             },
             itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
@@ -59,23 +105,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
             )).toList(),
             icon: const Icon(Icons.filter_list),
           ),
-          IconButton(
-            icon: const Icon(Icons.today),
-            onPressed: () {
-              setState(() {
-                final now = DateTime.now();
-                _focusedDay = now;
-                _selectedDay = now;
-              });
-            },
-          ),
+          if (_selectedView == 'calendar')
+            IconButton(
+              icon: const Icon(Icons.today),
+              onPressed: () {
+                setState(() {
+                  final now = DateTime.now();
+                  _focusedDay = now;
+                  _selectedDay = now;
+                });
+              },
+            ),
         ],
       ),
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          return Column(
-            children: [
-              TableCalendar<Note>(
+          if (_selectedView == 'timeline') {
+            return _buildTimelineView(appProvider);
+          } else if (_selectedView == 'todo') {
+            return _buildTodoView(appProvider);
+          } else {
+            return Column(
+              children: [
+                TableCalendar<Note>(
                 key: ValueKey(_calendarKey),
                 firstDay: DateTime.utc(2020, 1, 1),
                 lastDay: DateTime.utc(2030, 12, 31),
@@ -144,6 +196,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ],
           );
+          }
         },
       ),
     );
@@ -456,6 +509,404 @@ class _CalendarScreenState extends State<CalendarScreen> {
       default:
         return 'To Do';
     }
+  }
+
+  String _getViewTitle() {
+    switch (_selectedView) {
+      case 'timeline':
+        return 'Timeline';
+      case 'todo':
+        return 'Todo';
+      case 'calendar':
+      default:
+        return 'Calendar';
+    }
+  }
+
+  Widget _buildTimelineView(AppProvider appProvider) {
+    if (appProvider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final notes = _filterNotes(appProvider.notes);
+    final groupedNotes = _groupNotesByDate(notes);
+    
+    if (notes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.timeline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedTag == 'all'
+                  ? 'Create your first task'
+                  : 'Try selecting a different tag',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: groupedNotes.length,
+      itemBuilder: (context, index) {
+        final entry = groupedNotes.entries.elementAt(index);
+        final date = entry.key;
+        final dayNotes = entry.value;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                _formatDate(date),
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...dayNotes.map((note) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                child: InkWell(
+                  onTap: () => _openNoteDetail(note),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (note.isTask) ...[
+                              _buildStatusIcon(note),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                note.title,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  decoration: note.isCompleted ? TextDecoration.lineThrough : null,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (note.isTask)
+                              _buildStatusDropdown(note, appProvider),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          note.content,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (note.tags.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: note.tags.take(3).map((tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                              labelStyle: TextStyle(
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            )).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTodoView(AppProvider appProvider) {
+    if (appProvider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final tasks = _filterTasks(appProvider.notes);
+    
+    if (tasks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedTag == 'all'
+                  ? 'Create your first task'
+                  : 'Try selecting a different tag',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        final completionPercentage = appProvider.calculateTaskCompletionPercentage(task);
+        
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Card(
+            child: InkWell(
+              onTap: () => _openNoteDetail(task),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _buildStatusIcon(task),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            task.title,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        _buildStatusDropdown(task, appProvider),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      task.content,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (task.scheduledAt != null || task.completeBy != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          if (task.scheduledAt != null)
+                            Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Start: ${task.scheduledAt}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[700],
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          if (task.completeBy != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Due: ${task.completeBy}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (task.subNotes.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(
+                        value: completionPercentage,
+                        backgroundColor: Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          completionPercentage == 1.0 ? Colors.green : Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.list, size: 16, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${task.subNotes.where((sn) => sn.isCompleted).length}/${task.subNotes.length} subtasks completed',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${(completionPercentage * 100).toInt()}%',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (task.tags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: task.tags.take(3).map((tag) => Chip(
+                          label: Text(
+                            tag,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                          labelStyle: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        )).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Note> _filterNotes(List<Note> notes) {
+    // Filter to only show tasks
+    final tasks = notes.where((note) => note.isTask).toList();
+    
+    if (_selectedTag == 'all') {
+      return tasks;
+    }
+    
+    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+  }
+
+  List<Note> _filterTasks(List<Note> notes) {
+    final tasks = notes.where((note) => note.isTask).toList();
+    
+    if (_selectedTag == 'all') {
+      return tasks;
+    }
+    
+    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+  }
+
+  Map<DateTime, List<Note>> _groupNotesByDate(List<Note> notes) {
+    final Map<DateTime, List<Note>> grouped = {};
+    
+    for (final note in notes) {
+      DateTime dateToUse;
+      
+      // Use scheduledAt if available, otherwise fall back to createdAt
+      if (note.scheduledAt != null && note.scheduledAt!.isNotEmpty) {
+        try {
+          dateToUse = DateTime.parse(note.scheduledAt!);
+        } catch (e) {
+          // If parsing fails, use createdAt
+          dateToUse = note.createdAt;
+        }
+      } else {
+        // If no scheduledAt, use createdAt
+        dateToUse = note.createdAt;
+      }
+      
+      final date = DateTime(dateToUse.year, dateToUse.month, dateToUse.day);
+      if (grouped[date] == null) {
+        grouped[date] = [];
+      }
+      grouped[date]!.add(note);
+    }
+    
+    // Sort by date (most recent first)
+    final sortedEntries = grouped.entries.toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+    
+    return Map.fromEntries(sortedEntries);
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else {
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    }
+  }
+
+  bool _isOverdue(String completeBy) {
+    final due = DateTime.tryParse(completeBy);
+    if (due == null) return false;
+    return due.isBefore(DateTime.now());
   }
 
   // Link handling function
