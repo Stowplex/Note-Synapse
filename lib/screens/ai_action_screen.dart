@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/ai_interaction.dart';
@@ -101,10 +102,20 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 hintText: _getPromptHint(),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.edit),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.attach_file),
-                  onPressed: _attachFiles,
-                  tooltip: 'Attach files',
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.attach_file),
+                      onPressed: _attachFiles,
+                      tooltip: 'Attach files',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt),
+                      onPressed: _captureImage,
+                      tooltip: 'Take photo',
+                    ),
+                  ],
                 ),
               ),
               maxLines: 6,
@@ -389,12 +400,62 @@ class _AIActionScreenState extends State<AIActionScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking files: $e'),
-          backgroundColor: Colors.red,
-        ),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking files: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _captureImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
       );
+
+      if (image != null) {
+        // Convert XFile to PlatformFile for consistency with existing attachment system
+        final file = File(image.path);
+        final bytes = await file.readAsBytes();
+        
+        final platformFile = PlatformFile(
+          name: image.name,
+          size: bytes.length,
+          bytes: bytes,
+          path: image.path,
+        );
+        
+        setState(() {
+          _attachedFiles.add(platformFile);
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Photo captured and added as attachment'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error capturing image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
