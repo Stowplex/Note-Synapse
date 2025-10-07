@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,7 @@ import 'notes_screen.dart';
 import 'calendar_screen.dart';
 import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
+import 'share_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -148,6 +150,15 @@ class _MainScreenState extends State<MainScreen> {
               onTap: () {
                 _navigateToFileAttachment(context);
                 Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_paste),
+              title: const Text('New Note from Clipboard'),
+              subtitle: const Text('Create note from clipboard content'),
+              onTap: () {
+                Navigator.pop(context);
+                _createNoteFromClipboard(context);
               },
             ),
           ],
@@ -422,6 +433,102 @@ class _MainScreenState extends State<MainScreen> {
     // Capture the AppProvider reference before the context might become invalid
     final appProvider = context.read<AppProvider>();
     _pickFile(context, appProvider);
+  }
+
+  Future<void> _createNoteFromClipboard(BuildContext context) async {
+    try {
+      // Get clipboard data
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      
+      if (clipboardData?.text == null || clipboardData!.text!.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Clipboard is empty'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final clipboardText = clipboardData.text!.trim();
+      
+      // Check if the clipboard content is a URL
+      final url = _extractUrl(clipboardText);
+      
+      if (url != null) {
+        // Navigate to share screen with URL data
+        final sharedData = {
+          'action': 'SEND',
+          'type': 'text/plain',
+          'text': url,
+          'contentType': 'url',
+          'url': url,
+        };
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ShareScreen(sharedData: sharedData),
+          ),
+        );
+      } else {
+        // Create a regular note from clipboard text
+        final newNote = Note(
+          id: const Uuid().v4(),
+          title: 'Clipboard Note - ${DateTime.now().toString().substring(0, 16)}',
+          content: clipboardText,
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          tags: ['clipboard', 'text'],
+        );
+        
+        // Navigate to share screen with text data
+        final sharedData = {
+          'action': 'SEND',
+          'type': 'text/plain',
+          'text': clipboardText,
+          'contentType': 'text',
+          'note': newNote.toJson(),
+        };
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ShareScreen(sharedData: sharedData),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accessing clipboard: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String? _extractUrl(String text) {
+    final trimmedText = text.trim();
+    final uriPattern = RegExp(r'^https?://[^\s]+$');
+    
+    if (uriPattern.hasMatch(trimmedText)) {
+      try {
+        final uri = Uri.parse(trimmedText);
+        if (uri.scheme == 'http' || uri.scheme == 'https') {
+          return trimmedText;
+        }
+      } catch (e) {
+        // Invalid URI
+      }
+    }
+    
+    return null;
   }
 
 
