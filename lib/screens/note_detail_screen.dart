@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import '../providers/app_provider.dart';
@@ -1214,13 +1215,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         return;
       }
 
-      final uri = Uri.file(attachmentPath);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else {
+      // Use open_file package for proper Android file handling
+      final result = await OpenFile.open(attachmentPath);
+      
+      if (result.type != ResultType.done) {
+        String errorMessage = 'Cannot open file';
+        switch (result.type) {
+          case ResultType.noAppToOpen:
+            errorMessage = 'No application found to open this file type';
+            break;
+          case ResultType.fileNotFound:
+            errorMessage = 'File not found';
+            break;
+          case ResultType.permissionDenied:
+            errorMessage = 'Permission denied to open file';
+            break;
+          case ResultType.error:
+            errorMessage = 'Error opening file: ${result.message}';
+            break;
+          default:
+            errorMessage = 'Unknown error opening file';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot open file'),
+          SnackBar(
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
