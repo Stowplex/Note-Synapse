@@ -35,6 +35,7 @@ class Note {
   final String? completeBy; // For tasks only - when the task needs to be completed
   final TaskStatus? status; // For tasks only
   final double? completionPercentage; // For tasks only
+  final bool pinned; // Whether the note is pinned to the top
 
   Note({
     required this.id,
@@ -50,6 +51,7 @@ class Note {
     this.completeBy,
     this.status,
     this.completionPercentage,
+    this.pinned = false,
   });
 
   factory Note.fromJson(Map<String, dynamic> json) => _$NoteFromJson(json);
@@ -69,6 +71,7 @@ class Note {
     String? completeBy,
     TaskStatus? status,
     double? completionPercentage,
+    bool? pinned,
   }) {
     return Note(
       id: id ?? this.id,
@@ -84,6 +87,7 @@ class Note {
       completeBy: completeBy ?? this.completeBy,
       status: status ?? this.status,
       completionPercentage: completionPercentage ?? this.completionPercentage,
+      pinned: pinned ?? this.pinned,
     );
   }
 

@@ -90,6 +90,29 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> toggleNotePin(String noteId) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+      
+      final note = _notes[noteIndex];
+      final updatedNote = note.copyWith(
+        pinned: !note.pinned,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Update the note in the database
+      await _databaseService.updateNote(updatedNote);
+      
+      // Update the local state immediately
+      _notes[noteIndex] = updatedNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
   Future<void> deleteNote(String noteId) async {
     try {
       await _databaseService.deleteNote(noteId);

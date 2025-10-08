@@ -11,6 +11,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final Function(TaskStatus)? onStatusChanged;
   final VoidCallback? onAddSubNote;
+  final VoidCallback? onPinToggle;
 
   const NoteCard({
     super.key,
@@ -20,6 +21,7 @@ class NoteCard extends StatelessWidget {
     this.onLongPress,
     this.onStatusChanged,
     this.onAddSubNote,
+    this.onPinToggle,
   });
 
   @override
@@ -53,6 +55,18 @@ class NoteCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (onPinToggle != null)
+                    IconButton(
+                      icon: Icon(
+                        note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                        color: note.pinned ? Theme.of(context).primaryColor : Colors.grey[600],
+                        size: 20,
+                      ),
+                      onPressed: onPinToggle,
+                      tooltip: note.pinned ? 'Unpin note' : 'Pin note',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   if (note.isTask && onStatusChanged != null)
                     _buildStatusDropdown(note),
                   if (isSelected)

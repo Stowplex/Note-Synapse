@@ -206,6 +206,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     onLongPress: () => _handleNoteLongPress(note),
                     onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
                     onAddSubNote: () => _addSubNote(note),
+                    onPinToggle: () => _toggleNotePin(note.id),
                   ),
                 ),
               );
@@ -235,6 +236,13 @@ class _NotesScreenState extends State<NotesScreen> {
                note.tags.any((tag) => tag.toLowerCase().contains(query));
       }).toList();
     }
+    
+    // Sort by pinned status first, then by creation date
+    filteredNotes.sort((a, b) {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
     
     return filteredNotes;
   }
@@ -313,6 +321,10 @@ class _NotesScreenState extends State<NotesScreen> {
 
   void _updateTaskStatus(String noteId, TaskStatus status) {
     context.read<AppProvider>().updateTaskStatus(noteId, status);
+  }
+
+  void _toggleNotePin(String noteId) {
+    context.read<AppProvider>().toggleNotePin(noteId);
   }
 
   void _linkSelectedNotes() {

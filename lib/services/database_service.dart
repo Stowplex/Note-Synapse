@@ -39,7 +39,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -58,7 +58,8 @@ class DatabaseService {
         scheduledAt TEXT,
         completeBy TEXT,
         status TEXT,
-        completionPercentage REAL
+        completionPercentage REAL,
+        pinned INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -143,6 +144,7 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
     await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
     await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
+    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
     await db.execute('CREATE INDEX idx_ai_interactions_expiresAt ON ai_interactions(expiresAt)');
@@ -203,6 +205,25 @@ class DatabaseService {
         await _onCreate(db, newVersion);
       }
     }
+    
+    if (oldVersion < 3) {
+      // Migration from version 2 to 3: Add pinned column
+      try {
+        await db.execute('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+        await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
+      } catch (e) {
+        print('Migration to version 3 failed: $e');
+        // If migration fails, drop and recreate the database
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await _onCreate(db, newVersion);
+      }
+    }
   }
 
   // Notes CRUD
@@ -211,6 +232,7 @@ class DatabaseService {
     final json = note.toJson();
     json['createdAt'] = note.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = note.updatedAt.millisecondsSinceEpoch;
+    json['pinned'] = note.pinned ? 1 : 0;
     
     // Remove complex objects that can't be stored directly
     json.remove('subNotes');
@@ -241,7 +263,7 @@ class DatabaseService {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      orderBy: 'createdAt DESC',
+      orderBy: 'pinned DESC, createdAt DESC',
     );
 
     final List<Note> notes = [];
@@ -275,6 +297,7 @@ class DatabaseService {
     final json = note.toJson();
     json['createdAt'] = note.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = note.updatedAt.millisecondsSinceEpoch;
+    json['pinned'] = note.pinned ? 1 : 0;
     
     // Remove complex objects that can't be stored directly
     json.remove('subNotes');
@@ -523,6 +546,7 @@ class DatabaseService {
           ? _stringToTaskStatus(map['status'])
           : null,
       completionPercentage: map['completionPercentage'],
+      pinned: (map['pinned'] ?? 0) == 1,
     );
   }
 
