@@ -1668,9 +1668,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context: context,
       builder: (context) => _AddTagDialog(
         currentNote: currentNote,
-        onAddTag: (tagName) async {
+        onAddTags: (tagNames) async {
           Navigator.pop(context);
-          await context.read<AppProvider>().addTagToNote(currentNote.id, tagName);
+          for (final tagName in tagNames) {
+            await context.read<AppProvider>().addTagToNote(currentNote.id, tagName);
+          }
         },
       ),
     );
@@ -2125,11 +2127,11 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
 
 class _AddTagDialog extends StatefulWidget {
   final Note currentNote;
-  final Function(String tagName) onAddTag;
+  final Function(List<String> tagNames) onAddTags;
 
   const _AddTagDialog({
     required this.currentNote,
-    required this.onAddTag,
+    required this.onAddTags,
   });
 
   @override
@@ -2138,7 +2140,7 @@ class _AddTagDialog extends StatefulWidget {
 
 class _AddTagDialogState extends State<_AddTagDialog> {
   final TextEditingController _tagController = TextEditingController();
-  String? _selectedExistingTag;
+  Set<String> _selectedExistingTags = {};
   List<String> _availableTags = [];
 
   @override
@@ -2166,14 +2168,14 @@ class _AddTagDialogState extends State<_AddTagDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add Tag'),
+      title: const Text('Add Tags'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add a tag to "${widget.currentNote.title}":',
+              'Add tags to "${widget.currentNote.title}":',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
@@ -2186,14 +2188,14 @@ class _AddTagDialogState extends State<_AddTagDialog> {
               ),
               onChanged: (value) {
                 setState(() {
-                  _selectedExistingTag = null;
+                  // Clear existing selections when typing
                 });
               },
             ),
             if (_availableTags.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                'Or select from existing tags:',
+                'Select from existing tags:',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -2202,15 +2204,37 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                 runSpacing: 8,
                 children: _availableTags.map((tag) => FilterChip(
                   label: Text(tag),
-                  selected: _selectedExistingTag == tag,
+                  selected: _selectedExistingTags.contains(tag),
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {
-                        _selectedExistingTag = tag;
-                        _tagController.clear();
+                        _selectedExistingTags.add(tag);
                       } else {
-                        _selectedExistingTag = null;
+                        _selectedExistingTags.remove(tag);
                       }
+                    });
+                  },
+                )).toList(),
+              ),
+            ],
+            if (_selectedExistingTags.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Selected tags:',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _selectedExistingTags.map((tag) => Chip(
+                  label: Text(tag),
+                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                  labelStyle: TextStyle(color: Theme.of(context).primaryColor),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () {
+                    setState(() {
+                      _selectedExistingTags.remove(tag);
                     });
                   },
                 )).toList(),
@@ -2225,21 +2249,39 @@ class _AddTagDialogState extends State<_AddTagDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _canAddTag() ? () {
-            final tagName = _selectedExistingTag ?? _tagController.text.trim();
-            if (tagName.isNotEmpty) {
-              widget.onAddTag(tagName);
+          onPressed: _canAddTags() ? () {
+            final List<String> tagsToAdd = [];
+            
+            // Add new tag if entered
+            final newTag = _tagController.text.trim();
+            if (newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag)) {
+              tagsToAdd.add(newTag);
+            }
+            
+            // Add selected existing tags
+            tagsToAdd.addAll(_selectedExistingTags);
+            
+            if (tagsToAdd.isNotEmpty) {
+              widget.onAddTags(tagsToAdd);
             }
           } : null,
-          child: const Text('Add Tag'),
+          child: Text(_selectedExistingTags.length > 0 || _tagController.text.trim().isNotEmpty 
+              ? 'Add ${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0)} Tag${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0) > 1 ? 's' : ''}' 
+              : 'Add Tag'),
         ),
       ],
     );
   }
 
-  bool _canAddTag() {
-    final tagName = _selectedExistingTag ?? _tagController.text.trim();
-    return tagName.isNotEmpty && !widget.currentNote.tags.contains(tagName);
+  bool _canAddTags() {
+    // Check if there are any selected existing tags
+    if (_selectedExistingTags.isNotEmpty) {
+      return true;
+    }
+    
+    // Check if there's a new tag entered that's not already on the note
+    final newTag = _tagController.text.trim();
+    return newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag);
   }
 }
 
