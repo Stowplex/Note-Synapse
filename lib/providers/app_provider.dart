@@ -550,4 +550,44 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // Reparent subnote from one note to another
+  Future<void> reparentSubNote(String fromNoteId, String toNoteId, SubNote subNote) async {
+    try {
+      // Find source and destination notes
+      final fromNoteIndex = _notes.indexWhere((note) => note.id == fromNoteId);
+      final toNoteIndex = _notes.indexWhere((note) => note.id == toNoteId);
+      
+      if (fromNoteIndex == -1 || toNoteIndex == -1) return;
+      
+      final fromNote = _notes[fromNoteIndex];
+      final toNote = _notes[toNoteIndex];
+      
+      // Remove subnote from source note
+      final updatedFromSubNotes = fromNote.subNotes.where((sn) => sn.id != subNote.id).toList();
+      final updatedFromNote = fromNote.copyWith(
+        subNotes: updatedFromSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Add subnote to destination note
+      final updatedToSubNotes = List<SubNote>.from(toNote.subNotes)..add(subNote);
+      final updatedToNote = toNote.copyWith(
+        subNotes: updatedToSubNotes,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Update both notes in database
+      await _databaseService.updateNote(updatedFromNote);
+      await _databaseService.updateNote(updatedToNote);
+      
+      // Update local state
+      _notes[fromNoteIndex] = updatedFromNote;
+      _notes[toNoteIndex] = updatedToNote;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }

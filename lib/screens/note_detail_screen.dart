@@ -378,6 +378,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                     ),
                     PopupMenuItem(
+                      value: 'reparent',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.move_to_inbox, size: 16),
+                          SizedBox(width: 8),
+                          Text('Reparent'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: 'delete',
                       child: const Row(
                         children: [
@@ -395,6 +405,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         break;
                       case 'toggle':
                         _toggleSubNoteCompletion(subNote);
+                        break;
+                      case 'reparent':
+                        _reparentSubNote(currentNote, subNote);
                         break;
                       case 'delete':
                         _deleteSubNote(currentNote, subNote);
@@ -1942,6 +1955,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  // Reparent subnote
+  void _reparentSubNote(Note currentNote, SubNote subNote) {
+    showDialog(
+      context: context,
+      builder: (context) => _ReparentSubNoteDialog(
+        currentNote: currentNote,
+        subNote: subNote,
+        onReparent: (newParentNoteId) async {
+          final appProvider = Provider.of<AppProvider>(context, listen: false);
+          await appProvider.reparentSubNote(currentNote.id, newParentNoteId, subNote);
+          if (mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Sub-note moved successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   // Link handling function
   void _handleLinkTap(String url, String text) {
     // Note: gpt_markdown passes parameters in reverse order
@@ -1988,6 +2025,232 @@ class _AddLinkedNoteDialog extends StatefulWidget {
 
   @override
   State<_AddLinkedNoteDialog> createState() => _AddLinkedNoteDialogState();
+}
+
+class _ReparentSubNoteDialog extends StatefulWidget {
+  final Note currentNote;
+  final SubNote subNote;
+  final Function(String) onReparent;
+
+  const _ReparentSubNoteDialog({
+    required this.currentNote,
+    required this.subNote,
+    required this.onReparent,
+  });
+
+  @override
+  State<_ReparentSubNoteDialog> createState() => _ReparentSubNoteDialogState();
+}
+
+class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String? _selectedNoteId;
+  List<Note> _filteredNotes = [];
+  String? _selectedTag;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+    _filteredNotes = _getAvailableNotes();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+      _filteredNotes = _getAvailableNotes();
+    });
+  }
+
+  List<Note> _getAvailableNotes() {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    var notes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
+
+    // Filter by search query
+    if (_searchQuery.isNotEmpty) {
+      notes = notes.where((note) {
+        return note.title.toLowerCase().contains(_searchQuery) ||
+               note.content.toLowerCase().contains(_searchQuery);
+      }).toList();
+    }
+
+    // Filter by selected tag
+    if (_selectedTag != null && _selectedTag != 'All Notes') {
+      notes = notes.where((note) {
+        return note.tags.contains(_selectedTag);
+      }).toList();
+    }
+
+    return notes;
+  }
+
+  List<String> _getAllTags() {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final allTags = <String>{};
+    for (final note in appProvider.notes) {
+      allTags.addAll(note.tags);
+    }
+    final tagList = allTags.toList()..sort();
+    return ['All Notes', ...tagList];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Move "${widget.subNote.name}" to another note'),
+      content: SizedBox(
+        width: 500,
+        height: 600,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Search Box
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'Search notes...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Tags Dropdown
+            Row(
+              children: [
+                Text(
+                  'Filter by tag:',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedTag,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    hint: const Text('All Notes'),
+                    items: _getAllTags().map((tag) {
+                      return DropdownMenuItem<String>(
+                        value: tag,
+                        child: Text(tag),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedTag = value;
+                        _filteredNotes = _getAvailableNotes();
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Notes List
+            Expanded(
+              child: _filteredNotes.isEmpty
+                  ? Center(
+                      child: Text(
+                        _searchQuery.isNotEmpty || (_selectedTag != null && _selectedTag != 'All Notes')
+                            ? 'No notes match your search'
+                            : 'No other notes available',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _filteredNotes.length,
+                      itemBuilder: (context, index) {
+                        final note = _filteredNotes[index];
+                        final isSelected = _selectedNoteId == note.id;
+                        
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+                          child: ListTile(
+                            title: Text(
+                              note.title,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  note.content.length > 80 
+                                      ? '${note.content.substring(0, 80)}...'
+                                      : note.content,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (note.tags.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 2,
+                                    children: note.tags.take(3).map((tag) => Chip(
+                                      label: Text(
+                                        tag,
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                                      labelStyle: TextStyle(
+                                        color: Theme.of(context).primaryColor,
+                                        fontSize: 10,
+                                      ),
+                                    )).toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            trailing: isSelected 
+                                ? const Icon(Icons.check_circle, color: Colors.green)
+                                : const Icon(Icons.radio_button_unchecked, color: Colors.grey),
+                            onTap: () {
+                              setState(() {
+                                _selectedNoteId = note.id;
+                              });
+                            },
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selectedNoteId != null
+              ? () => widget.onReparent(_selectedNoteId!)
+              : null,
+          child: const Text('Move'),
+        ),
+      ],
+    );
+  }
 }
 
 class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
