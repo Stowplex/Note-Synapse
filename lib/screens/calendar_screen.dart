@@ -5,6 +5,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../widgets/multi_select_tag_filter.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_list.dart';
 
@@ -20,7 +21,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
   int _calendarKey = 0; // Add a key to force rebuild
-  String _selectedTag = 'all';
+  Set<String> _selectedTags = {};
   List<String> _availableTags = [];
   String _selectedView = 'calendar'; // 'calendar', 'timeline', 'todo'
 
@@ -33,6 +34,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _loadTags();
     });
   }
+
 
   void _loadTags() {
     final appProvider = context.read<AppProvider>();
@@ -91,20 +93,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ],
             icon: const Icon(Icons.view_module),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
+          MultiSelectTagFilter(
+            availableTags: _availableTags,
+            selectedTags: _selectedTags,
+            onSelectionChanged: (selectedTags) {
               setState(() {
-                _selectedTag = value;
+                _selectedTags = selectedTags;
                 if (_selectedView == 'calendar') {
                   _calendarKey++; // Force calendar rebuild
                 }
               });
             },
-            itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
-              value: tag,
-              child: Text(tag == 'all' ? 'All Notes' : tag),
-            )).toList(),
-            icon: const Icon(Icons.filter_list),
           ),
           if (_selectedView == 'calendar')
             IconButton(
@@ -121,6 +120,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
+          // Load tags when data becomes available
+          if (!appProvider.isLoading && appProvider.notes.isNotEmpty && _availableTags.length <= 1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _loadTags();
+            });
+          }
+          
           if (_selectedView == 'timeline') {
             return _buildTimelineView(appProvider);
           } else if (_selectedView == 'todo') {
@@ -168,10 +174,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 },
                 eventLoader: (day) {
                   final tasks = appProvider.getTasksForDate(day);
-                  if (_selectedTag == 'all') {
+                  if (_selectedTags.isEmpty) {
                     return tasks;
                   }
-                  return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+                  return tasks.where((task) {
+                    return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+                  }).toList();
                 },
                 calendarStyle: CalendarStyle(
                   outsideDaysVisible: true,
@@ -208,13 +216,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final allTasks = appProvider.getTasksForDate(selectedDate);
     final allNotes = appProvider.getNotesForDate(selectedDate);
     
-    // Filter by selected tag
-    final tasks = _selectedTag == 'all' 
+    // Filter by selected tags (OR logic)
+    final tasks = _selectedTags.isEmpty 
         ? allTasks 
-        : allTasks.where((task) => task.tags.contains(_selectedTag)).toList();
-    final notes = _selectedTag == 'all' 
+        : allTasks.where((task) {
+            return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+          }).toList();
+    final notes = _selectedTags.isEmpty 
         ? allNotes 
-        : allNotes.where((note) => note.tags.contains(_selectedTag)).toList();
+        : allNotes.where((note) {
+            return _selectedTags.any((selectedTag) => note.tags.contains(selectedTag));
+          }).toList();
 
     return DefaultTabController(
       length: 2,
@@ -284,14 +296,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTag == 'all' ? 'No tasks for this day' : 'No tasks with this tag for this day',
+              _selectedTags.isEmpty ? 'No tasks for this day' : 'No tasks with selected tags for this day',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTag == 'all' ? 'Create a task to get started' : 'Try selecting a different tag',
+              _selectedTags.isEmpty ? 'Create a task to get started' : 'Try selecting different tags',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -344,14 +356,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.note, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTag == 'all' ? 'No notes for this day' : 'No notes with this tag for this day',
+              _selectedTags.isEmpty ? 'No notes for this day' : 'No notes with selected tags for this day',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTag == 'all' ? 'Create a note to get started' : 'Try selecting a different tag',
+              _selectedTags.isEmpty ? 'Create a note to get started' : 'Try selecting different tags',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -534,14 +546,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.timeline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
+              _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTag == 'all'
+              _selectedTags.isEmpty
                   ? 'Create your first task'
-                  : 'Try selecting a different tag',
+                  : 'Try selecting different tags',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -664,14 +676,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
+              _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTag == 'all'
+              _selectedTags.isEmpty
                   ? 'Create your first task'
-                  : 'Try selecting a different tag',
+                  : 'Try selecting different tags',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -829,21 +841,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
     // Filter to only show tasks
     final tasks = notes.where((note) => note.isTask).toList();
     
-    if (_selectedTag == 'all') {
+    if (_selectedTags.isEmpty) {
       return tasks;
     }
     
-    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+    return tasks.where((task) {
+      return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+    }).toList();
   }
 
   List<Note> _filterTasks(List<Note> notes) {
     final tasks = notes.where((note) => note.isTask).toList();
     
-    if (_selectedTag == 'all') {
+    if (_selectedTags.isEmpty) {
       return tasks;
     }
     
-    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+    return tasks.where((task) {
+      return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+    }).toList();
   }
 
   Map<DateTime, List<Note>> _groupNotesByDate(List<Note> notes) {

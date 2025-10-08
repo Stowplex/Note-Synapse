@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../widgets/multi_select_tag_filter.dart';
 import 'note_detail_screen.dart';
 
 class TodoScreen extends StatefulWidget {
@@ -12,7 +13,7 @@ class TodoScreen extends StatefulWidget {
 }
 
 class _TodoScreenState extends State<TodoScreen> {
-  String _selectedTag = 'all';
+  Set<String> _selectedTags = {};
   List<String> _availableTags = [];
 
   @override
@@ -22,6 +23,7 @@ class _TodoScreenState extends State<TodoScreen> {
       _loadTags();
     });
   }
+
 
   void _loadTags() {
     final appProvider = context.read<AppProvider>();
@@ -44,17 +46,15 @@ class _TodoScreenState extends State<TodoScreen> {
       appBar: AppBar(
         title: const Text('Todo'),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
+          MultiSelectTagFilter(
+            availableTags: _availableTags,
+            selectedTags: _selectedTags,
+            onSelectionChanged: (selectedTags) {
               setState(() {
-                _selectedTag = value;
+                _selectedTags = selectedTags;
               });
             },
-            itemBuilder: (context) => _availableTags.map((tag) => PopupMenuItem(
-              value: tag,
-              child: Text(tag == 'all' ? 'All Tasks' : tag),
-            )).toList(),
-            icon: const Icon(Icons.filter_list),
+            allNotesLabel: 'All Tasks',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -67,6 +67,13 @@ class _TodoScreenState extends State<TodoScreen> {
       ),
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
+          // Load tags when data becomes available
+          if (!appProvider.isLoading && appProvider.notes.isNotEmpty && _availableTags.length <= 1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _loadTags();
+            });
+          }
+          
           if (appProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -81,14 +88,14 @@ class _TodoScreenState extends State<TodoScreen> {
                   Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
-                    _selectedTag == 'all' ? 'No tasks yet' : 'No tasks with this tag',
+                    _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _selectedTag == 'all'
+                    _selectedTags.isEmpty
                         ? 'Create your first task'
-                        : 'Try selecting a different tag',
+                        : 'Try selecting different tags',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
@@ -248,11 +255,13 @@ class _TodoScreenState extends State<TodoScreen> {
   List<Note> _filterTasks(List<Note> notes) {
     final tasks = notes.where((note) => note.isTask).toList();
     
-    if (_selectedTag == 'all') {
+    if (_selectedTags.isEmpty) {
       return tasks;
     }
     
-    return tasks.where((task) => task.tags.contains(_selectedTag)).toList();
+    return tasks.where((task) {
+      return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+    }).toList();
   }
 
   bool _isOverdue(String completeBy) {
