@@ -207,6 +207,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
                     onAddSubNote: () => _addSubNote(note),
                     onPinToggle: () => _toggleNotePin(note.id),
+                    onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
                   ),
                 ),
               );
@@ -357,6 +358,11 @@ class _NotesScreenState extends State<NotesScreen> {
         builder: (context) => SubNoteEditScreen(parentNote: note),
       ),
     );
+  }
+
+  void _updateNoteContent(String noteId, String newContent) async {
+    final appProvider = context.read<AppProvider>();
+    await appProvider.updateNoteContent(noteId, newContent);
   }
 
 }

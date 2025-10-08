@@ -1941,8 +1941,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _updateNoteContent(String newContent) async {
     if (mounted) {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
-      final updatedNote = widget.note.copyWith(content: newContent);
-      await appProvider.updateNote(updatedNote);
+      await appProvider.updateNoteContent(widget.note.id, newContent);
     }
   }
 

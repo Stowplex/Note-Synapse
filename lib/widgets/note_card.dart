@@ -12,6 +12,7 @@ class NoteCard extends StatelessWidget {
   final Function(TaskStatus)? onStatusChanged;
   final VoidCallback? onAddSubNote;
   final VoidCallback? onPinToggle;
+  final Function(String)? onContentChanged;
 
   const NoteCard({
     super.key,
@@ -22,6 +23,7 @@ class NoteCard extends StatelessWidget {
     this.onStatusChanged,
     this.onAddSubNote,
     this.onPinToggle,
+    this.onContentChanged,
   });
 
   @override
@@ -439,8 +441,8 @@ class NoteCard extends StatelessWidget {
           heightFactor: 1.0,
           child: InteractiveCheckboxList(
             originalContent: limitedContent,
-            onContentChanged: (newContent) {
-              // No-op for read-only display
+            onContentChanged: onContentChanged ?? (newContent) {
+              // No-op if no callback provided
             },
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey[600],

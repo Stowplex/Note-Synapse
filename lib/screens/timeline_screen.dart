@@ -143,6 +143,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                       onStatusChanged: note.isTask ? (status) {
                         appProvider.updateTaskStatus(note.id, status);
                       } : null,
+                      onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
                     ),
                   )),
                   const SizedBox(height: 16),
@@ -226,5 +227,10 @@ class _TimelineScreenState extends State<TimelineScreen> {
         builder: (context) => NoteDetailScreen(note: note),
       ),
     );
+  }
+
+  void _updateNoteContent(String noteId, String newContent) async {
+    final appProvider = context.read<AppProvider>();
+    await appProvider.updateNoteContent(noteId, newContent);
   }
 }
