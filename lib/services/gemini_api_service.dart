@@ -826,7 +826,8 @@ Please create the new note(s) in the following JSON format:
       "subNotes": [
         {
           "name": "Sub-note name",
-          "content": "Sub-note content"
+          "content": "Sub-note content",
+          "isCompleted": either false (default value) or true (if the sub-note is deemed completed, derived from the context)
         }
       ],
       "scheduledAt": "YYYY-MM-DD" (only for tasks - when the task should start),
@@ -870,6 +871,7 @@ If creating multiple notes, ensure they are related and useful based on the cont
             name: sn['name'] as String,
             content: sn['content'] as String,
             createdAt: DateTime.now(),
+            isCompleted: sn['isCompleted'] as bool? ?? false,
           )).toList() ?? [],
           scheduledAt: noteJson['scheduledAt'] as String?,
           completeBy: noteJson['completeBy'] as String?,
