@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/multi_select_tag_filter.dart';
+import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_list.dart';
 
@@ -752,7 +753,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                'Start: ${task.scheduledAt}',
+                                'Start: ${AppDateUtils.formatDateForDisplay(task.scheduledAt)}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.green[700],
@@ -764,14 +765,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
+                                color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[100] : Colors.blue[100],
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                'Due: ${task.completeBy}',
+                                'Due: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
+                                  color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[700] : Colors.blue[700],
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -914,11 +915,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  bool _isOverdue(String completeBy) {
-    final due = DateTime.tryParse(completeBy);
-    if (due == null) return false;
-    return due.isBefore(DateTime.now());
-  }
 
   Widget _buildSafeMarkdown(String content, BuildContext context) {
     try {

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/multi_select_tag_filter.dart';
+import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 
 class TodoScreen extends StatefulWidget {
@@ -164,7 +165,7 @@ class _TodoScreenState extends State<TodoScreen> {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      'Start: ${task.scheduledAt}',
+                                      'Start: ${AppDateUtils.formatDateForDisplay(task.scheduledAt)}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.green[700],
@@ -176,14 +177,14 @@ class _TodoScreenState extends State<TodoScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: _isOverdue(task.completeBy!) ? Colors.red[100] : Colors.blue[100],
+                                      color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[100] : Colors.blue[100],
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      'Due: ${task.completeBy}',
+                                      'Due: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: _isOverdue(task.completeBy!) ? Colors.red[700] : Colors.blue[700],
+                                        color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[700] : Colors.blue[700],
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -264,11 +265,6 @@ class _TodoScreenState extends State<TodoScreen> {
     }).toList();
   }
 
-  bool _isOverdue(String completeBy) {
-    final due = DateTime.tryParse(completeBy);
-    if (due == null) return false;
-    return due.isBefore(DateTime.now());
-  }
 
   void _openTaskDetail(Note task) {
     Navigator.of(context).push(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/note.dart';
+import '../utils/date_utils.dart';
 import 'interactive_checkbox_list.dart';
 
 class NoteCard extends StatelessWidget {
@@ -129,7 +130,7 @@ class NoteCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Start: ${note.scheduledAt}',
+                        'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.green[600],
                           fontWeight: FontWeight.bold,
@@ -145,7 +146,7 @@ class NoteCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Due: ${note.completeBy}',
+                        'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.orange[600],
                           fontWeight: FontWeight.bold,

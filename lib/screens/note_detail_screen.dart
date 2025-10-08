@@ -11,6 +11,7 @@ import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/gemini_api_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
+import '../utils/date_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 
@@ -782,12 +783,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   if (currentNote.scheduledAt != null)
                     SelectableText(
-                      'Scheduled: ${_formatDate(DateTime.parse(currentNote.scheduledAt!))}',
+                      'Scheduled: ${AppDateUtils.formatDateForDisplay(currentNote.scheduledAt)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (currentNote.completeBy != null)
                     SelectableText(
-                      'Due: ${_formatDate(DateTime.parse(currentNote.completeBy!))}',
+                      'Due: ${AppDateUtils.formatDateForDisplay(currentNote.completeBy)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                 ],
@@ -1058,8 +1059,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       title: _titleController.text.trim().isEmpty ? 'Untitled' : _titleController.text.trim(),
       content: _contentController.text.trim(),
       updatedAt: DateTime.now(),
-      scheduledAt: _scheduledAt?.toIso8601String(),
-      completeBy: _completeBy?.toIso8601String(),
+      scheduledAt: _scheduledAt != null ? AppDateUtils.formatDateOnly(_scheduledAt!) : null,
+      completeBy: _completeBy != null ? AppDateUtils.formatDateOnly(_completeBy!) : null,
     );
     
     if (!_hasBeenSaved) {
