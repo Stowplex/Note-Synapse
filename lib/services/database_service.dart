@@ -520,10 +520,7 @@ class DatabaseService {
       scheduledAt: map['scheduledAt'],
       completeBy: map['completeBy'],
       status: map['status'] != null
-          ? TaskStatus.values.firstWhere(
-              (e) => e.toString().split('.').last == map['status'],
-              orElse: () => TaskStatus.todo,
-            )
+          ? _stringToTaskStatus(map['status'])
           : null,
       completionPercentage: map['completionPercentage'],
     );
@@ -632,5 +629,21 @@ class DatabaseService {
   Future<void> close() async {
     final db = await database;
     await db.close();
+  }
+
+  // Helper method to convert string to TaskStatus
+  TaskStatus _stringToTaskStatus(String statusString) {
+    switch (statusString) {
+      case 'abandoned':
+        return TaskStatus.abandoned;
+      case 'complete':
+        return TaskStatus.complete;
+      case 'in_progress':
+        return TaskStatus.inProgress;
+      case 'todo':
+        return TaskStatus.todo;
+      default:
+        return TaskStatus.todo;
+    }
   }
 }
