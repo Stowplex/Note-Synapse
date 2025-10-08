@@ -120,70 +120,172 @@ class NoteCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 14,
-                    color: Colors.grey[500],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _formatDate(note.createdAt),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                  if (note.isTask && (note.scheduledAt != null || note.completeBy != null)) ...[
-                    const SizedBox(width: 16),
-                    if (note.scheduledAt != null) ...[
-                      Icon(
-                        Icons.play_arrow,
-                        size: 14,
-                        color: Colors.green[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.green[600],
-                          fontWeight: FontWeight.bold,
+              // Use LayoutBuilder to determine if we have enough space for horizontal layout
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Check if we have enough space for horizontal layout
+                  final hasTaskDates = note.isTask && (note.scheduledAt != null || note.completeBy != null);
+                  double estimatedWidth = 200.0; // Base width for created date
+                  if (hasTaskDates) {
+                    if (note.scheduledAt != null) estimatedWidth += 120.0;
+                    if (note.completeBy != null) estimatedWidth += 120.0;
+                  }
+                  final useHorizontalLayout = constraints.maxWidth > estimatedWidth;
+                  
+                  if (useHorizontalLayout) {
+                    // Horizontal layout when there's enough space
+                    return Row(
+                      children: [
+                        // Created date
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Colors.grey[500],
                         ),
-                      ),
-                    ],
-                    if (note.completeBy != null) ...[
-                      const SizedBox(width: 16),
-                      Icon(
-                        Icons.schedule,
-                        size: 14,
-                        color: Colors.orange[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.orange[600],
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatDate(note.createdAt),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[500],
+                          ),
                         ),
-                      ),
-                    ],
-                  ],
-                  const Spacer(),
-                  if (onAddSubNote != null)
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 16),
-                      onPressed: onAddSubNote,
-                      tooltip: 'Add sub-note',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (note.attachmentPaths.isNotEmpty)
-                    Icon(
-                      Icons.attach_file,
-                      size: 16,
-                      color: Colors.grey[500],
-                    ),
-                ],
+                        // Task dates
+                        if (hasTaskDates) ...[
+                          const SizedBox(width: 16),
+                          if (note.scheduledAt != null) ...[
+                            Icon(
+                              Icons.play_arrow,
+                              size: 14,
+                              color: Colors.green[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.green[600],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                          if (note.completeBy != null) ...[
+                            const SizedBox(width: 16),
+                            Icon(
+                              Icons.schedule,
+                              size: 14,
+                              color: Colors.orange[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.orange[600],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ],
+                        const Spacer(),
+                        // Action buttons
+                        if (onAddSubNote != null)
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 16),
+                            onPressed: onAddSubNote,
+                            tooltip: 'Add sub-note',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        if (note.attachmentPaths.isNotEmpty)
+                          Icon(
+                            Icons.attach_file,
+                            size: 16,
+                            color: Colors.grey[500],
+                          ),
+                      ],
+                    );
+                  } else {
+                    // Vertical layout when space is limited
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Created date row
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: Colors.grey[500],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatDate(note.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                            const Spacer(),
+                            // Action buttons
+                            if (onAddSubNote != null)
+                              IconButton(
+                                icon: const Icon(Icons.add, size: 16),
+                                onPressed: onAddSubNote,
+                                tooltip: 'Add sub-note',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            if (note.attachmentPaths.isNotEmpty)
+                              Icon(
+                                Icons.attach_file,
+                                size: 16,
+                                color: Colors.grey[500],
+                              ),
+                          ],
+                        ),
+                        // Task dates in separate rows if needed
+                        if (hasTaskDates) ...[
+                          const SizedBox(height: 4),
+                          if (note.scheduledAt != null)
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.play_arrow,
+                                  size: 14,
+                                  color: Colors.green[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.green[600],
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (note.completeBy != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.schedule,
+                                  size: 14,
+                                  color: Colors.orange[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.orange[600],
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ],
+                    );
+                  }
+                },
               ),
             ],
           ),
