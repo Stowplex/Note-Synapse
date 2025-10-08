@@ -97,9 +97,11 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     final lines = _currentContent.split('\n');
     final widgets = <Widget>[];
     
-    // Track if we're inside a code block
+    // Track if we're inside a code block or table
     bool inCodeBlock = false;
+    bool inTable = false;
     final List<String> codeBlockLines = [];
+    final List<String> tableLines = [];
     
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
@@ -135,6 +137,40 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       if (inCodeBlock) {
         // We're inside a code block - accumulate lines
         codeBlockLines.add(line);
+        continue;
+      }
+      
+      // Check for table markers
+      if (_isTableLine(line)) {
+        if (!inTable) {
+          // Start of table
+          inTable = true;
+          tableLines.clear();
+        }
+        tableLines.add(line);
+        continue;
+      } else if (inTable) {
+        // End of table - render the accumulated table
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: GptMarkdown(
+              tableLines.join('\n'),
+              style: widget.style,
+              textDirection: widget.textDirection,
+              onLinkTap: widget.onLinkTap,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+        tableLines.clear();
+        inTable = false;
+      }
+      
+      if (inTable) {
+        // We're inside a table - accumulate lines
+        tableLines.add(line);
         continue;
       }
       
@@ -229,7 +265,49 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       );
     }
     
+    // If we ended while still in a table, render it
+    if (inTable && tableLines.isNotEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: GptMarkdown(
+            tableLines.join('\n'),
+            style: widget.style,
+            textDirection: widget.textDirection,
+            onLinkTap: widget.onLinkTap,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+    
     return widgets;
+  }
+
+  /// Determines if a line is part of a markdown table
+  bool _isTableLine(String line) {
+    final trimmedLine = line.trim();
+    
+    // Empty lines are not table lines
+    if (trimmedLine.isEmpty) return false;
+    
+    // Check if line contains table separators (|)
+    if (!trimmedLine.contains('|')) return false;
+    
+    // Check if it's a table separator line (contains only |, -, :, and spaces)
+    final separatorPattern = RegExp(r'^[\s\|\-\:]+$');
+    if (separatorPattern.hasMatch(trimmedLine)) return true;
+    
+    // Check if it's a table data row (contains | and has reasonable table structure)
+    final parts = trimmedLine.split('|');
+    if (parts.length >= 2) {
+      // Remove empty parts at the beginning and end (common in markdown tables)
+      final nonEmptyParts = parts.where((part) => part.trim().isNotEmpty).toList();
+      return nonEmptyParts.isNotEmpty;
+    }
+    
+    return false;
   }
 }
 
