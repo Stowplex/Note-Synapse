@@ -23,6 +23,7 @@ class GeminiApiService {
     String question,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
+    bool useOwnKnowledge = false,
   }) async {
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     LoggerService.debug('Starting note Q&A request', error: {
@@ -39,7 +40,7 @@ class GeminiApiService {
     }
 
     final contextText = await _buildContextFromNotes(contextNotes);
-    final prompt = _buildMultiNoteQAPrompt(question, contextText);
+    final prompt = _buildMultiNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
 
     // Convert note attachments to PlatformFile objects
     final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(contextNotes);
@@ -711,21 +712,39 @@ class GeminiApiService {
     buffer.writeln();
   }
 
-  static String _buildMultiNoteQAPrompt(String question, String context) {
-    return '''
+  static String _buildMultiNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
+    if (useOwnKnowledge) {
+      return '''
 Based on the following notes and their linked relationships, please answer the question: "$question"
 
 Context Notes (including linked notes and their relationships):
 $context
 
-Please provide a comprehensive answer based on the information in the notes and their relationships. Consider:
+Please provide a comprehensive answer using both the information in the notes and your own knowledge. Consider:
+- The hierarchical structure shown (indented linked notes)
+- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
+- How linked notes might provide additional context or clarification
+- The direction of relationships (→ for outgoing, ← for incoming)
+- Your own knowledge to provide additional insights, explanations, or expanded context
+
+You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
+''';
+    } else {
+      return '''
+Based on the following notes and their linked relationships, please answer the question: "$question"
+
+Context Notes (including linked notes and their relationships):
+$context
+
+Please provide a comprehensive answer based ONLY on the information in the notes and their relationships. Consider:
 - The hierarchical structure shown (indented linked notes)
 - The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
 - How linked notes might provide additional context or clarification
 - The direction of relationships (→ for outgoing, ← for incoming)
 
-If the answer cannot be found in the provided context, please state that clearly.
+If the answer cannot be found in the provided context, please state that clearly and do not use your own knowledge to supplement the answer.
 ''';
+    }
   }
 
   static Future<String> _buildNoteTransformationPrompt(Note note, String transformationPrompt) async {

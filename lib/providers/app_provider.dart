@@ -194,12 +194,14 @@ class AppProvider extends ChangeNotifier {
     String question, 
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
+    bool useOwnKnowledge = false,
   }) async {
     try {
       final response = await GeminiApiService.answerNoteQuestion(
         question, 
         contextNotes,
         attachedFiles: attachedFiles,
+        useOwnKnowledge: useOwnKnowledge,
       );
       
       // Save AI interaction

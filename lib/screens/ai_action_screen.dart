@@ -26,6 +26,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   bool _isProcessing = false;
   String? _response;
   List<PlatformFile> _attachedFiles = [];
+  bool _answerOnlyFromNotes = true; // Default to checked
 
   @override
   void dispose() {
@@ -128,6 +129,22 @@ class _AIActionScreenState extends State<AIActionScreen> {
               },
             ),
             const SizedBox(height: 8),
+            if (_selectedAction == AIInteractionType.noteQa) ...[
+              CheckboxListTile(
+                title: const Text('Answer only based on notes selected'),
+                subtitle: const Text('When unchecked, AI can use its own knowledge for more expanded answers'),
+                value: _answerOnlyFromNotes,
+                onChanged: (bool? value) {
+                  setState(() {
+                    _answerOnlyFromNotes = value ?? true;
+                  });
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+              const SizedBox(height: 8),
+            ],
             Text(
               'Tip: Use Enter for new lines, click Process to submit',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -338,6 +355,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
             _promptController.text.trim(),
             widget.selectedNotes,
             attachedFiles: _attachedFiles,
+            useOwnKnowledge: !_answerOnlyFromNotes,
           );
           break;
         case AIInteractionType.noteTransformation:
@@ -383,6 +401,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
       _selectedAction = null;
       _promptController.clear();
       _attachedFiles.clear();
+      _answerOnlyFromNotes = true; // Reset to default
     });
   }
 
