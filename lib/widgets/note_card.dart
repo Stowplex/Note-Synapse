@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/note.dart';
+import 'interactive_checkbox_list.dart';
 
 class NoteCard extends StatelessWidget {
   final Note note;
@@ -62,15 +62,7 @@ class NoteCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              GptMarkdown(
-                note.content,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                onLinkTap: _handleLinkTap,
-              ),
+              _buildSafeMarkdown(note.content, context),
               if (note.subNotes.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Row(
@@ -205,7 +197,7 @@ class NoteCard extends StatelessWidget {
         iconColor = Colors.red;
         break;
       case TaskStatus.todo:
-      default:
+      case null:
         iconData = Icons.radio_button_unchecked;
         iconColor = Colors.grey;
         break;
@@ -223,7 +215,7 @@ class NoteCard extends StatelessWidget {
     
     return PopupMenuButton<TaskStatus>(
       onSelected: (TaskStatus status) {
-        onStatusChanged!(status);
+        onStatusChanged?.call(status);
       },
       itemBuilder: (BuildContext context) => [
         PopupMenuItem<TaskStatus>(
@@ -314,6 +306,42 @@ class NoteCard extends StatelessWidget {
       return '${difference.inDays} days ago';
     } else {
       return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  Widget _buildSafeMarkdown(String content, BuildContext context) {
+    try {
+      // Use InteractiveCheckboxList approach but limit to first 3 lines
+      final lines = content.split('\n');
+      final limitedLines = lines.take(3).toList();
+      final limitedContent = limitedLines.join('\n');
+      
+      return ClipRect(
+        child: Align(
+          alignment: Alignment.topLeft,
+          heightFactor: 1.0,
+          child: InteractiveCheckboxList(
+            originalContent: limitedContent,
+            onContentChanged: (newContent) {
+              // No-op for read-only display
+            },
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey[600],
+            ),
+            onLinkTap: _handleLinkTap,
+          ),
+        ),
+      );
+    } catch (e) {
+      // Fallback to simple text if InteractiveCheckboxList fails
+      return Text(
+        content,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Colors.grey[600],
+        ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      );
     }
   }
 

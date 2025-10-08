@@ -1575,16 +1575,30 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 ],
               ),
             ),
-            // WebView
-            Expanded(
-              child: InAppWebView(
-                initialUrlRequest: URLRequest(url: WebUri(widget.url)),
-                onLoadStart: (controller, url) {
-                  setState(() {
-                    _status = 'Loading web page...';
-                    _isLoading = true;
-                  });
-                },
+             // WebView
+             Expanded(
+               child: InAppWebView(
+                 initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+                 shouldOverrideUrlLoading: (controller, navigationAction) async {
+                   final url = navigationAction.request.url;
+                   if (url == null) return NavigationActionPolicy.CANCEL;
+                   
+                   final scheme = url.scheme.toLowerCase();
+                   
+                   // Allow only safe URL schemes
+                   if (['http', 'https', 'data', 'about', 'file', 'javascript'].contains(scheme)) {
+                     return NavigationActionPolicy.ALLOW;
+                   }
+                   
+                   // Reject all other schemes (like app://, intent://, etc.)
+                   return NavigationActionPolicy.CANCEL;
+                 },
+                 onLoadStart: (controller, url) {
+                   setState(() {
+                     _status = 'Loading web page...';
+                     _isLoading = true;
+                   });
+                 },
                 onLoadStop: (controller, url) async {
                   setState(() {
                     _status = 'Extracting content...';

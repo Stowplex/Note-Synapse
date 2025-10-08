@@ -117,6 +117,8 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
                 style: widget.style,
                 textDirection: widget.textDirection,
                 onLinkTap: widget.onLinkTap,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           );
@@ -184,6 +186,8 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
                     style: widget.style,
                     textDirection: widget.textDirection,
                     onLinkTap: widget.onLinkTap,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -200,6 +204,8 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
               style: widget.style,
               textDirection: widget.textDirection,
               onLinkTap: widget.onLinkTap,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         );
@@ -216,6 +222,8 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
             style: widget.style,
             textDirection: widget.textDirection,
             onLinkTap: widget.onLinkTap,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       );

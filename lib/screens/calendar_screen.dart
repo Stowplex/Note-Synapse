@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'note_detail_screen.dart';
+import '../widgets/interactive_checkbox_list.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -375,13 +376,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: SelectionArea(
-              child: GptMarkdown(
-                note.content,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                onLinkTap: _handleLinkTap,
-              ),
+              child: _buildSafeMarkdown(note.content, context),
             ),
             onTap: () => _openNoteDetail(note),
           ),
@@ -907,6 +902,38 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final due = DateTime.tryParse(completeBy);
     if (due == null) return false;
     return due.isBefore(DateTime.now());
+  }
+
+  Widget _buildSafeMarkdown(String content, BuildContext context) {
+    try {
+      // Use InteractiveCheckboxList approach but limit to first 3 lines
+      final lines = content.split('\n');
+      final limitedLines = lines.take(3).toList();
+      final limitedContent = limitedLines.join('\n');
+      
+      return ClipRect(
+        child: Align(
+          alignment: Alignment.topLeft,
+          heightFactor: 1.0,
+          child: InteractiveCheckboxList(
+            originalContent: limitedContent,
+            onContentChanged: (newContent) {
+              // No-op for read-only display
+            },
+            style: Theme.of(context).textTheme.bodySmall,
+            onLinkTap: _handleLinkTap,
+          ),
+        ),
+      );
+    } catch (e) {
+      // Fallback to simple text if InteractiveCheckboxList fails
+      return Text(
+        content,
+        style: Theme.of(context).textTheme.bodySmall,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
   }
 
   // Link handling function
