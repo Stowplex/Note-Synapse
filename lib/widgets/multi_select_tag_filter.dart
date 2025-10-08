@@ -21,113 +21,11 @@ class MultiSelectTagFilter extends StatefulWidget {
 }
 
 class _MultiSelectTagFilterState extends State<MultiSelectTagFilter> {
-  late Set<String> _selectedTags;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTags = Set.from(widget.selectedTags);
-  }
-
-  @override
-  void didUpdateWidget(MultiSelectTagFilter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedTags != widget.selectedTags) {
-      _selectedTags = Set.from(widget.selectedTags);
-    }
-  }
-
-  void _handleTagSelection(String tag) {
-    setState(() {
-      if (tag == 'all') {
-        // If "All Notes" is selected, clear all selections (empty set means "all")
-        _selectedTags.clear();
-      } else {
-        // Toggle the selected tag
-        if (_selectedTags.contains(tag)) {
-          _selectedTags.remove(tag);
-        } else {
-          _selectedTags.add(tag);
-        }
-      }
-    });
-    
-    widget.onSelectionChanged(_selectedTags);
-  }
-
-  String _getFilterDisplayText() {
-    if (_selectedTags.isEmpty) {
-      return widget.allNotesLabel;
-    } else if (_selectedTags.length == 1) {
-      return _selectedTags.first;
-    } else {
-      return '${_selectedTags.length} tags';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      onSelected: (value) {
-        // This is just to close the popup, actual handling is done in the menu items
-      },
-      itemBuilder: (context) => [
-        // "All Notes" option
-        PopupMenuItem<String>(
-          value: 'all',
-          child: InkWell(
-            onTap: () => _handleTagSelection('all'),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: _selectedTags.isEmpty,
-                  onChanged: (value) => _handleTagSelection('all'),
-                ),
-                const SizedBox(width: 8),
-                Text(widget.allNotesLabel),
-              ],
-            ),
-          ),
-        ),
-        const PopupMenuDivider(),
-        // Individual tag options - make it scrollable
-        PopupMenuItem<String>(
-          value: 'tags',
-          enabled: false,
-          child: Container(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.6, // 60% of viewport height
-            ),
-            width: 200,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: widget.availableTags
-                    .where((tag) => tag != 'all')
-                    .map((tag) => InkWell(
-                          onTap: () => _handleTagSelection(tag),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced from 8 to 4
-                            child: Row(
-                              children: [
-                                Checkbox(
-                                  value: _selectedTags.contains(tag),
-                                  onChanged: (value) => _handleTagSelection(tag),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(tag)),
-                              ],
-                            ),
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ),
-        ),
-      ],
-      icon: Row(
+    return GestureDetector(
+      onTap: () => _showFilterMenu(context),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.filter_list),
@@ -138,6 +36,144 @@ class _MultiSelectTagFilterState extends State<MultiSelectTagFilter> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showFilterMenu(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _FilterDialog(
+        availableTags: widget.availableTags,
+        selectedTags: widget.selectedTags,
+        onSelectionChanged: widget.onSelectionChanged,
+        allNotesLabel: widget.allNotesLabel,
+      ),
+    );
+  }
+
+
+  String _getFilterDisplayText() {
+    if (widget.selectedTags.isEmpty) {
+      return widget.allNotesLabel;
+    } else if (widget.selectedTags.length == 1) {
+      return widget.selectedTags.first;
+    } else {
+      return '${widget.selectedTags.length} tags';
+    }
+  }
+}
+
+class _FilterDialog extends StatefulWidget {
+  final List<String> availableTags;
+  final Set<String> selectedTags;
+  final Function(Set<String>) onSelectionChanged;
+  final String allNotesLabel;
+
+  const _FilterDialog({
+    required this.availableTags,
+    required this.selectedTags,
+    required this.onSelectionChanged,
+    required this.allNotesLabel,
+  });
+
+  @override
+  State<_FilterDialog> createState() => _FilterDialogState();
+}
+
+class _FilterDialogState extends State<_FilterDialog> {
+  late Set<String> _localSelectedTags;
+
+  @override
+  void initState() {
+    super.initState();
+    _localSelectedTags = Set.from(widget.selectedTags);
+  }
+
+  void _handleTagSelection(String tag) {
+    setState(() {
+      if (tag == 'all') {
+        // If "All Notes" is selected, clear all selections (empty set means "all")
+        _localSelectedTags.clear();
+      } else {
+        // Multi-select logic: toggle individual tags
+        if (_localSelectedTags.contains(tag)) {
+          _localSelectedTags.remove(tag);
+        } else {
+          _localSelectedTags.add(tag);
+        }
+      }
+    });
+    
+    // Update parent immediately
+    widget.onSelectionChanged(_localSelectedTags);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Filter by Tags'),
+      content: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        width: 300,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // "All Notes" option
+              InkWell(
+                onTap: () => _handleTagSelection('all'),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _localSelectedTags.isEmpty,
+                        onChanged: (value) => _handleTagSelection('all'),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.allNotesLabel,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(),
+              // Individual tag options
+              ...widget.availableTags
+                  .where((tag) => tag != 'all')
+                  .map((tag) => InkWell(
+                        onTap: () => _handleTagSelection(tag),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                value: _localSelectedTags.contains(tag),
+                                onChanged: (value) => _handleTagSelection(tag),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(tag)),
+                            ],
+                          ),
+                        ),
+                      )),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }
