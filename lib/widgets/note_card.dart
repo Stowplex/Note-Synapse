@@ -446,6 +446,9 @@ class NoteCard extends StatelessWidget {
               color: Colors.grey[600],
             ),
             onLinkTap: _handleLinkTap,
+            // Truncate content in card view
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       );

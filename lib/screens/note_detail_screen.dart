@@ -313,6 +313,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               style: Theme.of(context).textTheme.bodyLarge,
               textDirection: TextDirection.ltr,
               onLinkTap: _handleLinkTap,
+              // No truncation in detail view - show full content
+              maxLines: null,
+              overflow: null,
             ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
