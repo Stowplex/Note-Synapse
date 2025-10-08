@@ -82,10 +82,6 @@ class _NotesScreenState extends State<NotesScreen> {
               },
             ),
             IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: _toggleSearch,
-            ),
-            IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 context.read<AppProvider>().loadData();
@@ -314,10 +310,6 @@ class _NotesScreenState extends State<NotesScreen> {
         builder: (context) => AIActionScreen(selectedNotes: _selectedNotes),
       ),
     );
-  }
-
-  void _toggleSearch() {
-    // Search is always visible in the app bar
   }
 
   void _updateTaskStatus(String noteId, TaskStatus status) {

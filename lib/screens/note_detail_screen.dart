@@ -213,7 +213,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           orElse: () => widget.note,
         );
         
-        return Scaffold(
+        return PopScope(
+          canPop: !_isEditing, // Don't allow popping when editing
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && _isEditing) {
+              // If we're in editing mode and back was pressed, cancel editing instead
+              _cancelEditing();
+            }
+          },
+          child: Scaffold(
           appBar: AppBar(
             title: Text(currentNote.title),
         actions: [
@@ -221,10 +229,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             IconButton(
               icon: const Icon(Icons.save),
               onPressed: _hasChanges ? _saveChanges : null,
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: _cancelEditing,
             ),
           ] else ...[
             IconButton(
@@ -281,8 +285,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
         ],
       ),
-          body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote),
-          bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
+            body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote),
+            bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
+          ),
         );
       },
     );
