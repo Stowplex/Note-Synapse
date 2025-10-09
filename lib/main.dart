@@ -73,7 +73,14 @@ class _AppWrapperState extends State<AppWrapper> {
     super.initState();
     // Initialize share service after Flutter binding is ready
     ShareService.initialize();
-    _checkApiKeyAndSharedContent();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Load theme preference first
+    await context.read<AppProvider>().loadThemePreference();
+    // Then check API key and shared content
+    await _checkApiKeyAndSharedContent();
   }
 
   Future<void> _checkApiKeyAndSharedContent() async {

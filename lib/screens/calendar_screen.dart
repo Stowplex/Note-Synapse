@@ -821,9 +821,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             tag,
                             style: const TextStyle(fontSize: 12),
                           ),
-                          backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                           labelStyle: TextStyle(
-                            color: Theme.of(context).primaryColor,
+                            color: Theme.of(context).brightness == Brightness.dark 
+                              ? Colors.white 
+                              : Theme.of(context).colorScheme.primary,
                           ),
                         )).toList(),
                       ),

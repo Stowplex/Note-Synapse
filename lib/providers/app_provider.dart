@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
@@ -430,7 +431,28 @@ class AppProvider extends ChangeNotifier {
 
   void toggleTheme() {
     _isDarkMode = !_isDarkMode;
+    _saveThemePreference();
     notifyListeners();
+  }
+
+  Future<void> _saveThemePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_dark_mode', _isDarkMode);
+    } catch (e) {
+      print('Error saving theme preference: $e');
+    }
+  }
+
+  Future<void> loadThemePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isDarkMode = prefs.getBool('is_dark_mode') ?? false;
+      notifyListeners();
+    } catch (e) {
+      print('Error loading theme preference: $e');
+      _isDarkMode = false; // Default to light mode
+    }
   }
 
   Future<void> clearAllData() async {
@@ -444,6 +466,10 @@ class AppProvider extends ChangeNotifier {
       _tags = [];
       _aiInteractions = [];
       _error = null;
+      
+      // Reset theme to default (light mode)
+      _isDarkMode = false;
+      await _saveThemePreference();
       
       notifyListeners();
     } catch (e) {

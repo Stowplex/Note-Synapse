@@ -86,7 +86,7 @@ class _TodoScreenState extends State<TodoScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
+                  Icon(Icons.checklist, size: 64, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
                   const SizedBox(height: 16),
                   Text(
                     _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
@@ -98,7 +98,7 @@ class _TodoScreenState extends State<TodoScreen> {
                         ? 'Create your first task'
                         : 'Try selecting different tags',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -147,7 +147,7 @@ class _TodoScreenState extends State<TodoScreen> {
                           Text(
                             task.content,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                             ),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
@@ -161,7 +161,7 @@ class _TodoScreenState extends State<TodoScreen> {
                                     margin: const EdgeInsets.only(right: 8),
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: Colors.green[100],
+                                      color: Colors.green.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -216,7 +216,7 @@ class _TodoScreenState extends State<TodoScreen> {
                                 Text(
                                   '${(completionPercentage * 100).toInt()}%',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
+                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -233,9 +233,11 @@ class _TodoScreenState extends State<TodoScreen> {
                                   tag,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                                 labelStyle: TextStyle(
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).brightness == Brightness.dark 
+                                    ? Colors.white 
+                                    : Theme.of(context).colorScheme.primary,
                                 ),
                               )).toList(),
                             ),
