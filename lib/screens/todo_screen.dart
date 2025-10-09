@@ -233,9 +233,9 @@ class _TodoScreenState extends State<TodoScreen> {
                                   tag,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                 labelStyle: TextStyle(
-                                  color: Theme.of(context).primaryColor,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                               )).toList(),
                             ),

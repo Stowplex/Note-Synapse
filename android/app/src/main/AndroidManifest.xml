@@ -23,9 +23,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application
-        android:label="note_synapse"
+        android:label="Note Synapse"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true">
         <activity

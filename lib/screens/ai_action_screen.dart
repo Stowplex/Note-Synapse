@@ -148,7 +148,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
             Text(
               'Tip: Use Enter for new lines, click Process to submit',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -186,12 +186,12 @@ class _AIActionScreenState extends State<AIActionScreen> {
     
     return Card(
       elevation: isSelected ? 4 : 2,
-      shadowColor: isSelected ? Theme.of(context).primaryColor.withOpacity(0.3) : null,
-      color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+      shadowColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.3) : null,
+      color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isSelected 
-            ? BorderSide(color: Theme.of(context).primaryColor.withOpacity(0.3), width: 2)
+            ? BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), width: 2)
             : BorderSide.none,
       ),
       child: InkWell(
@@ -212,13 +212,13 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 decoration: BoxDecoration(
                   color: isSelected 
                       ? Theme.of(context).primaryColor.withOpacity(0.1)
-                      : Colors.grey[100],
+                      : Theme.of(context).colorScheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Icon(
                   icon,
                   size: 24,
-                  color: isSelected ? Theme.of(context).primaryColor : Colors.grey[600],
+                  color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
               const SizedBox(width: 16),
@@ -238,7 +238,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                       ),
                     ),
                   ],
@@ -488,22 +488,22 @@ class _AIActionScreenState extends State<AIActionScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: Theme.of(context).colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.attach_file, size: 16, color: Colors.grey[600]),
+              Icon(Icons.attach_file, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
               const SizedBox(width: 8),
               Text(
                 'Attached Files (${_attachedFiles.length})',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
                 ),
               ),
             ],
@@ -517,14 +517,14 @@ class _AIActionScreenState extends State<AIActionScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
                   Icon(
                     _getFileIcon(file.extension),
                     size: 16,
-                    color: Colors.grey[600],
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -537,7 +537,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                   Text(
                     _formatFileSize(file.size),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(width: 8),

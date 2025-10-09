@@ -30,7 +30,7 @@ class NoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: isSelected ? 8 : 2,
-      color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+      color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -61,7 +61,7 @@ class NoteCard extends StatelessWidget {
                     IconButton(
                       icon: Icon(
                         note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                        color: note.pinned ? Theme.of(context).primaryColor : Colors.grey[600],
+                        color: note.pinned ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         size: 20,
                       ),
                       onPressed: onPinToggle,
@@ -70,11 +70,11 @@ class NoteCard extends StatelessWidget {
                       constraints: const BoxConstraints(),
                     ),
                   if (note.isTask && onStatusChanged != null)
-                    _buildStatusDropdown(note),
+                    _buildStatusDropdown(note, context),
                   if (isSelected)
                     Icon(
                       Icons.check_circle,
-                      color: Theme.of(context).primaryColor,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                 ],
               ),
@@ -84,12 +84,12 @@ class NoteCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.list, size: 16, color: Colors.grey[500]),
+                    Icon(Icons.list, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
                     const SizedBox(width: 4),
                     Text(
                       '${note.subNotes.length} sub-notes',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[500],
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                     if (note.isTask && note.subNotes.isNotEmpty) ...[
@@ -97,7 +97,7 @@ class NoteCard extends StatelessWidget {
                       Text(
                         '(${note.subNotes.where((sn) => sn.isCompleted).length}/${note.subNotes.length} completed)',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         ),
                       ),
                     ],
@@ -114,9 +114,9 @@ class NoteCard extends StatelessWidget {
                       tag,
                       style: const TextStyle(fontSize: 12),
                     ),
-                    backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                     labelStyle: TextStyle(
-                      color: Theme.of(context).primaryColor,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   )).toList(),
                 ),
@@ -142,13 +142,13 @@ class NoteCard extends StatelessWidget {
                         Icon(
                           Icons.access_time,
                           size: 14,
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           _formatDate(note.createdAt),
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[500],
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                           ),
                         ),
                         // Task dates
@@ -200,7 +200,7 @@ class NoteCard extends StatelessWidget {
                           Icon(
                             Icons.attach_file,
                             size: 16,
-                            color: Colors.grey[500],
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                           ),
                       ],
                     );
@@ -215,13 +215,13 @@ class NoteCard extends StatelessWidget {
                             Icon(
                               Icons.access_time,
                               size: 14,
-                              color: Colors.grey[500],
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               _formatDate(note.createdAt),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey[500],
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               ),
                             ),
                             const Spacer(),
@@ -238,7 +238,7 @@ class NoteCard extends StatelessWidget {
                               Icon(
                                 Icons.attach_file,
                                 size: 16,
-                                color: Colors.grey[500],
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               ),
                           ],
                         ),
@@ -329,7 +329,7 @@ class NoteCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusDropdown(Note note) {
+  Widget _buildStatusDropdown(Note note, BuildContext context) {
     if (!note.isTask || onStatusChanged == null) return const SizedBox.shrink();
     
     return PopupMenuButton<TaskStatus>(
@@ -381,7 +381,7 @@ class NoteCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
+          border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -445,7 +445,7 @@ class NoteCard extends StatelessWidget {
               // No-op if no callback provided
             },
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
             onLinkTap: _handleLinkTap,
             // Truncate content in card view

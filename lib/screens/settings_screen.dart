@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
-import '../models/ai_interaction.dart';
 import 'setup_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,7 +12,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -24,30 +22,135 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('AI Configuration'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.palette),
+              title: const Text('Appearance'),
+              subtitle: const Text('Theme and display settings'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AppearanceSettingsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               leading: const Icon(Icons.psychology),
-              title: const Text('Gemini API Key'),
+              title: const Text('AI API'),
               subtitle: const Text('Configure your AI API key'),
               trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AIApiSettingsScreen()),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+class AppearanceSettingsScreen extends StatelessWidget {
+  const AppearanceSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Appearance'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Consumer<AppProvider>(
+              builder: (context, appProvider, child) {
+                return SwitchListTile(
+                  title: const Text('Dark Mode'),
+                  subtitle: const Text('Toggle between light and dark theme'),
+                  value: appProvider.isDarkMode,
+                  onChanged: (value) {
+                    appProvider.toggleTheme();
+                  },
+                  secondary: const Icon(Icons.dark_mode),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AIApiSettingsScreen extends StatefulWidget {
+  const AIApiSettingsScreen({super.key});
+
+  @override
+  State<AIApiSettingsScreen> createState() => _AIApiSettingsScreenState();
+}
+
+class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
+  bool _isLoading = false;
+  bool _obscureApiKey = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AI API'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.key),
+              title: const Text('API Key'),
+              subtitle: FutureBuilder<String?>(
+                future: SecureStorageService.getApiKey(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Text('Loading...');
+                  }
+                  
+                  final apiKey = snapshot.data;
+                  if (apiKey == null || apiKey.isEmpty) {
+                    return const Text('No API key configured');
+                  }
+                  
+                  return Text(
+                    _obscureApiKey 
+                        ? '•' * 20 
+                        : apiKey.length > 20 
+                            ? '${apiKey.substring(0, 20)}...' 
+                            : apiKey,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                  );
+                },
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(_obscureApiKey ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () {
+                      setState(() {
+                        _obscureApiKey = !_obscureApiKey;
+                      });
+                    },
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
               onTap: _showApiKeyDialog,
             ),
           ),
           const SizedBox(height: 16),
-          _buildSectionHeader('Data Management'),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.storage),
-              title: const Text('Database Info'),
-              subtitle: Consumer<AppProvider>(
-                builder: (context, appProvider, child) {
-                  return Text('${appProvider.notes.length} notes, ${appProvider.tags.length} tags');
-                },
-              ),
-              trailing: const Icon(Icons.info),
-            ),
-          ),
           Card(
             child: ListTile(
               leading: _isLoading 
@@ -56,52 +159,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     height: 24,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.delete_forever),
-              title: const Text('Clear All Data'),
-              subtitle: const Text('Delete all notes and data'),
+                : const Icon(Icons.refresh),
+              title: const Text('Update API Key'),
+              subtitle: const Text('Enter a new API key'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: _isLoading ? null : _showClearDataDialog,
+              onTap: _isLoading ? null : _showUpdateApiKeyDialog,
             ),
           ),
           const SizedBox(height: 16),
-          _buildSectionHeader('AI Interactions'),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('AI History'),
-              subtitle: Consumer<AppProvider>(
-                builder: (context, appProvider, child) {
-                  return Text('${appProvider.aiInteractions.length} interactions');
-                },
-              ),
+              leading: const Icon(Icons.delete_forever),
+              title: const Text('Reset API Key'),
+              subtitle: const Text('Clear current API key and return to setup'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: _showAIHistory,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildSectionHeader('About'),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('Version'),
-              subtitle: const Text('1.0.0'),
-              trailing: const Icon(Icons.info),
+              onTap: _showResetApiKeyDialog,
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 16),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).primaryColor,
-        ),
       ),
     );
   }
@@ -110,9 +185,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('API Key Configuration'),
-        content: const Text(
-          'Your current API key is stored securely. To change it, you can reset the app and enter a new key.',
+        title: const Text('Current API Key'),
+        content: FutureBuilder<String?>(
+          future: SecureStorageService.getApiKey(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const CircularProgressIndicator();
+            }
+            
+            final apiKey = snapshot.data;
+            if (apiKey == null || apiKey.isEmpty) {
+              return const Text('No API key configured');
+            }
+            
+            return SelectableText(
+              apiKey,
+              style: const TextStyle(fontFamily: 'monospace'),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUpdateApiKeyDialog() {
+    final TextEditingController controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update API Key'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your new Gemini API key:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'API Key',
+                hintText: 'Enter your API key here',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -120,18 +243,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _resetApiKey();
+            onPressed: () async {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context);
+                await _updateApiKey(controller.text.trim());
+              }
             },
-            child: const Text('Reset Key'),
+            child: const Text('Update'),
           ),
         ],
       ),
     );
   }
 
-  void _resetApiKey() {
+  void _showResetApiKeyDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -147,12 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await SecureStorageService.deleteApiKey();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const SetupScreen()),
-                );
-              }
+              await _resetApiKey();
             },
             child: const Text('Reset'),
           ),
@@ -161,53 +281,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showClearDataDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All Data'),
-        content: const Text(
-          'This will permanently delete all your notes, tasks, and AI interactions. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _clearAllData();
-            },
-            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _clearAllData() async {
+  Future<void> _updateApiKey(String newApiKey) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Clear all data from the app provider
-      await context.read<AppProvider>().clearAllData();
+      await SecureStorageService.saveApiKey(newApiKey);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('All data has been cleared successfully'),
+            content: Text('API key updated successfully'),
             backgroundColor: Colors.green,
           ),
         );
+        setState(() {}); // Refresh the UI
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error clearing data: $e'),
+            content: Text('Error updating API key: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -221,124 +316,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showAIHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const AIHistoryScreen(),
-      ),
-    );
+  Future<void> _resetApiKey() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await SecureStorageService.deleteApiKey();
+      
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const SetupScreen()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error resetting API key: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }
 
-class AIHistoryScreen extends StatelessWidget {
-  const AIHistoryScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI History'),
-      ),
-      body: Consumer<AppProvider>(
-        builder: (context, appProvider, child) {
-          if (appProvider.aiInteractions.isEmpty) {
-            return const Center(
-              child: Text('No AI interactions yet'),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: appProvider.aiInteractions.length,
-            itemBuilder: (context, index) {
-              final interaction = appProvider.aiInteractions[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: Icon(_getInteractionIcon(interaction.type)),
-                  title: Text(_getInteractionTitle(interaction.type)),
-                  subtitle: Text(
-                    interaction.prompt,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Text(
-                    _formatDate(interaction.createdAt),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  onTap: () => _showInteractionDetails(context, interaction),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  IconData _getInteractionIcon(AIInteractionType type) {
-    switch (type) {
-      case AIInteractionType.noteQa:
-        return Icons.quiz;
-      case AIInteractionType.noteTransformation:
-        return Icons.transform;
-      case AIInteractionType.newNoteCreation:
-        return Icons.add_circle;
-    }
-  }
-
-  String _getInteractionTitle(AIInteractionType type) {
-    switch (type) {
-      case AIInteractionType.noteQa:
-        return 'Note Q&A';
-      case AIInteractionType.noteTransformation:
-        return 'Note Transformation';
-      case AIInteractionType.newNoteCreation:
-        return 'New Note Creation';
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  void _showInteractionDetails(BuildContext context, interaction) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_getInteractionTitle(interaction.type)),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Prompt:',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(interaction.prompt),
-              const SizedBox(height: 16),
-              Text(
-                'Response:',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(interaction.response),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-}

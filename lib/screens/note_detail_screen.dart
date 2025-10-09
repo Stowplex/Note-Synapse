@@ -466,8 +466,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               runSpacing: 8,
               children: currentNote.tags.map((tag) => Chip(
                 label: Text(tag),
-                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                labelStyle: TextStyle(color: Theme.of(context).primaryColor),
+                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
                 deleteIcon: const Icon(Icons.close, size: 16),
                 onDeleted: () => _removeTag(currentNote, tag),
               )).toList(),
@@ -2215,9 +2215,9 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                                         tag,
                                         style: const TextStyle(fontSize: 10),
                                       ),
-                                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                       labelStyle: TextStyle(
-                                        color: Theme.of(context).primaryColor,
+                                        color: Theme.of(context).colorScheme.primary,
                                         fontSize: 10,
                                       ),
                                     )).toList(),
@@ -2499,8 +2499,8 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                 runSpacing: 8,
                 children: _selectedExistingTags.map((tag) => Chip(
                   label: Text(tag),
-                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                  labelStyle: TextStyle(color: Theme.of(context).primaryColor),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
                   deleteIcon: const Icon(Icons.close, size: 16),
                   onDeleted: () {
                     setState(() {

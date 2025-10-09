@@ -15,12 +15,14 @@ class AppProvider extends ChangeNotifier {
   List<AIInteraction> _aiInteractions = [];
   bool _isLoading = false;
   String? _error;
+  bool _isDarkMode = false;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
   List<AIInteraction> get aiInteractions => _aiInteractions;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get isDarkMode => _isDarkMode;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -423,6 +425,11 @@ class AppProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  void toggleTheme() {
+    _isDarkMode = !_isDarkMode;
     notifyListeners();
   }
 

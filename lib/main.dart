@@ -24,23 +24,32 @@ class NoteSynapseApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (context) => AppProvider(),
-      child: MaterialApp(
-        title: 'Note Synapse',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: const AppWrapper(),
-        routes: {
-          '/setup': (context) => const SetupScreen(),
-          '/main': (context) => const MainScreen(),
-          '/share': (context) {
-            final sharedData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-            if (sharedData != null) {
-              return ShareScreen(sharedData: sharedData);
-            }
-            return const MainScreen();
-          },
+      child: Consumer<AppProvider>(
+        builder: (context, appProvider, child) {
+          return MaterialApp(
+            title: 'Note Synapse',
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              useMaterial3: true,
+            ),
+            darkTheme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue, brightness: Brightness.dark),
+              useMaterial3: true,
+            ),
+            themeMode: appProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            home: const AppWrapper(),
+            routes: {
+              '/setup': (context) => const SetupScreen(),
+              '/main': (context) => const MainScreen(),
+              '/share': (context) {
+                final sharedData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+                if (sharedData != null) {
+                  return ShareScreen(sharedData: sharedData);
+                }
+                return const MainScreen();
+              },
+            },
+          );
         },
       ),
     );

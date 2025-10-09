@@ -563,7 +563,7 @@ class _ShareScreenState extends State<ShareScreen> {
                         'Selected tags:',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[700],
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -637,7 +637,7 @@ class _ShareScreenState extends State<ShareScreen> {
                         'Available tags:',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[700],
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 8),

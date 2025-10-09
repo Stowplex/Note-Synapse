@@ -13,6 +13,7 @@ import 'calendar_screen.dart';
 import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
 import 'share_screen.dart';
+import 'settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -30,6 +31,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const NotesScreen(),
     const CalendarScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -72,6 +74,10 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: 'Calendar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
