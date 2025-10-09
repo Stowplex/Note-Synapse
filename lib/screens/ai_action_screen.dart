@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/ai_interaction.dart';
@@ -36,29 +37,32 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Actions'),
+        title: Text(l10n.aiActions),
         actions: [
           if (_response != null)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _clearResponse,
+              tooltip: l10n.clearResponse,
             ),
         ],
       ),
-      body: _response != null ? _buildResponseView() : _buildActionSelectionView(),
+      body: _response != null ? _buildResponseView(l10n) : _buildActionSelectionView(l10n),
     );
   }
 
-  Widget _buildActionSelectionView() {
+  Widget _buildActionSelectionView(AppLocalizations l10n) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Select AI Action',
+            l10n.selectAIAction,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -67,8 +71,8 @@ class _AIActionScreenState extends State<AIActionScreen> {
           if (widget.selectedNotes.isNotEmpty) ...[
             _buildActionCard(
               icon: Icons.quiz,
-              title: 'Note Q&A',
-              description: 'Ask questions about your selected notes',
+              title: l10n.noteQa,
+              description: l10n.noteQaDescription,
               action: AIInteractionType.noteQa,
             ),
             const SizedBox(height: 12),
@@ -76,22 +80,22 @@ class _AIActionScreenState extends State<AIActionScreen> {
           if (widget.selectedNotes.length == 1) ...[
             _buildActionCard(
               icon: Icons.transform,
-              title: 'Transform Note',
-              description: 'Rewrite, reorganize, or modify your note',
+              title: l10n.transformNote,
+              description: l10n.transformNoteDescription,
               action: AIInteractionType.noteTransformation,
             ),
             const SizedBox(height: 12),
           ],
           _buildActionCard(
             icon: Icons.add_circle,
-            title: 'Create New Notes',
-            description: 'Generate new notes based on your prompt and context',
+            title: l10n.createNewNotes,
+            description: l10n.createNewNotesDescription,
             action: AIInteractionType.newNoteCreation,
           ),
           const SizedBox(height: 24),
           if (_selectedAction != null) ...[
             Text(
-              'Enter your prompt:',
+              l10n.enterYourPrompt,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -109,7 +113,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                     IconButton(
                       icon: const Icon(Icons.attach_file),
                       onPressed: _attachFiles,
-                      tooltip: 'Attach files',
+                      tooltip: l10n.attachFiles,
                     ),
                     IconButton(
                       icon: const Icon(Icons.camera_alt),
@@ -131,7 +135,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
             const SizedBox(height: 8),
             if (_selectedAction == AIInteractionType.noteQa) ...[
               CheckboxListTile(
-                title: const Text('Answer only based on notes selected'),
+                title: Text(l10n.answerOnlyFromNotes),
                 subtitle: const Text('When unchecked, AI can use its own knowledge for more expanded answers'),
                 value: _answerOnlyFromNotes,
                 onChanged: (bool? value) {
@@ -167,7 +171,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Process'),
+                    : Text(l10n.process),
               ),
             ),
           ],
@@ -265,14 +269,14 @@ class _AIActionScreenState extends State<AIActionScreen> {
     );
   }
 
-  Widget _buildResponseView() {
+  Widget _buildResponseView(AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'AI Response',
+            l10n.response,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),

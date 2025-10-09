@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'providers/app_provider.dart';
 import 'screens/setup_screen.dart';
 import 'screens/main_screen.dart';
@@ -28,6 +30,17 @@ class NoteSynapseApp extends StatelessWidget {
         builder: (context, appProvider, child) {
           return MaterialApp(
             title: 'Note Synapse',
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en', ''), // English
+              Locale('zh', ''), // Chinese Simplified
+            ],
+            locale: appProvider.locale,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,
@@ -77,8 +90,9 @@ class _AppWrapperState extends State<AppWrapper> {
   }
 
   Future<void> _initializeApp() async {
-    // Load theme preference first
+    // Load theme and language preferences first
     await context.read<AppProvider>().loadThemePreference();
+    await context.read<AppProvider>().loadLanguagePreference();
     // Then check API key and shared content
     await _checkApiKeyAndSharedContent();
   }

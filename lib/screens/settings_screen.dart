@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
 import 'setup_screen.dart';
@@ -15,9 +16,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(l10n.settings),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -25,8 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.palette),
-              title: const Text('Appearance'),
-              subtitle: const Text('Theme and display settings'),
+              title: Text(l10n.appearance),
+              subtitle: Text(l10n.appearanceSubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
@@ -37,9 +40,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
+              leading: const Icon(Icons.language),
+              title: Text(l10n.language),
+              subtitle: Text(l10n.languageSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LanguageSettingsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.psychology),
-              title: const Text('AI API'),
-              subtitle: const Text('Configure your AI API key'),
+              title: Text(l10n.aiApi),
+              subtitle: Text(l10n.aiApiSubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
@@ -59,9 +75,11 @@ class AppearanceSettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Appearance'),
+        title: Text(l10n.appearance),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -70,13 +88,75 @@ class AppearanceSettingsScreen extends StatelessWidget {
             child: Consumer<AppProvider>(
               builder: (context, appProvider, child) {
                 return SwitchListTile(
-                  title: const Text('Dark Mode'),
-                  subtitle: const Text('Toggle between light and dark theme'),
+                  title: Text(l10n.darkMode),
+                  subtitle: Text(l10n.darkModeSubtitle),
                   value: appProvider.isDarkMode,
                   onChanged: (value) {
                     appProvider.toggleTheme();
                   },
                   secondary: const Icon(Icons.dark_mode),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class LanguageSettingsScreen extends StatelessWidget {
+  const LanguageSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.language),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Consumer<AppProvider>(
+              builder: (context, appProvider, child) {
+                return Column(
+                  children: [
+                    RadioListTile<Locale>(
+                      title: Text(l10n.english),
+                      value: const Locale('en', ''),
+                      groupValue: appProvider.locale,
+                      onChanged: (Locale? value) {
+                        if (value != null) {
+                          appProvider.changeLanguage(value);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.languageChanged),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    RadioListTile<Locale>(
+                      title: Text(l10n.chineseSimplified),
+                      value: const Locale('zh', ''),
+                      groupValue: appProvider.locale,
+                      onChanged: (Locale? value) {
+                        if (value != null) {
+                          appProvider.changeLanguage(value);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.languageChanged),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 );
               },
             ),
@@ -100,9 +180,11 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI API'),
+        title: Text(l10n.aiApi),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -110,17 +192,17 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.key),
-              title: const Text('API Key'),
+              title: Text(l10n.apiKey),
               subtitle: FutureBuilder<String?>(
                 future: SecureStorageService.getApiKey(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Text('Loading...');
+                    return Text(l10n.loading);
                   }
                   
                   final apiKey = snapshot.data;
                   if (apiKey == null || apiKey.isEmpty) {
-                    return const Text('No API key configured');
+                    return Text(l10n.noApiKeyConfigured);
                   }
                   
                   return Text(
@@ -160,8 +242,8 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.refresh),
-              title: const Text('Update API Key'),
-              subtitle: const Text('Enter a new API key'),
+              title: Text(l10n.updateApiKey),
+              subtitle: Text(l10n.updateApiKeySubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: _isLoading ? null : _showUpdateApiKeyDialog,
             ),
@@ -170,8 +252,8 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.delete_forever),
-              title: const Text('Reset API Key'),
-              subtitle: const Text('Clear current API key and return to setup'),
+              title: Text(l10n.resetApiKey),
+              subtitle: Text(l10n.resetApiKeySubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: _showResetApiKeyDialog,
             ),
@@ -182,10 +264,12 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   }
 
   void _showApiKeyDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Current API Key'),
+        title: Text(l10n.currentApiKey),
         content: FutureBuilder<String?>(
           future: SecureStorageService.getApiKey(),
           builder: (context, snapshot) {
@@ -195,7 +279,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
             
             final apiKey = snapshot.data;
             if (apiKey == null || apiKey.isEmpty) {
-              return const Text('No API key configured');
+              return Text(l10n.noApiKeyConfigured);
             }
             
             return SelectableText(
@@ -207,7 +291,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -215,23 +299,24 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   }
 
   void _showUpdateApiKeyDialog() {
+    final l10n = AppLocalizations.of(context)!;
     final TextEditingController controller = TextEditingController();
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Update API Key'),
+        title: Text(l10n.updateApiKey),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter your new Gemini API key:'),
+            Text(l10n.enterNewApiKey),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'API Key',
-                hintText: 'Enter your API key here',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.apiKeyLabel,
+                hintText: l10n.apiKeyHint,
+                border: const OutlineInputBorder(),
               ),
               obscureText: true,
             ),
@@ -240,7 +325,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () async {
@@ -249,7 +334,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
                 await _updateApiKey(controller.text.trim());
               }
             },
-            child: const Text('Update'),
+            child: Text(l10n.update),
           ),
         ],
       ),
@@ -257,24 +342,24 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   }
 
   void _showResetApiKeyDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset API Key'),
-        content: const Text(
-          'This will clear your current API key and return you to the setup screen. Are you sure?',
-        ),
+        title: Text(l10n.resetApiKey),
+        content: Text(l10n.resetApiKeyConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               await _resetApiKey();
             },
-            child: const Text('Reset'),
+            child: Text(l10n.reset),
           ),
         ],
       ),
@@ -282,6 +367,8 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   }
 
   Future<void> _updateApiKey(String newApiKey) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     setState(() {
       _isLoading = true;
     });
@@ -291,8 +378,8 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('API key updated successfully'),
+          SnackBar(
+            content: Text(l10n.apiKeyUpdatedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -302,7 +389,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating API key: $e'),
+            content: Text(l10n.errorUpdatingApiKey(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -317,6 +404,8 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   }
 
   Future<void> _resetApiKey() async {
+    final l10n = AppLocalizations.of(context)!;
+    
     setState(() {
       _isLoading = true;
     });
@@ -333,7 +422,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error resetting API key: $e'),
+            content: Text(l10n.errorResettingApiKey(e.toString())),
             backgroundColor: Colors.red,
           ),
         );

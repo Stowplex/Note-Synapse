@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
@@ -49,28 +50,34 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
         title: _isMultiSelectMode
-            ? Text('${_selectedNotes.length} selected')
-            : const Text('Notes'),
+            ? Text('${_selectedNotes.length} ${l10n.selected}')
+            : Text(l10n.notes),
         actions: [
           if (_isMultiSelectMode) ...[
             IconButton(
               icon: const Icon(Icons.link),
               onPressed: _selectedNotes.length >= 2 ? _linkSelectedNotes : null,
+              tooltip: l10n.linkSelectedNotes,
             ),
             IconButton(
               icon: const Icon(Icons.delete),
               onPressed: _selectedNotes.isNotEmpty ? _deleteSelectedNotes : null,
+              tooltip: l10n.deleteSelectedNotes,
             ),
             IconButton(
               icon: const Icon(Icons.psychology),
               onPressed: _selectedNotes.isNotEmpty ? _openAIAction : null,
+              tooltip: l10n.openAIAction,
             ),
             IconButton(
               icon: const Icon(Icons.close),
               onPressed: _exitMultiSelectMode,
+              tooltip: l10n.exitMultiSelectMode,
             ),
           ] else ...[
             MultiSelectTagFilter(
@@ -81,6 +88,8 @@ class _NotesScreenState extends State<NotesScreen> {
                   _selectedTags = selectedTags;
                 });
               },
+              allNotesLabel: l10n.allNotes,
+              filterLabel: l10n.filter,
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -100,11 +109,11 @@ class _NotesScreenState extends State<NotesScreen> {
                 // Search bar
                 TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Search notes...',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: InputDecoration(
+                    hintText: l10n.searchNotes,
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   onChanged: (value) {
                     setState(() {});
@@ -115,19 +124,19 @@ class _NotesScreenState extends State<NotesScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _buildViewFilterChip('default', 'Default'),
+                      child: _buildViewFilterChip('default', l10n.allNotes),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildViewFilterChip('pinned', 'Pinned'),
+                      child: _buildViewFilterChip('pinned', l10n.pinnedNotes),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildViewFilterChip('archived', 'Archived'),
+                      child: _buildViewFilterChip('archived', l10n.archivedNotes),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildViewFilterChip('all', 'All'),
+                      child: _buildViewFilterChip('all', l10n.allNotes),
                     ),
                   ],
                 ),
@@ -157,16 +166,8 @@ class _NotesScreenState extends State<NotesScreen> {
                   Icon(Icons.error, size: 64, color: Colors.red[300]),
                   const SizedBox(height: 16),
                   Text(
-                    'Error loading notes',
+                    l10n.errorLoadingNotes(appProvider.error!),
                     style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    appProvider.error!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
@@ -189,8 +190,8 @@ class _NotesScreenState extends State<NotesScreen> {
                   const SizedBox(height: 16),
                   Text(
                     _searchController.text.isNotEmpty || _selectedTags.isNotEmpty
-                        ? 'No notes found'
-                        : 'No notes yet',
+                        ? l10n.noNotesFound
+                        : l10n.createFirstNote,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
@@ -405,6 +406,7 @@ class _NotesScreenState extends State<NotesScreen> {
     
     // Check if trying to archive a pinned note
     if (!note.isArchived && note.pinned) {
+      final l10n = AppLocalizations.of(context)!;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -413,7 +415,7 @@ class _NotesScreenState extends State<NotesScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+              child: Text(l10n.yes),
             ),
           ],
         ),
@@ -421,16 +423,19 @@ class _NotesScreenState extends State<NotesScreen> {
       return;
     }
     
+    final l10n = AppLocalizations.of(context)!;
     final action = note.isArchived ? 'unarchive' : 'archive';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${action == 'archive' ? 'Archive' : 'Unarchive'} Note'),
-        content: Text('Are you sure you want to ${action} this note?'),
+        title: Text(action == 'archive' ? l10n.archiveNote : l10n.unarchiveNote),
+        content: Text(action == 'archive' 
+            ? 'Are you sure you want to archive this note?'
+            : 'Are you sure you want to unarchive this note?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () {
@@ -442,7 +447,7 @@ class _NotesScreenState extends State<NotesScreen> {
               );
               appProvider.updateNote(updatedNote);
             },
-            child: Text(action == 'archive' ? 'Archive' : 'Unarchive'),
+            child: Text(action == 'archive' ? l10n.archiveNote : l10n.unarchiveNote),
           ),
         ],
       ),

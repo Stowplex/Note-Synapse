@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:html2md/html2md.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
@@ -175,20 +176,22 @@ class _ShareScreenState extends State<ShareScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Share to Note Synapse'),
+        title: Text(l10n.sharedContent),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildErrorWidget()
-              : _buildContentWidget(),
+              ? _buildErrorWidget(l10n)
+              : _buildContentWidget(l10n),
     );
   }
 
-  Widget _buildErrorWidget() {
+  Widget _buildErrorWidget(AppLocalizations l10n) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -215,7 +218,7 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(l10n.close),
             ),
           ],
         ),
@@ -223,9 +226,9 @@ class _ShareScreenState extends State<ShareScreen> {
     );
   }
 
-  Widget _buildContentWidget() {
+  Widget _buildContentWidget(AppLocalizations l10n) {
     if (_preparedNote == null && _contentType != 'url' && _contentType != 'image' && _contentType != 'pdf') {
-      return const Center(child: Text('No content to share'));
+      return Center(child: Text(l10n.noNotesAvailable));
     }
 
     // Show URL detection and extraction option
@@ -261,8 +264,8 @@ class _ShareScreenState extends State<ShareScreen> {
                   ),
                   const SizedBox(height: 16),
                   RadioListTile<String>(
-                    title: const Text('Create new note'),
-                    subtitle: const Text('Create a new note with this content'),
+                    title: Text(l10n.createNote),
+                    subtitle: Text('Create a new note with this content'),
                     value: 'create',
                     groupValue: _action,
                     onChanged: (value) {
@@ -273,8 +276,8 @@ class _ShareScreenState extends State<ShareScreen> {
                     },
                   ),
                   RadioListTile<String>(
-                    title: const Text('Append to existing note'),
-                    subtitle: const Text('Add this content to an existing note'),
+                    title: Text(l10n.appendToNote),
+                    subtitle: Text('Add this content to an existing note'),
                     value: 'append',
                     groupValue: _action,
                     onChanged: (value) {
@@ -299,7 +302,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Select Note to Append To',
+                      l10n.selectNoteToAppend,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
@@ -314,7 +317,7 @@ class _ShareScreenState extends State<ShareScreen> {
                           );
                         }
                         if (notes.isEmpty) {
-                          return const Text('No notes available');
+                          return Text(l10n.noNotesAvailable);
                         }
                         
                         // Filter notes based on search query
@@ -470,7 +473,7 @@ class _ShareScreenState extends State<ShareScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    _buildTagSelection(),
+                    _buildTagSelection(l10n),
                   ],
                 ),
               ),
@@ -530,7 +533,7 @@ class _ShareScreenState extends State<ShareScreen> {
     );
   }
 
-  Widget _buildTagSelection() {
+  Widget _buildTagSelection(AppLocalizations l10n) {
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
         final allTags = appProvider.tags.map((tag) => tag.name).toList();
@@ -540,7 +543,7 @@ class _ShareScreenState extends State<ShareScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Tags',
+              l10n.tags,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
@@ -592,8 +595,8 @@ class _ShareScreenState extends State<ShareScreen> {
                         Expanded(
                           child: TextField(
                             controller: _newTagController,
-                            decoration: const InputDecoration(
-                              labelText: 'Add new tag',
+                            decoration: InputDecoration(
+                              labelText: l10n.addTag,
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.add),
                               isDense: true,

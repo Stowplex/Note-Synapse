@@ -17,6 +17,7 @@ class AppProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;
+  Locale _locale = const Locale('en', '');
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -24,6 +25,7 @@ class AppProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
+  Locale get locale => _locale;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -455,6 +457,35 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       print('Error loading theme preference: $e');
       _isDarkMode = false; // Default to light mode
+    }
+  }
+
+  void changeLanguage(Locale locale) {
+    _locale = locale;
+    _saveLanguagePreference();
+    notifyListeners();
+  }
+
+  Future<void> _saveLanguagePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('language_code', _locale.languageCode);
+      await prefs.setString('country_code', _locale.countryCode ?? '');
+    } catch (e) {
+      print('Error saving language preference: $e');
+    }
+  }
+
+  Future<void> loadLanguagePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final languageCode = prefs.getString('language_code') ?? 'en';
+      final countryCode = prefs.getString('country_code') ?? '';
+      _locale = Locale(languageCode, countryCode);
+      notifyListeners();
+    } catch (e) {
+      print('Error loading language preference: $e');
+      _locale = const Locale('en', ''); // Default to English
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../services/secure_storage_service.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -21,9 +22,11 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Future<void> _saveApiKey() async {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_apiKeyController.text.trim().isEmpty) {
       setState(() {
-        _error = 'Please enter your API key';
+        _error = l10n.pleaseEnterApiKey;
       });
       return;
     }
@@ -40,7 +43,7 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Failed to save API key: $e';
+        _error = l10n.failedToSaveApiKey(e.toString());
         _isLoading = false;
       });
     }
@@ -55,6 +58,8 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -70,7 +75,7 @@ class _SetupScreenState extends State<SetupScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Welcome to Note Synapse',
+                l10n.welcomeToNoteSynapse,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -78,7 +83,7 @@ class _SetupScreenState extends State<SetupScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Your AI-powered note-taking companion',
+                l10n.aiPoweredNoteTaking,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey[600],
                 ),
@@ -92,14 +97,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Setup Required',
+                        l10n.setupRequired,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'To use AI features, you need a Gemini API key from Google AI Studio.',
+                        l10n.setupRequiredDescription,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 16),
@@ -109,7 +114,7 @@ class _SetupScreenState extends State<SetupScreen> {
                             child: OutlinedButton.icon(
                               onPressed: _openGoogleAIStudio,
                               icon: const Icon(Icons.open_in_new),
-                              label: const Text('Get API Key'),
+                              label: Text(l10n.getApiKey),
                             ),
                           ),
                         ],
@@ -121,11 +126,11 @@ class _SetupScreenState extends State<SetupScreen> {
               const SizedBox(height: 24),
               TextField(
                 controller: _apiKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Gemini API Key',
-                  hintText: 'Enter your API key here',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.key),
+                decoration: InputDecoration(
+                  labelText: l10n.geminiApiKey,
+                  hintText: l10n.apiKeyHint,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.key),
                 ),
                 obscureText: true,
                 textInputAction: TextInputAction.done,
@@ -165,12 +170,12 @@ class _SetupScreenState extends State<SetupScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Continue'),
+                      : Text(l10n.continueButton),
                 ),
               ),
               const Spacer(),
               Text(
-                'Your API key is stored securely on your device and never shared.',
+                l10n.apiKeySecurityNote,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey[600],
                 ),

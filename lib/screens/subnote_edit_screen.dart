@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 
@@ -23,7 +24,7 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   late TextEditingController _nameController;
   late TextEditingController _contentController;
   bool _hasChanges = false;
-  bool _hasBeenSaved = false; // Track if subnote has been saved to database
+  bool _hasBeenSaved = false; // Track if subnote has 1been saved to database
   Timer? _autoSaveTimer;
   String? _currentSubNoteId; // Track the current subnote ID for upsert operations
 
@@ -96,34 +97,38 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isNewSubNote ? 'Add Sub-note' : 'Edit Sub-note'),
+        title: Text(widget.isNewSubNote ? l10n.addNewSubNote : l10n.editSubNote),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _hasChanges ? _saveChanges : null,
+            tooltip: l10n.saveChanges,
           ),
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: _cancelEditing,
+            tooltip: l10n.close,
           ),
         ],
       ),
-      body: _buildEditingView(),
+      body: _buildEditingView(l10n),
     );
   }
 
-  Widget _buildEditingView() {
+  Widget _buildEditingView(AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Sub-note Name',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l10n.subNote,
+              border: const OutlineInputBorder(),
               hintText: 'Enter a brief name for this sub-note',
             ),
             style: Theme.of(context).textTheme.titleMedium,
@@ -132,9 +137,9 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
           Expanded(
             child: TextField(
               controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'Content',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.title,
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
                 hintText: 'Enter the sub-note content...',
               ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/audio_recording_service.dart';
@@ -66,18 +67,18 @@ class _MainScreenState extends State<MainScreen> {
             _currentIndex = index;
           });
         },
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.note),
-            label: 'Notes',
+            icon: const Icon(Icons.note),
+            label: AppLocalizations.of(context)!.notes,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
+            icon: const Icon(Icons.calendar_today),
+            label: AppLocalizations.of(context)!.calendar,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: const Icon(Icons.settings),
+            label: AppLocalizations.of(context)!.settings,
           ),
         ],
       ),
@@ -91,6 +92,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _showAddNoteMenu(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -99,15 +102,15 @@ class _MainScreenState extends State<MainScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Add New Content',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              l10n.addNewContent,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             ListTile(
               leading: const Icon(Icons.psychology),
-              title: const Text('New AI Action'),
-              subtitle: const Text('Create content using AI'),
+              title: Text(l10n.newAiAction),
+              subtitle: Text(l10n.newAiActionSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _navigateToAIAction(context);
@@ -115,8 +118,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.note_add),
-              title: const Text('New Note'),
-              subtitle: const Text('Create a regular note'),
+              title: Text(l10n.newNote),
+              subtitle: Text(l10n.newNoteSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _createNewNote(NoteType.note);
@@ -124,8 +127,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.task),
-              title: const Text('New Task'),
-              subtitle: const Text('Create a new task'),
+              title: Text(l10n.newTask),
+              subtitle: Text(l10n.newTaskSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _createNewNote(NoteType.task);
@@ -133,8 +136,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.mic),
-              title: const Text('New Voice'),
-              subtitle: const Text('Record voice note'),
+              title: Text(l10n.newVoice),
+              subtitle: Text(l10n.newVoiceSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _navigateToVoiceNote(context);
@@ -142,8 +145,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.image),
-              title: const Text('New Picture'),
-              subtitle: const Text('Add image from camera or gallery'),
+              title: Text(l10n.newPicture),
+              subtitle: Text(l10n.newPictureSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _navigateToImageNote(context);
@@ -151,8 +154,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.attach_file),
-              title: const Text('Attachment'),
-              subtitle: const Text('Add file attachment'),
+              title: Text(l10n.attachment),
+              subtitle: Text(l10n.attachmentSubtitle),
               onTap: () {
                 _navigateToFileAttachment(context);
                 Navigator.pop(context);
@@ -160,8 +163,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.content_paste),
-              title: const Text('New Note from Clipboard'),
-              subtitle: const Text('Create note from clipboard content'),
+              title: Text(l10n.newNoteFromClipboard),
+              subtitle: Text(l10n.newNoteFromClipboardSubtitle),
               onTap: () {
                 Navigator.pop(context);
                 _createNoteFromClipboard(context);
@@ -224,14 +227,15 @@ class _MainScreenState extends State<MainScreen> {
   // Audio recording methods
   Future<void> _startAudioRecording() async {
     if (_audioService == null) return;
+    final l10n = AppLocalizations.of(context)!;
     
     try {
       final success = await _audioService!.startRecording();
       if (success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Recording started'),
+            SnackBar(
+              content: Text(l10n.recordingStarted),
               backgroundColor: Colors.green,
             ),
           );
@@ -241,8 +245,8 @@ class _MainScreenState extends State<MainScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(Platform.isLinux 
-                  ? 'Failed to start recording. Please check if gstreamer and PulseAudio are installed.'
-                  : 'Failed to start recording. Please check microphone permissions.'),
+                  ? l10n.failedToStartRecordingLinux
+                  : l10n.failedToStartRecording),
               backgroundColor: Colors.red,
             ),
           );
@@ -252,7 +256,7 @@ class _MainScreenState extends State<MainScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error starting recording: $e'),
+            content: Text(l10n.errorStartingRecording(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -262,6 +266,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _stopAudioRecording(BuildContext context) async {
     if (_audioService == null) return;
+    final l10n = AppLocalizations.of(context)!;
     
     try {
       final audioPath = await _audioService!.stopRecording();
@@ -269,8 +274,8 @@ class _MainScreenState extends State<MainScreen> {
         // Create a note with the audio attachment
         final audioNote = Note(
           id: const Uuid().v4(),
-          title: 'Audio Note - ${DateTime.now().toString().substring(0, 16)}',
-          content: 'Audio recording from ${DateTime.now().toString().substring(0, 16)}',
+          title: '${l10n.audioNote} - ${DateTime.now().toString().substring(0, 16)}',
+          content: '${l10n.audioRecordingFrom} ${DateTime.now().toString().substring(0, 16)}',
           type: NoteType.note,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
@@ -286,8 +291,8 @@ class _MainScreenState extends State<MainScreen> {
           _resetVoiceRecording();
           
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Audio note saved successfully!'),
+            SnackBar(
+              content: Text(l10n.audioNoteSavedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -297,7 +302,7 @@ class _MainScreenState extends State<MainScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error stopping recording: $e'),
+            content: Text(l10n.errorStoppingRecording(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -313,11 +318,13 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _showImageSourceDialog(BuildContext mainContext, AppProvider appProvider) {
+    final l10n = AppLocalizations.of(mainContext)!;
+    
     showDialog(
       context: mainContext,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Select Image Source'),
-        content: const Text('Choose how you want to add an image'),
+        title: Text(l10n.selectImageSource),
+        content: Text(l10n.chooseImageSource),
         actions: [
           TextButton.icon(
             onPressed: () async {
@@ -327,7 +334,7 @@ class _MainScreenState extends State<MainScreen> {
               _pickImage(ImageSource.camera, mainContext, appProvider);
             },
             icon: const Icon(Icons.camera_alt),
-            label: const Text('Camera'),
+            label: Text(l10n.camera),
           ),
           TextButton.icon(
             onPressed: () async {
@@ -337,13 +344,13 @@ class _MainScreenState extends State<MainScreen> {
               _pickImage(ImageSource.gallery, mainContext, appProvider);
             },
             icon: const Icon(Icons.photo_library),
-            label: const Text('Gallery'),
+            label: Text(l10n.gallery),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
             },
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
         ],
       ),
@@ -408,9 +415,10 @@ class _MainScreenState extends State<MainScreen> {
       // Try to show success message if context is still valid
       try {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image note created successfully!'),
+            SnackBar(
+              content: Text(l10n.imageNoteCreatedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -422,9 +430,10 @@ class _MainScreenState extends State<MainScreen> {
       // Try to show error message if context is still valid
       try {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error creating image note: $e'),
+              content: Text(l10n.errorCreatingImageNote(e.toString())),
               backgroundColor: Colors.red,
             ),
           );
@@ -448,9 +457,10 @@ class _MainScreenState extends State<MainScreen> {
       
       if (clipboardData?.text == null || clipboardData!.text!.trim().isEmpty) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Clipboard is empty'),
+            SnackBar(
+              content: Text(l10n.clipboardIsEmpty),
               backgroundColor: Colors.orange,
             ),
           );
@@ -509,9 +519,10 @@ class _MainScreenState extends State<MainScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error accessing clipboard: $e'),
+            content: Text(l10n.errorAccessingClipboard(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -556,16 +567,18 @@ class _MainScreenState extends State<MainScreen> {
           await _createFileNoteFromBytes(file, context, appProvider);
         } else {
           if (context.mounted) {
+            final l10n = AppLocalizations.of(context)!;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Unable to access file data')),
+              SnackBar(content: Text(l10n.unableToAccessFileData)),
             );
           }
         }
       }
     } catch (e) {
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking file: $e')),
+          SnackBar(content: Text(l10n.errorPickingFile(e.toString()))),
         );
       }
     }
@@ -587,9 +600,10 @@ class _MainScreenState extends State<MainScreen> {
       await appProvider.addNote(fileNote);
       
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File note created successfully!'),
+          SnackBar(
+            content: Text(l10n.fileNoteCreatedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -597,9 +611,10 @@ class _MainScreenState extends State<MainScreen> {
     } catch (e) {
       print('Error creating file note: $e'); // Debug logging
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating file note: $e'),
+            content: Text(l10n.errorCreatingFileNote(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -625,9 +640,10 @@ class _MainScreenState extends State<MainScreen> {
       await appProvider.addNote(fileNote);
       
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File note created successfully!'),
+          SnackBar(
+            content: Text(l10n.fileNoteCreatedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -635,9 +651,10 @@ class _MainScreenState extends State<MainScreen> {
     } catch (e) {
       print('Error creating file note from bytes: $e'); // Debug logging
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating file note: $e'),
+            content: Text(l10n.errorCreatingFileNote(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -691,8 +708,10 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return AlertDialog(
-      title: Text(_isRecording ? 'Recording...' : 'Voice Note Recording'),
+      title: Text(_isRecording ? l10n.recording : l10n.voiceNoteRecording),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -712,7 +731,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Recording... Tap stop when done',
+              l10n.recordingTapStop,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.red,
                 fontWeight: FontWeight.bold,
@@ -720,7 +739,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Recording will continue until you tap "Stop Recording"',
+              l10n.recordingWillContinue,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -729,14 +748,14 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
           ] else ...[
             const Icon(Icons.mic, size: 48, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text('Start recording your voice note'),
+            Text(l10n.startRecordingVoiceNote),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _startRecording,
                 icon: const Icon(Icons.mic),
-                label: const Text('Start Recording'),
+                label: Text(l10n.startRecording),
               ),
             ),
           ],
@@ -747,7 +766,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
           ElevatedButton.icon(
             onPressed: _stopRecording,
             icon: const Icon(Icons.stop),
-            label: const Text('Stop Recording'),
+            label: Text(l10n.stopRecording),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
@@ -759,7 +778,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
             Navigator.pop(context);
             widget.onReset();
           },
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
       ],
     );

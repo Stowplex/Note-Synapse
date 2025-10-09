@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 class MultiSelectTagFilter extends StatefulWidget {
   final List<String> availableTags;
@@ -110,8 +111,10 @@ class _FilterDialogState extends State<_FilterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return AlertDialog(
-      title: const Text('Filter by Tags'),
+      title: Text(l10n.filter),
       content: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.6,
@@ -171,7 +174,7 @@ class _FilterDialogState extends State<_FilterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: Text(l10n.close),
         ),
       ],
     );

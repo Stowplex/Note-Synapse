@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
@@ -205,6 +206,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
         // Get the latest version of the note from the provider
@@ -247,7 +250,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     children: [
                       Icon(Icons.delete, color: Colors.red),
                       const SizedBox(width: 8),
-                      Text('Delete', style: TextStyle(color: Colors.red)),
+                      Text(l10n.deleteNote, style: TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),
@@ -283,7 +286,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        currentNote.isArchived ? 'Unarchive' : 'Archive',
+                        currentNote.isArchived ? l10n.unarchiveNote : l10n.archiveNote,
                         style: TextStyle(
                           color: currentNote.isArchived ? Colors.orange : Colors.grey[600],
                         ),
@@ -305,7 +308,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
         ],
       ),
-            body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote),
+            body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote, l10n),
             bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
           ),
         );
@@ -313,7 +316,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  Widget _buildViewingView(Note currentNote) {
+  Widget _buildViewingView(Note currentNote, AppLocalizations l10n) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -348,7 +351,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Row(
               children: [
                 Text(
-                  'Sub-notes',
+                  l10n.subNotes,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -357,7 +360,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () => _addSubNote(currentNote),
-                  tooltip: 'Add sub-note',
+                  tooltip: l10n.addSubNote,
                 ),
               ],
             ),
@@ -381,11 +384,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'edit',
-                      child: const Row(
+                      child: Row(
                         children: [
                           Icon(Icons.edit, size: 16),
-                          SizedBox(width: 8),
-                          Text('Edit'),
+                          const SizedBox(width: 8),
+                          Text(l10n.editSubNote),
                         ],
                       ),
                     ),
@@ -398,7 +401,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             size: 16,
                           ),
                           const SizedBox(width: 8),
-                          Text(subNote.isCompleted ? 'Mark Incomplete' : 'Mark Complete'),
+                          Text(subNote.isCompleted ? l10n.markIncomplete : l10n.markComplete),
                         ],
                       ),
                     ),
@@ -414,11 +417,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                     PopupMenuItem(
                       value: 'delete',
-                      child: const Row(
+                      child: Row(
                         children: [
                           Icon(Icons.delete, color: Colors.red, size: 16),
-                          SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
+                          const SizedBox(width: 8),
+                          Text(l10n.deleteSubNote, style: TextStyle(color: Colors.red)),
                         ],
                       ),
                     ),
@@ -448,7 +451,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Row(
               children: [
                 Text(
-                  'Sub-notes',
+                  l10n.subNotes,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -466,7 +469,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Row(
             children: [
               Text(
-                'Tags',
+                l10n.tags,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -475,7 +478,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               TextButton.icon(
                 onPressed: () => _showAddTagDialog(currentNote),
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Tag'),
+                label: Text(l10n.addTag),
               ),
             ],
           ),
@@ -504,7 +507,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   Icon(Icons.label_outline, color: Colors.grey[400]),
                   const SizedBox(width: 8),
                   Text(
-                    'No tags yet. Tap "Add Tag" to add some.',
+                    l10n.noTagsYet,
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
@@ -513,7 +516,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           if (currentNote.attachmentPaths.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
-              'Attachments',
+              l10n.attachments,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -526,7 +529,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Row(
               children: [
                 Text(
-                  'Linked Notes',
+                  l10n.linkedNotes,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -535,7 +538,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 TextButton.icon(
                   onPressed: _addLinkedNote,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Link'),
+                  label: Text(l10n.addLink),
                 ),
               ],
             ),
@@ -546,7 +549,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Row(
               children: [
                 Text(
-                  'Linked Notes',
+                  l10n.linkedNotes,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -555,7 +558,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 TextButton.icon(
                   onPressed: _addLinkedNote,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Link'),
+                  label: Text(l10n.addLink),
                 ),
               ],
             ),
@@ -568,7 +571,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     Icon(Icons.link_off, color: Colors.grey[400]),
                     const SizedBox(width: 8),
                     Text(
-                      'No linked notes yet',
+                      l10n.noLinkedNotesYet,
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                   ],
@@ -578,14 +581,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
           const SizedBox(height: 24),
           SelectableText(
-            'Created: ${_formatDate(currentNote.createdAt)}',
+            '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.grey[600],
             ),
           ),
           if (currentNote.updatedAt != currentNote.createdAt)
             SelectableText(
-              'Updated: ${_formatDate(currentNote.updatedAt)}',
+              '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -596,15 +599,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildEditingView() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           TextField(
             controller: _titleController,
-            decoration: const InputDecoration(
-              labelText: 'Title',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l10n.title,
+              border: const OutlineInputBorder(),
             ),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
@@ -616,9 +621,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Expanded(
             child: TextField(
               controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'Content',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.content,
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
               maxLines: null,
@@ -634,6 +639,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildMarkdownButtons() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -641,17 +647,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         children: [
           _buildMarkdownButton(
             icon: Icons.check_box_outline_blank,
-            label: 'Checkbox',
+            label: l10n.checkbox,
             onPressed: _insertCheckbox,
           ),
           _buildMarkdownButton(
             icon: Icons.title,
-            label: 'Title',
+            label: l10n.title,
             onPressed: _insertTitle,
           ),
           _buildMarkdownButton(
             icon: Icons.format_bold,
-            label: 'Bold',
+            label: l10n.bold,
             onPressed: _insertBold,
           ),
         ],
@@ -721,6 +727,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildDateSelectionFields() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Column(
       children: [
         Row(
@@ -730,7 +738,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onTap: () => _selectScheduledAt(),
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'Schedule At',
+                    labelText: l10n.scheduledAt,
                     border: OutlineInputBorder(
                       borderSide: BorderSide(
                         color: _dateValidationError != null ? Colors.red : Colors.grey,
@@ -754,7 +762,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onTap: () => _selectCompleteBy(),
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'Complete By',
+                    labelText: l10n.completeBy,
                     border: OutlineInputBorder(
                       borderSide: BorderSide(
                         color: _dateValidationError != null ? Colors.red : Colors.grey,
@@ -794,6 +802,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Widget _buildTaskStatus(Note currentNote) {
     if (!currentNote.isTask) return const SizedBox.shrink();
     
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       color: _getStatusColor().withOpacity(0.1),
       child: Padding(
@@ -813,7 +823,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   Row(
                     children: [
                       Text(
-                        'Status: ',
+                        '${l10n.status}: ',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: _getStatusColor(),
@@ -824,12 +834,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   if (currentNote.scheduledAt != null)
                     SelectableText(
-                      'Scheduled: ${AppDateUtils.formatDateForDisplay(currentNote.scheduledAt)}',
+                      '${l10n.scheduled}: ${AppDateUtils.formatDateForDisplay(currentNote.scheduledAt)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (currentNote.completeBy != null)
                     SelectableText(
-                      'Due: ${AppDateUtils.formatDateForDisplay(currentNote.completeBy)}',
+                      '${l10n.due}: ${AppDateUtils.formatDateForDisplay(currentNote.completeBy)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                 ],
@@ -892,6 +902,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildBottomBar() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -910,7 +922,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _openAIAction,
                   icon: const Icon(Icons.psychology),
-                  label: const Text('AI Actions'),
+                  label: Text(l10n.aiActions),
                 ),
               ),
               const SizedBox(width: 8),
@@ -918,7 +930,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _addAttachment,
                   icon: const Icon(Icons.attach_file),
-                  label: const Text('Attach'),
+                  label: Text(l10n.attach),
                 ),
               ),
               if (_audioService != null) ...[
@@ -927,7 +939,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _isRecording ? _stopRecording : _startRecording,
                     icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                    label: Text(_isRecording ? 'Stop Recording' : 'Record Audio'),
+                    label: Text(_isRecording ? l10n.stopRecording : l10n.recordAudio),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _isRecording ? Colors.red : null,
                     ),
@@ -1037,6 +1049,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   String _getStatusText() {
+    final l10n = AppLocalizations.of(context)!;
     // Get the current note from the provider
     final currentNote = context.read<AppProvider>().notes.firstWhere(
       (note) => note.id == widget.note.id,
@@ -1044,14 +1057,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
     switch (currentNote.status) {
       case TaskStatus.complete:
-        return 'Complete';
+        return l10n.completed;
       case TaskStatus.inProgress:
-        return 'In Progress';
+        return l10n.inProgress;
       case TaskStatus.abandoned:
-        return 'Cancelled';
+        return l10n.cancelled;
       case TaskStatus.todo:
       default:
-        return 'To Do';
+        return l10n.toDo;
     }
   }
 
@@ -1284,6 +1297,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildAttachmentCard(String attachmentPath, Note currentNote) {
+    final l10n = AppLocalizations.of(context)!;
     final fileName = attachmentPath.split('/').last;
     final file = File(attachmentPath);
     final fileExists = file.existsSync();
@@ -1347,7 +1361,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: () => _removeAttachment(attachmentPath, currentNote),
-              tooltip: 'Remove attachment',
+              tooltip: l10n.removeAttachmentTooltip,
             ),
           ],
         ),
@@ -1474,13 +1488,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _removeAttachment(String attachmentPath, Note currentNote) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       // Show confirmation dialog
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Remove Attachment'),
-          content: Text('Are you sure you want to remove "${attachmentPath.split('/').last}" from this note?'),
+          title: Text(l10n.removeAttachment),
+          content: Text(l10n.removeAttachmentConfirm(attachmentPath.split('/').last)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -1508,8 +1523,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         await context.read<AppProvider>().updateNote(updatedNote);
         
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Attachment removed'),
+          SnackBar(
+            content: Text(l10n.attachmentRemoved),
             backgroundColor: Colors.green,
           ),
         );
@@ -1517,7 +1532,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error removing attachment: $e'),
+          content: Text('${l10n.errorRemovingAttachment}: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1525,6 +1540,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _addAttachment() async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -1557,7 +1573,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added ${result.files.length} attachment(s)'),
+            content: Text(l10n.addedAttachments(result.files.length)),
             backgroundColor: Colors.green,
           ),
         );
@@ -1565,7 +1581,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error adding attachment: $e'),
+          content: Text('${l10n.errorAddingAttachment}: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1573,6 +1589,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildStatusDropdown(Note currentNote) {
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<TaskStatus>(
       onSelected: (TaskStatus status) {
         context.read<AppProvider>().updateTaskStatus(currentNote.id, status);
@@ -1584,7 +1601,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 20),
               const SizedBox(width: 8),
-              const Text('To Do'),
+              Text(l10n.toDo),
             ],
           ),
         ),
@@ -1594,7 +1611,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Icon(Icons.play_circle, color: Colors.orange, size: 20),
               const SizedBox(width: 8),
-              const Text('In Progress'),
+              Text(l10n.inProgress),
             ],
           ),
         ),
@@ -1604,7 +1621,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 20),
               const SizedBox(width: 8),
-              const Text('Complete'),
+              Text(l10n.completed),
             ],
           ),
         ),
@@ -1614,7 +1631,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Icon(Icons.cancel, color: Colors.red, size: 20),
               const SizedBox(width: 8),
-              const Text('Cancelled'),
+              Text(l10n.cancelled),
             ],
           ),
         ),
@@ -1805,6 +1822,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _stopRecording() async {
     if (_audioService == null) return;
+    final l10n = AppLocalizations.of(context)!;
     
     try {
       final audioPath = await _audioService!.stopRecording();
@@ -1826,8 +1844,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         await context.read<AppProvider>().updateNote(updatedNote);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Recording saved as attachment'),
+          SnackBar(
+            content: Text(l10n.recordingSavedAsAttachment),
             backgroundColor: Colors.green,
           ),
         );
@@ -2147,6 +2165,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   }
 
   List<Note> _getAvailableNotes() {
+    final l10n = AppLocalizations.of(context)!;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     var notes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
 
@@ -2159,7 +2178,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
     }
 
     // Filter by selected tag
-    if (_selectedTag != null && _selectedTag != 'All Notes') {
+    if (_selectedTag != null && _selectedTag != l10n.allNotes) {
       notes = notes.where((note) {
         return note.tags.contains(_selectedTag);
       }).toList();
@@ -2169,17 +2188,19 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   }
 
   List<String> _getAllTags() {
+    final l10n = AppLocalizations.of(context)!;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final allTags = <String>{};
     for (final note in appProvider.notes) {
       allTags.addAll(note.tags);
     }
     final tagList = allTags.toList()..sort();
-    return ['All Notes', ...tagList];
+    return [l10n.allNotes, ...tagList];
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       title: Text('Move "${widget.subNote.name}" to another note'),
       content: SizedBox(
@@ -2215,7 +2236,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    hint: const Text('All Notes'),
+                    hint: Text(l10n.allNotes),
                     items: _getAllTags().map((tag) {
                       return DropdownMenuItem<String>(
                         value: tag,
@@ -2239,7 +2260,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
               child: _filteredNotes.isEmpty
                   ? Center(
                       child: Text(
-                        _searchQuery.isNotEmpty || (_selectedTag != null && _selectedTag != 'All Notes')
+                        _searchQuery.isNotEmpty || (_selectedTag != null && _selectedTag != l10n.allNotes)
                             ? 'No notes match your search'
                             : 'No other notes available',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(

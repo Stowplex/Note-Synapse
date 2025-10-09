@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../utils/date_utils.dart';
 import 'interactive_checkbox_list.dart';
@@ -30,6 +31,8 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       elevation: isSelected ? 8 : 2,
       color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
@@ -67,7 +70,7 @@ class NoteCard extends StatelessWidget {
                         size: 20,
                       ),
                       onPressed: onPinToggle,
-                      tooltip: note.pinned ? 'Unpin note' : 'Pin note',
+                      tooltip: note.pinned ? l10n.unpinNote : l10n.pinNote,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -79,7 +82,7 @@ class NoteCard extends StatelessWidget {
                         size: 20,
                       ),
                       onPressed: onArchiveToggle,
-                      tooltip: note.isArchived ? 'Unarchive note' : 'Archive note',
+                      tooltip: note.isArchived ? l10n.unarchiveNote : l10n.archiveNote,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -160,7 +163,7 @@ class NoteCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _formatDate(note.createdAt),
+                          _formatDate(note.createdAt, context),
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                           ),
@@ -233,7 +236,7 @@ class NoteCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              _formatDate(note.createdAt),
+                              _formatDate(note.createdAt, context),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               ),
@@ -345,6 +348,7 @@ class NoteCard extends StatelessWidget {
 
   Widget _buildStatusDropdown(Note note, BuildContext context) {
     if (!note.isTask || onStatusChanged == null) return const SizedBox.shrink();
+    final l10n = AppLocalizations.of(context)!;
     
     return PopupMenuButton<TaskStatus>(
       onSelected: (TaskStatus status) {
@@ -357,7 +361,7 @@ class NoteCard extends StatelessWidget {
             children: [
               Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 16),
               const SizedBox(width: 8),
-              const Text('To Do'),
+              Text(l10n.toDo),
             ],
           ),
         ),
@@ -367,7 +371,7 @@ class NoteCard extends StatelessWidget {
             children: [
               Icon(Icons.play_circle, color: Colors.orange, size: 16),
               const SizedBox(width: 8),
-              const Text('In Progress'),
+              Text(l10n.inProgress),
             ],
           ),
         ),
@@ -377,7 +381,7 @@ class NoteCard extends StatelessWidget {
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 16),
               const SizedBox(width: 8),
-              const Text('Complete'),
+              Text(l10n.completed),
             ],
           ),
         ),
@@ -387,7 +391,7 @@ class NoteCard extends StatelessWidget {
             children: [
               Icon(Icons.cancel, color: Colors.red, size: 16),
               const SizedBox(width: 8),
-              const Text('Cancelled'),
+              Text(l10n.cancelled),
             ],
           ),
         ),
@@ -402,7 +406,7 @@ class NoteCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              _getStatusText(note.status),
+              _getStatusText(note.status, context),
               style: const TextStyle(fontSize: 10),
             ),
             const SizedBox(width: 2),
@@ -413,30 +417,32 @@ class NoteCard extends StatelessWidget {
     );
   }
 
-  String _getStatusText(TaskStatus? status) {
+  String _getStatusText(TaskStatus? status, BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     switch (status) {
       case TaskStatus.complete:
-        return 'Complete';
+        return l10n.completed;
       case TaskStatus.inProgress:
-        return 'In Progress';
+        return l10n.inProgress;
       case TaskStatus.abandoned:
-        return 'Cancelled';
+        return l10n.cancelled;
       case TaskStatus.todo:
       default:
-        return 'To Do';
+        return l10n.toDo;
     }
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime date, BuildContext context) {
     final now = DateTime.now();
     final difference = now.difference(date);
+    final l10n = AppLocalizations.of(context)!;
     
     if (difference.inDays == 0) {
-      return 'Today';
+      return l10n.today;
     } else if (difference.inDays == 1) {
-      return 'Yesterday';
+      return l10n.yesterday;
     } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
+      return l10n.daysAgo(difference.inDays);
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }

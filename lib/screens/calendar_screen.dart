@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/multi_select_tag_filter.dart';
@@ -47,9 +48,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: Text(_getViewTitle()),
+        title: Text(_getViewTitle(l10n)),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -67,7 +70,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Icon(Icons.calendar_today, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Calendar'),
+                    Text(l10n.calendar),
                   ],
                 ),
               ),
@@ -77,7 +80,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Icon(Icons.timeline, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Timeline'),
+                    Text(l10n.timeline),
                   ],
                 ),
               ),
@@ -87,7 +90,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Icon(Icons.checklist, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Todo'),
+                    Text(l10n.todo),
                   ],
                 ),
               ),
@@ -105,6 +108,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 }
               });
             },
+            allNotesLabel: l10n.allNotes,
+            filterLabel: l10n.filter,
           ),
           if (_selectedView == 'calendar')
             IconButton(
@@ -129,9 +134,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           }
           
           if (_selectedView == 'timeline') {
-            return _buildTimelineView(appProvider);
+            return _buildTimelineView(appProvider, l10n);
           } else if (_selectedView == 'todo') {
-            return _buildTodoView(appProvider);
+            return _buildTodoView(appProvider, l10n);
           } else {
             return Column(
               children: [
@@ -141,10 +146,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 lastDay: DateTime.utc(2030, 12, 31),
                 focusedDay: _focusedDay,
                 calendarFormat: _calendarFormat,
-                availableCalendarFormats: const {
-                  CalendarFormat.month: 'Month',
-                  CalendarFormat.twoWeeks: '2 Weeks',
-                  CalendarFormat.week: 'Week',
+                availableCalendarFormats: {
+                  CalendarFormat.month: l10n.month,
+                  CalendarFormat.twoWeeks: l10n.twoWeeks,
+                  CalendarFormat.week: l10n.week,
                 },
                 selectedDayPredicate: (day) {
                   return isSameDay(_selectedDay, day);
@@ -202,7 +207,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ? const Center(
                         child: Text('Select a day to view notes and tasks'),
                       )
-                    : _buildTabbedDayContent(appProvider),
+                    : _buildTabbedDayContent(appProvider, l10n),
               ),
             ],
           );
@@ -212,7 +217,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildTabbedDayContent(AppProvider appProvider) {
+  Widget _buildTabbedDayContent(AppProvider appProvider, AppLocalizations l10n) {
     final selectedDate = _selectedDay!;
     final allTasks = appProvider.getTasksForDate(selectedDate);
     final allNotes = appProvider.getNotesForDate(selectedDate);
@@ -254,7 +259,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     children: [
                       Icon(Icons.task_alt, size: 18),
                       const SizedBox(width: 8),
-                      Text('Tasks (${tasks.length})'),
+                      Text('${l10n.tasks} (${tasks.length})'),
                     ],
                   ),
                 ),
@@ -264,7 +269,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     children: [
                       Icon(Icons.note, size: 18),
                       const SizedBox(width: 8),
-                      Text('Notes (${notes.length})'),
+                      Text('${l10n.notes} (${notes.length})'),
                     ],
                   ),
                 ),
@@ -278,8 +283,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           Expanded(
             child: TabBarView(
               children: [
-                _buildTasksTab(tasks, appProvider),
-                _buildNotesTab(notes),
+                _buildTasksTab(tasks, appProvider, l10n),
+                _buildNotesTab(notes, l10n),
               ],
             ),
           ),
@@ -288,7 +293,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildTasksTab(List<Note> tasks, AppProvider appProvider) {
+  Widget _buildTasksTab(List<Note> tasks, AppProvider appProvider, AppLocalizations l10n) {
     if (tasks.isEmpty) {
       return Center(
         child: Column(
@@ -297,14 +302,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? 'No tasks for this day' : 'No tasks with selected tags for this day',
+              _selectedTags.isEmpty ? l10n.noTasksForToday : l10n.noTasksWithSelectedTagsForThisDay,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTags.isEmpty ? 'Create a task to get started' : 'Try selecting different tags',
+              _selectedTags.isEmpty ? l10n.createFirstTask : l10n.trySelectingDifferentTags,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -348,7 +353,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildNotesTab(List<Note> notes) {
+  Widget _buildNotesTab(List<Note> notes, AppLocalizations l10n) {
     if (notes.isEmpty) {
       return Center(
         child: Column(
@@ -357,14 +362,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.note, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? 'No notes for this day' : 'No notes with selected tags for this day',
+              _selectedTags.isEmpty ? l10n.noNotesForToday : l10n.noNotesWithSelectedTagsForThisDay,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTags.isEmpty ? 'Create a note to get started' : 'Try selecting different tags',
+              _selectedTags.isEmpty ? l10n.createFirstNote : l10n.trySelectingDifferentTags,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -438,6 +443,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildStatusDropdown(Note task, AppProvider appProvider) {
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<TaskStatus>(
       onSelected: (TaskStatus status) {
         appProvider.updateTaskStatus(task.id, status);
@@ -449,7 +455,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Icon(Icons.radio_button_unchecked, color: Colors.grey, size: 20),
               const SizedBox(width: 8),
-              const Text('To Do'),
+              Text(l10n.toDo),
             ],
           ),
         ),
@@ -459,7 +465,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Icon(Icons.play_circle, color: Colors.orange, size: 20),
               const SizedBox(width: 8),
-              const Text('In Progress'),
+              Text(l10n.inProgress),
             ],
           ),
         ),
@@ -469,7 +475,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 20),
               const SizedBox(width: 8),
-              const Text('Complete'),
+              Text(l10n.completed),
             ],
           ),
         ),
@@ -479,7 +485,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Icon(Icons.cancel, color: Colors.red, size: 20),
               const SizedBox(width: 8),
-              const Text('Cancelled'),
+              Text(l10n.cancelled),
             ],
           ),
         ),
@@ -506,32 +512,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   String _getStatusText(TaskStatus? status) {
+    final l10n = AppLocalizations.of(context)!;
     switch (status) {
       case TaskStatus.complete:
-        return 'Complete';
+        return l10n.completed;
       case TaskStatus.inProgress:
-        return 'In Progress';
+        return l10n.inProgress;
       case TaskStatus.abandoned:
-        return 'Cancelled';
+        return l10n.cancelled;
       case TaskStatus.todo:
       default:
-        return 'To Do';
+        return l10n.toDo;
     }
   }
 
-  String _getViewTitle() {
+  String _getViewTitle(AppLocalizations l10n) {
     switch (_selectedView) {
       case 'timeline':
-        return 'Timeline';
+        return l10n.timeline;
       case 'todo':
-        return 'Todo';
+        return l10n.todo;
       case 'calendar':
       default:
-        return 'Calendar';
+        return l10n.calendar;
     }
   }
 
-  Widget _buildTimelineView(AppProvider appProvider) {
+  Widget _buildTimelineView(AppProvider appProvider, AppLocalizations l10n) {
     if (appProvider.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -547,14 +554,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.timeline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
+              _selectedTags.isEmpty ? l10n.createFirstTimelineNote : l10n.noTasksWithSelectedTags,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
               _selectedTags.isEmpty
-                  ? 'Create your first task'
-                  : 'Try selecting different tags',
+                  ? l10n.createFirstTimelineNote
+                  : l10n.trySelectingDifferentTags,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -587,7 +594,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
               child: Text(
-                _formatDate(date),
+                _formatDate(date, l10n),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.primary,
@@ -666,7 +673,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildTodoView(AppProvider appProvider) {
+  Widget _buildTodoView(AppProvider appProvider, AppLocalizations l10n) {
     if (appProvider.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -681,14 +688,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? 'No tasks yet' : 'No tasks with selected tags',
+              _selectedTags.isEmpty ? l10n.createFirstTask : l10n.noTasksWithSelectedTags,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
               _selectedTags.isEmpty
-                  ? 'Create your first task'
-                  : 'Try selecting different tags',
+                  ? l10n.createFirstTask
+                  : l10n.trySelectingDifferentTags,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -757,7 +764,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                'Start: ${AppDateUtils.formatDateForDisplay(task.scheduledAt)}',
+                                '${l10n.start}: ${AppDateUtils.formatDateForDisplay(task.scheduledAt)}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.green[700],
@@ -773,7 +780,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                'Due: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
+                                '${l10n.due}: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[700] : Colors.blue[700],
@@ -799,7 +806,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           Icon(Icons.list, size: 16, color: Colors.grey[500]),
                           const SizedBox(width: 4),
                           Text(
-                            '${task.subNotes.where((sn) => sn.isCompleted).length}/${task.subNotes.length} subtasks completed',
+                            l10n.subtasksCompleted(task.subNotes.where((sn) => sn.isCompleted).length, task.subNotes.length),
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.grey[500],
                             ),
@@ -902,20 +909,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Map.fromEntries(sortedEntries);
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime date, AppLocalizations l10n) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final dateOnly = DateTime(date.year, date.month, date.day);
     
     if (dateOnly == today) {
-      return 'Today';
+      return l10n.today;
     } else if (dateOnly == yesterday) {
-      return 'Yesterday';
+      return l10n.yesterday;
     } else {
       final months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        l10n.january, l10n.february, l10n.march, l10n.april, l10n.may, l10n.june,
+        l10n.july, l10n.august, l10n.september, l10n.october, l10n.november, l10n.december
       ];
       return '${months[date.month - 1]} ${date.day}, ${date.year}';
     }
@@ -962,6 +969,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _launchUrl(String url) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
@@ -970,7 +978,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Cannot open link: $url'),
+              content: Text('${l10n.cannotOpenLink}: $url'),
               backgroundColor: Colors.red,
             ),
           );
@@ -980,7 +988,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening link: $e'),
+            content: Text('${l10n.errorOpeningLink}: $e'),
             backgroundColor: Colors.red,
           ),
         );
