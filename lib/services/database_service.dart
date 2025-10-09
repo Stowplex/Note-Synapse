@@ -40,7 +40,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -60,7 +60,8 @@ class DatabaseService {
         completeBy TEXT,
         status TEXT,
         completionPercentage REAL,
-        pinned INTEGER NOT NULL DEFAULT 0
+        pinned INTEGER NOT NULL DEFAULT 0,
+        isArchived INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -146,6 +147,7 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
     await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
     await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
+    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
     await db.execute('CREATE INDEX idx_ai_interactions_expiresAt ON ai_interactions(expiresAt)');
@@ -225,6 +227,50 @@ class DatabaseService {
         await _onCreate(db, newVersion);
       }
     }
+    
+    if (oldVersion < 4) {
+      // Migration from version 3 to 4: Add isArchived column
+      try {
+        await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
+        await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
+      } catch (e) {
+        print('Migration to version 4 failed: $e');
+        // If migration fails, drop and recreate the database
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await _onCreate(db, newVersion);
+      }
+    }
+    
+    if (oldVersion < 5) {
+      // Migration from version 4 to 5: Ensure isArchived column exists
+      try {
+        // Check if isArchived column exists
+        final columns = await db.rawQuery("PRAGMA table_info(notes)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('isArchived')) {
+          await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
+          await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
+        }
+      } catch (e) {
+        print('Migration to version 5 failed: $e');
+        // If migration fails, drop and recreate the database
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await _onCreate(db, newVersion);
+      }
+    }
   }
 
   // Notes CRUD
@@ -234,6 +280,7 @@ class DatabaseService {
     json['createdAt'] = note.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = note.updatedAt.millisecondsSinceEpoch;
     json['pinned'] = note.pinned ? 1 : 0;
+    json['isArchived'] = note.isArchived ? 1 : 0;
     
     // Remove complex objects that can't be stored directly
     json.remove('subNotes');
@@ -281,6 +328,83 @@ class DatabaseService {
     return notes;
   }
 
+  Future<List<Note>> getNotesByArchiveStatus({bool? isArchived}) async {
+    final db = await database;
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+    
+    if (isArchived != null) {
+      whereClause = 'isArchived = ?';
+      whereArgs.add(isArchived ? 1 : 0);
+    }
+    
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'pinned DESC, createdAt DESC',
+    );
+
+    final List<Note> notes = [];
+    for (final map in maps) {
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        print('Error mapping note with id ${map['id']}: $e');
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
+    }
+    return notes;
+  }
+
+  Future<List<Note>> getPinnedNotes() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      where: 'pinned = ? AND isArchived = ?',
+      whereArgs: [1, 0],
+      orderBy: 'createdAt DESC',
+    );
+
+    final List<Note> notes = [];
+    for (final map in maps) {
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        print('Error mapping note with id ${map['id']}: $e');
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
+    }
+    return notes;
+  }
+
+  Future<List<Note>> getArchivedNotes() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      where: 'isArchived = ?',
+      whereArgs: [1],
+      orderBy: 'createdAt DESC',
+    );
+
+    final List<Note> notes = [];
+    for (final map in maps) {
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        print('Error mapping note with id ${map['id']}: $e');
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
+    }
+    return notes;
+  }
+
   Future<Note?> getNote(String id) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -299,6 +423,7 @@ class DatabaseService {
     json['createdAt'] = note.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = note.updatedAt.millisecondsSinceEpoch;
     json['pinned'] = note.pinned ? 1 : 0;
+    json['isArchived'] = note.isArchived ? 1 : 0;
     
     // Remove complex objects that can't be stored directly
     json.remove('subNotes');
@@ -548,6 +673,7 @@ class DatabaseService {
           : null,
       completionPercentage: map['completionPercentage'],
       pinned: (map['pinned'] ?? 0) == 1,
+      isArchived: (map['isArchived'] ?? 0) == 1,
     );
   }
 

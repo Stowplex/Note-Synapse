@@ -273,12 +273,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ],
                     ),
                   ),
+                PopupMenuItem(
+                  value: 'archive',
+                  child: Row(
+                    children: [
+                      Icon(
+                        currentNote.isArchived ? Icons.unarchive : Icons.archive,
+                        color: currentNote.isArchived ? Colors.orange : Colors.grey[600],
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        currentNote.isArchived ? 'Unarchive' : 'Archive',
+                        style: TextStyle(
+                          color: currentNote.isArchived ? Colors.orange : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
               onSelected: (value) {
                 if (value == 'delete') {
                   _deleteNote();
                 } else if (value == 'convert') {
                   _convertNoteType();
+                } else if (value == 'archive') {
+                  _toggleArchive();
                 }
               },
             ),
@@ -1153,6 +1173,59 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     
     context.read<AppProvider>().updateNote(updatedNote);
     Navigator.pop(context);
+  }
+
+  void _toggleArchive() {
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
+    // Check if trying to archive a pinned note
+    if (!currentNote.isArchived && currentNote.pinned) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cannot Archive Pinned Note'),
+          content: const Text('Please unpin the note first before archiving it.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    final action = currentNote.isArchived ? 'unarchive' : 'archive';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${action == 'archive' ? 'Archive' : 'Unarchive'} Note'),
+        content: Text('Are you sure you want to ${action} this note?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              final updatedNote = currentNote.copyWith(
+                isArchived: !currentNote.isArchived,
+                pinned: currentNote.isArchived ? currentNote.pinned : false, // Unpin when archiving
+                updatedAt: DateTime.now(),
+              );
+              context.read<AppProvider>().updateNote(updatedNote);
+              Navigator.pop(context);
+            },
+            child: Text(action == 'archive' ? 'Archive' : 'Unarchive'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleSubNoteCompletion(SubNote subNote) {

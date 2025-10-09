@@ -579,14 +579,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                  width: 1,
+                ),
               ),
               child: Text(
                 _formatDate(date),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ),
@@ -841,8 +845,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<Note> _filterNotes(List<Note> notes) {
-    // Filter to only show tasks
-    final tasks = notes.where((note) => note.isTask).toList();
+    // Filter to only show tasks that are not archived
+    final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
     
     if (_selectedTags.isEmpty) {
       return tasks;
@@ -854,7 +858,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<Note> _filterTasks(List<Note> notes) {
-    final tasks = notes.where((note) => note.isTask).toList();
+    final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
     
     if (_selectedTags.isEmpty) {
       return tasks;

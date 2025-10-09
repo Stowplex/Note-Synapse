@@ -36,6 +36,7 @@ class AppProvider extends ChangeNotifier {
       await _databaseService.cleanupExpiredAIInteractions();
       
       _error = null;
+      notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
       print('Error in loadData: $e'); // Debug logging
@@ -385,6 +386,7 @@ class AppProvider extends ChangeNotifier {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return _notes.where((note) => 
       note.isTask && 
+      !note.isArchived &&
       (note.scheduledAt == dateStr || note.completeBy == dateStr ||
        (note.scheduledAt != null && note.completeBy != null &&
         _isDateInRange(dateStr, note.scheduledAt!, note.completeBy!)))
@@ -404,6 +406,7 @@ class AppProvider extends ChangeNotifier {
 
   List<Note> getNotesForDate(DateTime date) {
     return _notes.where((note) => 
+      !note.isArchived &&
       note.createdAt.year == date.year &&
       note.createdAt.month == date.month &&
       note.createdAt.day == date.day

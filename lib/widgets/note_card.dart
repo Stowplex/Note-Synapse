@@ -12,6 +12,7 @@ class NoteCard extends StatelessWidget {
   final Function(TaskStatus)? onStatusChanged;
   final VoidCallback? onAddSubNote;
   final VoidCallback? onPinToggle;
+  final VoidCallback? onArchiveToggle;
   final Function(String)? onContentChanged;
 
   const NoteCard({
@@ -23,6 +24,7 @@ class NoteCard extends StatelessWidget {
     this.onStatusChanged,
     this.onAddSubNote,
     this.onPinToggle,
+    this.onArchiveToggle,
     this.onContentChanged,
   });
 
@@ -66,6 +68,18 @@ class NoteCard extends StatelessWidget {
                       ),
                       onPressed: onPinToggle,
                       tooltip: note.pinned ? 'Unpin note' : 'Pin note',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (onArchiveToggle != null)
+                    IconButton(
+                      icon: Icon(
+                        note.isArchived ? Icons.archive : Icons.archive_outlined,
+                        color: note.isArchived ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        size: 20,
+                      ),
+                      onPressed: onArchiveToggle,
+                      tooltip: note.isArchived ? 'Unarchive note' : 'Archive note',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),

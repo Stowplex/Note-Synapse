@@ -36,6 +36,7 @@ class Note {
   final TaskStatus? status; // For tasks only
   final double? completionPercentage; // For tasks only
   final bool pinned; // Whether the note is pinned to the top
+  final bool isArchived; // Whether the note is archived
 
   Note({
     required this.id,
@@ -52,6 +53,7 @@ class Note {
     this.status,
     this.completionPercentage,
     this.pinned = false,
+    this.isArchived = false,
   });
 
   factory Note.fromJson(Map<String, dynamic> json) => _$NoteFromJson(json);
@@ -72,6 +74,7 @@ class Note {
     TaskStatus? status,
     double? completionPercentage,
     bool? pinned,
+    bool? isArchived,
   }) {
     return Note(
       id: id ?? this.id,
@@ -88,6 +91,7 @@ class Note {
       status: status ?? this.status,
       completionPercentage: completionPercentage ?? this.completionPercentage,
       pinned: pinned ?? this.pinned,
+      isArchived: isArchived ?? this.isArchived,
     );
   }
 

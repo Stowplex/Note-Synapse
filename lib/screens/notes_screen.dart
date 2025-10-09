@@ -22,6 +22,7 @@ class _NotesScreenState extends State<NotesScreen> {
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
   List<String> _availableTags = [];
+  String _selectedView = 'default'; // 'default', 'pinned', 'archived', 'all'
 
   @override
   void initState() {
@@ -91,20 +92,46 @@ class _NotesScreenState extends State<NotesScreen> {
           ],
         ],
         bottom: _isMultiSelectMode ? null : PreferredSize(
-          preferredSize: const Size.fromHeight(60),
+          preferredSize: const Size.fromHeight(120),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search notes...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              ),
-              onChanged: (value) {
-                setState(() {});
-              },
+            child: Column(
+              children: [
+                // Search bar
+                TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'Search notes...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  onChanged: (value) {
+                    setState(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                // View filter bar
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildViewFilterChip('default', 'Default'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewFilterChip('pinned', 'Pinned'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewFilterChip('archived', 'Archived'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewFilterChip('all', 'All'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -203,6 +230,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
                     onAddSubNote: () => _addSubNote(note),
                     onPinToggle: () => _toggleNotePin(note.id),
+                    onArchiveToggle: () => _toggleNoteArchive(note.id),
                     onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
                   ),
                 ),
@@ -214,8 +242,59 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
+  Widget _buildViewFilterChip(String value, String label) {
+    final isSelected = _selectedView == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedView = value;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: isSelected 
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outline,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isSelected 
+                ? Theme.of(context).colorScheme.onPrimary
+                : Theme.of(context).colorScheme.onSurface,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Note> _filterNotes(List<Note> notes) {
     List<Note> filteredNotes = notes;
+    
+    // Filter by view type
+    switch (_selectedView) {
+      case 'default':
+        filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
+        break;
+      case 'pinned':
+        filteredNotes = filteredNotes.where((note) => note.pinned && !note.isArchived).toList();
+        break;
+      case 'archived':
+        filteredNotes = filteredNotes.where((note) => note.isArchived).toList();
+        break;
+      case 'all':
+        // No additional filtering needed
+        break;
+    }
     
     // Filter by tags (OR logic - show notes that have ANY of the selected tags)
     if (_selectedTags.isNotEmpty) {
@@ -318,6 +397,56 @@ class _NotesScreenState extends State<NotesScreen> {
 
   void _toggleNotePin(String noteId) {
     context.read<AppProvider>().toggleNotePin(noteId);
+  }
+
+  void _toggleNoteArchive(String noteId) {
+    final appProvider = context.read<AppProvider>();
+    final note = appProvider.notes.firstWhere((n) => n.id == noteId);
+    
+    // Check if trying to archive a pinned note
+    if (!note.isArchived && note.pinned) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cannot Archive Pinned Note'),
+          content: const Text('Please unpin the note first before archiving it.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    final action = note.isArchived ? 'unarchive' : 'archive';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${action == 'archive' ? 'Archive' : 'Unarchive'} Note'),
+        content: Text('Are you sure you want to ${action} this note?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              final updatedNote = note.copyWith(
+                isArchived: !note.isArchived,
+                pinned: note.isArchived ? note.pinned : false, // Unpin when archiving
+                updatedAt: DateTime.now(),
+              );
+              appProvider.updateNote(updatedNote);
+            },
+            child: Text(action == 'archive' ? 'Archive' : 'Unarchive'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _linkSelectedNotes() {

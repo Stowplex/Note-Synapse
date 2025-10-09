@@ -31,6 +31,7 @@ Note _$NoteFromJson(Map<String, dynamic> json) => Note(
   status: $enumDecodeNullable(_$TaskStatusEnumMap, json['status']),
   completionPercentage: (json['completionPercentage'] as num?)?.toDouble(),
   pinned: json['pinned'] as bool? ?? false,
+  isArchived: json['isArchived'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$NoteToJson(Note instance) => <String, dynamic>{
@@ -48,6 +49,7 @@ Map<String, dynamic> _$NoteToJson(Note instance) => <String, dynamic>{
   'status': _$TaskStatusEnumMap[instance.status],
   'completionPercentage': instance.completionPercentage,
   'pinned': instance.pinned,
+  'isArchived': instance.isArchived,
 };
 
 const _$NoteTypeEnumMap = {NoteType.note: 'note', NoteType.task: 'task'};
