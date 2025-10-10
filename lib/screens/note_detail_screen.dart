@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:markdown_toolbar/markdown_toolbar.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -30,6 +31,7 @@ class NoteDetailScreen extends StatefulWidget {
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
+  late FocusNode _contentFocusNode;
   bool _isEditing = false;
   bool _hasChanges = false;
   bool _hasBeenSaved = false; // Track if note has been saved to database
@@ -53,6 +55,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     super.initState();
     _titleController = TextEditingController(text: widget.note.title);
     _contentController = TextEditingController(text: widget.note.content);
+    _contentFocusNode = FocusNode();
     
     // Initialize date fields for tasks
     if (widget.note.isTask) {
@@ -108,6 +111,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _autoSaveTimer?.cancel();
     _titleController.dispose();
     _contentController.dispose();
+    _contentFocusNode.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     super.dispose();
@@ -639,6 +643,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Expanded(
             child: TextField(
               controller: _contentController,
+              focusNode: _contentFocusNode,
               decoration: InputDecoration(
                 labelText: l10n.content,
                 border: const OutlineInputBorder(),
@@ -650,99 +655,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          _buildMarkdownButtons(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMarkdownButtons() {
-    final l10n = AppLocalizations.of(context)!;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildMarkdownButton(
-            icon: Icons.check_box_outline_blank,
-            label: l10n.checkbox,
-            onPressed: _insertCheckbox,
-          ),
-          _buildMarkdownButton(
-            icon: Icons.title,
-            label: l10n.title,
-            onPressed: _insertTitle,
-          ),
-          _buildMarkdownButton(
-            icon: Icons.format_bold,
-            label: l10n.bold,
-            onPressed: _insertBold,
+          MarkdownToolbar(
+            useIncludedTextField: false,
+            controller: _contentController,
+            focusNode: _contentFocusNode,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMarkdownButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        minimumSize: const Size(0, 36),
-      ),
-    );
-  }
-
-  void _insertCheckbox() {
-    _insertTextAtCursor('\n\n[ ] \n\n');
-  }
-
-  void _insertTitle() {
-    _insertTextAtCursor('\n\n** \n\n');
-  }
-
-  void _insertBold() {
-    _insertTextAtCursor('****', selectMiddle: true);
-  }
-
-  void _insertTextAtCursor(String text, {bool selectMiddle = false}) {
-    final textEditingValue = _contentController.value;
-    final selection = textEditingValue.selection;
-    
-    if (selection.isValid) {
-      final newText = textEditingValue.text.replaceRange(
-        selection.start,
-        selection.end,
-        text,
-      );
-      
-      int newCursorPosition;
-      if (selectMiddle && text.length > 0) {
-        // For bold text, place cursor between the ** markers
-        newCursorPosition = selection.start + (text.length ~/ 2);
-      } else {
-        // For other text, place cursor at the end
-        newCursorPosition = selection.start + text.length;
-      }
-      
-      _contentController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: newCursorPosition),
-      );
-    } else {
-      // If no selection, append to the end
-      _contentController.text += text;
-      _contentController.selection = TextSelection.collapsed(
-        offset: _contentController.text.length,
-      );
-    }
-  }
 
   Widget _buildDateSelectionFields() {
     final l10n = AppLocalizations.of(context)!;
