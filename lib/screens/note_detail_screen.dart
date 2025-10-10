@@ -372,20 +372,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 8),
             ...currentNote.subNotes.map((subNote) => Card(
               child: ListTile(
-                leading: Icon(
-                  subNote.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: subNote.isCompleted ? Colors.green : Colors.grey,
-                ),
-                title: SelectableText(subNote.name),
-                subtitle: InteractiveCheckboxList(
-                  key: ValueKey('subnote_${subNote.id}'),
-                  originalContent: subNote.content,
-                  onContentChanged: (newContent) => _updateSubNoteContent(subNote, newContent),
-                  style: Theme.of(context).textTheme.bodySmall,
-                  textDirection: TextDirection.ltr,
-                  onLinkTap: _handleLinkTap,
-                ),
-                trailing: PopupMenuButton(
+                    leading: Icon(
+                      subNote.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: subNote.isCompleted ? Colors.green : Colors.grey,
+                    ),
+                    title: SelectableText(subNote.name),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        InteractiveCheckboxList(
+                          key: ValueKey('subnote_${subNote.id}'),
+                          originalContent: subNote.content,
+                          onContentChanged: (newContent) => _updateSubNoteContent(subNote, newContent),
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textDirection: TextDirection.ltr,
+                          onLinkTap: _handleLinkTap,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${l10n.created} ${AppDateUtils.formatDateOnly(subNote.createdAt)}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: PopupMenuButton(
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'edit',
