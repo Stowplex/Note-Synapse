@@ -714,7 +714,7 @@ class GeminiApiService {
 
   static String _buildMultiNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
     if (useOwnKnowledge) {
-      return '''
+      return r'''
 Based on the following notes and their linked relationships, please answer the question: "$question"
 
 Context Notes (including linked notes and their relationships):
@@ -727,10 +727,20 @@ Please provide a comprehensive answer using both the information in the notes an
 - The direction of relationships (→ for outgoing, ← for incoming)
 - Your own knowledge to provide additional insights, explanations, or expanded context
 
+IMPORTANT - Math Formula Guidelines:
+- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
+- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
+- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Examples:
+  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
+  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+- Preserve all mathematical notation, symbols, and formatting accurately
+- If explaining complex equations, break them down into logical components
+
 You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
 ''';
     } else {
-      return '''
+      return r'''
 Based on the following notes and their linked relationships, please answer the question: "$question"
 
 Context Notes (including linked notes and their relationships):
@@ -741,6 +751,16 @@ Please provide a comprehensive answer based ONLY on the information in the notes
 - The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
 - How linked notes might provide additional context or clarification
 - The direction of relationships (→ for outgoing, ← for incoming)
+
+IMPORTANT - Math Formula Guidelines:
+- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
+- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
+- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Examples:
+  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
+  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+- Preserve all mathematical notation, symbols, and formatting accurately
+- If explaining complex equations, break them down into logical components
 
 If the answer cannot be found in the provided context, please state that clearly and do not use your own knowledge to supplement the answer.
 ''';
@@ -815,13 +835,23 @@ If the answer cannot be found in the provided context, please state that clearly
     }
     
     buffer.writeln();
+    buffer.writeln('IMPORTANT - Math Formula Guidelines:');
+    buffer.writeln('- When including mathematical formulas, equations, or expressions in the transformed content, use LaTeX format');
+    buffer.writeln(r'- Use the format: \( formula \) for inline math (without leading and ending $ symbols)');
+    buffer.writeln(r'- Use the format: \[ formula \] for display math (without leading and ending $ symbols)');
+    buffer.writeln('- Examples:');
+    buffer.writeln(r'  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)');
+    buffer.writeln(r'  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]');
+    buffer.writeln('- Preserve all mathematical notation, symbols, and formatting accurately');
+    buffer.writeln('- If transforming complex equations, break them down into logical components');
+    buffer.writeln();
     buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.');
     
     return buffer.toString();
   }
 
   static String _buildNewNoteCreationPrompt(String prompt, String context) {
-    return '''
+    return r'''
 Based on the following context and prompt, please create one or more new notes.
 
 Context Notes (including linked notes and their relationships):
@@ -833,6 +863,16 @@ IMPORTANT:
 - When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
 - Consider the relationships between notes in the context when creating new notes. If the context shows linked notes with specific relationship types (answers, causality, related, subnote, parent, references, expands, contradicts, supports), consider how your new notes might relate to existing ones.
 - Pay attention to the hierarchical structure shown in the context (indented linked notes) to understand the note relationships.
+
+IMPORTANT - Math Formula Guidelines:
+- When including mathematical formulas, equations, or expressions in note content, use LaTeX format
+- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
+- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Examples:
+  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
+  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+- Preserve all mathematical notation, symbols, and formatting accurately
+- If creating notes with complex equations, break them down into logical components
 
 Please create the new note(s) in the following JSON format:
 {
@@ -1085,7 +1125,7 @@ If creating multiple notes, ensure they are related and useful based on the cont
   }
 
   static String _buildContentExtractionPrompt(String text, String contentType, String title) {
-    return '''
+    return r'''
 Please analyze and extract the key content from this $contentType. 
 
 Title: $title
@@ -1098,6 +1138,16 @@ Please provide a well-structured summary that includes:
 2. Key points and important information
 3. Any actionable items or insights
 4. Relevant context or background information
+
+IMPORTANT - Math Formula Guidelines:
+- When encountering mathematical formulas, equations, or expressions, represent them using LaTeX format
+- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
+- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Examples:
+  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
+  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+- Preserve all mathematical notation, symbols, and formatting accurately
+- If you encounter complex equations, break them down into logical components
 
 Format the response in a clear, organized manner that would be useful for note-taking and future reference.
 ''';
