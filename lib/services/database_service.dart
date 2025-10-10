@@ -562,6 +562,108 @@ class DatabaseService {
     });
   }
 
+  Future<int> getTagUsageCount(String tagName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT COUNT(*) as count
+      FROM note_tags nt
+      JOIN tags t ON nt.tagId = t.id
+      WHERE t.name = ?
+    ''', [tagName]);
+    
+    return maps.first['count'] as int;
+  }
+
+  Future<void> deleteTag(String tagName) async {
+    final db = await database;
+    
+    // First, get the tag ID
+    final tagMaps = await db.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: [tagName],
+    );
+    
+    if (tagMaps.isEmpty) return; // Tag doesn't exist
+    
+    final tagId = tagMaps.first['id'] as String;
+    
+    // Delete all note-tag relationships for this tag
+    await db.delete('note_tags', where: 'tagId = ?', whereArgs: [tagId]);
+    
+    // Delete the tag itself
+    await db.delete('tags', where: 'id = ?', whereArgs: [tagId]);
+  }
+
+  Future<void> replaceTag(String oldTagName, String newTagName) async {
+    final db = await database;
+    
+    // Get the old tag ID
+    final oldTagMaps = await db.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: [oldTagName],
+    );
+    
+    if (oldTagMaps.isEmpty) return; // Old tag doesn't exist
+    
+    final oldTagId = oldTagMaps.first['id'] as String;
+    
+    // Check if new tag already exists
+    final newTagMaps = await db.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: [newTagName],
+    );
+    
+    String newTagId;
+    if (newTagMaps.isEmpty) {
+      // Create new tag
+      final newTag = Tag(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: newTagName,
+        color: oldTagMaps.first['color'] as String, // Use same color as old tag
+        createdAt: DateTime.now(),
+      );
+      newTagId = await insertTag(newTag);
+    } else {
+      newTagId = newTagMaps.first['id'] as String;
+    }
+    
+    // Get all notes that have the old tag
+    final noteTagMaps = await db.query(
+      'note_tags',
+      where: 'tagId = ?',
+      whereArgs: [oldTagId],
+    );
+    
+    // For each note, add the new tag if it doesn't already exist
+    for (final noteTagMap in noteTagMaps) {
+      final noteId = noteTagMap['noteId'] as String;
+      
+      // Check if this note already has the new tag
+      final existingNewTag = await db.query(
+        'note_tags',
+        where: 'noteId = ? AND tagId = ?',
+        whereArgs: [noteId, newTagId],
+      );
+      
+      // Only insert if the note doesn't already have the new tag
+      if (existingNewTag.isEmpty) {
+        await db.insert('note_tags', {
+          'noteId': noteId,
+          'tagId': newTagId,
+        });
+      }
+    }
+    
+    // Delete all old tag relationships
+    await db.delete('note_tags', where: 'tagId = ?', whereArgs: [oldTagId]);
+    
+    // Delete the old tag
+    await db.delete('tags', where: 'id = ?', whereArgs: [oldTagId]);
+  }
+
   // Relationships CRUD
   Future<String> insertRelationship(Relationship relationship) async {
     final db = await database;

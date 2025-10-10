@@ -1095,4 +1095,120 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get delete => 'Delete';
+
+  @override
+  String get manageTags => 'Manage Tags';
+
+  @override
+  String get tagManagement => 'Tag Management';
+
+  @override
+  String tagUsageCount(Object count) {
+    return '$count notes';
+  }
+
+  @override
+  String get deleteTag => 'Delete Tag';
+
+  @override
+  String confirmDeleteTag(Object tagName) {
+    return 'Are you sure you want to delete the tag \"$tagName\"?';
+  }
+
+  @override
+  String confirmDeleteTagWarning(Object count) {
+    return 'This will remove the tag from all $count associated notes. This action cannot be undone.';
+  }
+
+  @override
+  String get tagDeletedSuccessfully => 'Tag deleted successfully!';
+
+  @override
+  String errorDeletingTag(Object error) {
+    return 'Error deleting tag: $error';
+  }
+
+  @override
+  String get noTagsAvailable => 'No tags available';
+
+  @override
+  String get tagUsage => 'Usage';
+
+  @override
+  String get deleteTags => 'Delete Tags';
+
+  @override
+  String get dedupTags => 'Dedup Tags';
+
+  @override
+  String get dedupRules => 'Dedup Rules';
+
+  @override
+  String get addDedupRule => 'Add Dedup Rule';
+
+  @override
+  String get leftTag => 'Left Tag';
+
+  @override
+  String get rightTag => 'Right Tag';
+
+  @override
+  String get selectLeftTag => 'Select Left Tag';
+
+  @override
+  String get selectRightTag => 'Select Right Tag';
+
+  @override
+  String get swapTags => 'Swap Tags';
+
+  @override
+  String get executeDedup => 'Execute';
+
+  @override
+  String get aiSuggestDedup => 'AI Suggest';
+
+  @override
+  String get noDedupRules => 'No dedup rules yet';
+
+  @override
+  String get addFirstDedupRule => 'Add your first dedup rule';
+
+  @override
+  String dedupRuleValidationError(Object error) {
+    return 'Invalid dedup rule: $error';
+  }
+
+  @override
+  String get dedupRulesExecutedSuccessfully =>
+      'Dedup rules executed successfully!';
+
+  @override
+  String errorExecutingDedupRules(Object error) {
+    return 'Error executing dedup rules: $error';
+  }
+
+  @override
+  String get aiSuggestingDedupRules => 'AI is suggesting dedup rules...';
+
+  @override
+  String errorGettingAiSuggestions(Object error) {
+    return 'Error getting AI suggestions: $error';
+  }
+
+  @override
+  String get confirmExecuteDedupRules =>
+      'Are you sure you want to execute these dedup rules? This will replace all left tags with right tags and cannot be undone.';
+
+  @override
+  String get dedupRuleLeftTagDuplicate => 'Left tag appears in multiple rules';
+
+  @override
+  String get dedupRuleRightTagDuplicate =>
+      'Right tag appears in multiple rules';
+
+  @override
+  String get dedupRuleCircularReference => 'Circular reference detected';
+
+  @override
+  String get dedupRuleSelfReference => 'Cannot replace tag with itself';
 }

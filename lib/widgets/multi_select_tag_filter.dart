@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import '../screens/tag_management_screen.dart';
 
 class MultiSelectTagFilter extends StatefulWidget {
   final List<String> availableTags;
@@ -109,6 +110,16 @@ class _FilterDialogState extends State<_FilterDialog> {
     widget.onSelectionChanged(_localSelectedTags);
   }
 
+  void _navigateToTagManagement(BuildContext context) {
+    Navigator.pop(context); // Close the filter dialog first
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TagManagementScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -172,6 +183,11 @@ class _FilterDialogState extends State<_FilterDialog> {
         ),
       ),
       actions: [
+        TextButton(
+          onPressed: () => _navigateToTagManagement(context),
+          child: Text(l10n.manageTags),
+        ),
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.close),

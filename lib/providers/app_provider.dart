@@ -403,6 +403,72 @@ class AppProvider extends ChangeNotifier {
     return allTags.toList()..sort();
   }
 
+  Future<int> getTagUsageCount(String tagName) async {
+    try {
+      return await _databaseService.getTagUsageCount(tagName);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return 0;
+    }
+  }
+
+  Future<void> deleteTag(String tagName) async {
+    try {
+      await _databaseService.deleteTag(tagName);
+      
+      // Remove the tag from all notes in local state
+      for (int i = 0; i < _notes.length; i++) {
+        if (_notes[i].tags.contains(tagName)) {
+          final updatedTags = List<String>.from(_notes[i].tags)..remove(tagName);
+          _notes[i] = _notes[i].copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
+        }
+      }
+      
+      // Reload tags to update the list
+      _tags = await _databaseService.getAllTags();
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> replaceTag(String oldTagName, String newTagName) async {
+    try {
+      await _databaseService.replaceTag(oldTagName, newTagName);
+      
+      // Update the tag in all notes in local state
+      for (int i = 0; i < _notes.length; i++) {
+        if (_notes[i].tags.contains(oldTagName)) {
+          final updatedTags = List<String>.from(_notes[i].tags);
+          final oldTagIndex = updatedTags.indexOf(oldTagName);
+          if (oldTagIndex != -1) {
+            updatedTags[oldTagIndex] = newTagName;
+            _notes[i] = _notes[i].copyWith(
+              tags: updatedTags,
+              updatedAt: DateTime.now(),
+            );
+          }
+        }
+      }
+      
+      // Reload tags to update the list
+      _tags = await _databaseService.getAllTags();
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   List<Note> getTasksForDate(DateTime date) {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return _notes.where((note) => 

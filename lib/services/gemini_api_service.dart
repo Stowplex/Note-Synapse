@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
+import '../models/dedup_rule.dart';
 import 'secure_storage_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
@@ -1216,6 +1217,99 @@ Format the response in a clear, organized manner that would be useful for note-t
       return responseData['candidates'][0]['content']['parts'][0]['text'];
     } else {
       throw Exception('API request failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  // AI suggestion for dedup rules
+  static Future<List<DedupRule>> suggestDedupRules(List<String> tagNames) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting AI dedup rules suggestion', error: {
+      'tagNames': tagNames,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for dedup rules suggestion', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+
+    try {
+      final prompt = _buildDedupRulesSuggestionPrompt(tagNames);
+      final response = await _makeGeminiRequest(apiKey, prompt, requestId: requestId);
+      
+      LoggerService.debug('AI dedup rules suggestion completed', error: {
+        'requestId': requestId,
+        'responseLength': response.length,
+      });
+
+      return _parseDedupRulesResponse(response);
+    } catch (e) {
+      LoggerService.error('AI dedup rules suggestion failed', error: {
+        'requestId': requestId,
+        'error': e.toString(),
+      });
+      throw Exception('AI dedup rules suggestion failed: $e');
+    }
+  }
+
+  static String _buildDedupRulesSuggestionPrompt(List<String> tagNames) {
+    return '''
+Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. 
+
+Tags: ${tagNames.join(', ')}
+
+Please suggest rules in the format "leftTag -> rightTag" where:
+- leftTag is the tag that should be replaced
+- rightTag is the tag that should replace it
+
+Rules to follow:
+1. No tag should appear as leftTag in multiple rules (each tag can only be replaced once)
+2. No tag should appear as both leftTag in one rule and rightTag in another rule (no cross-references)
+3. Do not suggest self-replacement (A -> A)
+4. It IS allowed for a tag to appear as rightTag in multiple rules (consolidating multiple tags into one)
+5. Focus on consolidating similar tags, typos, or variations
+6. Prefer shorter, more standard tag names
+7. Consider semantic similarity (e.g., "work" and "job" could be consolidated)
+
+Please respond with a JSON array of objects in this format:
+[
+  {"leftTag": "old_tag_name", "rightTag": "new_tag_name"},
+  {"leftTag": "another_old_tag", "rightTag": "another_new_tag"}
+]
+
+Only suggest rules that would genuinely improve tag organization. If no meaningful consolidations are possible, return an empty array.
+''';
+  }
+
+  static List<DedupRule> _parseDedupRulesResponse(String response) {
+    try {
+      // Extract JSON from the response
+      final jsonStart = response.indexOf('[');
+      final jsonEnd = response.lastIndexOf(']') + 1;
+      
+      if (jsonStart == -1 || jsonEnd == 0) {
+        return [];
+      }
+      
+      final jsonString = response.substring(jsonStart, jsonEnd);
+      final List<dynamic> rulesJson = jsonDecode(jsonString);
+      
+      final List<DedupRule> rules = [];
+      
+      for (final ruleJson in rulesJson) {
+        final rule = DedupRule(
+          id: DateTime.now().millisecondsSinceEpoch.toString() + '_${rules.length}',
+          leftTag: ruleJson['leftTag'] as String,
+          rightTag: ruleJson['rightTag'] as String,
+        );
+        rules.add(rule);
+      }
+      
+      return rules;
+    } catch (e) {
+      LoggerService.warning('Failed to parse AI dedup rules response: $e');
+      return [];
     }
   }
 }

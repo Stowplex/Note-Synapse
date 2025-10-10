@@ -2101,6 +2101,204 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete'**
   String get delete;
+
+  /// No description provided for @manageTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Tags'**
+  String get manageTags;
+
+  /// No description provided for @tagManagement.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag Management'**
+  String get tagManagement;
+
+  /// No description provided for @tagUsageCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} notes'**
+  String tagUsageCount(Object count);
+
+  /// No description provided for @deleteTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Tag'**
+  String get deleteTag;
+
+  /// No description provided for @confirmDeleteTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete the tag \"{tagName}\"?'**
+  String confirmDeleteTag(Object tagName);
+
+  /// No description provided for @confirmDeleteTagWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This will remove the tag from all {count} associated notes. This action cannot be undone.'**
+  String confirmDeleteTagWarning(Object count);
+
+  /// No description provided for @tagDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag deleted successfully!'**
+  String get tagDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting tag: {error}'**
+  String errorDeletingTag(Object error);
+
+  /// No description provided for @noTagsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No tags available'**
+  String get noTagsAvailable;
+
+  /// No description provided for @tagUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage'**
+  String get tagUsage;
+
+  /// No description provided for @deleteTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Tags'**
+  String get deleteTags;
+
+  /// No description provided for @dedupTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Dedup Tags'**
+  String get dedupTags;
+
+  /// No description provided for @dedupRules.
+  ///
+  /// In en, this message translates to:
+  /// **'Dedup Rules'**
+  String get dedupRules;
+
+  /// No description provided for @addDedupRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Dedup Rule'**
+  String get addDedupRule;
+
+  /// No description provided for @leftTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Left Tag'**
+  String get leftTag;
+
+  /// No description provided for @rightTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Right Tag'**
+  String get rightTag;
+
+  /// No description provided for @selectLeftTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Left Tag'**
+  String get selectLeftTag;
+
+  /// No description provided for @selectRightTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Right Tag'**
+  String get selectRightTag;
+
+  /// No description provided for @swapTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Swap Tags'**
+  String get swapTags;
+
+  /// No description provided for @executeDedup.
+  ///
+  /// In en, this message translates to:
+  /// **'Execute'**
+  String get executeDedup;
+
+  /// No description provided for @aiSuggestDedup.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Suggest'**
+  String get aiSuggestDedup;
+
+  /// No description provided for @noDedupRules.
+  ///
+  /// In en, this message translates to:
+  /// **'No dedup rules yet'**
+  String get noDedupRules;
+
+  /// No description provided for @addFirstDedupRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your first dedup rule'**
+  String get addFirstDedupRule;
+
+  /// No description provided for @dedupRuleValidationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid dedup rule: {error}'**
+  String dedupRuleValidationError(Object error);
+
+  /// No description provided for @dedupRulesExecutedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Dedup rules executed successfully!'**
+  String get dedupRulesExecutedSuccessfully;
+
+  /// No description provided for @errorExecutingDedupRules.
+  ///
+  /// In en, this message translates to:
+  /// **'Error executing dedup rules: {error}'**
+  String errorExecutingDedupRules(Object error);
+
+  /// No description provided for @aiSuggestingDedupRules.
+  ///
+  /// In en, this message translates to:
+  /// **'AI is suggesting dedup rules...'**
+  String get aiSuggestingDedupRules;
+
+  /// No description provided for @errorGettingAiSuggestions.
+  ///
+  /// In en, this message translates to:
+  /// **'Error getting AI suggestions: {error}'**
+  String errorGettingAiSuggestions(Object error);
+
+  /// No description provided for @confirmExecuteDedupRules.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to execute these dedup rules? This will replace all left tags with right tags and cannot be undone.'**
+  String get confirmExecuteDedupRules;
+
+  /// No description provided for @dedupRuleLeftTagDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Left tag appears in multiple rules'**
+  String get dedupRuleLeftTagDuplicate;
+
+  /// No description provided for @dedupRuleRightTagDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Right tag appears in multiple rules'**
+  String get dedupRuleRightTagDuplicate;
+
+  /// No description provided for @dedupRuleCircularReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Circular reference detected'**
+  String get dedupRuleCircularReference;
+
+  /// No description provided for @dedupRuleSelfReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot replace tag with itself'**
+  String get dedupRuleSelfReference;
 }
 
 class _AppLocalizationsDelegate

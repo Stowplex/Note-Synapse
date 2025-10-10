@@ -1079,4 +1079,117 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get delete => '删除';
+
+  @override
+  String get manageTags => '管理标签';
+
+  @override
+  String get tagManagement => '标签管理';
+
+  @override
+  String tagUsageCount(Object count) {
+    return '$count条笔记';
+  }
+
+  @override
+  String get deleteTag => '删除标签';
+
+  @override
+  String confirmDeleteTag(Object tagName) {
+    return '您确定要删除标签\"$tagName\"吗？';
+  }
+
+  @override
+  String confirmDeleteTagWarning(Object count) {
+    return '这将从所有$count条关联笔记中移除该标签。此操作无法撤销。';
+  }
+
+  @override
+  String get tagDeletedSuccessfully => '标签删除成功！';
+
+  @override
+  String errorDeletingTag(Object error) {
+    return '删除标签时出错：$error';
+  }
+
+  @override
+  String get noTagsAvailable => '没有可用的标签';
+
+  @override
+  String get tagUsage => '使用情况';
+
+  @override
+  String get deleteTags => '删除标签';
+
+  @override
+  String get dedupTags => '去重标签';
+
+  @override
+  String get dedupRules => '去重规则';
+
+  @override
+  String get addDedupRule => '添加去重规则';
+
+  @override
+  String get leftTag => '左侧标签';
+
+  @override
+  String get rightTag => '右侧标签';
+
+  @override
+  String get selectLeftTag => '选择左侧标签';
+
+  @override
+  String get selectRightTag => '选择右侧标签';
+
+  @override
+  String get swapTags => '交换标签';
+
+  @override
+  String get executeDedup => '执行';
+
+  @override
+  String get aiSuggestDedup => 'AI建议';
+
+  @override
+  String get noDedupRules => '暂无去重规则';
+
+  @override
+  String get addFirstDedupRule => '添加您的第一个去重规则';
+
+  @override
+  String dedupRuleValidationError(Object error) {
+    return '无效的去重规则：$error';
+  }
+
+  @override
+  String get dedupRulesExecutedSuccessfully => '去重规则执行成功！';
+
+  @override
+  String errorExecutingDedupRules(Object error) {
+    return '执行去重规则时出错：$error';
+  }
+
+  @override
+  String get aiSuggestingDedupRules => 'AI正在建议去重规则...';
+
+  @override
+  String errorGettingAiSuggestions(Object error) {
+    return '获取AI建议时出错：$error';
+  }
+
+  @override
+  String get confirmExecuteDedupRules => '您确定要执行这些去重规则吗？这将用右侧标签替换所有左侧标签，且无法撤销。';
+
+  @override
+  String get dedupRuleLeftTagDuplicate => '左侧标签在多个规则中出现';
+
+  @override
+  String get dedupRuleRightTagDuplicate => '右侧标签在多个规则中出现';
+
+  @override
+  String get dedupRuleCircularReference => '检测到循环引用';
+
+  @override
+  String get dedupRuleSelfReference => '不能将标签替换为自身';
 }
