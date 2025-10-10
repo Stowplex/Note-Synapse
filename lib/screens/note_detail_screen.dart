@@ -656,9 +656,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           const SizedBox(height: 8),
           MarkdownToolbar(
+            collapsable: false,
             useIncludedTextField: false,
             controller: _contentController,
             focusNode: _contentFocusNode,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            iconColor: Theme.of(context).colorScheme.onSurface,
+            dropdownTextColor: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(8.0),
+            width: 60.0,
+            height: 40.0,
+            spacing: 4.0,
+            runSpacing: 4.0,
           ),
         ],
       ),
@@ -1013,6 +1022,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _startEditing() {
+    // Get the current note from the provider to ensure we have the latest content
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
+    // Update controllers with the latest content
+    _titleController.text = currentNote.title;
+    _contentController.text = currentNote.content;
+    
+    // Update date fields for tasks
+    if (currentNote.isTask) {
+      _scheduledAt = currentNote.scheduledAt != null 
+          ? DateTime.tryParse(currentNote.scheduledAt!) 
+          : null;
+      _completeBy = currentNote.completeBy != null 
+          ? DateTime.tryParse(currentNote.completeBy!) 
+          : null;
+    }
+    
     setState(() {
       _isEditing = true;
       _hasChanges = false;
@@ -1992,8 +2021,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // Update note content when checkboxes are toggled
   void _updateNoteContent(String newContent) async {
     if (mounted) {
+      // Cancel any pending auto-save to prevent race condition
+      _autoSaveTimer?.cancel();
+      
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       await appProvider.updateNoteContent(widget.note.id, newContent);
+      
+      // If we're in editing mode, update the content controller to reflect the changes
+      if (_isEditing) {
+        _contentController.text = newContent;
+        // Reset the hasChanges flag since we just updated the controller
+        setState(() {
+          _hasChanges = false;
+        });
+      }
     }
   }
 
