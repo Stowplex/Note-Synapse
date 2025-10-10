@@ -1045,4 +1045,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get task => 'Task';
+
+  @override
+  String get createFilter => 'Create Filter';
+
+  @override
+  String get editFilter => 'Edit Filter';
+
+  @override
+  String get filterName => 'Filter Name';
+
+  @override
+  String get filterNameHint => 'Enter a name for this filter';
+
+  @override
+  String get includeText => 'Include Text';
+
+  @override
+  String get includeTextHint => 'Text to search for in notes';
+
+  @override
+  String get includeTags => 'Include Tags';
+
+  @override
+  String get includeTagsHint => 'Select tags to filter by';
+
+  @override
+  String get includeArchivedNotes => 'Include archived notes';
+
+  @override
+  String get create => 'Create';
+
+  @override
+  String get selectTags => 'Select Tags';
+
+  @override
+  String get apply => 'Apply';
+
+  @override
+  String get deleteFilter => 'Delete Filter';
+
+  @override
+  String deleteFilterConfirm(Object filterName) {
+    return 'Are you sure you want to delete \"$filterName\"?';
+  }
+
+  @override
+  String get addFilter => 'Add Filter';
+
+  @override
+  String get delete => 'Delete';
 }

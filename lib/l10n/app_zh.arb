@@ -327,5 +327,22 @@
   "shareSelectedNotes": "分享选中的笔记",
   "type": "类型",
   "note": "笔记",
-  "task": "任务"
+  "task": "任务",
+  "createFilter": "创建筛选器",
+  "editFilter": "编辑筛选器",
+  "filterName": "筛选器名称",
+  "filterNameHint": "为此筛选器输入名称",
+  "includeText": "包含文本",
+  "includeTextHint": "在笔记中搜索的文本",
+  "includeTags": "包含标签",
+  "includeTagsHint": "选择要筛选的标签",
+  "includeArchivedNotes": "包含已归档笔记",
+  "update": "更新",
+  "create": "创建",
+  "selectTags": "选择标签",
+  "apply": "应用",
+  "deleteFilter": "删除筛选器",
+  "deleteFilterConfirm": "您确定要删除\"{filterName}\"吗？",
+  "addFilter": "添加筛选器",
+  "delete": "删除"
 }

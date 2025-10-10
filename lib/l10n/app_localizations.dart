@@ -2005,6 +2005,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Task'**
   String get task;
+
+  /// No description provided for @createFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Filter'**
+  String get createFilter;
+
+  /// No description provided for @editFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Filter'**
+  String get editFilter;
+
+  /// No description provided for @filterName.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter Name'**
+  String get filterName;
+
+  /// No description provided for @filterNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name for this filter'**
+  String get filterNameHint;
+
+  /// No description provided for @includeText.
+  ///
+  /// In en, this message translates to:
+  /// **'Include Text'**
+  String get includeText;
+
+  /// No description provided for @includeTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Text to search for in notes'**
+  String get includeTextHint;
+
+  /// No description provided for @includeTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Include Tags'**
+  String get includeTags;
+
+  /// No description provided for @includeTagsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select tags to filter by'**
+  String get includeTagsHint;
+
+  /// No description provided for @includeArchivedNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Include archived notes'**
+  String get includeArchivedNotes;
+
+  /// No description provided for @create.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get create;
+
+  /// No description provided for @selectTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Tags'**
+  String get selectTags;
+
+  /// No description provided for @apply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get apply;
+
+  /// No description provided for @deleteFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Filter'**
+  String get deleteFilter;
+
+  /// No description provided for @deleteFilterConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete \"{filterName}\"?'**
+  String deleteFilterConfirm(Object filterName);
+
+  /// No description provided for @addFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Filter'**
+  String get addFilter;
+
+  /// No description provided for @delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get delete;
 }
 
 class _AppLocalizationsDelegate

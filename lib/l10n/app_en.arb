@@ -327,5 +327,22 @@
   "shareSelectedNotes": "Share Selected Notes",
   "type": "Type",
   "note": "Note",
-  "task": "Task"
+  "task": "Task",
+  "createFilter": "Create Filter",
+  "editFilter": "Edit Filter",
+  "filterName": "Filter Name",
+  "filterNameHint": "Enter a name for this filter",
+  "includeText": "Include Text",
+  "includeTextHint": "Text to search for in notes",
+  "includeTags": "Include Tags",
+  "includeTagsHint": "Select tags to filter by",
+  "includeArchivedNotes": "Include archived notes",
+  "update": "Update",
+  "create": "Create",
+  "selectTags": "Select Tags",
+  "apply": "Apply",
+  "deleteFilter": "Delete Filter",
+  "deleteFilterConfirm": "Are you sure you want to delete \"{filterName}\"?",
+  "addFilter": "Add Filter",
+  "delete": "Delete"
 }

@@ -1029,4 +1029,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get task => '任务';
+
+  @override
+  String get createFilter => '创建筛选器';
+
+  @override
+  String get editFilter => '编辑筛选器';
+
+  @override
+  String get filterName => '筛选器名称';
+
+  @override
+  String get filterNameHint => '为此筛选器输入名称';
+
+  @override
+  String get includeText => '包含文本';
+
+  @override
+  String get includeTextHint => '在笔记中搜索的文本';
+
+  @override
+  String get includeTags => '包含标签';
+
+  @override
+  String get includeTagsHint => '选择要筛选的标签';
+
+  @override
+  String get includeArchivedNotes => '包含已归档笔记';
+
+  @override
+  String get create => '创建';
+
+  @override
+  String get selectTags => '选择标签';
+
+  @override
+  String get apply => '应用';
+
+  @override
+  String get deleteFilter => '删除筛选器';
+
+  @override
+  String deleteFilterConfirm(Object filterName) {
+    return '您确定要删除\"$filterName\"吗？';
+  }
+
+  @override
+  String get addFilter => '添加筛选器';
+
+  @override
+  String get delete => '删除';
 }

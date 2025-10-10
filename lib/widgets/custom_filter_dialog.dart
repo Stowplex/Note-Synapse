@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/filter.dart';
+import '../l10n/app_localizations.dart';
 
 class CustomFilterDialog extends StatefulWidget {
   final List<String> availableTags;
@@ -87,8 +88,9 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(widget.existingFilter != null ? 'Edit Filter' : 'Create Filter'),
+      title: Text(widget.existingFilter != null ? l10n.editFilter : l10n.createFilter),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -96,28 +98,28 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Filter Name',
-                border: OutlineInputBorder(),
-                hintText: 'Enter a name for this filter',
+              decoration: InputDecoration(
+                labelText: l10n.filterName,
+                border: const OutlineInputBorder(),
+                hintText: l10n.filterNameHint,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _includeTextController,
-              decoration: const InputDecoration(
-                labelText: 'Include Text',
-                border: OutlineInputBorder(),
-                hintText: 'Text to search for in notes',
+              decoration: InputDecoration(
+                labelText: l10n.includeText,
+                border: const OutlineInputBorder(),
+                hintText: l10n.includeTextHint,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _includeTagsController,
               decoration: InputDecoration(
-                labelText: 'Include Tags',
+                labelText: l10n.includeTags,
                 border: const OutlineInputBorder(),
-                hintText: 'Select tags to filter by',
+                hintText: l10n.includeTagsHint,
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: _showTagSelector,
@@ -140,7 +142,7 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
             ],
             const SizedBox(height: 16),
             CheckboxListTile(
-              title: const Text('Include archived notes'),
+              title: Text(l10n.includeArchivedNotes),
               value: _includeArchived,
               onChanged: (value) {
                 setState(() {
@@ -159,7 +161,7 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
         ),
         ElevatedButton(
           onPressed: _isValid() ? _saveFilter : null,
-          child: Text(widget.existingFilter != null ? 'Update' : 'Create'),
+          child: Text(widget.existingFilter != null ? l10n.update : l10n.create),
         ),
       ],
     );
@@ -206,8 +208,9 @@ class _TagSelectorDialogState extends State<_TagSelectorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('Select Tags'),
+      title: Text(l10n.selectTags),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView.builder(
@@ -243,7 +246,7 @@ class _TagSelectorDialogState extends State<_TagSelectorDialog> {
             widget.onSelectionChanged(_tempSelectedTags);
             Navigator.of(context).pop();
           },
-          child: const Text('Apply'),
+          child: Text(l10n.apply),
         ),
       ],
     );

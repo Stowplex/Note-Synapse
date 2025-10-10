@@ -51,11 +51,12 @@ class _FilterTabStripState extends State<FilterTabStrip> {
 
 
   void _showDeleteConfirmation(Filter filter) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Filter'),
-        content: Text('Are you sure you want to delete "${filter.name}"?'),
+        title: Text(l10n.deleteFilter),
+        content: Text(l10n.deleteFilterConfirm(filter.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -70,7 +71,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Delete'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -200,6 +201,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   }
 
   Widget _buildAddButton() {
+    final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
       onTap: _showCreateFilterDialog,
       child: Container(
@@ -222,7 +224,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             ),
             const SizedBox(width: 4),
             Text(
-              'Add Filter',
+              l10n.addFilter,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface,
               ),
