@@ -11,6 +11,7 @@ import '../models/note.dart';
 import '../services/audio_recording_service.dart';
 import 'notes_screen.dart';
 import 'calendar_screen.dart';
+import 'user_apps_list_screen.dart';
 import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
 import 'share_screen.dart';
@@ -32,6 +33,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const NotesScreen(),
     const CalendarScreen(),
+    const UserAppsListScreen(),
     const SettingsScreen(),
   ];
 
@@ -75,6 +77,10 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: const Icon(Icons.calendar_today),
             label: AppLocalizations.of(context)!.calendar,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.apps),
+            label: AppLocalizations.of(context)!.myApps,
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.settings),

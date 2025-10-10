@@ -995,7 +995,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareAsText => 'Share as Text';
 
   @override
-  String get copyToClipboard => 'Copy to Clipboard';
+  String get copyToClipboard => 'Copy to clipboard';
 
   @override
   String get shareSubNotesAndLinkedNotes => 'Share sub-notes and linked notes';
@@ -1211,4 +1211,168 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dedupRuleSelfReference => 'Cannot replace tag with itself';
+
+  @override
+  String get myApps => 'My Apps';
+
+  @override
+  String get myAppsSubtitle => 'Create and manage custom applications';
+
+  @override
+  String get noUserApps => 'No custom apps yet';
+
+  @override
+  String get createFirstApp => 'Create your first custom app';
+
+  @override
+  String get createNewApp => 'Create New App';
+
+  @override
+  String get appName => 'App Name';
+
+  @override
+  String get appNameHint => 'Enter a name for your app';
+
+  @override
+  String get appDescription => 'Description';
+
+  @override
+  String get appDescriptionHint => 'Describe what your app does';
+
+  @override
+  String get appSteps => 'Steps';
+
+  @override
+  String get appStepsHint => 'Describe the steps your app should follow';
+
+  @override
+  String get addStep => 'Add Step';
+
+  @override
+  String get removeStep => 'Remove Step';
+
+  @override
+  String get stepHint => 'Enter a step description';
+
+  @override
+  String get createApp => 'Create App';
+
+  @override
+  String get creatingApp => 'Creating app...';
+
+  @override
+  String get appCreatedSuccessfully => 'App created successfully!';
+
+  @override
+  String get appCreationFailed => 'App creation failed';
+
+  @override
+  String get appCreated => 'Created';
+
+  @override
+  String get appCantCreate => 'Can\'t Create';
+
+  @override
+  String get reason => 'Reason';
+
+  @override
+  String get toApp => 'To App';
+
+  @override
+  String get console => 'Console';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get confirmDeleteApp => 'Are you sure you want to delete this app?';
+
+  @override
+  String get appDeletedSuccessfully => 'App deleted successfully!';
+
+  @override
+  String errorDeletingApp(Object error) {
+    return 'Error deleting app: $error';
+  }
+
+  @override
+  String get webViewNotSupported => 'WebView is not supported on Linux';
+
+  @override
+  String get webViewNotSupportedDescription =>
+      'User-defined apps require WebView which is not available on Linux platform';
+
+  @override
+  String get editApp => 'Edit App';
+
+  @override
+  String get appCode => 'App Code';
+
+  @override
+  String get editSuggestion => 'Edit Suggestion';
+
+  @override
+  String get editSuggestionHint => 'Describe what changes you want to make';
+
+  @override
+  String get submitEdit => 'Submit Edit';
+
+  @override
+  String get editingApp => 'Editing app...';
+
+  @override
+  String get appEditSubmitted => 'Edit submitted successfully!';
+
+  @override
+  String get appEditFailed => 'App edit failed';
+
+  @override
+  String get newAppCreatedFromEdit => 'New app created from edit';
+
+  @override
+  String errorCreatingAppFromEdit(Object error) {
+    return 'Error creating app from edit: $error';
+  }
+
+  @override
+  String get consoleOutput => 'Console Output';
+
+  @override
+  String get noConsoleOutput => 'No console output yet';
+
+  @override
+  String get clearConsole => 'Clear Console';
+
+  @override
+  String get consoleOutputCopied => 'Console output copied to clipboard';
+
+  @override
+  String get appState => 'App State';
+
+  @override
+  String get saveState => 'Save State';
+
+  @override
+  String get loadState => 'Load State';
+
+  @override
+  String get stateSaved => 'State saved successfully!';
+
+  @override
+  String get stateLoaded => 'State loaded successfully!';
+
+  @override
+  String errorSavingState(Object error) {
+    return 'Error saving state: $error';
+  }
+
+  @override
+  String errorLoadingState(Object error) {
+    return 'Error loading state: $error';
+  }
+
+  @override
+  String appGenerationPrompt(Object description, Object name, Object steps) {
+    return 'Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: $name\nDescription: $description\nSteps: $steps\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app\'s database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.';
+  }
 }

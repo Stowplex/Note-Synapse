@@ -1192,4 +1192,167 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dedupRuleSelfReference => '不能将标签替换为自身';
+
+  @override
+  String get myApps => '我的应用';
+
+  @override
+  String get myAppsSubtitle => '创建和管理自定义应用程序';
+
+  @override
+  String get noUserApps => '还没有自定义应用';
+
+  @override
+  String get createFirstApp => '创建您的第一个自定义应用';
+
+  @override
+  String get createNewApp => '创建新应用';
+
+  @override
+  String get appName => '应用名称';
+
+  @override
+  String get appNameHint => '为您的应用输入名称';
+
+  @override
+  String get appDescription => '描述';
+
+  @override
+  String get appDescriptionHint => '描述您的应用的功能';
+
+  @override
+  String get appSteps => '步骤';
+
+  @override
+  String get appStepsHint => '描述您的应用应遵循的步骤';
+
+  @override
+  String get addStep => '添加步骤';
+
+  @override
+  String get removeStep => '删除步骤';
+
+  @override
+  String get stepHint => '输入步骤描述';
+
+  @override
+  String get createApp => '创建应用';
+
+  @override
+  String get creatingApp => '正在创建应用...';
+
+  @override
+  String get appCreatedSuccessfully => '应用创建成功！';
+
+  @override
+  String get appCreationFailed => '应用创建失败';
+
+  @override
+  String get appCreated => '已创建';
+
+  @override
+  String get appCantCreate => '无法创建';
+
+  @override
+  String get reason => '原因';
+
+  @override
+  String get toApp => '到应用';
+
+  @override
+  String get console => '控制台';
+
+  @override
+  String get edit => '编辑';
+
+  @override
+  String get confirmDeleteApp => '您确定要删除此应用吗？';
+
+  @override
+  String get appDeletedSuccessfully => '应用删除成功！';
+
+  @override
+  String errorDeletingApp(Object error) {
+    return '删除应用时出错：$error';
+  }
+
+  @override
+  String get webViewNotSupported => 'Linux不支持WebView';
+
+  @override
+  String get webViewNotSupportedDescription => '用户定义的应用需要WebView，但Linux平台不支持';
+
+  @override
+  String get editApp => '编辑应用';
+
+  @override
+  String get appCode => '应用代码';
+
+  @override
+  String get editSuggestion => '编辑建议';
+
+  @override
+  String get editSuggestionHint => '描述您想要进行的更改';
+
+  @override
+  String get submitEdit => '提交编辑';
+
+  @override
+  String get editingApp => '正在编辑应用...';
+
+  @override
+  String get appEditSubmitted => '编辑提交成功！';
+
+  @override
+  String get appEditFailed => '应用编辑失败';
+
+  @override
+  String get newAppCreatedFromEdit => '从编辑创建新应用';
+
+  @override
+  String errorCreatingAppFromEdit(Object error) {
+    return '从编辑创建应用时出错：$error';
+  }
+
+  @override
+  String get consoleOutput => '控制台输出';
+
+  @override
+  String get noConsoleOutput => '暂无控制台输出';
+
+  @override
+  String get clearConsole => '清除控制台';
+
+  @override
+  String get consoleOutputCopied => '控制台输出已复制到剪贴板';
+
+  @override
+  String get appState => '应用状态';
+
+  @override
+  String get saveState => '保存状态';
+
+  @override
+  String get loadState => '加载状态';
+
+  @override
+  String get stateSaved => '状态保存成功！';
+
+  @override
+  String get stateLoaded => '状态加载成功！';
+
+  @override
+  String errorSavingState(Object error) {
+    return '保存状态时出错：$error';
+  }
+
+  @override
+  String errorLoadingState(Object error) {
+    return '加载状态时出错：$error';
+  }
+
+  @override
+  String appGenerationPrompt(Object description, Object name, Object steps) {
+    return '根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：$name\n描述：$description\n步骤：$steps\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。';
+  }
 }

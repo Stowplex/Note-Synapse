@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,6 +10,7 @@ import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
+import '../models/user_app.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -41,7 +43,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -150,6 +152,20 @@ class DatabaseService {
         includeText TEXT,
         includeTags TEXT NOT NULL,
         includeArchived INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+    ''');
+
+    // User Apps table
+    await db.execute('''
+      CREATE TABLE user_apps(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        steps TEXT NOT NULL,
+        htmlContent TEXT NOT NULL,
+        appState TEXT,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
@@ -311,6 +327,37 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS relationships');
         await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await db.execute('DROP TABLE IF EXISTS filters');
+        await _onCreate(db, newVersion);
+      }
+    }
+    
+    if (oldVersion < 7) {
+      // Migration from version 6 to 7: Add user_apps table
+      try {
+        await db.execute('''
+          CREATE TABLE user_apps(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            steps TEXT NOT NULL,
+            htmlContent TEXT NOT NULL,
+            appState TEXT,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        print('Migration to version 7 failed: $e');
+        // If migration fails, drop and recreate the database
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await db.execute('DROP TABLE IF EXISTS filters');
+        await db.execute('DROP TABLE IF EXISTS user_apps');
         await _onCreate(db, newVersion);
       }
     }
@@ -1023,5 +1070,108 @@ class DatabaseService {
   Future<void> deleteFilter(String id) async {
     final db = await database;
     await db.delete('filters', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Execute raw SQL query for user apps
+  Future<List<Map<String, dynamic>>> executeRawQuery(String sql) async {
+    final db = await database;
+    try {
+      // Basic security check - only allow SELECT queries
+      final trimmedSql = sql.trim().toLowerCase();
+      if (!trimmedSql.startsWith('select')) {
+        throw Exception('Only SELECT queries are allowed');
+      }
+      
+      // Execute the query
+      final result = await db.rawQuery(sql);
+      return result;
+    } catch (e) {
+      throw Exception('SQL query execution failed: $e');
+    }
+  }
+
+  // User Apps CRUD
+  Future<String> insertUserApp(UserApp app) async {
+    final db = await database;
+    final json = app.toJson();
+    json['createdAt'] = app.createdAt.millisecondsSinceEpoch;
+    json['updatedAt'] = app.updatedAt.millisecondsSinceEpoch;
+    json['steps'] = app.steps.join('|'); // Store steps as pipe-separated string
+    json['appState'] = app.appState != null ? jsonEncode(app.appState) : null;
+    
+    await db.insert('user_apps', json);
+    return app.id;
+  }
+
+  Future<List<UserApp>> getAllUserApps() async {
+    final db = await database;
+    final maps = await db.query('user_apps', orderBy: 'createdAt DESC');
+    return maps.map((map) => _userAppFromMap(map)).toList();
+  }
+
+  Future<UserApp?> getUserApp(String id) async {
+    final db = await database;
+    final maps = await db.query('user_apps', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) {
+      return _userAppFromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<void> updateUserApp(UserApp app) async {
+    final db = await database;
+    final json = app.toJson();
+    json['updatedAt'] = app.updatedAt.millisecondsSinceEpoch;
+    json['steps'] = app.steps.join('|'); // Store steps as pipe-separated string
+    json['appState'] = app.appState != null ? jsonEncode(app.appState) : null;
+    
+    await db.update('user_apps', json, where: 'id = ?', whereArgs: [app.id]);
+  }
+
+  Future<void> deleteUserApp(String id) async {
+    final db = await database;
+    await db.delete('user_apps', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> updateUserAppState(String id, Map<String, dynamic> state) async {
+    final db = await database;
+    await db.update(
+      'user_apps',
+      {
+        'appState': jsonEncode(state),
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUserAppState(String id) async {
+    final db = await database;
+    final maps = await db.query(
+      'user_apps',
+      columns: ['appState'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (maps.isNotEmpty && maps.first['appState'] != null) {
+      return jsonDecode(maps.first['appState'] as String) as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  UserApp _userAppFromMap(Map<String, dynamic> map) {
+    return UserApp(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      description: map['description'] as String,
+      steps: (map['steps'] as String).split('|'), // Parse pipe-separated steps
+      htmlContent: map['htmlContent'] as String,
+      appState: map['appState'] != null 
+          ? jsonDecode(map['appState'] as String) as Map<String, dynamic>
+          : null,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
+    );
   }
 }

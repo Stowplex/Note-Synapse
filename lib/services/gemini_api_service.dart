@@ -11,6 +11,7 @@ import 'logger_service.dart';
 
 class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+  static const String _model = 'gemini-2.5-flash';
 
   // Helper method to get API key
   static Future<String?> _getApiKeyWithFallback() async {
@@ -209,7 +210,7 @@ class GeminiApiService {
 
       final startTime = DateTime.now();
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
+        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -248,7 +249,7 @@ class GeminiApiService {
       } else {
         LoggerService.logAiError(
           error: 'Failed to transcribe audio: ${response.statusCode} - ${response.body}',
-          endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+          endpoint: '$_baseUrl/models/$_model:generateContent',
           requestId: requestId,
           duration: duration,
         );
@@ -331,7 +332,7 @@ class GeminiApiService {
 
       final startTime = DateTime.now();
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
+        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -370,7 +371,7 @@ class GeminiApiService {
       } else {
         LoggerService.logAiError(
           error: 'Failed to summarize audio: ${response.statusCode} - ${response.body}',
-          endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+          endpoint: '$_baseUrl/models/$_model:generateContent',
           requestId: requestId,
           duration: duration,
         );
@@ -439,7 +440,7 @@ class GeminiApiService {
 
     // Log the request
     LoggerService.logAiRequest(
-      endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+      endpoint: '$_baseUrl/models/$_model:generateContent',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -490,7 +491,7 @@ class GeminiApiService {
     } else {
       LoggerService.logAiError(
         error: 'Failed to process request: ${response.statusCode} - ${response.body}',
-        endpoint: '$_baseUrl/models/gemini-2.5-flash:generateContent',
+        endpoint: '$_baseUrl/models/$_model:generateContent',
         requestId: actualRequestId,
         duration: duration,
       );
@@ -1178,7 +1179,7 @@ Format the response in a clear, organized manner that would be useful for note-t
     String apiKey, {
     String? requestId,
   }) async {
-    final url = '$_baseUrl/models/gemini-1.5-flash:generateContent?key=$apiKey';
+    final url = '$_baseUrl/models/$_model:generateContent?key=$apiKey';
     
     final requestBody = {
       'contents': [
@@ -1200,7 +1201,7 @@ Format the response in a clear, organized manner that would be useful for note-t
         'temperature': 0.7,
         'topK': 40,
         'topP': 0.95,
-        'maxOutputTokens': 8192,
+        'maxOutputTokens': 60000,
       },
     };
 
@@ -1310,6 +1311,104 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
     } catch (e) {
       LoggerService.warning('Failed to parse AI dedup rules response: $e');
       return [];
+    }
+  }
+
+  // Generate user app HTML
+  static Future<String> generateApp(String prompt) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting app generation request', error: {
+      'prompt': prompt,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for app generation', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+
+    try {
+      final requestBody = {
+        'contents': [
+          {
+            'parts': [
+              {
+                'text': prompt,
+              }
+            ]
+          }
+        ],
+        'generationConfig': {
+          'temperature': 0.7,
+          'topK': 40,
+          'topP': 0.95,
+          'maxOutputTokens': 60000,
+        },
+        'safetySettings': [
+          {
+            'category': 'HARM_CATEGORY_HARASSMENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_HATE_SPEECH',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          }
+        ]
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      LoggerService.debug('App generation API response received', error: {
+        'statusCode': response.statusCode,
+        'requestId': requestId,
+      });
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final generatedText = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        
+        if (generatedText != null) {
+          LoggerService.debug('App generation successful', error: {
+            'responseLength': generatedText.length,
+            'requestId': requestId,
+          });
+          return generatedText;
+        } else {
+          LoggerService.error('No generated text in app generation response', error: {
+            'responseBody': response.body,
+            'requestId': requestId,
+          });
+          throw Exception('No generated text in response');
+        }
+      } else {
+        LoggerService.error('App generation API request failed', error: {
+          'statusCode': response.statusCode,
+          'responseBody': response.body,
+          'requestId': requestId,
+        });
+        throw Exception('API request failed with status ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      LoggerService.error('Error in app generation', error: {
+        'error': e.toString(),
+        'requestId': requestId,
+      });
+      rethrow;
     }
   }
 }

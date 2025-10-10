@@ -6,8 +6,10 @@ import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
+import '../models/user_app.dart';
 import '../services/database_service.dart';
 import '../services/gemini_api_service.dart';
+import '../services/user_app_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
@@ -16,6 +18,7 @@ class AppProvider extends ChangeNotifier {
   List<Tag> _tags = [];
   List<AIInteraction> _aiInteractions = [];
   List<Filter> _filters = [];
+  List<UserApp> _userApps = [];
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;
@@ -25,6 +28,7 @@ class AppProvider extends ChangeNotifier {
   List<Tag> get tags => _tags;
   List<AIInteraction> get aiInteractions => _aiInteractions;
   List<Filter> get filters => _filters;
+  List<UserApp> get userApps => _userApps;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
@@ -37,6 +41,7 @@ class AppProvider extends ChangeNotifier {
       _tags = await _databaseService.getAllTags();
       _aiInteractions = await _databaseService.getAllAIInteractions();
       _filters = await _databaseService.getAllFilters();
+      _userApps = await UserAppService.getAllUserApps();
       
       // Clean up expired AI interactions
       await _databaseService.cleanupExpiredAIInteractions();
@@ -844,5 +849,116 @@ class AppProvider extends ChangeNotifier {
     });
     
     return filteredNotes;
+  }
+
+  // User App management methods
+  Future<void> addUserApp(UserApp app) async {
+    try {
+      await UserAppService.saveUserApp(app);
+      _userApps.add(app);
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> updateUserApp(UserApp app) async {
+    try {
+      await UserAppService.saveUserApp(app);
+      final appIndex = _userApps.indexWhere((a) => a.id == app.id);
+      if (appIndex != -1) {
+        _userApps[appIndex] = app;
+        notifyListeners();
+      }
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteUserApp(String appId) async {
+    try {
+      await UserAppService.deleteUserApp(appId);
+      _userApps.removeWhere((app) => app.id == appId);
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<UserApp> createUserApp({
+    required String name,
+    required String description,
+    required List<String> steps,
+  }) async {
+    try {
+      final app = await UserAppService.createUserApp(
+        name: name,
+        description: description,
+        steps: steps,
+      );
+      _userApps.add(app);
+      notifyListeners();
+      _error = null;
+      return app;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+
+  Future<UserApp> editUserApp({
+    required UserApp originalApp,
+    required String editSuggestion,
+  }) async {
+    try {
+      final editedApp = await UserAppService.editUserApp(
+        originalApp: originalApp,
+        editSuggestion: editSuggestion,
+      );
+      _userApps.add(editedApp);
+      notifyListeners();
+      _error = null;
+      return editedApp;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getAppState(String appId) async {
+    try {
+      return await UserAppService.getAppState(appId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
+    try {
+      await UserAppService.saveAppState(appId, state);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  bool isWebViewSupported() {
+    return UserAppService.isWebViewSupported();
   }
 }

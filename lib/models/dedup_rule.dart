@@ -56,3 +56,4 @@ class DedupRule {
     return 'DedupRule(id: $id, leftTag: $leftTag, rightTag: $rightTag)';
   }
 }
+

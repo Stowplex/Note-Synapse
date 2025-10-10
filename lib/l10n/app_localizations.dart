@@ -1919,7 +1919,7 @@ abstract class AppLocalizations {
   /// No description provided for @copyToClipboard.
   ///
   /// In en, this message translates to:
-  /// **'Copy to Clipboard'**
+  /// **'Copy to clipboard'**
   String get copyToClipboard;
 
   /// No description provided for @shareSubNotesAndLinkedNotes.
@@ -2299,6 +2299,312 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cannot replace tag with itself'**
   String get dedupRuleSelfReference;
+
+  /// No description provided for @myApps.
+  ///
+  /// In en, this message translates to:
+  /// **'My Apps'**
+  String get myApps;
+
+  /// No description provided for @myAppsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create and manage custom applications'**
+  String get myAppsSubtitle;
+
+  /// No description provided for @noUserApps.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom apps yet'**
+  String get noUserApps;
+
+  /// No description provided for @createFirstApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your first custom app'**
+  String get createFirstApp;
+
+  /// No description provided for @createNewApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create New App'**
+  String get createNewApp;
+
+  /// No description provided for @appName.
+  ///
+  /// In en, this message translates to:
+  /// **'App Name'**
+  String get appName;
+
+  /// No description provided for @appNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name for your app'**
+  String get appNameHint;
+
+  /// No description provided for @appDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get appDescription;
+
+  /// No description provided for @appDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what your app does'**
+  String get appDescriptionHint;
+
+  /// No description provided for @appSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get appSteps;
+
+  /// No description provided for @appStepsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe the steps your app should follow'**
+  String get appStepsHint;
+
+  /// No description provided for @addStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Step'**
+  String get addStep;
+
+  /// No description provided for @removeStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Step'**
+  String get removeStep;
+
+  /// No description provided for @stepHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a step description'**
+  String get stepHint;
+
+  /// No description provided for @createApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create App'**
+  String get createApp;
+
+  /// No description provided for @creatingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating app...'**
+  String get creatingApp;
+
+  /// No description provided for @appCreatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'App created successfully!'**
+  String get appCreatedSuccessfully;
+
+  /// No description provided for @appCreationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'App creation failed'**
+  String get appCreationFailed;
+
+  /// No description provided for @appCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get appCreated;
+
+  /// No description provided for @appCantCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t Create'**
+  String get appCantCreate;
+
+  /// No description provided for @reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get reason;
+
+  /// No description provided for @toApp.
+  ///
+  /// In en, this message translates to:
+  /// **'To App'**
+  String get toApp;
+
+  /// No description provided for @console.
+  ///
+  /// In en, this message translates to:
+  /// **'Console'**
+  String get console;
+
+  /// No description provided for @edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get edit;
+
+  /// No description provided for @confirmDeleteApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this app?'**
+  String get confirmDeleteApp;
+
+  /// No description provided for @appDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'App deleted successfully!'**
+  String get appDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting app: {error}'**
+  String errorDeletingApp(Object error);
+
+  /// No description provided for @webViewNotSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'WebView is not supported on Linux'**
+  String get webViewNotSupported;
+
+  /// No description provided for @webViewNotSupportedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'User-defined apps require WebView which is not available on Linux platform'**
+  String get webViewNotSupportedDescription;
+
+  /// No description provided for @editApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit App'**
+  String get editApp;
+
+  /// No description provided for @appCode.
+  ///
+  /// In en, this message translates to:
+  /// **'App Code'**
+  String get appCode;
+
+  /// No description provided for @editSuggestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Suggestion'**
+  String get editSuggestion;
+
+  /// No description provided for @editSuggestionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what changes you want to make'**
+  String get editSuggestionHint;
+
+  /// No description provided for @submitEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit Edit'**
+  String get submitEdit;
+
+  /// No description provided for @editingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing app...'**
+  String get editingApp;
+
+  /// No description provided for @appEditSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit submitted successfully!'**
+  String get appEditSubmitted;
+
+  /// No description provided for @appEditFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'App edit failed'**
+  String get appEditFailed;
+
+  /// No description provided for @newAppCreatedFromEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'New app created from edit'**
+  String get newAppCreatedFromEdit;
+
+  /// No description provided for @errorCreatingAppFromEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Error creating app from edit: {error}'**
+  String errorCreatingAppFromEdit(Object error);
+
+  /// No description provided for @consoleOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Console Output'**
+  String get consoleOutput;
+
+  /// No description provided for @noConsoleOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'No console output yet'**
+  String get noConsoleOutput;
+
+  /// No description provided for @clearConsole.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Console'**
+  String get clearConsole;
+
+  /// No description provided for @consoleOutputCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Console output copied to clipboard'**
+  String get consoleOutputCopied;
+
+  /// No description provided for @appState.
+  ///
+  /// In en, this message translates to:
+  /// **'App State'**
+  String get appState;
+
+  /// No description provided for @saveState.
+  ///
+  /// In en, this message translates to:
+  /// **'Save State'**
+  String get saveState;
+
+  /// No description provided for @loadState.
+  ///
+  /// In en, this message translates to:
+  /// **'Load State'**
+  String get loadState;
+
+  /// No description provided for @stateSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'State saved successfully!'**
+  String get stateSaved;
+
+  /// No description provided for @stateLoaded.
+  ///
+  /// In en, this message translates to:
+  /// **'State loaded successfully!'**
+  String get stateLoaded;
+
+  /// No description provided for @errorSavingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving state: {error}'**
+  String errorSavingState(Object error);
+
+  /// No description provided for @errorLoadingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading state: {error}'**
+  String errorLoadingState(Object error);
+
+  /// No description provided for @appGenerationPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: {name}\nDescription: {description}\nSteps: {steps}\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app\'s database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.'**
+  String appGenerationPrompt(Object description, Object name, Object steps);
 }
 
 class _AppLocalizationsDelegate
