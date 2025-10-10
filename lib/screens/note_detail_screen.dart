@@ -1098,20 +1098,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _cancelEditing() {
+    // Get the current note from the provider
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
     setState(() {
       _isEditing = false;
       _hasChanges = false;
-      _titleController.text = widget.note.title;
-      _contentController.text = widget.note.content;
+      _titleController.text = currentNote.title;
+      _contentController.text = currentNote.content;
       _dateValidationError = null;
       
       // Reset date fields for tasks
-      if (widget.note.isTask) {
-        _scheduledAt = widget.note.scheduledAt != null 
-            ? DateTime.tryParse(widget.note.scheduledAt!) 
+      if (currentNote.isTask) {
+        _scheduledAt = currentNote.scheduledAt != null 
+            ? DateTime.tryParse(currentNote.scheduledAt!) 
             : null;
-        _completeBy = widget.note.completeBy != null 
-            ? DateTime.tryParse(widget.note.completeBy!) 
+        _completeBy = currentNote.completeBy != null 
+            ? DateTime.tryParse(currentNote.completeBy!) 
             : null;
       }
     });

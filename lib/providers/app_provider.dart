@@ -50,7 +50,11 @@ class AppProvider extends ChangeNotifier {
   Future<void> addNote(Note note) async {
     try {
       await _databaseService.insertNote(note);
-      await loadData();
+      
+      // Add to local state immediately instead of reloading from database
+      _notes.add(note);
+      notifyListeners();
+      
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
@@ -62,7 +66,14 @@ class AppProvider extends ChangeNotifier {
   Future<void> updateNote(Note note) async {
     try {
       await _databaseService.updateNote(note);
-      await loadData();
+      
+      // Update the local state immediately instead of reloading from database
+      final noteIndex = _notes.indexWhere((n) => n.id == note.id);
+      if (noteIndex != -1) {
+        _notes[noteIndex] = note;
+        notifyListeners();
+      }
+      
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
@@ -145,7 +156,11 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteNote(String noteId) async {
     try {
       await _databaseService.deleteNote(noteId);
-      await loadData();
+      
+      // Remove from local state immediately instead of reloading from database
+      _notes.removeWhere((note) => note.id == noteId);
+      notifyListeners();
+      
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
