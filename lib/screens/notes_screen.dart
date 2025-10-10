@@ -7,6 +7,8 @@ import '../models/relationship.dart';
 import '../widgets/note_card.dart';
 import '../widgets/multi_select_tag_filter.dart';
 import '../widgets/share_dialog.dart';
+import '../widgets/filter_tab_strip.dart';
+import '../models/filter.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
@@ -24,7 +26,7 @@ class _NotesScreenState extends State<NotesScreen> {
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
   List<String> _availableTags = [];
-  String _selectedView = 'default'; // 'default', 'pinned', 'archived', 'all'
+  String _selectedFilterId = 'default'; // 'default', 'pinned', 'archived', 'all', or custom filter ID
 
   @override
   void initState() {
@@ -126,25 +128,19 @@ class _NotesScreenState extends State<NotesScreen> {
                   },
                 ),
                 const SizedBox(height: 8),
-                // View filter bar
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildViewFilterChip('default', l10n.defaultNotes),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildViewFilterChip('pinned', l10n.pinnedNotes),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildViewFilterChip('archived', l10n.archivedNotes),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildViewFilterChip('all', l10n.allNotes),
-                    ),
-                  ],
+                // Filter tab strip
+                Consumer<AppProvider>(
+                  builder: (context, appProvider, child) {
+                    return FilterTabStrip(
+                      selectedFilterId: _selectedFilterId,
+                      customFilters: appProvider.filters,
+                      availableTags: _availableTags,
+                      onFilterSelected: _onFilterSelected,
+                      onFilterCreated: _onFilterCreated,
+                      onFilterUpdated: _onFilterUpdated,
+                      onFilterDeleted: _onFilterDeleted,
+                    );
+                  },
                 ),
               ],
             ),
@@ -185,7 +181,7 @@ class _NotesScreenState extends State<NotesScreen> {
             );
           }
 
-          final notes = _filterNotes(appProvider.notes);
+          final notes = _filterNotes(appProvider.notes, appProvider);
           
           if (notes.isEmpty) {
             return Center(
@@ -250,58 +246,49 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
-  Widget _buildViewFilterChip(String value, String label) {
-    final isSelected = _selectedView == value;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedView = value;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surface,
-          border: Border.all(
-            color: isSelected 
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline,
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isSelected 
-                ? Theme.of(context).colorScheme.onPrimary
-                : Theme.of(context).colorScheme.onSurface,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
+  void _onFilterSelected(String filterId) {
+    setState(() {
+      _selectedFilterId = filterId;
+    });
   }
 
-  List<Note> _filterNotes(List<Note> notes) {
+  void _onFilterCreated(Filter filter) {
+    context.read<AppProvider>().addFilter(filter);
+  }
+
+  void _onFilterUpdated(Filter filter) {
+    context.read<AppProvider>().updateFilter(filter);
+  }
+
+  void _onFilterDeleted(String filterId) {
+    context.read<AppProvider>().deleteFilter(filterId);
+    // If the deleted filter was selected, switch to default
+    if (_selectedFilterId == filterId) {
+      setState(() {
+        _selectedFilterId = 'default';
+      });
+    }
+  }
+
+  List<Note> _filterNotes(List<Note> notes, AppProvider appProvider) {
     List<Note> filteredNotes = notes;
     
-    // Filter by view type
-    switch (_selectedView) {
-      case 'default':
-        filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
-        break;
-      case 'pinned':
-        filteredNotes = filteredNotes.where((note) => note.pinned && !note.isArchived).toList();
-        break;
-      case 'archived':
-        filteredNotes = filteredNotes.where((note) => note.isArchived).toList();
-        break;
-      case 'all':
-        // No additional filtering needed
-        break;
+    // Handle built-in filters
+    if (_selectedFilterId == 'default') {
+      filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
+    } else if (_selectedFilterId == 'pinned') {
+      filteredNotes = filteredNotes.where((note) => note.pinned && !note.isArchived).toList();
+    } else if (_selectedFilterId == 'archived') {
+      filteredNotes = filteredNotes.where((note) => note.isArchived).toList();
+    } else if (_selectedFilterId == 'all') {
+      // No additional filtering needed
+    } else {
+      // Handle custom filter
+      final customFilter = appProvider.filters.firstWhere(
+        (filter) => filter.id == _selectedFilterId,
+        orElse: () => throw Exception('Filter not found'),
+      );
+      filteredNotes = appProvider.getFilteredNotes(customFilter);
     }
     
     // Filter by tags (OR logic - show notes that have ANY of the selected tags)

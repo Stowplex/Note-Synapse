@@ -5,6 +5,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
 import '../models/tag.dart';
+import '../models/filter.dart';
 import '../services/database_service.dart';
 import '../services/gemini_api_service.dart';
 
@@ -14,6 +15,7 @@ class AppProvider extends ChangeNotifier {
   List<Note> _notes = [];
   List<Tag> _tags = [];
   List<AIInteraction> _aiInteractions = [];
+  List<Filter> _filters = [];
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;
@@ -22,6 +24,7 @@ class AppProvider extends ChangeNotifier {
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
   List<AIInteraction> get aiInteractions => _aiInteractions;
+  List<Filter> get filters => _filters;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
@@ -33,6 +36,7 @@ class AppProvider extends ChangeNotifier {
       _notes = await _databaseService.getAllNotes();
       _tags = await _databaseService.getAllTags();
       _aiInteractions = await _databaseService.getAllAIInteractions();
+      _filters = await _databaseService.getAllFilters();
       
       // Clean up expired AI interactions
       await _databaseService.cleanupExpiredAIInteractions();
@@ -696,5 +700,83 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
+  }
+
+  // Filter management methods
+  Future<void> addFilter(Filter filter) async {
+    try {
+      await _databaseService.insertFilter(filter);
+      _filters.add(filter);
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> updateFilter(Filter filter) async {
+    try {
+      await _databaseService.updateFilter(filter);
+      final filterIndex = _filters.indexWhere((f) => f.id == filter.id);
+      if (filterIndex != -1) {
+        _filters[filterIndex] = filter;
+        notifyListeners();
+      }
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteFilter(String filterId) async {
+    try {
+      await _databaseService.deleteFilter(filterId);
+      _filters.removeWhere((filter) => filter.id == filterId);
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  List<Note> getFilteredNotes(Filter filter) {
+    List<Note> filteredNotes = _notes;
+    
+    // Filter by archived status
+    if (!filter.includeArchived) {
+      filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
+    }
+    
+    // Filter by text content
+    if (filter.includeText?.isNotEmpty == true) {
+      final query = filter.includeText!.toLowerCase();
+      filteredNotes = filteredNotes.where((note) {
+        return note.title.toLowerCase().contains(query) ||
+               note.content.toLowerCase().contains(query) ||
+               note.tags.any((tag) => tag.toLowerCase().contains(query));
+      }).toList();
+    }
+    
+    // Filter by tags (AND logic - note must have ALL selected tags)
+    if (filter.includeTags.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return filter.includeTags.every((selectedTag) => note.tags.contains(selectedTag));
+      }).toList();
+    }
+    
+    // Sort by pinned status first, then by creation date
+    filteredNotes.sort((a, b) {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    
+    return filteredNotes;
   }
 }

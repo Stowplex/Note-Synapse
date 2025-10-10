@@ -8,6 +8,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/ai_interaction.dart';
 import '../models/tag.dart';
+import '../models/filter.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -40,7 +41,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -138,6 +139,19 @@ class DatabaseService {
         createdNoteIds TEXT,
         createdAt INTEGER NOT NULL,
         expiresAt INTEGER NOT NULL
+      )
+    ''');
+
+    // Filters table
+    await db.execute('''
+      CREATE TABLE filters(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        includeText TEXT,
+        includeTags TEXT NOT NULL,
+        includeArchived INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
       )
     ''');
 
@@ -268,6 +282,35 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
         await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await _onCreate(db, newVersion);
+      }
+    }
+    
+    if (oldVersion < 6) {
+      // Migration from version 5 to 6: Add filters table
+      try {
+        await db.execute('''
+          CREATE TABLE filters(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            includeText TEXT,
+            includeTags TEXT NOT NULL,
+            includeArchived INTEGER NOT NULL DEFAULT 0,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        print('Migration to version 6 failed: $e');
+        // If migration fails, drop and recreate the database
+        await db.execute('DROP TABLE IF EXISTS notes');
+        await db.execute('DROP TABLE IF EXISTS subnotes');
+        await db.execute('DROP TABLE IF EXISTS tags');
+        await db.execute('DROP TABLE IF EXISTS note_tags');
+        await db.execute('DROP TABLE IF EXISTS attachments');
+        await db.execute('DROP TABLE IF EXISTS relationships');
+        await db.execute('DROP TABLE IF EXISTS ai_interactions');
+        await db.execute('DROP TABLE IF EXISTS filters');
         await _onCreate(db, newVersion);
       }
     }
@@ -774,6 +817,7 @@ class DatabaseService {
     await db.delete('subnotes');
     await db.delete('notes');
     await db.delete('tags');
+    await db.delete('filters');
   }
 
   // Utility methods
@@ -796,5 +840,86 @@ class DatabaseService {
       default:
         return TaskStatus.todo;
     }
+  }
+
+  // Filters CRUD
+  Future<String> insertFilter(Filter filter) async {
+    final db = await database;
+    final json = filter.toJson();
+    json['createdAt'] = filter.createdAt.millisecondsSinceEpoch;
+    json['updatedAt'] = filter.updatedAt.millisecondsSinceEpoch;
+    json['includeArchived'] = filter.includeArchived ? 1 : 0;
+    json['includeTags'] = filter.includeTags.join(',');
+    
+    await db.insert('filters', json);
+    return filter.id;
+  }
+
+  Future<List<Filter>> getAllFilters() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'filters',
+      orderBy: 'createdAt DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      final includeTagsString = maps[i]['includeTags'] as String? ?? '';
+      final includeTags = includeTagsString.isEmpty ? <String>[] : includeTagsString.split(',');
+      
+      return Filter(
+        id: maps[i]['id'],
+        name: maps[i]['name'],
+        includeText: maps[i]['includeText'],
+        includeTags: includeTags,
+        includeArchived: maps[i]['includeArchived'] == 1,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['updatedAt']),
+      );
+    });
+  }
+
+  Future<Filter?> getFilter(String id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'filters',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isEmpty) return null;
+    
+    final map = maps.first;
+    final includeTagsString = map['includeTags'] as String? ?? '';
+    final includeTags = includeTagsString.isEmpty ? <String>[] : includeTagsString.split(',');
+    
+    return Filter(
+      id: map['id'],
+      name: map['name'],
+      includeText: map['includeText'],
+      includeTags: includeTags,
+      includeArchived: map['includeArchived'] == 1,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
+    );
+  }
+
+  Future<void> updateFilter(Filter filter) async {
+    final db = await database;
+    final json = filter.toJson();
+    json['updatedAt'] = filter.updatedAt.millisecondsSinceEpoch;
+    json['includeArchived'] = filter.includeArchived ? 1 : 0;
+    json['includeTags'] = filter.includeTags.join(',');
+    
+    await db.update(
+      'filters',
+      json,
+      where: 'id = ?',
+      whereArgs: [filter.id],
+    );
+  }
+
+  Future<void> deleteFilter(String id) async {
+    final db = await database;
+    await db.delete('filters', where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -1,0 +1,51 @@
+import 'package:json_annotation/json_annotation.dart';
+
+part 'filter.g.dart';
+
+@JsonSerializable()
+class Filter {
+  final String id;
+  final String name;
+  final String? includeText;
+  final List<String> includeTags;
+  final bool includeArchived;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  Filter({
+    required this.id,
+    required this.name,
+    this.includeText,
+    this.includeTags = const [],
+    this.includeArchived = false,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory Filter.fromJson(Map<String, dynamic> json) => _$FilterFromJson(json);
+  Map<String, dynamic> toJson() => _$FilterToJson(this);
+
+  Filter copyWith({
+    String? id,
+    String? name,
+    String? includeText,
+    List<String>? includeTags,
+    bool? includeArchived,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Filter(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      includeText: includeText ?? this.includeText,
+      includeTags: includeTags ?? this.includeTags,
+      includeArchived: includeArchived ?? this.includeArchived,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  bool get hasValidCriteria {
+    return (includeText?.isNotEmpty == true) || includeTags.isNotEmpty;
+  }
+}

@@ -1,0 +1,251 @@
+import 'package:flutter/material.dart';
+import '../models/filter.dart';
+
+class CustomFilterDialog extends StatefulWidget {
+  final List<String> availableTags;
+  final Filter? existingFilter;
+
+  const CustomFilterDialog({
+    super.key,
+    required this.availableTags,
+    this.existingFilter,
+  });
+
+  @override
+  State<CustomFilterDialog> createState() => _CustomFilterDialogState();
+}
+
+class _CustomFilterDialogState extends State<CustomFilterDialog> {
+  late TextEditingController _nameController;
+  late TextEditingController _includeTextController;
+  late TextEditingController _includeTagsController;
+  bool _includeArchived = false;
+  Set<String> _selectedTags = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.existingFilter?.name ?? '');
+    _includeTextController = TextEditingController(text: widget.existingFilter?.includeText ?? '');
+    _includeTagsController = TextEditingController();
+    _includeArchived = widget.existingFilter?.includeArchived ?? false;
+    _selectedTags = Set.from(widget.existingFilter?.includeTags ?? []);
+    _updateTagsDisplay();
+    
+    // Add listeners to update validation state
+    _nameController.addListener(_onTextChanged);
+    _includeTextController.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _nameController.removeListener(_onTextChanged);
+    _includeTextController.removeListener(_onTextChanged);
+    _nameController.dispose();
+    _includeTextController.dispose();
+    _includeTagsController.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    setState(() {
+      // This will trigger a rebuild and update the button state
+    });
+  }
+
+  void _updateTagsDisplay() {
+    _includeTagsController.text = _selectedTags.join(', ');
+  }
+
+  void _showTagSelector() {
+    showDialog(
+      context: context,
+      builder: (context) => _TagSelectorDialog(
+        availableTags: widget.availableTags,
+        selectedTags: _selectedTags,
+        onSelectionChanged: (selectedTags) {
+          setState(() {
+            _selectedTags = selectedTags;
+            _updateTagsDisplay();
+          });
+        },
+      ),
+    );
+  }
+
+  void _removeTag(String tag) {
+    setState(() {
+      _selectedTags.remove(tag);
+      _updateTagsDisplay();
+    });
+  }
+
+  bool _isValid() {
+    return _nameController.text.trim().isNotEmpty &&
+           (_includeTextController.text.trim().isNotEmpty || _selectedTags.isNotEmpty);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existingFilter != null ? 'Edit Filter' : 'Create Filter'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Filter Name',
+                border: OutlineInputBorder(),
+                hintText: 'Enter a name for this filter',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _includeTextController,
+              decoration: const InputDecoration(
+                labelText: 'Include Text',
+                border: OutlineInputBorder(),
+                hintText: 'Text to search for in notes',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _includeTagsController,
+              decoration: InputDecoration(
+                labelText: 'Include Tags',
+                border: const OutlineInputBorder(),
+                hintText: 'Select tags to filter by',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: _showTagSelector,
+                ),
+              ),
+              readOnly: true,
+              onTap: _showTagSelector,
+            ),
+            if (_selectedTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _selectedTags.map((tag) => Chip(
+                  label: Text(tag),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () => _removeTag(tag),
+                )).toList(),
+              ),
+            ],
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              title: const Text('Include archived notes'),
+              value: _includeArchived,
+              onChanged: (value) {
+                setState(() {
+                  _includeArchived = value ?? false;
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isValid() ? _saveFilter : null,
+          child: Text(widget.existingFilter != null ? 'Update' : 'Create'),
+        ),
+      ],
+    );
+  }
+
+  void _saveFilter() {
+    final filter = Filter(
+      id: widget.existingFilter?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: _nameController.text.trim(),
+      includeText: _includeTextController.text.trim().isEmpty ? null : _includeTextController.text.trim(),
+      includeTags: _selectedTags.toList(),
+      includeArchived: _includeArchived,
+      createdAt: widget.existingFilter?.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    Navigator.of(context).pop(filter);
+  }
+}
+
+class _TagSelectorDialog extends StatefulWidget {
+  final List<String> availableTags;
+  final Set<String> selectedTags;
+  final Function(Set<String>) onSelectionChanged;
+
+  const _TagSelectorDialog({
+    required this.availableTags,
+    required this.selectedTags,
+    required this.onSelectionChanged,
+  });
+
+  @override
+  State<_TagSelectorDialog> createState() => _TagSelectorDialogState();
+}
+
+class _TagSelectorDialogState extends State<_TagSelectorDialog> {
+  late Set<String> _tempSelectedTags;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelectedTags = Set.from(widget.selectedTags);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Tags'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.availableTags.length,
+          itemBuilder: (context, index) {
+            final tag = widget.availableTags[index];
+            final isSelected = _tempSelectedTags.contains(tag);
+            
+            return CheckboxListTile(
+              title: Text(tag),
+              value: isSelected,
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    _tempSelectedTags.add(tag);
+                  } else {
+                    _tempSelectedTags.remove(tag);
+                  }
+                });
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            widget.onSelectionChanged(_tempSelectedTags);
+            Navigator.of(context).pop();
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
