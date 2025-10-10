@@ -73,6 +73,9 @@ dependencies:
   # URL launcher
   url_launcher: ^6.2.1
   
+  # Sharing
+  share_plus: ^7.2.1
+  
   # UUID generation
   uuid: ^4.2.1
   

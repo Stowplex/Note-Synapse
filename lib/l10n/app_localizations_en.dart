@@ -317,10 +317,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get allNotes => 'All Notes';
 
   @override
-  String get pinnedNotes => 'Pinned Notes';
+  String get defaultNotes => 'Default';
 
   @override
-  String get archivedNotes => 'Archived Notes';
+  String get pinnedNotes => 'Pinned';
+
+  @override
+  String get archivedNotes => 'Archived';
 
   @override
   String get filter => 'Filter';
@@ -967,4 +970,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get removeAttachmentTooltip => 'Remove attachment';
+
+  @override
+  String get share => 'Share';
+
+  @override
+  String get shareNote => 'Share Note';
+
+  @override
+  String get shareNotes => 'Share Notes';
+
+  @override
+  String get shareAsText => 'Share as Text';
+
+  @override
+  String get copyToClipboard => 'Copy to Clipboard';
+
+  @override
+  String get shareSubNotesAndLinkedNotes => 'Share sub-notes and linked notes';
+
+  @override
+  String get shareDialogTitle => 'Share Notes';
+
+  @override
+  String get shareDialogDescription =>
+      'Choose how you want to share the selected notes';
+
+  @override
+  String get textCopiedToClipboard => 'Text copied to clipboard';
+
+  @override
+  String errorCopyingToClipboard(Object error) {
+    return 'Error copying to clipboard: $error';
+  }
+
+  @override
+  String errorSharingText(Object error) {
+    return 'Error sharing text: $error';
+  }
+
+  @override
+  String get selectFileLocation => 'Select file location';
+
+  @override
+  String get saveAsMarkdown => 'Save as Markdown';
+
+  @override
+  String get fileSavedSuccessfully => 'File saved successfully';
+
+  @override
+  String errorSavingFile(Object error) {
+    return 'Error saving file: $error';
+  }
+
+  @override
+  String get shareSelectedNotes => 'Share Selected Notes';
+
+  @override
+  String get type => 'Type';
+
+  @override
+  String get note => 'Note';
+
+  @override
+  String get task => 'Task';
 }

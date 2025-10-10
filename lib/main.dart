@@ -8,7 +8,6 @@ import 'screens/setup_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'services/secure_storage_service.dart';
-import 'services/share_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,8 +83,6 @@ class _AppWrapperState extends State<AppWrapper> {
   @override
   void initState() {
     super.initState();
-    // Initialize share service after Flutter binding is ready
-    ShareService.initialize();
     _initializeApp();
   }
 

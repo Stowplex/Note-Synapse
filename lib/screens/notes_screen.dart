@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../widgets/note_card.dart';
 import '../widgets/multi_select_tag_filter.dart';
+import '../widgets/share_dialog.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
@@ -65,14 +66,19 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: l10n.linkSelectedNotes,
             ),
             IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _selectedNotes.isNotEmpty ? _deleteSelectedNotes : null,
-              tooltip: l10n.deleteSelectedNotes,
+              icon: const Icon(Icons.share),
+              onPressed: _selectedNotes.isNotEmpty ? _shareSelectedNotes : null,
+              tooltip: l10n.shareSelectedNotes,
             ),
             IconButton(
               icon: const Icon(Icons.psychology),
               onPressed: _selectedNotes.isNotEmpty ? _openAIAction : null,
               tooltip: l10n.openAIAction,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _selectedNotes.isNotEmpty ? _deleteSelectedNotes : null,
+              tooltip: l10n.deleteSelectedNotes,
             ),
             IconButton(
               icon: const Icon(Icons.close),
@@ -124,7 +130,7 @@ class _NotesScreenState extends State<NotesScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _buildViewFilterChip('default', l10n.allNotes),
+                      child: _buildViewFilterChip('default', l10n.defaultNotes),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -232,6 +238,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     onAddSubNote: () => _addSubNote(note),
                     onPinToggle: () => _toggleNotePin(note.id),
                     onArchiveToggle: () => _toggleNoteArchive(note.id),
+                    onShare: () => _shareNote(note),
                     onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
                   ),
                 ),
@@ -489,6 +496,26 @@ class _NotesScreenState extends State<NotesScreen> {
   void _updateNoteContent(String noteId, String newContent) async {
     final appProvider = context.read<AppProvider>();
     await appProvider.updateNoteContent(noteId, newContent);
+  }
+
+  void _shareNote(Note note) {
+    showDialog(
+      context: context,
+      builder: (context) => ShareDialog(
+        notes: [note],
+        title: note.title,
+      ),
+    );
+  }
+
+  void _shareSelectedNotes() {
+    showDialog(
+      context: context,
+      builder: (context) => ShareDialog(
+        notes: _selectedNotes,
+        title: '${_selectedNotes.length} Notes',
+      ),
+    );
   }
 
 }

@@ -250,7 +250,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           // Tab bar
           Container(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.surface,
             child: TabBar(
               tabs: [
                 Tab(
@@ -274,9 +274,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 ),
               ],
-              labelColor: Theme.of(context).primaryColor,
-              unselectedLabelColor: Colors.grey[600],
-              indicatorColor: Theme.of(context).primaryColor,
+              labelColor: Theme.of(context).colorScheme.onSurface,
+              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              indicatorColor: Theme.of(context).colorScheme.primary,
+              indicatorWeight: 2.0,
+              dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
             ),
           ),
           // Tab content

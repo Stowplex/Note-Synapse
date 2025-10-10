@@ -14,6 +14,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback? onAddSubNote;
   final VoidCallback? onPinToggle;
   final VoidCallback? onArchiveToggle;
+  final VoidCallback? onShare;
   final Function(String)? onContentChanged;
 
   const NoteCard({
@@ -26,6 +27,7 @@ class NoteCard extends StatelessWidget {
     this.onAddSubNote,
     this.onPinToggle,
     this.onArchiveToggle,
+    this.onShare,
     this.onContentChanged,
   });
 
@@ -71,6 +73,18 @@ class NoteCard extends StatelessWidget {
                       ),
                       onPressed: onPinToggle,
                       tooltip: note.pinned ? l10n.unpinNote : l10n.pinNote,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (onShare != null)
+                    IconButton(
+                      icon: Icon(
+                        Icons.share,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        size: 20,
+                      ),
+                      onPressed: onShare,
+                      tooltip: l10n.share,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),

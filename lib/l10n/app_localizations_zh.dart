@@ -312,10 +312,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get allNotes => '所有笔记';
 
   @override
-  String get pinnedNotes => '置顶笔记';
+  String get defaultNotes => '默认';
 
   @override
-  String get archivedNotes => '已归档笔记';
+  String get pinnedNotes => '置顶';
+
+  @override
+  String get archivedNotes => '归档';
 
   @override
   String get filter => '筛选';
@@ -952,4 +955,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get removeAttachmentTooltip => '删除附件';
+
+  @override
+  String get share => '分享';
+
+  @override
+  String get shareNote => '分享笔记';
+
+  @override
+  String get shareNotes => '分享笔记';
+
+  @override
+  String get shareAsText => '分享为文本';
+
+  @override
+  String get copyToClipboard => '复制到剪贴板';
+
+  @override
+  String get shareSubNotesAndLinkedNotes => '分享子笔记和关联笔记';
+
+  @override
+  String get shareDialogTitle => '分享笔记';
+
+  @override
+  String get shareDialogDescription => '选择您想要分享选中笔记的方式';
+
+  @override
+  String get textCopiedToClipboard => '文本已复制到剪贴板';
+
+  @override
+  String errorCopyingToClipboard(Object error) {
+    return '复制到剪贴板时出错：$error';
+  }
+
+  @override
+  String errorSharingText(Object error) {
+    return '分享文本时出错：$error';
+  }
+
+  @override
+  String get selectFileLocation => '选择文件位置';
+
+  @override
+  String get saveAsMarkdown => '保存为Markdown';
+
+  @override
+  String get fileSavedSuccessfully => '文件保存成功';
+
+  @override
+  String errorSavingFile(Object error) {
+    return '保存文件时出错：$error';
+  }
+
+  @override
+  String get shareSelectedNotes => '分享选中的笔记';
+
+  @override
+  String get type => '类型';
+
+  @override
+  String get note => '笔记';
+
+  @override
+  String get task => '任务';
 }

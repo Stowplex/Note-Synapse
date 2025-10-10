@@ -12,6 +12,7 @@ import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/gemini_api_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
@@ -241,6 +242,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             IconButton(
               icon: const Icon(Icons.psychology),
               onPressed: _openAIAction,
+            ),
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _shareNote,
             ),
             PopupMenuButton(
               itemBuilder: (context) => [
@@ -1292,6 +1297,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AIActionScreen(selectedNotes: [widget.note]),
+      ),
+    );
+  }
+
+  void _shareNote() {
+    showDialog(
+      context: context,
+      builder: (context) => ShareDialog(
+        notes: [widget.note],
+        title: widget.note.title,
       ),
     );
   }

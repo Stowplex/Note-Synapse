@@ -656,16 +656,22 @@ abstract class AppLocalizations {
   /// **'All Notes'**
   String get allNotes;
 
+  /// No description provided for @defaultNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get defaultNotes;
+
   /// No description provided for @pinnedNotes.
   ///
   /// In en, this message translates to:
-  /// **'Pinned Notes'**
+  /// **'Pinned'**
   String get pinnedNotes;
 
   /// No description provided for @archivedNotes.
   ///
   /// In en, this message translates to:
-  /// **'Archived Notes'**
+  /// **'Archived'**
   String get archivedNotes;
 
   /// No description provided for @filter.
@@ -1867,6 +1873,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove attachment'**
   String get removeAttachmentTooltip;
+
+  /// No description provided for @share.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get share;
+
+  /// No description provided for @shareNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Note'**
+  String get shareNote;
+
+  /// No description provided for @shareNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Notes'**
+  String get shareNotes;
+
+  /// No description provided for @shareAsText.
+  ///
+  /// In en, this message translates to:
+  /// **'Share as Text'**
+  String get shareAsText;
+
+  /// No description provided for @copyToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy to Clipboard'**
+  String get copyToClipboard;
+
+  /// No description provided for @shareSubNotesAndLinkedNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Share sub-notes and linked notes'**
+  String get shareSubNotesAndLinkedNotes;
+
+  /// No description provided for @shareDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Notes'**
+  String get shareDialogTitle;
+
+  /// No description provided for @shareDialogDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how you want to share the selected notes'**
+  String get shareDialogDescription;
+
+  /// No description provided for @textCopiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Text copied to clipboard'**
+  String get textCopiedToClipboard;
+
+  /// No description provided for @errorCopyingToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Error copying to clipboard: {error}'**
+  String errorCopyingToClipboard(Object error);
+
+  /// No description provided for @errorSharingText.
+  ///
+  /// In en, this message translates to:
+  /// **'Error sharing text: {error}'**
+  String errorSharingText(Object error);
+
+  /// No description provided for @selectFileLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Select file location'**
+  String get selectFileLocation;
+
+  /// No description provided for @saveAsMarkdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as Markdown'**
+  String get saveAsMarkdown;
+
+  /// No description provided for @fileSavedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'File saved successfully'**
+  String get fileSavedSuccessfully;
+
+  /// No description provided for @errorSavingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving file: {error}'**
+  String errorSavingFile(Object error);
+
+  /// No description provided for @shareSelectedNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Selected Notes'**
+  String get shareSelectedNotes;
+
+  /// No description provided for @type.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get type;
+
+  /// No description provided for @note.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get note;
+
+  /// No description provided for @task.
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get task;
 }
 
 class _AppLocalizationsDelegate
