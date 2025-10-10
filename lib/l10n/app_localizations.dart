@@ -476,6 +476,12 @@ abstract class AppLocalizations {
   /// **'Camera'**
   String get camera;
 
+  /// No description provided for @takePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Take Photo'**
+  String get takePhoto;
+
   /// No description provided for @gallery.
   ///
   /// In en, this message translates to:
@@ -1867,6 +1873,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording saved as attachment'**
   String get recordingSavedAsAttachment;
+
+  /// No description provided for @photoAddedToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo added to note'**
+  String get photoAddedToNote;
+
+  /// No description provided for @errorTakingPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Error taking photo: {error}'**
+  String errorTakingPhoto(Object error);
 
   /// No description provided for @removeAttachmentTooltip.
   ///

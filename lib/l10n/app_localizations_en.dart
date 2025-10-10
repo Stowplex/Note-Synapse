@@ -214,6 +214,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get camera => 'Camera';
 
   @override
+  String get takePhoto => 'Take Photo';
+
+  @override
   String get gallery => 'Gallery';
 
   @override
@@ -967,6 +970,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordingSavedAsAttachment => 'Recording saved as attachment';
+
+  @override
+  String get photoAddedToNote => 'Photo added to note';
+
+  @override
+  String errorTakingPhoto(Object error) {
+    return 'Error taking photo: $error';
+  }
 
   @override
   String get removeAttachmentTooltip => 'Remove attachment';

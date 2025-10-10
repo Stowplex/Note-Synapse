@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:markdown_toolbar/markdown_toolbar.dart';
+import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -869,9 +870,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _openAIAction,
-                  icon: const Icon(Icons.psychology),
-                  label: Text(l10n.aiActions),
+                  onPressed: _takePhoto,
+                  icon: const Icon(Icons.camera_alt),
+                  label: Text(l10n.takePhoto),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1567,6 +1568,52 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${l10n.errorAddingAttachment}: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        final currentNote = context.read<AppProvider>().notes.firstWhere(
+          (note) => note.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+
+        // Get existing attachment paths
+        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        
+        // Add the new photo path
+        updatedAttachmentPaths.add(image.path);
+
+        // Update the note
+        final updatedNote = currentNote.copyWith(
+          attachmentPaths: updatedAttachmentPaths,
+          updatedAt: DateTime.now(),
+        );
+
+        await context.read<AppProvider>().updateNote(updatedNote);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.photoAddedToNote),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorTakingPhoto(e.toString())),
           backgroundColor: Colors.red,
         ),
       );

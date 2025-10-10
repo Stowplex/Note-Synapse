@@ -210,6 +210,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get camera => '相机';
 
   @override
+  String get takePhoto => '拍照';
+
+  @override
   String get gallery => '图库';
 
   @override
@@ -952,6 +955,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordingSavedAsAttachment => '录音已保存为附件';
+
+  @override
+  String get photoAddedToNote => '照片已添加到笔记';
+
+  @override
+  String errorTakingPhoto(Object error) {
+    return '拍照时出错：$error';
+  }
 
   @override
   String get removeAttachmentTooltip => '删除附件';
