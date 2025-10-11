@@ -44,7 +44,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 9,
+      version: 11,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -184,6 +184,7 @@ class DatabaseService {
         userPrompt TEXT NOT NULL,
         aiResponse TEXT NOT NULL,
         appCode TEXT NOT NULL,
+        attachmentPaths TEXT,
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
     ''');
@@ -464,6 +465,67 @@ class DatabaseService {
         await _migrateExistingAppsToRevisions(db);
       } catch (e) {
         print('Migration to version 9 failed: $e');
+      }
+    }
+    
+    if (oldVersion < 10) {
+      // Migration from version 9 to 10: Add attachmentPaths column to user_apps table
+      try {
+        // Check if attachmentPaths column exists in user_apps table
+        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('attachmentPaths')) {
+          await db.execute('ALTER TABLE user_apps ADD COLUMN attachmentPaths TEXT');
+        }
+      } catch (e) {
+        print('Migration to version 10 failed: $e');
+      }
+    }
+    
+    if (oldVersion < 11) {
+      // Migration from version 10 to 11: Move attachmentPaths from user_apps to app_revisions
+      try {
+        // Add attachmentPaths column to app_revisions table
+        final columns = await db.rawQuery("PRAGMA table_info(app_revisions)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('attachmentPaths')) {
+          await db.execute('ALTER TABLE app_revisions ADD COLUMN attachmentPaths TEXT');
+        }
+        
+        // Remove attachmentPaths column from user_apps table if it exists
+        final userAppColumns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final userAppColumnNames = userAppColumns.map((col) => col['name'] as String).toList();
+        
+        if (userAppColumnNames.contains('attachmentPaths')) {
+          // SQLite doesn't support DROP COLUMN, so we need to recreate the table
+          await db.execute('''
+            CREATE TABLE user_apps_new(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              type TEXT NOT NULL DEFAULT 'normal',
+              selectedRevisionId TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+          
+          await db.execute('''
+            INSERT INTO user_apps_new 
+            SELECT id, name, description, steps, htmlContent, appState, type, selectedRevisionId, createdAt, updatedAt 
+            FROM user_apps
+          ''');
+          
+          await db.execute('DROP TABLE user_apps');
+          await db.execute('ALTER TABLE user_apps_new RENAME TO user_apps');
+        }
+      } catch (e) {
+        print('Migration to version 11 failed: $e');
       }
     }
   }
@@ -1417,6 +1479,7 @@ class DatabaseService {
       'userPrompt': revision.userPrompt,
       'aiResponse': revision.aiResponse,
       'appCode': revision.appCode,
+      'attachmentPaths': revision.attachmentPaths.join('|'), // Store attachment paths as pipe-separated string
     };
     
     print('DatabaseService.insertAppRevision: Inserting revision ${revision.id} for app ${revision.appId}');
@@ -1482,6 +1545,9 @@ class DatabaseService {
       userPrompt: map['userPrompt'] as String,
       aiResponse: map['aiResponse'] as String,
       appCode: map['appCode'] as String,
+      attachmentPaths: map['attachmentPaths'] != null 
+          ? (map['attachmentPaths'] as String).split('|').where((path) => path.isNotEmpty).toList()
+          : [],
     );
     print('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
     return revision;

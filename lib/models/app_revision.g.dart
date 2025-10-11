@@ -14,6 +14,11 @@ AppRevision _$AppRevisionFromJson(Map<String, dynamic> json) => AppRevision(
   userPrompt: json['userPrompt'] as String,
   aiResponse: json['aiResponse'] as String,
   appCode: json['appCode'] as String,
+  attachmentPaths:
+      (json['attachmentPaths'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
 );
 
 Map<String, dynamic> _$AppRevisionToJson(AppRevision instance) =>
@@ -25,4 +30,5 @@ Map<String, dynamic> _$AppRevisionToJson(AppRevision instance) =>
       'userPrompt': instance.userPrompt,
       'aiResponse': instance.aiResponse,
       'appCode': instance.appCode,
+      'attachmentPaths': instance.attachmentPaths,
     };

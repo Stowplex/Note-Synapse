@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
@@ -165,10 +166,11 @@ class UserAppService {
     required List<String> steps,
     UserAppType type = UserAppType.normal,
     String? userPrompt,
+    List<String>? attachmentPaths,
   }) async {
     try {
       // Generate the app using AI
-      final aiResponse = await _generateAppWithAI(name, description, steps, type);
+      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths);
       
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
@@ -203,6 +205,7 @@ class UserAppService {
         userPrompt: userPrompt ?? 'Initial app creation',
         aiResponse: explanation,
         appCode: htmlContent,
+        attachmentPaths: attachmentPaths ?? [],
       );
       
       print('Creating revision ${revision.id} for app ${app.id}');
@@ -229,6 +232,7 @@ class UserAppService {
   static Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
+    List<String>? attachmentPaths,
   }) async {
     try {
       // Generate new app based on original and edit suggestion
@@ -239,6 +243,7 @@ class UserAppService {
         originalApp.htmlContent,
         editSuggestion,
         originalApp.type,
+        attachmentPaths: attachmentPaths,
       );
       
       // Parse the AI response to extract code and explanation
@@ -259,6 +264,7 @@ class UserAppService {
         userPrompt: editSuggestion,
         aiResponse: explanation,
         appCode: newHtmlContent,
+        attachmentPaths: attachmentPaths ?? [],
       );
       
       // Save the revision
@@ -280,10 +286,30 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type) async {
+  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths}) async {
     try {
       final prompt = _buildAppGenerationPrompt(name, description, steps, type);
-      final response = await GeminiApiService.generateApp(prompt);
+      
+      // Convert attachment paths to PlatformFile objects for the AI service
+      List<PlatformFile>? attachedFiles;
+      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
+        attachedFiles = [];
+        for (final path in attachmentPaths) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final fileName = path.split('/').last;
+            attachedFiles.add(PlatformFile(
+              name: fileName,
+              size: bytes.length,
+              bytes: bytes,
+              path: path,
+            ));
+          }
+        }
+      }
+      
+      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       print('Error generating app with AI: $e');
@@ -298,8 +324,9 @@ class UserAppService {
     List<String> steps,
     String originalHtml,
     String editSuggestion,
-    UserAppType type,
-  ) async {
+    UserAppType type, {
+    List<String>? attachmentPaths,
+  }) async {
     try {
       final prompt = '''
 Edit the following HTML application based on the user's suggestion:
@@ -446,7 +473,26 @@ Here's the updated application with your requested changes:
 ```
 ''';
       
-      final response = await GeminiApiService.generateApp(prompt);
+      // Convert attachment paths to PlatformFile objects for the AI service
+      List<PlatformFile>? attachedFiles;
+      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
+        attachedFiles = [];
+        for (final path in attachmentPaths) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final fileName = path.split('/').last;
+            attachedFiles.add(PlatformFile(
+              name: fileName,
+              size: bytes.length,
+              bytes: bytes,
+              path: path,
+            ));
+          }
+        }
+      }
+      
+      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       print('Error generating app edit with AI: $e');

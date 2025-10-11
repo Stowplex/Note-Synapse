@@ -1429,6 +1429,117 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
     }
   }
 
+  // Generate user app HTML with attachments
+  static Future<String> generateAppWithAttachments(String prompt, List<PlatformFile>? attachedFiles) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting app generation request with attachments', error: {
+      'prompt': prompt,
+      'attachedFilesCount': attachedFiles?.length ?? 0,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for app generation', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+
+    try {
+      final parts = <Map<String, dynamic>>[
+        {'text': prompt}
+      ];
+
+      // Add file attachments if any
+      if (attachedFiles != null && attachedFiles.isNotEmpty) {
+        for (final file in attachedFiles) {
+          if (file.bytes != null) {
+            // Convert file to base64 for Gemini API
+            final base64Data = base64Encode(file.bytes!);
+            final extension = file.name.split('.').last;
+            final mimeType = _getMimeType(extension);
+            
+            parts.add({
+              'inline_data': {
+                'mime_type': mimeType,
+                'data': base64Data,
+              }
+            });
+          }
+        }
+      }
+
+      final requestBody = {
+        'contents': [
+          {
+            'parts': parts
+          }
+        ],
+        'generationConfig': {
+          'temperature': 0.7,
+          'topK': 40,
+          'topP': 0.95,
+          'maxOutputTokens': 60000,
+        },
+        'safetySettings': [
+          {
+            'category': 'HARM_CATEGORY_HARASSMENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_HATE_SPEECH',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          }
+        ]
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      LoggerService.debug('App generation API response received', error: {
+        'statusCode': response.statusCode,
+        'requestId': requestId,
+      });
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final generatedText = responseData['candidates'][0]['content']['parts'][0]['text'];
+        
+        LoggerService.debug('App generation successful', error: {
+          'responseLength': generatedText.length,
+          'requestId': requestId,
+        });
+        
+        return generatedText;
+      } else {
+        LoggerService.error('App generation API error', error: {
+          'statusCode': response.statusCode,
+          'responseBody': response.body,
+          'requestId': requestId,
+        });
+        throw Exception('API request failed: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      LoggerService.error('Error in app generation', error: {
+        'error': e.toString(),
+        'requestId': requestId,
+      });
+      rethrow;
+    }
+  }
+
   // Generate user app HTML
   static Future<String> generateApp(String prompt) async {
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();

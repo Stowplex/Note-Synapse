@@ -900,6 +900,7 @@ class AppProvider extends ChangeNotifier {
     required String description,
     required List<String> steps,
     UserAppType type = UserAppType.normal,
+    List<String>? attachmentPaths,
   }) async {
     try {
       // Construct user prompt from the provided information
@@ -911,6 +912,7 @@ class AppProvider extends ChangeNotifier {
         steps: steps,
         type: type,
         userPrompt: userPrompt,
+        attachmentPaths: attachmentPaths,
       );
       _userApps.add(app);
       notifyListeners();
@@ -927,11 +929,13 @@ class AppProvider extends ChangeNotifier {
   Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
+    List<String>? attachmentPaths,
   }) async {
     try {
       final revision = await UserAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
+        attachmentPaths: attachmentPaths,
       );
       
       // Update the app in our local list

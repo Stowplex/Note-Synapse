@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../services/user_app_service.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -24,12 +27,29 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
   bool _isSaving = false;
   bool _isCodeEditable = false;
   String _originalCode = '';
+  List<String> _attachmentPaths = [];
 
   @override
   void initState() {
     super.initState();
     _originalCode = widget.app.htmlContent;
     _codeController.text = widget.app.htmlContent;
+    _loadCurrentRevisionAttachments();
+  }
+
+  Future<void> _loadCurrentRevisionAttachments() async {
+    if (widget.app.selectedRevisionId != null) {
+      try {
+        final revision = await UserAppService.getAppRevision(widget.app.selectedRevisionId!);
+        if (revision != null) {
+          setState(() {
+            _attachmentPaths = List<String>.from(revision.attachmentPaths);
+          });
+        }
+      } catch (e) {
+        print('Error loading revision attachments: $e');
+      }
+    }
   }
 
   @override
@@ -52,6 +72,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
       await appProvider.editUserApp(
         originalApp: widget.app,
         editSuggestion: _editSuggestionController.text.trim(),
+        attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
       
       if (mounted) {
@@ -167,6 +188,98 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     });
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      _attachmentPaths.removeAt(index);
+    });
+  }
+
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Image Source'),
+        content: const Text('Choose how you want to add an image'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _takePhoto();
+            },
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Camera'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage();
+            },
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Gallery'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -195,9 +308,19 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l10n.appName,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        l10n.appName,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      IconButton(
+                        onPressed: _showImageSourceDialog,
+                        icon: const Icon(Icons.add_photo_alternate),
+                        tooltip: 'Add Image',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -214,6 +337,53 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
                     widget.app.description,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
+                  if (_attachmentPaths.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Attached Images:',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 8.0,
+                      children: _attachmentPaths.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final path = entry.value;
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8.0),
+                              child: Image.file(
+                                File(path),
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () => _removeAttachment(index),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
             ),

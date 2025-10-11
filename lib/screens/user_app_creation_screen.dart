@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -19,6 +21,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
   bool _isNoteActionApp = false;
+  List<String> _attachmentPaths = [];
 
   @override
   void initState() {
@@ -59,6 +62,98 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
         .toList();
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      _attachmentPaths.removeAt(index);
+    });
+  }
+
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Image Source'),
+        content: const Text('Choose how you want to add an image'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _takePhoto();
+            },
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Camera'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage();
+            },
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Gallery'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _createApp() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -85,6 +180,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
         description: _descriptionController.text.trim(),
         steps: steps,
         type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
+        attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
       
       if (mounted) {
@@ -193,6 +289,74 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
                         },
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Image Attachments Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Image Attachments (Optional)',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          IconButton(
+                            onPressed: _showImageSourceDialog,
+                            icon: const Icon(Icons.add_photo_alternate),
+                            tooltip: 'Add Image',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Attach images to help explain what you want the AI to create',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      if (_attachmentPaths.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ...List.generate(_attachmentPaths.length, (index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  child: Image.file(
+                                    File(_attachmentPaths[index]),
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _attachmentPaths[index].split('/').last,
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _removeAttachment(index),
+                                  icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                  tooltip: 'Remove Image',
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
                     ],
                   ),
                 ),

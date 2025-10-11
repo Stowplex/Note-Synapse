@@ -11,6 +11,7 @@ class AppRevision {
   final String userPrompt;
   final String aiResponse;
   final String appCode;
+  final List<String> attachmentPaths;
 
   const AppRevision({
     required this.id,
@@ -20,6 +21,7 @@ class AppRevision {
     required this.userPrompt,
     required this.aiResponse,
     required this.appCode,
+    this.attachmentPaths = const [],
   });
 
   factory AppRevision.fromJson(Map<String, dynamic> json) => _$AppRevisionFromJson(json);
@@ -33,6 +35,7 @@ class AppRevision {
     String? userPrompt,
     String? aiResponse,
     String? appCode,
+    List<String>? attachmentPaths,
   }) {
     return AppRevision(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class AppRevision {
       userPrompt: userPrompt ?? this.userPrompt,
       aiResponse: aiResponse ?? this.aiResponse,
       appCode: appCode ?? this.appCode,
+      attachmentPaths: attachmentPaths ?? this.attachmentPaths,
     );
   }
 
