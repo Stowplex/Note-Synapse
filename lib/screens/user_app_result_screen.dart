@@ -22,7 +22,6 @@ class UserAppResultScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(isSuccess ? l10n.appCreated : l10n.appCantCreate),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Center(
         child: Padding(

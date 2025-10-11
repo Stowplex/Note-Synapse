@@ -95,7 +95,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.editApp),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Form(
         key: _formKey,

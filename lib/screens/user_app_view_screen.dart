@@ -44,7 +44,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.app.name),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.code),
@@ -121,7 +120,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.app.name),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Center(
         child: Padding(

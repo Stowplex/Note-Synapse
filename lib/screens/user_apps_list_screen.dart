@@ -21,7 +21,6 @@ class UserAppsListScreen extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(
             title: Text(AppLocalizations.of(context)!.myApps),
-            backgroundColor: Theme.of(context).colorScheme.inversePrimary,
           ),
           body: appProvider.userApps.isEmpty
               ? _buildEmptyState(context)
@@ -39,10 +38,9 @@ class UserAppsListScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.myApps),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+        appBar: AppBar(
+          title: Text(l10n.myApps),
+        ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),

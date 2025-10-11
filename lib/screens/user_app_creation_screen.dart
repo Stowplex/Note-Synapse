@@ -123,7 +123,6 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.createNewApp),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Form(
         key: _formKey,

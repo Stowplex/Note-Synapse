@@ -151,7 +151,6 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.tagManagement),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         bottom: TabBar(
           controller: _tabController,
           tabs: [
