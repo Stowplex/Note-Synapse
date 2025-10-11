@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -80,6 +81,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               builtInZoomControls: true,
               displayZoomControls: false,
             ),
+            initialUserScripts: UnmodifiableListView<UserScript>([
+              _createInitialUserScript(),
+            ]),
             onWebViewCreated: (controller) {
               _setupJavaScriptHandlers(controller);
             },
@@ -149,6 +153,53 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     );
   }
 
+  // Create the initial user script for Synapse API injection
+  UserScript _createInitialUserScript() {
+    return UserScript(
+      source: '''
+        // Override console.log to also send to Flutter
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        
+        console.log = function(...args) {
+          originalConsoleLog.apply(console, args);
+          window.flutter_inappwebview.callHandler('log', args.join(' '), 'LOG');
+        };
+        
+        console.error = function(...args) {
+          originalConsoleError.apply(console, args);
+          window.flutter_inappwebview.callHandler('log', args.join(' '), 'ERROR');
+        };
+        
+        console.warn = function(...args) {
+          originalConsoleWarn.apply(console, args);
+          window.flutter_inappwebview.callHandler('log', args.join(' '), 'WARN');
+        };
+        
+        window.Synapse = {
+          runQuery: async (sql) => {
+            const result = await window.flutter_inappwebview.callHandler('runQuery', sql);
+            return result;
+          },
+          storeAppState: async (state) => {
+            const result = await window.flutter_inappwebview.callHandler('storeAppState', state);
+            return result;
+          },
+          loadAppState: async () => {
+            const result = await window.flutter_inappwebview.callHandler('loadAppState');
+            return result;
+          },
+          chatAI: async (prompt) => {
+            const result = await window.flutter_inappwebview.callHandler('chatAI', prompt);
+            return result;
+          }
+        };
+      ''',
+      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+    );
+  }
+
   void _setupJavaScriptHandlers(InAppWebViewController controller) {
     // Add JavaScript handlers for the Synapse API
     controller.addJavaScriptHandler(
@@ -158,8 +209,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final sql = args[0] as String;
           print('[Synapse.runQuery] Called with SQL: $sql');
-          
-          final appProvider = context.read<AppProvider>();
           
           // Execute the SQL query using the database service
           final result = await _executeSQLQuery(sql);
@@ -233,8 +282,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           final prompt = args[0] as String;
           print('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
           
-          final appProvider = context.read<AppProvider>();
-          
           // Use the existing AI service to get a response
           final response = await _callAI(prompt);
           final duration = DateTime.now().difference(startTime);
@@ -264,47 +311,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       },
     );
 
-    // Inject the Synapse API into the web page
-    controller.evaluateJavascript(source: '''
-      // Override console.log to also send to Flutter
-      const originalConsoleLog = console.log;
-      const originalConsoleError = console.error;
-      const originalConsoleWarn = console.warn;
-      
-      console.log = function(...args) {
-        originalConsoleLog.apply(console, args);
-        window.flutter_inappwebview.callHandler('log', args.join(' '), 'LOG');
-      };
-      
-      console.error = function(...args) {
-        originalConsoleError.apply(console, args);
-        window.flutter_inappwebview.callHandler('log', args.join(' '), 'ERROR');
-      };
-      
-      console.warn = function(...args) {
-        originalConsoleWarn.apply(console, args);
-        window.flutter_inappwebview.callHandler('log', args.join(' '), 'WARN');
-      };
-      
-      window.Synapse = {
-        runQuery: async (sql) => {
-          const result = await window.flutter_inappwebview.callHandler('runQuery', sql);
-          return result;
-        },
-        storeAppState: async (state) => {
-          const result = await window.flutter_inappwebview.callHandler('storeAppState', state);
-          return result;
-        },
-        loadAppState: async () => {
-          const result = await window.flutter_inappwebview.callHandler('loadAppState');
-          return result;
-        },
-        chatAI: async (prompt) => {
-          const result = await window.flutter_inappwebview.callHandler('chatAI', prompt);
-          return result;
-        }
-      };
-    ''');
   }
 
   void _showConsole(BuildContext context) {
