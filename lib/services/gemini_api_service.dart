@@ -1411,4 +1411,110 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
       rethrow;
     }
   }
+
+  // Chat AI with configurable parameters
+  static Future<String> chatAI(
+    String prompt, {
+    double? temperature,
+    int? topK,
+    double? topP,
+  }) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    LoggerService.debug('Starting chat AI request', error: {
+      'prompt': prompt,
+      'temperature': temperature,
+      'topK': topK,
+      'topP': topP,
+      'requestId': requestId,
+    });
+
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found for chat AI', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+
+    try {
+      final requestBody = {
+        'contents': [
+          {
+            'parts': [
+              {
+                'text': prompt,
+              }
+            ]
+          }
+        ],
+        'generationConfig': {
+          'temperature': temperature ?? 0.7,
+          'topK': topK ?? 40,
+          'topP': topP ?? 0.95,
+          'maxOutputTokens': 60000,
+        },
+        'safetySettings': [
+          {
+            'category': 'HARM_CATEGORY_HARASSMENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_HATE_SPEECH',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+          }
+        ]
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      LoggerService.debug('Chat AI API response received', error: {
+        'statusCode': response.statusCode,
+        'requestId': requestId,
+      });
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final generatedText = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        
+        if (generatedText != null) {
+          LoggerService.debug('Chat AI successful', error: {
+            'responseLength': generatedText.length,
+            'requestId': requestId,
+          });
+          return generatedText;
+        } else {
+          LoggerService.error('No generated text in chat AI response', error: {
+            'responseBody': response.body,
+            'requestId': requestId,
+          });
+          throw Exception('No generated text in response');
+        }
+      } else {
+        LoggerService.error('Chat AI API request failed', error: {
+          'statusCode': response.statusCode,
+          'responseBody': response.body,
+          'requestId': requestId,
+        });
+        throw Exception('API request failed with status ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      LoggerService.error('Error in chat AI', error: {
+        'error': e.toString(),
+        'requestId': requestId,
+      });
+      rethrow;
+    }
+  }
 }

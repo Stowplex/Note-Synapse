@@ -246,7 +246,10 @@ Available APIs:
   Response format: {success: boolean, error?: string}
 - Synapse.loadAppState() - Load saved JSON serialized state from the app's database
   Response format: {success: boolean, data?: object, error?: string}
-- Synapse.chatAI(prompt: string) - Send prompt through the app's AI channel and get the response
+- Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
+  Param format: 
+    - prompt: a string of prompt to send to the app's AI channel
+    - options: optional object with temperature, topK, topP parameters, for example: {temperature: 0.1, topK: 32, topP: 1}
   Response format: {success: boolean, response?: string, error?: string}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
@@ -282,8 +285,10 @@ IMPORTANT - REQUIREMENTS:
      Response format: {success: boolean, error?: string}
    - Synapse.loadAppState() - Load saved JSON serialized state from the app's database
      Response format: {success: boolean, data?: object, error?: string}
-   - Synapse.chatAI(prompt: string) - Send prompt through the app's AI channel and get the response
-     Param format: a string of prompt to send to the app's AI channel
+   - Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
+     Param format: 
+       - prompt: a string of prompt to send to the app's AI channel
+       - options: optional object with temperature, topK, topP parameters
      Response format: {success: boolean, response?: string, error?: string}
 5. You are also provided with the chart.js libary. You can import it with:
    ```html

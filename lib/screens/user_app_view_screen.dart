@@ -201,8 +201,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             const result = await window.flutter_inappwebview.callHandler('loadAppState');
             return result;
           },
-          chatAI: async (prompt) => {
-            const result = await window.flutter_inappwebview.callHandler('chatAI', prompt);
+          chatAI: async (prompt, options = {}) => {
+            const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, options);
             return result;
           }
         };
@@ -291,10 +291,16 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         final startTime = DateTime.now();
         try {
           final prompt = args[0] as String;
+          final options = args.length > 1 ? args[1] as Map<String, dynamic>? : <String, dynamic>{};
           print('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
           
-          // Use the existing AI service to get a response
-          final response = await _callAI(prompt);
+          // Extract optional parameters
+          final temperature = options?['temperature'] as double?;
+          final topK = options?['topK'] as int?;
+          final topP = options?['topP'] as double?;
+          
+          // Use the new chatAI service with configurable parameters
+          final response = await _callChatAI(prompt, temperature: temperature, topK: topK, topP: topP);
           final duration = DateTime.now().difference(startTime);
           
           print('[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms');
@@ -477,26 +483,25 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     }
   }
 
-  // Call AI service for chat functionality
-  Future<String> _callAI(String prompt) async {
+
+  // Call chat AI service with configurable parameters
+  Future<String> _callChatAI(
+    String prompt, {
+    double? temperature,
+    int? topK,
+    double? topP,
+  }) async {
     try {
-      final appProvider = context.read<AppProvider>();
-      
-      // Use the existing AI service to get a response
-      // We'll use a simple AI interaction for now
-      return await _getAIResponse(prompt);
+      // Use the new chatAI service with configurable parameters
+      return await GeminiApiService.chatAI(
+        prompt,
+        temperature: temperature,
+        topK: topK,
+        topP: topP,
+      );
     } catch (e) {
-      throw Exception('AI call failed: $e');
+      throw Exception('Chat AI call failed: $e');
     }
   }
 
-  // Get AI response using the existing Gemini service
-  Future<String> _getAIResponse(String prompt) async {
-    try {
-      // Use the Gemini API service directly
-      return await GeminiApiService.generateApp('User prompt: $prompt\n\nPlease provide a helpful response.');
-    } catch (e) {
-      throw Exception('AI response failed: $e');
-    }
-  }
 }
