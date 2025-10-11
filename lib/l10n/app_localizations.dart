@@ -2564,6 +2564,24 @@ abstract class AppLocalizations {
   /// **'Edit Code Directly'**
   String get editCodeDirectly;
 
+  /// No description provided for @editAppName.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit App Name'**
+  String get editAppName;
+
+  /// No description provided for @appNameUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'App name updated successfully!'**
+  String get appNameUpdated;
+
+  /// No description provided for @errorUpdatingAppName.
+  ///
+  /// In en, this message translates to:
+  /// **'Error updating app name: {error}'**
+  String errorUpdatingAppName(Object error);
+
   /// No description provided for @consoleOutput.
   ///
   /// In en, this message translates to:

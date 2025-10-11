@@ -1352,6 +1352,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editCodeDirectly => 'Edit Code Directly';
 
   @override
+  String get editAppName => 'Edit App Name';
+
+  @override
+  String get appNameUpdated => 'App name updated successfully!';
+
+  @override
+  String errorUpdatingAppName(Object error) {
+    return 'Error updating app name: $error';
+  }
+
+  @override
   String get consoleOutput => 'Console Output';
 
   @override

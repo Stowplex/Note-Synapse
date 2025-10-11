@@ -6,8 +6,96 @@ import '../models/user_app.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 
-class UserAppsListScreen extends StatelessWidget {
+class UserAppsListScreen extends StatefulWidget {
   const UserAppsListScreen({super.key});
+
+  @override
+  State<UserAppsListScreen> createState() => _UserAppsListScreenState();
+}
+
+class _UserAppsListScreenState extends State<UserAppsListScreen> {
+  String? _editingAppId;
+  final TextEditingController _editingController = TextEditingController();
+  final FocusNode _editingFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _editingFocusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _editingController.dispose();
+    _editingFocusNode.removeListener(_onFocusChange);
+    _editingFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_editingFocusNode.hasFocus && _editingAppId != null) {
+      _saveAppName();
+    }
+  }
+
+  void _startEditingAppName(UserApp app) {
+    setState(() {
+      _editingAppId = app.id;
+      _editingController.text = app.name;
+    });
+    _editingFocusNode.requestFocus();
+  }
+
+  Future<void> _saveAppName() async {
+    if (_editingAppId == null) return;
+
+    final newName = _editingController.text.trim();
+    if (newName.isEmpty) {
+      _cancelEditing();
+      return;
+    }
+
+    try {
+      final appProvider = context.read<AppProvider>();
+      final app = appProvider.userApps.firstWhere((a) => a.id == _editingAppId);
+      
+      if (app.name != newName) {
+        final updatedApp = app.copyWith(
+          name: newName,
+          updatedAt: DateTime.now(),
+        );
+        
+        await appProvider.updateUserApp(updatedApp);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.appNameUpdated),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.errorUpdatingAppName(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      _cancelEditing();
+    }
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingAppId = null;
+      _editingController.clear();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +210,7 @@ class UserAppsListScreen extends StatelessWidget {
 
   Widget _buildAppCard(BuildContext context, UserApp app, AppProvider appProvider) {
     final l10n = AppLocalizations.of(context)!;
+    final isEditing = _editingAppId == app.id;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -133,10 +222,25 @@ class UserAppsListScreen extends StatelessWidget {
             color: Theme.of(context).colorScheme.onPrimary,
           ),
         ),
-        title: Text(
-          app.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: isEditing
+            ? TextField(
+                controller: _editingController,
+                focusNode: _editingFocusNode,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Enter app name...',
+                ),
+                onSubmitted: (_) => _saveAppName(),
+                onTapOutside: (_) => _saveAppName(),
+              )
+            : GestureDetector(
+                onTap: () => _startEditingAppName(app),
+                child: Text(
+                  app.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -151,19 +255,37 @@ class UserAppsListScreen extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.play_arrow),
-              onPressed: () => _navigateToViewApp(context, app),
-              tooltip: l10n.toApp,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () => _showDeleteDialog(context, app, appProvider),
-              tooltip: l10n.delete,
-            ),
+            if (isEditing) ...[
+              IconButton(
+                icon: const Icon(Icons.check),
+                onPressed: _saveAppName,
+                tooltip: 'Save',
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _cancelEditing,
+                tooltip: 'Cancel',
+              ),
+            ] else ...[
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => _startEditingAppName(app),
+                tooltip: l10n.editAppName,
+              ),
+              IconButton(
+                icon: const Icon(Icons.play_arrow),
+                onPressed: () => _navigateToViewApp(context, app),
+                tooltip: l10n.toApp,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () => _showDeleteDialog(context, app, appProvider),
+                tooltip: l10n.delete,
+              ),
+            ],
           ],
         ),
-        onTap: () => _navigateToViewApp(context, app),
+        onTap: isEditing ? null : () => _navigateToViewApp(context, app),
       ),
     );
   }

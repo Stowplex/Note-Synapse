@@ -172,7 +172,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     final l10n = AppLocalizations.of(context)!;
     
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: !_isCodeEditable,
       appBar: AppBar(
         title: Text(l10n.editApp),
       ),
