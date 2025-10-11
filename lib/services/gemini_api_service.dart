@@ -716,7 +716,7 @@ class GeminiApiService {
 
   static String _buildMultiNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
     if (useOwnKnowledge) {
-      return r'''
+      return '''
 Based on the following notes and their linked relationships, please answer the question: "$question"
 
 Context Notes (including linked notes and their relationships):
@@ -731,18 +731,18 @@ Please provide a comprehensive answer using both the information in the notes an
 
 IMPORTANT - Math Formula Guidelines:
 - When including mathematical formulas, equations, or expressions in your response, use LaTeX format
-- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
-- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
+- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
 - Examples:
-  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
-  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
+  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
 - Preserve all mathematical notation, symbols, and formatting accurately
 - If explaining complex equations, break them down into logical components
 
 You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
 ''';
     } else {
-      return r'''
+      return '''
 Based on the following notes and their linked relationships, please answer the question: "$question"
 
 Context Notes (including linked notes and their relationships):
@@ -756,11 +756,11 @@ Please provide a comprehensive answer based ONLY on the information in the notes
 
 IMPORTANT - Math Formula Guidelines:
 - When including mathematical formulas, equations, or expressions in your response, use LaTeX format
-- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
-- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
+- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
 - Examples:
-  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
-  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
+  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
 - Preserve all mathematical notation, symbols, and formatting accurately
 - If explaining complex equations, break them down into logical components
 
@@ -853,7 +853,7 @@ If the answer cannot be found in the provided context, please state that clearly
   }
 
   static String _buildNewNoteCreationPrompt(String prompt, String context) {
-    return r'''
+    return '''
 Based on the following context and prompt, please create one or more new notes.
 
 Context Notes (including linked notes and their relationships):
@@ -868,11 +868,11 @@ IMPORTANT:
 
 IMPORTANT - Math Formula Guidelines:
 - When including mathematical formulas, equations, or expressions in note content, use LaTeX format
-- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
-- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
+- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
 - Examples:
-  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
-  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
+  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
 - Preserve all mathematical notation, symbols, and formatting accurately
 - If creating notes with complex equations, break them down into logical components
 
@@ -1127,7 +1127,7 @@ If creating multiple notes, ensure they are related and useful based on the cont
   }
 
   static String _buildContentExtractionPrompt(String text, String contentType, String title) {
-    return r'''
+    return '''
 Please analyze and extract the key content from this $contentType. 
 
 Title: $title
@@ -1143,11 +1143,11 @@ Please provide a well-structured summary that includes:
 
 IMPORTANT - Math Formula Guidelines:
 - When encountering mathematical formulas, equations, or expressions, represent them using LaTeX format
-- Use the format: \( formula \) for inline math (without leading and ending $ symbols)
-- Use the format: \[ formula \] for display math (without leading and ending $ symbols)
+- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
+- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
 - Examples:
-  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)
-  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]
+  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
+  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
 - Preserve all mathematical notation, symbols, and formatting accurately
 - If you encounter complex equations, break them down into logical components
 
