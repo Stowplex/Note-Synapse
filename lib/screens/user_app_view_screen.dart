@@ -75,7 +75,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               javaScriptEnabled: true,
               domStorageEnabled: true,
               databaseEnabled: true,
-              clearCache: false,
+              clearCache: true,
               cacheEnabled: true,
               supportZoom: true,
               builtInZoomControls: true,

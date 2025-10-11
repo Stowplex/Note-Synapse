@@ -2534,6 +2534,36 @@ abstract class AppLocalizations {
   /// **'Error creating app from edit: {error}'**
   String errorCreatingAppFromEdit(Object error);
 
+  /// No description provided for @saveCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Code'**
+  String get saveCode;
+
+  /// No description provided for @saveCodeDirectly.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Code Directly'**
+  String get saveCodeDirectly;
+
+  /// No description provided for @codeSavedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Code saved successfully!'**
+  String get codeSavedSuccessfully;
+
+  /// No description provided for @errorSavingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving code: {error}'**
+  String errorSavingCode(Object error);
+
+  /// No description provided for @editCodeDirectly.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Code Directly'**
+  String get editCodeDirectly;
+
   /// No description provided for @consoleOutput.
   ///
   /// In en, this message translates to:

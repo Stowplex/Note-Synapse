@@ -334,31 +334,53 @@ class DatabaseService {
     if (oldVersion < 7) {
       // Migration from version 6 to 7: Add user_apps table
       try {
-        await db.execute('''
-          CREATE TABLE user_apps(
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            steps TEXT NOT NULL,
-            htmlContent TEXT NOT NULL,
-            appState TEXT,
-            createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL
-          )
-        ''');
+        // Check if user_apps table already exists
+        final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'");
+        if (tables.isEmpty) {
+          await db.execute('''
+            CREATE TABLE user_apps(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        }
       } catch (e) {
         print('Migration to version 7 failed: $e');
-        // If migration fails, drop and recreate the database
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
-        await db.execute('DROP TABLE IF EXISTS filters');
-        await db.execute('DROP TABLE IF EXISTS user_apps');
-        await _onCreate(db, newVersion);
+        // Only drop and recreate if the table creation actually failed
+        try {
+          await db.execute('DROP TABLE IF EXISTS user_apps');
+          await db.execute('''
+            CREATE TABLE user_apps(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        } catch (e2) {
+          print('Failed to create user_apps table: $e2');
+          // Only as last resort, recreate entire database
+          await db.execute('DROP TABLE IF EXISTS notes');
+          await db.execute('DROP TABLE IF EXISTS subnotes');
+          await db.execute('DROP TABLE IF EXISTS tags');
+          await db.execute('DROP TABLE IF EXISTS note_tags');
+          await db.execute('DROP TABLE IF EXISTS attachments');
+          await db.execute('DROP TABLE IF EXISTS relationships');
+          await db.execute('DROP TABLE IF EXISTS ai_interactions');
+          await db.execute('DROP TABLE IF EXISTS filters');
+          await db.execute('DROP TABLE IF EXISTS user_apps');
+          await _onCreate(db, newVersion);
+        }
       }
     }
   }
@@ -1093,19 +1115,28 @@ class DatabaseService {
   // User Apps CRUD
   Future<String> insertUserApp(UserApp app) async {
     final db = await database;
-    final json = app.toJson();
-    json['createdAt'] = app.createdAt.millisecondsSinceEpoch;
-    json['updatedAt'] = app.updatedAt.millisecondsSinceEpoch;
-    json['steps'] = app.steps.join('|'); // Store steps as pipe-separated string
-    json['appState'] = app.appState != null ? jsonEncode(app.appState) : null;
+    // Build JSON manually to avoid conflicts with toJson() DateTime serialization
+    final json = {
+      'id': app.id,
+      'name': app.name,
+      'description': app.description,
+      'steps': app.steps.join('|'), // Store steps as pipe-separated string
+      'htmlContent': app.htmlContent,
+      'appState': app.appState != null ? jsonEncode(app.appState) : null,
+      'createdAt': app.createdAt.millisecondsSinceEpoch,
+      'updatedAt': app.updatedAt.millisecondsSinceEpoch,
+    };
     
+    print('DatabaseService.insertUserApp: Inserting app ${app.id} - ${app.name}');
     await db.insert('user_apps', json);
+    print('DatabaseService.insertUserApp: Successfully inserted app ${app.id}');
     return app.id;
   }
 
   Future<List<UserApp>> getAllUserApps() async {
     final db = await database;
     final maps = await db.query('user_apps', orderBy: 'createdAt DESC');
+    print('DatabaseService.getAllUserApps: Found ${maps.length} user apps');
     return maps.map((map) => _userAppFromMap(map)).toList();
   }
 
@@ -1120,10 +1151,17 @@ class DatabaseService {
 
   Future<void> updateUserApp(UserApp app) async {
     final db = await database;
-    final json = app.toJson();
-    json['updatedAt'] = app.updatedAt.millisecondsSinceEpoch;
-    json['steps'] = app.steps.join('|'); // Store steps as pipe-separated string
-    json['appState'] = app.appState != null ? jsonEncode(app.appState) : null;
+    // Build JSON manually to avoid conflicts with toJson() DateTime serialization
+    final json = {
+      'id': app.id,
+      'name': app.name,
+      'description': app.description,
+      'steps': app.steps.join('|'), // Store steps as pipe-separated string
+      'htmlContent': app.htmlContent,
+      'appState': app.appState != null ? jsonEncode(app.appState) : null,
+      'createdAt': app.createdAt.millisecondsSinceEpoch,
+      'updatedAt': app.updatedAt.millisecondsSinceEpoch,
+    };
     
     await db.update('user_apps', json, where: 'id = ?', whereArgs: [app.id]);
   }
@@ -1161,6 +1199,17 @@ class DatabaseService {
   }
 
   UserApp _userAppFromMap(Map<String, dynamic> map) {
+    // Handle both int and string timestamps for backward compatibility
+    DateTime parseTimestamp(dynamic timestamp) {
+      if (timestamp is int) {
+        return DateTime.fromMillisecondsSinceEpoch(timestamp);
+      } else if (timestamp is String) {
+        return DateTime.parse(timestamp);
+      } else {
+        throw Exception('Invalid timestamp format: $timestamp');
+      }
+    }
+
     return UserApp(
       id: map['id'] as String,
       name: map['name'] as String,
@@ -1170,8 +1219,8 @@ class DatabaseService {
       appState: map['appState'] != null 
           ? jsonDecode(map['appState'] as String) as Map<String, dynamic>
           : null,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
+      createdAt: parseTimestamp(map['createdAt']),
+      updatedAt: parseTimestamp(map['updatedAt']),
     );
   }
 }

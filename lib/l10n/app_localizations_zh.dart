@@ -1315,6 +1315,23 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get saveCode => 'Save Code';
+
+  @override
+  String get saveCodeDirectly => 'Save Code Directly';
+
+  @override
+  String get codeSavedSuccessfully => 'Code saved successfully!';
+
+  @override
+  String errorSavingCode(Object error) {
+    return 'Error saving code: $error';
+  }
+
+  @override
+  String get editCodeDirectly => 'Edit Code Directly';
+
+  @override
   String get consoleOutput => '控制台输出';
 
   @override

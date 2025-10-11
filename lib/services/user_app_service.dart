@@ -27,6 +27,17 @@ class UserAppService {
     }
   }
   
+  // Update a user app
+  static Future<void> updateUserApp(UserApp app) async {
+    try {
+      final databaseService = DatabaseService();
+      await databaseService.updateUserApp(app);
+    } catch (e) {
+      print('Error updating user app: $e');
+      rethrow;
+    }
+  }
+  
   // Delete a user app
   static Future<void> deleteUserApp(String appId) async {
     try {
@@ -265,22 +276,25 @@ IMPORTANT - REQUIREMENTS:
 3. Document the purpose, requirements, and approach in comments
 4. Use the following APIs to interact with the Flutter app, genereated code should strictly follow the API parameter types.
    - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
+     Param format: a string of SQL query to execute
      Response format: {success: boolean, data: array, error?: string}
    - Synapse.storeAppState(state: object) - Store JSON serialized state to the app's database
      Response format: {success: boolean, error?: string}
    - Synapse.loadAppState() - Load saved JSON serialized state from the app's database
      Response format: {success: boolean, data?: object, error?: string}
    - Synapse.chatAI(prompt: string) - Send prompt through the app's AI channel and get the response
+     Param format: a string of prompt to send to the app's AI channel
      Response format: {success: boolean, response?: string, error?: string}
-5. You are also provided with the c3.js library, you can use it to generate charts. If c3.js is needed, you should import it with
+5. You are also provided with the chart.js libary. You can import it with:
    ```html
-   <link rel="stylesheet" href="synapse://c3.min.css">
-   <script src="synapse://d3-5.8.2.min.js"></script>
-   <script src="synapse://c3.min.js"></script>
+   <script src="synapse://chart.min.js"></script>
    ```
 6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
 7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
    but be mindful of the latency, you should try to batch data in one request.
+8. Be careful when you parse the output of AI interaction with chatAI. You should clearly require that
+   the output follow a format (such as JSON), but be careful that the AI might output JSON with quotes like ```json ```,
+   your code should be able to handle this.
 
 
 Database Schema:

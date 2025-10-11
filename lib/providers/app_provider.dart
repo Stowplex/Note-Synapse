@@ -867,7 +867,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateUserApp(UserApp app) async {
     try {
-      await UserAppService.saveUserApp(app);
+      await UserAppService.updateUserApp(app);
       final appIndex = _userApps.indexWhere((a) => a.id == app.id);
       if (appIndex != -1) {
         _userApps[appIndex] = app;
