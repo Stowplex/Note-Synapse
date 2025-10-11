@@ -138,9 +138,6 @@ flutter:
   assets:
     - assets/scripts/Readability.min.js
     - assets/scripts/chart.min.js
-    - assets/scripts/c3.min.css
-    - assets/scripts/c3.min.js
-    - assets/scripts/d3-5.8.2.min.js
 
   # Internationalization
   generate: true
