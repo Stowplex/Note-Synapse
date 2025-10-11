@@ -898,12 +898,14 @@ class AppProvider extends ChangeNotifier {
     required String name,
     required String description,
     required List<String> steps,
+    UserAppType type = UserAppType.normal,
   }) async {
     try {
       final app = await UserAppService.createUserApp(
         name: name,
         description: description,
         steps: steps,
+        type: type,
       );
       _userApps.add(app);
       notifyListeners();

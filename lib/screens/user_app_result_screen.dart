@@ -70,7 +70,7 @@ class UserAppResultScreen extends StatelessWidget {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => UserAppViewScreen(app: app!),
+                            builder: (context) => UserAppViewScreen(app: app!, selectedNotes: null),
                           ),
                         );
                       },

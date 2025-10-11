@@ -77,10 +77,11 @@ class UserAppService {
     required String name,
     required String description,
     required List<String> steps,
+    UserAppType type = UserAppType.normal,
   }) async {
     try {
       // Generate the app using AI
-      final htmlContent = await _generateAppWithAI(name, description, steps);
+      final htmlContent = await _generateAppWithAI(name, description, steps, type);
       
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -88,6 +89,7 @@ class UserAppService {
         description: description,
         steps: steps,
         htmlContent: htmlContent,
+        type: type,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -114,6 +116,7 @@ class UserAppService {
         originalApp.steps,
         originalApp.htmlContent,
         editSuggestion,
+        originalApp.type,
       );
       
       final editedApp = UserApp(
@@ -122,6 +125,7 @@ class UserAppService {
         description: originalApp.description,
         steps: originalApp.steps,
         htmlContent: newHtmlContent,
+        type: originalApp.type, // Preserve the original app type
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -135,9 +139,9 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps) async {
+  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type) async {
     try {
-      final prompt = _buildAppGenerationPrompt(name, description, steps);
+      final prompt = _buildAppGenerationPrompt(name, description, steps, type);
       final response = await GeminiApiService.generateApp(prompt);
       return _trimMarkdownCodeBlocks(response);
     } catch (e) {
@@ -153,6 +157,7 @@ class UserAppService {
     List<String> steps,
     String originalHtml,
     String editSuggestion,
+    UserAppType type,
   ) async {
     try {
       final prompt = '''
@@ -239,18 +244,42 @@ The app has access to the following database tables:
    - createdAt (INTEGER NOT NULL) - Creation timestamp
    - updatedAt (INTEGER NOT NULL) - Last update timestamp
 
-Available APIs:
-- Synapse.runQuery(sql: string) - Query the app's database by running the sql query
-  Response format: {success: boolean, data: array, error?: string}
-- Synapse.storeAppState(state: object) - Store JSON serialized state to the app's database
-  Response format: {success: boolean, error?: string}
-- Synapse.loadAppState() - Load saved JSON serialized state from the app's database
-  Response format: {success: boolean, data?: object, error?: string}
-- Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
-  Param format: 
-    - prompt: a string of prompt to send to the app's AI channel
-    - options: optional object with temperature, topK, topP parameters, for example: {temperature: 0.1, topK: 32, topP: 1}
-  Response format: {success: boolean, response?: string, error?: string}
+IMPORTANT - REQUIREMENTS:
+1. The HTML must be completely self-contained with embedded CSS and JavaScript
+2. Do not reference any external resources
+3. Document the purpose, requirements, and approach in comments
+4. Use the following APIs to interact with the Flutter app, genereated code should strictly follow the API parameter types.
+   - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
+     Param format: a string of SQL query to execute
+     Response format: {success: boolean, data: array, error?: string}
+   - Synapse.storeAppState(state: object) - Store JSON serialized state to the app's database
+     Response format: {success: boolean, error?: string}
+   - Synapse.loadAppState() - Load saved JSON serialized state from the app's database
+     Response format: {success: boolean, data?: object, error?: string}
+   - Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
+     Param format: 
+       - prompt: a string of prompt to send to the app's AI channel
+       - options: optional object with temperature, topK, topP, attachments parameters, for example: {temperature: 0.1, topK: 32, topP: 1, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+     Response format: {success: boolean, response?: string, error?: string}
+5. Libraries you can utilize:
+  - You are provided with the chart.js libary (version 2.9.4). You can import it with:
+    ```html
+    <script src="synapse://chart.min.js"></script>
+    ```
+  - You are provided with the bootstrap library (version 4.6). You can import it with:
+    ```html
+    <link rel="stylesheet" href="synapse://bootstrap.min.css">
+    ```
+6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
+7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
+   but be mindful of the latency, you should try to batch data in one request.
+8. Be careful when you parse the output of AI interaction with chatAI. You should clearly require that
+   the output follow a format (such as JSON), but be careful that the AI might output JSON with quotes like ```json ```,
+   your code should be able to handle this.
+9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
+10. Prefer creating responsive layout with existing libraries over manual css.
+
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
 ''';
@@ -264,7 +293,7 @@ Please generate the updated HTML application that incorporates the user's sugges
   }
   
   // Build the app generation prompt
-  static String _buildAppGenerationPrompt(String name, String description, List<String> steps) {
+  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type) {
     return '''
 Create a single-page self-contained HTML application based on the following requirements:
 
@@ -288,18 +317,25 @@ IMPORTANT - REQUIREMENTS:
    - Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
      Param format: 
        - prompt: a string of prompt to send to the app's AI channel
-       - options: optional object with temperature, topK, topP parameters
+       - options: optional object with temperature, topK, topP, attachments parameters, for example: {temperature: 0.1, topK: 32, topP: 1, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
-5. You are also provided with the chart.js libary. You can import it with:
-   ```html
-   <script src="synapse://chart.min.js"></script>
-   ```
+5. Libraries you can utilize:
+  - You are provided with the chart.js libary (version 2.9.4). You can import it with:
+    ```html
+    <script src="synapse://chart.min.js"></script>
+    ```
+  - You are provided with the bootstrap library (version 4.6). You can import it with:
+    ```html
+    <link rel="stylesheet" href="synapse://bootstrap.min.css">
+    ```
 6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
 7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
    but be mindful of the latency, you should try to batch data in one request.
 8. Be careful when you parse the output of AI interaction with chatAI. You should clearly require that
    the output follow a format (such as JSON), but be careful that the AI might output JSON with quotes like ```json ```,
    your code should be able to handle this.
+9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
+10. Prefer creating responsive layout with existing libraries over manual css.
 
 
 Database Schema:
@@ -380,7 +416,68 @@ Example SQL queries you can use:
 - SELECT * FROM notes WHERE pinned = 1 ORDER BY createdAt DESC
 - SELECT * FROM subnotes WHERE noteId = 'some-note-id' AND isCompleted = 0
 
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
+
 Generate the complete HTML application now.
+''';
+  }
+
+  // Get Note Action App specific instructions
+  static String _getNoteActionAppInstructions() {
+    return '''
+NOTE ACTION APP SPECIFIC INSTRUCTIONS:
+This is a Note Action App that operates on pre-selected notes. The app will receive a list of notes through window.Synapse.Notes.
+
+IMPORTANT: The window.Synapse.Notes array will be pre-populated with the user's selected notes when the app runs.
+
+Note Object Format:
+Each note in window.Synapse.Notes has the following structure:
+{
+  "id": "string",                    // Unique note identifier
+  "title": "string",                 // Note title
+  "content": "string",               // Note content (may contain markdown)
+  "tags": ["string"],                // Array of tag names
+  "createdAt": "ISO8601 string",     // Creation timestamp
+  "updatedAt": "ISO8601 string",     // Last update timestamp
+  "isTask": boolean,                 // Whether this is a task (true) or note (false)
+  "status": "string",                // Task status: "todo", "inProgress", "completed", "cancelled" (only for tasks)
+  "pinned": boolean,                 // Whether the note is pinned
+  "isArchived": boolean,             // Whether the note is archived
+  "attachmentPaths": ["string"]      // Array of file paths to attachments
+}
+
+USAGE GUIDELINES:
+1. The app should primarily work with the notes provided in window.Synapse.Notes
+2. You can access individual notes like: window.Synapse.Notes[0], window.Synapse.Notes[1], etc.
+3. You can iterate through all notes using: window.Synapse.Notes.forEach(note => { ... })
+4. The app should be designed to process, analyze, or manipulate these specific notes
+5. If you need to query the database for additional context, you can still use Synapse.runQuery()
+6. The app should clearly indicate that it's working with the selected notes
+7. Consider showing the number of notes being processed: window.Synapse.Notes.length
+8. You can display note titles, content, tags, and other properties as needed
+9. For tasks, check the isTask property and status to handle them appropriately
+10. For attachments, the attachmentPaths array contains file paths that can be used with Synapse.chatAI() if needed
+
+EXAMPLE USAGE:
+```javascript
+// Check if notes are available
+if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
+  console.log(\`Processing \${window.Synapse.Notes.length} selected notes\`);
+  
+  // Process each note
+  window.Synapse.Notes.forEach((note, index) => {
+    console.log(\`Note \${index + 1}: \${note.title}\`);
+    console.log(\`Content: \${note.content}\`);
+    console.log(\`Tags: \${note.tags.join(', ')}\`);
+    console.log(\`Type: \${note.isTask ? 'Task' : 'Note'}\`);
+    if (note.isTask) {
+      console.log(\`Status: \${note.status}\`);
+    }
+  });
+} else {
+  console.log('No notes selected');
+}
+```
 ''';
   }
   

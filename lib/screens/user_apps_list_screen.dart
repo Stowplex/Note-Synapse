@@ -303,7 +303,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => UserAppViewScreen(app: app),
+        builder: (context) => UserAppViewScreen(app: app, selectedNotes: null),
       ),
     );
   }

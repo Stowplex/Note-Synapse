@@ -18,6 +18,7 @@ import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
+import 'note_action_app_selection_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -247,6 +248,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             IconButton(
               icon: const Icon(Icons.psychology),
               onPressed: _openAIAction,
+            ),
+            IconButton(
+              icon: const Icon(Icons.apps),
+              onPressed: _openNoteActionApps,
+              tooltip: 'Run Note Action App',
             ),
             IconButton(
               icon: const Icon(Icons.share),
@@ -1268,6 +1274,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AIActionScreen(selectedNotes: [widget.note]),
+      ),
+    );
+  }
+
+  void _openNoteActionApps() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NoteActionAppSelectionScreen(selectedNotes: [widget.note]),
       ),
     );
   }

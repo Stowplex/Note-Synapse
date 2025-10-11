@@ -2,6 +2,11 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'user_app.g.dart';
 
+enum UserAppType {
+  normal,
+  noteAction,
+}
+
 @JsonSerializable()
 class UserApp {
   final String id;
@@ -10,6 +15,7 @@ class UserApp {
   final List<String> steps;
   final String htmlContent;
   final Map<String, dynamic>? appState;
+  final UserAppType type;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -20,6 +26,7 @@ class UserApp {
     required this.steps,
     required this.htmlContent,
     this.appState,
+    this.type = UserAppType.normal,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -34,6 +41,7 @@ class UserApp {
     List<String>? steps,
     String? htmlContent,
     Map<String, dynamic>? appState,
+    UserAppType? type,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -44,6 +52,7 @@ class UserApp {
       steps: steps ?? this.steps,
       htmlContent: htmlContent ?? this.htmlContent,
       appState: appState ?? this.appState,
+      type: type ?? this.type,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

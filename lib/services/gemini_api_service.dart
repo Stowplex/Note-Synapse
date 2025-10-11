@@ -387,6 +387,121 @@ class GeminiApiService {
     }
   }
 
+  static Future<String> _makeGeminiRequestWithConfig(
+    String apiKey, 
+    String prompt, {
+    List<PlatformFile>? attachedFiles,
+    double? temperature,
+    int? topK,
+    double? topP,
+    String? requestId,
+  }) async {
+    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    
+    // Add today's date context to the prompt
+    final today = DateTime.now();
+    final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
+    final enhancedPrompt = prompt + todayContext;
+
+    final parts = <Map<String, dynamic>>[
+      {'text': enhancedPrompt}
+    ];
+
+    // Add file attachments if any
+    if (attachedFiles != null && attachedFiles.isNotEmpty) {
+      for (final file in attachedFiles) {
+        if (file.bytes != null) {
+          // Convert file to base64 for Gemini API
+          final base64Data = base64Encode(file.bytes!);
+          final extension = file.name.split('.').last;
+          final mimeType = _getMimeType(extension);
+          
+          parts.add({
+            'inline_data': {
+              'mime_type': mimeType,
+              'data': base64Data,
+            }
+          });
+        }
+      }
+    }
+
+    final requestBody = {
+      'contents': [
+        {
+          'parts': parts
+        }
+      ],
+      'generationConfig': {
+        'temperature': temperature ?? 0.1,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': 60000,
+      }
+    };
+
+    // Log the request
+    LoggerService.logAiRequest(
+      endpoint: '$_baseUrl/models/$_model:generateContent',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(requestBody),
+    );
+    
+    final duration = DateTime.now().difference(startTime);
+
+    // Log the response
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: actualRequestId,
+      duration: duration,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+        final candidate = data['candidates'][0];
+        final content = candidate['content'];
+        
+        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+          final responseText = content['parts'][0]['text'];
+          LoggerService.debug('Gemini API request completed successfully', error: {
+            'responseLength': responseText.length,
+            'requestId': actualRequestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+          return responseText;
+        }
+      }
+      LoggerService.error('No content in Gemini API response', error: {
+        'responseData': data,
+        'requestId': actualRequestId,
+      });
+      throw Exception('No content in Gemini API response');
+    } else {
+      LoggerService.logAiError(
+        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: '$_baseUrl/models/$_model:generateContent',
+        requestId: actualRequestId,
+        duration: duration,
+      );
+      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+    }
+  }
+
   static Future<String> _makeGeminiRequest(
     String apiKey, 
     String prompt, {
@@ -1418,6 +1533,7 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
     double? temperature,
     int? topK,
     double? topP,
+    List<PlatformFile>? attachedFiles,
   }) async {
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     LoggerService.debug('Starting chat AI request', error: {
@@ -1425,6 +1541,7 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
       'temperature': temperature,
       'topK': topK,
       'topP': topP,
+      'attachedFilesCount': attachedFiles?.length ?? 0,
       'requestId': requestId,
     });
 
@@ -1435,80 +1552,23 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
     }
 
     try {
-      final requestBody = {
-        'contents': [
-          {
-            'parts': [
-              {
-                'text': prompt,
-              }
-            ]
-          }
-        ],
-        'generationConfig': {
-          'temperature': temperature ?? 0.7,
-          'topK': topK ?? 40,
-          'topP': topP ?? 0.95,
-          'maxOutputTokens': 60000,
-        },
-        'safetySettings': [
-          {
-            'category': 'HARM_CATEGORY_HARASSMENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_HATE_SPEECH',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          }
-        ]
-      };
-
-      final response = await http.post(
-        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
+      // Use the existing _makeGeminiRequest method which supports attachments
+      // but we need to create a custom request body with the specific generation config
+      final response = await _makeGeminiRequestWithConfig(
+        apiKey,
+        prompt,
+        attachedFiles: attachedFiles,
+        temperature: temperature ?? 0.7,
+        topK: topK ?? 40,
+        topP: topP ?? 0.95,
+        requestId: requestId,
       );
 
-      LoggerService.debug('Chat AI API response received', error: {
-        'statusCode': response.statusCode,
+      LoggerService.debug('Chat AI successful', error: {
+        'responseLength': response.length,
         'requestId': requestId,
       });
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final generatedText = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'];
-        
-        if (generatedText != null) {
-          LoggerService.debug('Chat AI successful', error: {
-            'responseLength': generatedText.length,
-            'requestId': requestId,
-          });
-          return generatedText;
-        } else {
-          LoggerService.error('No generated text in chat AI response', error: {
-            'responseBody': response.body,
-            'requestId': requestId,
-          });
-          throw Exception('No generated text in response');
-        }
-      } else {
-        LoggerService.error('Chat AI API request failed', error: {
-          'statusCode': response.statusCode,
-          'responseBody': response.body,
-          'requestId': requestId,
-        });
-        throw Exception('API request failed with status ${response.statusCode}: ${response.body}');
-      }
+      return response;
     } catch (e) {
       LoggerService.error('Error in chat AI', error: {
         'error': e.toString(),

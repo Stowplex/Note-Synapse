@@ -43,7 +43,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -166,6 +166,7 @@ class DatabaseService {
         steps TEXT NOT NULL,
         htmlContent TEXT NOT NULL,
         appState TEXT,
+        type TEXT NOT NULL DEFAULT 'normal',
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
@@ -380,6 +381,40 @@ class DatabaseService {
           await db.execute('DROP TABLE IF EXISTS filters');
           await db.execute('DROP TABLE IF EXISTS user_apps');
           await _onCreate(db, newVersion);
+        }
+      }
+    }
+    
+    if (oldVersion < 8) {
+      // Migration from version 7 to 8: Add type column to user_apps table
+      try {
+        // Check if type column exists in user_apps table
+        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('type')) {
+          await db.execute('ALTER TABLE user_apps ADD COLUMN type TEXT NOT NULL DEFAULT "normal"');
+        }
+      } catch (e) {
+        print('Migration to version 8 failed: $e');
+        // If migration fails, recreate the user_apps table
+        try {
+          await db.execute('DROP TABLE IF EXISTS user_apps');
+          await db.execute('''
+            CREATE TABLE user_apps(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              type TEXT NOT NULL DEFAULT 'normal',
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        } catch (e2) {
+          print('Failed to recreate user_apps table: $e2');
         }
       }
     }
@@ -914,6 +949,30 @@ class DatabaseService {
     return maps.map((map) => map['filePath'] as String).toList();
   }
 
+  // Verify if an attachment path belongs to any note
+  Future<bool> verifyAttachmentPath(String attachmentPath) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'filePath = ?',
+      whereArgs: [attachmentPath],
+    );
+
+    return maps.isNotEmpty;
+  }
+
+  // Get the note ID for a given attachment path
+  Future<String?> getNoteIdForAttachment(String attachmentPath) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'filePath = ?',
+      whereArgs: [attachmentPath],
+    );
+
+    return maps.isNotEmpty ? maps.first['noteId'] as String? : null;
+  }
+
   Future<void> _linkNoteToTag(String noteId, String tagName) async {
     final db = await database;
     
@@ -1123,6 +1182,7 @@ class DatabaseService {
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
       'htmlContent': app.htmlContent,
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
+      'type': app.type.toString().split('.').last, // Store enum as string
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1159,6 +1219,7 @@ class DatabaseService {
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
       'htmlContent': app.htmlContent,
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
+      'type': app.type.toString().split('.').last, // Store enum as string
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1219,6 +1280,12 @@ class DatabaseService {
       appState: map['appState'] != null 
           ? jsonDecode(map['appState'] as String) as Map<String, dynamic>
           : null,
+      type: map['type'] != null 
+          ? UserAppType.values.firstWhere(
+              (e) => e.toString().split('.').last == map['type'],
+              orElse: () => UserAppType.normal,
+            )
+          : UserAppType.normal,
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );

@@ -12,6 +12,7 @@ import '../models/filter.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
+import 'note_action_app_selection_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -76,6 +77,11 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.psychology),
               onPressed: _selectedNotes.isNotEmpty ? _openAIAction : null,
               tooltip: l10n.openAIAction,
+            ),
+            IconButton(
+              icon: const Icon(Icons.apps),
+              onPressed: _selectedNotes.isNotEmpty ? _openNoteActionApps : null,
+              tooltip: 'Run Note Action App',
             ),
             IconButton(
               icon: const Icon(Icons.delete),
@@ -382,6 +388,14 @@ class _NotesScreenState extends State<NotesScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AIActionScreen(selectedNotes: _selectedNotes),
+      ),
+    );
+  }
+
+  void _openNoteActionApps() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NoteActionAppSelectionScreen(selectedNotes: _selectedNotes),
       ),
     );
   }

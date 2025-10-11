@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
+import '../models/user_app.dart';
 import 'user_app_result_screen.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
   final _descriptionController = TextEditingController();
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
+  bool _isNoteActionApp = false;
 
   @override
   void initState() {
@@ -82,6 +84,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         steps: steps,
+        type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
       );
       
       if (mounted) {
@@ -163,6 +166,36 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+              
+              // Note Action App Checkbox
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CheckboxListTile(
+                        title: const Text(
+                          'Note Action App',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          'This type of app will operate specifically on pre-selected notes',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: _isNoteActionApp,
+                        onChanged: (value) {
+                          setState(() {
+                            _isNoteActionApp = value ?? false;
+                          });
+                        },
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               

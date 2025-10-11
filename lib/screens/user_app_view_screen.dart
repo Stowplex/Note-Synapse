@@ -1,12 +1,15 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:file_picker/file_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../models/note.dart';
 import '../services/user_app_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/database_service.dart';
@@ -14,10 +17,12 @@ import 'user_app_edit_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
   final UserApp app;
+  final List<Note>? selectedNotes;
 
   const UserAppViewScreen({
     super.key,
     required this.app,
+    this.selectedNotes,
   });
 
   @override
@@ -31,6 +36,39 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   @override
   void initState() {
     super.initState();
+    _validateNoteActionApp();
+  }
+
+  void _validateNoteActionApp() {
+    if (widget.app.type == UserAppType.noteAction) {
+      if (widget.selectedNotes == null || widget.selectedNotes!.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showNoteSelectionDialog();
+        });
+      }
+    }
+  }
+
+  void _showNoteSelectionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Note Selection Required'),
+        content: const Text(
+          'This Note Action App requires at least one note to be selected. Please go back and select notes first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(); // Go back to previous screen
+            },
+            child: const Text('Go Back'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -44,7 +82,30 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.app.name),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  widget.app.type == UserAppType.noteAction 
+                      ? Icons.apps 
+                      : Icons.web,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(widget.app.name),
+              ],
+            ),
+            if (widget.app.type == UserAppType.noteAction && widget.selectedNotes != null)
+              Text(
+                '${widget.selectedNotes!.length} notes selected',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white70,
+                ),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.code),
@@ -166,6 +227,25 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   // Create the initial user script for Synapse API injection
   UserScript _createInitialUserScript() {
+    // Convert selected notes to JSON for JavaScript
+    String notesJson = '[]';
+    if (widget.selectedNotes != null && widget.selectedNotes!.isNotEmpty) {
+      final notesData = widget.selectedNotes!.map((note) => {
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'tags': note.tags,
+        'createdAt': note.createdAt.toIso8601String(),
+        'updatedAt': note.updatedAt.toIso8601String(),
+        'isTask': note.isTask,
+        'status': note.isTask ? note.status.toString() : null,
+        'pinned': note.pinned,
+        'isArchived': note.isArchived,
+        'attachmentPaths': note.attachmentPaths,
+      }).toList();
+      notesJson = jsonEncode(notesData);
+    }
+
     return UserScript(
       source: '''
         // Override console.log to also send to Flutter
@@ -204,7 +284,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           chatAI: async (prompt, options = {}) => {
             const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, options);
             return result;
-          }
+          },
+          Notes: $notesJson
         };
       ''',
       injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
@@ -298,9 +379,22 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           final temperature = options?['temperature'] as double?;
           final topK = options?['topK'] as int?;
           final topP = options?['topP'] as double?;
+          final attachmentPaths = options?['attachments'] as List<dynamic>?;
           
-          // Use the new chatAI service with configurable parameters
-          final response = await _callChatAI(prompt, temperature: temperature, topK: topK, topP: topP);
+          // Process and verify attachments
+          List<PlatformFile>? attachedFiles;
+          if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
+            attachedFiles = await _processAttachments(attachmentPaths.cast<String>());
+          }
+          
+          // Use the new chatAI service with configurable parameters and attachments
+          final response = await _callChatAI(
+            prompt, 
+            temperature: temperature, 
+            topK: topK, 
+            topP: topP,
+            attachedFiles: attachedFiles,
+          );
           final duration = DateTime.now().difference(startTime);
           
           print('[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms');
@@ -490,6 +584,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     double? temperature,
     int? topK,
     double? topP,
+    List<PlatformFile>? attachedFiles,
   }) async {
     try {
       // Use the new chatAI service with configurable parameters
@@ -498,10 +593,52 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         temperature: temperature,
         topK: topK,
         topP: topP,
+        attachedFiles: attachedFiles,
       );
     } catch (e) {
       throw Exception('Chat AI call failed: $e');
     }
+  }
+
+  // Process and verify attachment paths
+  Future<List<PlatformFile>> _processAttachments(List<String> attachmentPaths) async {
+    final List<PlatformFile> validAttachments = [];
+    final databaseService = DatabaseService();
+    
+    for (final attachmentPath in attachmentPaths) {
+      try {
+        // Verify that the attachment belongs to a note
+        final isValid = await databaseService.verifyAttachmentPath(attachmentPath);
+        if (!isValid) {
+          print('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
+          continue;
+        }
+        
+        // Read the file and create PlatformFile
+        final file = File(attachmentPath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final fileName = attachmentPath.split('/').last;
+          
+          final platformFile = PlatformFile(
+            name: fileName,
+            path: attachmentPath,
+            size: bytes.length,
+            bytes: bytes,
+          );
+          
+          validAttachments.add(platformFile);
+          print('[Synapse.chatAI] Added attachment: $fileName (${bytes.length} bytes)');
+        } else {
+          print('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
+        }
+      } catch (e) {
+        print('[Synapse.chatAI] Error processing attachment $attachmentPath: $e');
+        // Continue with other attachments even if one fails
+      }
+    }
+    
+    return validAttachments;
   }
 
 }

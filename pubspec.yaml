@@ -138,6 +138,7 @@ flutter:
   assets:
     - assets/scripts/Readability.min.js
     - assets/scripts/chart.min.js
+    - assets/scripts/bootstrap.min.css
 
   # Internationalization
   generate: true
