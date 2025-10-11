@@ -85,18 +85,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  widget.app.type == UserAppType.noteAction 
-                      ? Icons.apps 
-                      : Icons.web,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(widget.app.name),
-              ],
-            ),
+            Text(widget.app.name),
             if (widget.app.type == UserAppType.noteAction && widget.selectedNotes != null)
               Text(
                 '${widget.selectedNotes!.length} notes selected',

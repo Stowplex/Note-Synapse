@@ -5,6 +5,7 @@ import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
+import 'note_selection_dialog.dart';
 
 class UserAppsListScreen extends StatefulWidget {
   const UserAppsListScreen({super.key});
@@ -218,7 +219,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
         leading: CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primary,
           child: Icon(
-            Icons.apps,
+            app.type == UserAppType.noteAction ? Icons.apps : Icons.web,
             color: Theme.of(context).colorScheme.onPrimary,
           ),
         ),
@@ -300,10 +301,36 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   }
 
   void _navigateToViewApp(BuildContext context, UserApp app) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserAppViewScreen(app: app, selectedNotes: null),
+    if (app.type == UserAppType.noteAction) {
+      // For NoteActionApp, show note selection dialog first
+      _showNoteSelectionDialog(context, app);
+    } else {
+      // For normal apps, navigate directly
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserAppViewScreen(app: app, selectedNotes: null),
+        ),
+      );
+    }
+  }
+
+  void _showNoteSelectionDialog(BuildContext context, UserApp app) {
+    showDialog(
+      context: context,
+      builder: (context) => NoteSelectionDialog(
+        onNotesSelected: (selectedNotes) {
+          Navigator.of(context).pop(); // Close dialog
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserAppViewScreen(
+                app: app, 
+                selectedNotes: selectedNotes,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
