@@ -272,9 +272,16 @@ IMPORTANT - REQUIREMENTS:
      Response format: {success: boolean, data?: object, error?: string}
    - Synapse.chatAI(prompt: string) - Send prompt through the app's AI channel and get the response
      Response format: {success: boolean, response?: string, error?: string}
-5. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
-6. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
+5. You are also provided with the c3.js library, you can use it to generate charts. If c3.js is needed, you should import it with
+   ```html
+   <link rel="stylesheet" href="synapse://c3.min.css">
+   <script src="synapse://d3-5.8.2.min.js"></script>
+   <script src="synapse://c3.min.js"></script>
+   ```
+6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
+7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
    but be mindful of the latency, you should try to batch data in one request.
+
 
 Database Schema:
 The app has access to the following database tables:

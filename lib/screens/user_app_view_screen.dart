@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -79,7 +80,19 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               supportZoom: true,
               builtInZoomControls: true,
               displayZoomControls: false,
+              resourceCustomSchemes: ['synapse'],
             ),
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              print('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path} - ${request.url.path}');
+              if (request.url.scheme.toLowerCase() == 'synapse') {
+                final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+                return CustomSchemeResponse(
+                  contentType: 'text/plain',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              }
+              return null;            
+            },
             initialUserScripts: UnmodifiableListView<UserScript>([
               _createInitialUserScript(),
             ]),
