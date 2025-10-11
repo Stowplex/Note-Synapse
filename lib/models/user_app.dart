@@ -16,6 +16,7 @@ class UserApp {
   final String htmlContent;
   final Map<String, dynamic>? appState;
   final UserAppType type;
+  final String? selectedRevisionId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -27,6 +28,7 @@ class UserApp {
     required this.htmlContent,
     this.appState,
     this.type = UserAppType.normal,
+    this.selectedRevisionId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -42,6 +44,7 @@ class UserApp {
     String? htmlContent,
     Map<String, dynamic>? appState,
     UserAppType? type,
+    String? selectedRevisionId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -53,6 +56,7 @@ class UserApp {
       htmlContent: htmlContent ?? this.htmlContent,
       appState: appState ?? this.appState,
       type: type ?? this.type,
+      selectedRevisionId: selectedRevisionId ?? this.selectedRevisionId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

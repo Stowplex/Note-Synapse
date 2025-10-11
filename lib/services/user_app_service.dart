@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../models/user_app.dart';
+import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
 import 'database_service.dart';
 
@@ -70,6 +71,91 @@ class UserAppService {
       rethrow;
     }
   }
+
+  // App Revisions management
+  static Future<List<AppRevision>> getAppRevisions(String appId) async {
+    try {
+      final databaseService = DatabaseService();
+      return await databaseService.getAppRevisions(appId);
+    } catch (e) {
+      print('Error loading app revisions: $e');
+      return [];
+    }
+  }
+
+  static Future<AppRevision?> getAppRevision(String revisionId) async {
+    try {
+      final databaseService = DatabaseService();
+      return await databaseService.getAppRevision(revisionId);
+    } catch (e) {
+      print('Error loading app revision: $e');
+      return null;
+    }
+  }
+
+  static Future<void> deleteAppRevision(String revisionId) async {
+    try {
+      final databaseService = DatabaseService();
+      await databaseService.deleteAppRevision(revisionId);
+    } catch (e) {
+      print('Error deleting app revision: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> setSelectedRevision(String appId, String revisionId) async {
+    try {
+      final databaseService = DatabaseService();
+      final app = await databaseService.getUserApp(appId);
+      if (app != null) {
+        final updatedApp = app.copyWith(selectedRevisionId: revisionId);
+        await databaseService.updateUserApp(updatedApp);
+      }
+    } catch (e) {
+      print('Error setting selected revision: $e');
+      rethrow;
+    }
+  }
+
+  // Create initial revision for apps that don't have any revisions yet
+  static Future<AppRevision> createInitialRevision(String appId) async {
+    try {
+      final databaseService = DatabaseService();
+      final app = await databaseService.getUserApp(appId);
+      if (app == null) {
+        throw Exception('App not found: $appId');
+      }
+
+      // Check if app already has revisions
+      final existingRevisions = await databaseService.getAppRevisions(appId);
+      if (existingRevisions.isNotEmpty) {
+        throw Exception('App already has revisions');
+      }
+
+      // Create initial revision
+      final revision = AppRevision(
+        id: '${appId}_rev_1',
+        appId: appId,
+        revisionNumber: 1,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: 'Initial app creation',
+        aiResponse: 'This is the initial version of the app.',
+        appCode: app.htmlContent,
+      );
+
+      // Save the revision
+      await databaseService.insertAppRevision(revision);
+
+      // Update the app to set the selected revision
+      final updatedApp = app.copyWith(selectedRevisionId: revision.id);
+      await databaseService.updateUserApp(updatedApp);
+
+      return revision;
+    } catch (e) {
+      print('Error creating initial revision: $e');
+      rethrow;
+    }
+  }
   
   
   // Create a new user app using AI
@@ -78,10 +164,21 @@ class UserAppService {
     required String description,
     required List<String> steps,
     UserAppType type = UserAppType.normal,
+    String? userPrompt,
   }) async {
     try {
       // Generate the app using AI
-      final htmlContent = await _generateAppWithAI(name, description, steps, type);
+      final aiResponse = await _generateAppWithAI(name, description, steps, type);
+      
+      // Parse the AI response to extract code and explanation
+      final parsedResponse = parseAIResponse(aiResponse);
+      final htmlContent = parsedResponse['code']?.isNotEmpty == true ? parsedResponse['code']! : aiResponse;
+      final explanation = parsedResponse['explanation']?.isNotEmpty == true ? parsedResponse['explanation']! : '';
+      
+      print('createUserApp: Parsed response - code length: ${parsedResponse['code']?.length ?? 0}, explanation length: ${parsedResponse['explanation']?.length ?? 0}');
+      print('createUserApp: Using parsed code: ${parsedResponse['code']?.isNotEmpty == true}');
+      print('createUserApp: Final htmlContent length: ${htmlContent.length}');
+      print('createUserApp: Final explanation length: ${explanation.length}');
       
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -95,7 +192,32 @@ class UserAppService {
       );
       
       await saveUserApp(app);
-      return app;
+      
+      // Always create initial revision for new apps
+      final databaseService = DatabaseService();
+      final revision = AppRevision(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + '_rev',
+        appId: app.id,
+        revisionNumber: 1,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: userPrompt ?? 'Initial app creation',
+        aiResponse: explanation,
+        appCode: htmlContent,
+      );
+      
+      print('Creating revision ${revision.id} for app ${app.id}');
+      print('Revision userPrompt: ${revision.userPrompt}');
+      print('Revision aiResponse length: ${revision.aiResponse.length}');
+      print('Revision appCode length: ${revision.appCode.length}');
+      print('Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...');
+      
+      await databaseService.insertAppRevision(revision);
+      
+      // Update app with selected revision
+      final updatedApp = app.copyWith(selectedRevisionId: revision.id);
+      await databaseService.updateUserApp(updatedApp);
+      print('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
+      return updatedApp;
     } catch (e) {
       print('Error creating user app: $e');
       rethrow;
@@ -103,14 +225,14 @@ class UserAppService {
   }
   
   
-  // Edit an existing app
-  static Future<UserApp> editUserApp({
+  // Edit an existing app by creating a new revision
+  static Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
   }) async {
     try {
       // Generate new app based on original and edit suggestion
-      final newHtmlContent = await _generateAppEditWithAI(
+      final aiResponse = await _generateAppEditWithAI(
         originalApp.name,
         originalApp.description,
         originalApp.steps,
@@ -119,19 +241,38 @@ class UserAppService {
         originalApp.type,
       );
       
-      final editedApp = UserApp(
+      // Parse the AI response to extract code and explanation
+      final parsedResponse = parseAIResponse(aiResponse);
+      final newHtmlContent = parsedResponse['code'] ?? originalApp.htmlContent;
+      final explanation = parsedResponse['explanation'] ?? '';
+      
+      // Get the next revision number
+      final databaseService = DatabaseService();
+      final revisionNumber = await databaseService.getNextRevisionNumber(originalApp.id);
+      
+      // Create the revision
+      final revision = AppRevision(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: '${originalApp.name} - ${DateTime.now().toString().substring(0, 16)}',
-        description: originalApp.description,
-        steps: originalApp.steps,
-        htmlContent: newHtmlContent,
-        type: originalApp.type, // Preserve the original app type
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        appId: originalApp.id,
+        revisionNumber: revisionNumber,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: editSuggestion,
+        aiResponse: explanation,
+        appCode: newHtmlContent,
       );
       
-      await saveUserApp(editedApp);
-      return editedApp;
+      // Save the revision
+      await databaseService.insertAppRevision(revision);
+      
+      // Update the app's selected revision and HTML content
+      final updatedApp = originalApp.copyWith(
+        selectedRevisionId: revision.id,
+        htmlContent: newHtmlContent,
+        updatedAt: DateTime.now(),
+      );
+      await databaseService.updateUserApp(updatedApp);
+      
+      return revision;
     } catch (e) {
       print('Error editing user app: $e');
       rethrow;
@@ -143,7 +284,7 @@ class UserAppService {
     try {
       final prompt = _buildAppGenerationPrompt(name, description, steps, type);
       final response = await GeminiApiService.generateApp(prompt);
-      return _trimMarkdownCodeBlocks(response);
+      return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       print('Error generating app with AI: $e');
       rethrow;
@@ -282,10 +423,31 @@ IMPORTANT - REQUIREMENTS:
 ${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
+
+IMPORTANT: Your response must be formatted as follows:
+1. First, provide a brief explanation of the changes made
+2. Then, provide the complete HTML code wrapped in ```html code blocks
+
+Example format:
+Here's the updated application with your requested changes:
+
+[Brief explanation of changes]
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Complete HTML code here -->
+</head>
+<body>
+    <!-- Complete HTML code here -->
+</body>
+</html>
+```
 ''';
       
       final response = await GeminiApiService.generateApp(prompt);
-      return _trimMarkdownCodeBlocks(response);
+      return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       print('Error generating app edit with AI: $e');
       rethrow;
@@ -419,6 +581,27 @@ Example SQL queries you can use:
 ${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
 
 Generate the complete HTML application now.
+
+IMPORTANT: Your response must be formatted as follows:
+1. First, provide a brief explanation of the application and its features
+2. Then, provide the complete HTML code wrapped in ```html code blocks
+
+Example format:
+Here's the complete HTML application:
+
+[Brief explanation of the application and its features]
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Complete HTML code here -->
+</head>
+<body>
+    <!-- Complete HTML code here -->
+</body>
+</html>
+```
 ''';
   }
 
@@ -486,23 +669,49 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     return !Platform.isLinux;
   }
 
-  // Trim markdown code blocks from AI response
-  static String _trimMarkdownCodeBlocks(String response) {
+  // Parse AI response and extract code
+  static Map<String, String> parseAIResponse(String response) {
+    final Map<String, String> result = {
+      'code': '',
+      'explanation': '',
+    };
+    
     // Remove leading and trailing whitespace
     String trimmed = response.trim();
+    print('parseAIResponse: Input length: ${trimmed.length}');
+    print('parseAIResponse: Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
     
-    // Remove markdown code block markers
-    if (trimmed.startsWith('```html')) {
-      trimmed = trimmed.substring(7); // Remove '```html'
-    } else if (trimmed.startsWith('```')) {
-      trimmed = trimmed.substring(3); // Remove '```'
+    // Look for HTML code blocks
+    final htmlCodeBlockRegex = RegExp(r'```html\s*\n(.*?)\n```', dotAll: true);
+    final codeBlockRegex = RegExp(r'```\s*\n(.*?)\n```', dotAll: true);
+    
+    String? code;
+    if (htmlCodeBlockRegex.hasMatch(trimmed)) {
+      final match = htmlCodeBlockRegex.firstMatch(trimmed);
+      code = match?.group(1)?.trim();
+      print('parseAIResponse: Found HTML code block, length: ${code?.length ?? 0}');
+    } else if (codeBlockRegex.hasMatch(trimmed)) {
+      final match = codeBlockRegex.firstMatch(trimmed);
+      code = match?.group(1)?.trim();
+      print('parseAIResponse: Found generic code block, length: ${code?.length ?? 0}');
+    } else {
+      print('parseAIResponse: No code blocks found');
     }
     
-    if (trimmed.endsWith('```')) {
-      trimmed = trimmed.substring(0, trimmed.length - 3); // Remove trailing '```'
+    if (code != null && code.isNotEmpty) {
+      result['code'] = code;
+      // Remove the code block from the response to get the explanation
+      result['explanation'] = trimmed
+          .replaceAll(htmlCodeBlockRegex, '')
+          .replaceAll(codeBlockRegex, '')
+          .trim();
+    } else {
+      // If no code blocks found, treat the entire response as explanation
+      result['explanation'] = trimmed;
     }
     
-    // Remove any remaining leading/trailing whitespace
-    return trimmed.trim();
+    print('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
+    return result;
   }
+
 }

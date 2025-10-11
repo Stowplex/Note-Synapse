@@ -7,6 +7,7 @@ import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
+import '../models/app_revision.dart';
 import '../services/database_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/user_app_service.dart';
@@ -901,11 +902,15 @@ class AppProvider extends ChangeNotifier {
     UserAppType type = UserAppType.normal,
   }) async {
     try {
+      // Construct user prompt from the provided information
+      final userPrompt = 'Create a $name app. Description: $description. Steps: ${steps.join(', ')}';
+      
       final app = await UserAppService.createUserApp(
         name: name,
         description: description,
         steps: steps,
         type: type,
+        userPrompt: userPrompt,
       );
       _userApps.add(app);
       notifyListeners();
@@ -919,19 +924,28 @@ class AppProvider extends ChangeNotifier {
   }
 
 
-  Future<UserApp> editUserApp({
+  Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
   }) async {
     try {
-      final editedApp = await UserAppService.editUserApp(
+      final revision = await UserAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
       );
-      _userApps.add(editedApp);
+      
+      // Update the app in our local list
+      final appIndex = _userApps.indexWhere((app) => app.id == originalApp.id);
+      if (appIndex != -1) {
+        final updatedApp = await _databaseService.getUserApp(originalApp.id);
+        if (updatedApp != null) {
+          _userApps[appIndex] = updatedApp;
+        }
+      }
+      
       notifyListeners();
       _error = null;
-      return editedApp;
+      return revision;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -953,6 +967,81 @@ class AppProvider extends ChangeNotifier {
     try {
       await UserAppService.saveAppState(appId, state);
       _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // App Revisions management
+  Future<List<AppRevision>> getAppRevisions(String appId) async {
+    try {
+      return await UserAppService.getAppRevisions(appId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<AppRevision?> getAppRevision(String revisionId) async {
+    try {
+      return await UserAppService.getAppRevision(revisionId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAppRevision(String revisionId) async {
+    try {
+      await UserAppService.deleteAppRevision(revisionId);
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> setSelectedRevision(String appId, String revisionId) async {
+    try {
+      await UserAppService.setSelectedRevision(appId, revisionId);
+      
+      // Update the app in our local list
+      final appIndex = _userApps.indexWhere((app) => app.id == appId);
+      if (appIndex != -1) {
+        final updatedApp = await _databaseService.getUserApp(appId);
+        if (updatedApp != null) {
+          _userApps[appIndex] = updatedApp;
+        }
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<AppRevision> createInitialRevision(String appId) async {
+    try {
+      final revision = await UserAppService.createInitialRevision(appId);
+      
+      // Update the app in our local list
+      final appIndex = _userApps.indexWhere((app) => app.id == appId);
+      if (appIndex != -1) {
+        final updatedApp = await _databaseService.getUserApp(appId);
+        if (updatedApp != null) {
+          _userApps[appIndex] = updatedApp;
+        }
+      }
+      
+      notifyListeners();
+      return revision;
     } catch (e) {
       _error = e.toString();
       notifyListeners();

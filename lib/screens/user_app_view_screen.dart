@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../services/user_app_service.dart';
 import '../services/gemini_api_service.dart';
@@ -32,11 +33,53 @@ class UserAppViewScreen extends StatefulWidget {
 class _UserAppViewScreenState extends State<UserAppViewScreen> {
   List<String> _consoleOutput = [];
   bool _isLoading = true;
+  List<AppRevision> _revisions = [];
+  AppRevision? _selectedRevision;
+  bool _showRevisionDetails = false;
 
   @override
   void initState() {
     super.initState();
     _validateNoteActionApp();
+    _loadRevisions();
+  }
+
+  Future<void> _loadRevisions() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      final revisions = await appProvider.getAppRevisions(widget.app.id);
+      print('Loaded ${revisions.length} revisions for app ${widget.app.id}');
+      print('App selectedRevisionId: ${widget.app.selectedRevisionId}');
+      
+      setState(() {
+        _revisions = revisions;
+        if (widget.app.selectedRevisionId != null) {
+          try {
+            _selectedRevision = revisions.firstWhere(
+              (r) => r.id == widget.app.selectedRevisionId,
+            );
+            print('Selected revision: ${_selectedRevision?.id} with code length: ${_selectedRevision?.appCode.length}');
+          } catch (e) {
+            print('Selected revision not found, using first available');
+            _selectedRevision = revisions.isNotEmpty ? revisions.first : null;
+          }
+        } else if (revisions.isNotEmpty) {
+          _selectedRevision = revisions.first;
+          print('No selected revision, using first: ${_selectedRevision?.id}');
+        } else {
+          // Fallback: if no revisions exist, create a virtual revision from the app's htmlContent
+          // This handles cases where the migration didn't run or apps were created before revisions
+          _selectedRevision = null;
+          print('No revisions found, using app htmlContent');
+        }
+      });
+    } catch (e) {
+      print('Error loading revisions: $e');
+      // Fallback: if loading revisions fails, set to null to use app's htmlContent
+      setState(() {
+        _selectedRevision = null;
+      });
+    }
   }
 
   void _validateNoteActionApp() {
@@ -69,6 +112,96 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         ],
       ),
     );
+  }
+
+  void _selectRevision(AppRevision revision) {
+    setState(() {
+      _selectedRevision = revision;
+      _showRevisionDetails = false;
+    });
+  }
+
+  void _toggleRevisionDetails(AppRevision revision) {
+    setState(() {
+      _selectedRevision = revision;
+      _showRevisionDetails = true;
+    });
+  }
+
+  Future<void> _pinRevision(AppRevision revision) async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.setSelectedRevision(widget.app.id, revision.id);
+      
+      // Reload revisions to update the UI
+      await _loadRevisions();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Revision ${revision.revisionNumber} ${widget.app.selectedRevisionId == revision.id ? 'unpinned' : 'pinned'}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error pinning revision: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRevision(AppRevision revision) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Revision'),
+        content: Text('Are you sure you want to delete revision ${revision.revisionNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final appProvider = context.read<AppProvider>();
+        await appProvider.deleteAppRevision(revision.id);
+        
+        // Reload revisions
+        await _loadRevisions();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Revision ${revision.revisionNumber} deleted'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting revision: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -113,11 +246,156 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
+        children: [
+          // Revision tabs
+          if (_revisions.isNotEmpty)
+            Container(
+              height: 60,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Revision numbers on the left
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.only(left: 8.0, right: 16.0),
+                      itemCount: _revisions.length,
+                      itemBuilder: (context, index) {
+                        final revision = _revisions[index];
+                        final isSelected = _selectedRevision?.id == revision.id;
+                        final isPinned = widget.app.selectedRevisionId == revision.id;
+                        
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                          child: GestureDetector(
+                            onTap: () => _selectRevision(revision),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                              decoration: BoxDecoration(
+                                color: isSelected 
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(8.0),
+                                border: Border.all(
+                                  color: isSelected 
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).dividerColor,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${revision.revisionNumber}',
+                                    style: TextStyle(
+                                      color: isSelected 
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.onSurface,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                  if (isPinned) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.push_pin,
+                                      size: 12,
+                                      color: isSelected 
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // Action buttons on the right
+                  if (_selectedRevision != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // AI Response button
+                        IconButton(
+                          onPressed: () => _toggleRevisionDetails(_selectedRevision!),
+                          icon: Icon(
+                            _showRevisionDetails ? Icons.web : Icons.chat,
+                            size: 16,
+                          ),
+                          tooltip: _showRevisionDetails ? 'Show App' : 'Show AI Response',
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                        // Pin button
+                        IconButton(
+                          onPressed: () => _pinRevision(_selectedRevision!),
+                          icon: Icon(
+                            widget.app.selectedRevisionId == _selectedRevision!.id 
+                                ? Icons.push_pin 
+                                : Icons.push_pin_outlined,
+                            size: 16,
+                          ),
+                          tooltip: widget.app.selectedRevisionId == _selectedRevision!.id 
+                              ? 'Unpin Revision' 
+                              : 'Pin Revision',
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                        // Delete button
+                        IconButton(
+                          onPressed: () => _deleteRevision(_selectedRevision!),
+                          icon: const Icon(Icons.delete, size: 16),
+                          tooltip: 'Delete Revision',
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          // Main content area
+          Expanded(
+            child: _showRevisionDetails && _selectedRevision != null
+                ? _buildRevisionDetailsView()
+                : _buildWebView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebView() {
+    final htmlData = _selectedRevision?.appCode ?? widget.app.htmlContent;
+    print('WebView loading data: ${htmlData.length} characters');
+    print('Using revision: ${_selectedRevision?.id ?? 'none'}');
+    print('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
+    
+    return Stack(
         children: [
           InAppWebView(
             initialData: InAppWebViewInitialData(
-              data: widget.app.htmlContent,
+            data: htmlData,
               mimeType: 'text/html',
               encoding: 'utf8',
             ),
@@ -174,6 +452,107 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             const Center(
               child: CircularProgressIndicator(),
             ),
+      ],
+    );
+  }
+
+  Widget _buildRevisionDetailsView() {
+    if (_selectedRevision == null) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with revision info
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Revision ${_selectedRevision!.revisionNumber}',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${_selectedRevision!.revisionTimestamp.day}/${_selectedRevision!.revisionTimestamp.month}/${_selectedRevision!.revisionTimestamp.year}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'User Prompt:',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    height: 120, // Fixed height for user prompt
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          _selectedRevision!.userPrompt,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // AI Response - Fixed height with scrollable content
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI Response:',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    height: 400, // Fixed height
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          _selectedRevision!.aiResponse,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -503,7 +882,27 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   }
 
 
-  void _navigateToEdit(BuildContext context) {
+  void _navigateToEdit(BuildContext context) async {
+    // If no revisions exist, create an initial revision first
+    if (_revisions.isEmpty) {
+      try {
+        final appProvider = context.read<AppProvider>();
+        await appProvider.createInitialRevision(widget.app.id);
+        // Reload revisions after creating initial revision
+        await _loadRevisions();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error creating initial revision: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+    
     Navigator.push(
       context,
       MaterialPageRoute(

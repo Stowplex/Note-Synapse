@@ -11,6 +11,7 @@ import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
+import '../models/app_revision.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -43,7 +44,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -167,8 +168,23 @@ class DatabaseService {
         htmlContent TEXT NOT NULL,
         appState TEXT,
         type TEXT NOT NULL DEFAULT 'normal',
+        selectedRevisionId TEXT,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
+      )
+    ''');
+
+    // App Revisions table
+    await db.execute('''
+      CREATE TABLE app_revisions(
+        id TEXT PRIMARY KEY,
+        appId TEXT NOT NULL,
+        revisionNumber INTEGER NOT NULL,
+        revisionTimestamp INTEGER NOT NULL,
+        userPrompt TEXT NOT NULL,
+        aiResponse TEXT NOT NULL,
+        appCode TEXT NOT NULL,
+        FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
     ''');
 
@@ -417,6 +433,99 @@ class DatabaseService {
           print('Failed to recreate user_apps table: $e2');
         }
       }
+    }
+    
+    if (oldVersion < 9) {
+      // Migration from version 8 to 9: Add selectedRevisionId column and app_revisions table
+      try {
+        // Add selectedRevisionId column to user_apps table
+        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('selectedRevisionId')) {
+          await db.execute('ALTER TABLE user_apps ADD COLUMN selectedRevisionId TEXT');
+        }
+        
+        // Create app_revisions table
+        await db.execute('''
+          CREATE TABLE app_revisions(
+            id TEXT PRIMARY KEY,
+            appId TEXT NOT NULL,
+            revisionNumber INTEGER NOT NULL,
+            revisionTimestamp INTEGER NOT NULL,
+            userPrompt TEXT NOT NULL,
+            aiResponse TEXT NOT NULL,
+            appCode TEXT NOT NULL,
+            FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
+          )
+        ''');
+        
+        // Migrate existing apps to have initial revisions
+        await _migrateExistingAppsToRevisions(db);
+      } catch (e) {
+        print('Migration to version 9 failed: $e');
+      }
+    }
+  }
+
+  // Migration helper method to create initial revisions for existing apps
+  Future<void> _migrateExistingAppsToRevisions(Database db) async {
+    try {
+      print('Starting migration of existing apps to revisions...');
+      
+      // Get all existing apps
+      final apps = await db.query('user_apps');
+      print('Found ${apps.length} existing apps to migrate');
+      
+      for (final appMap in apps) {
+        final appId = appMap['id'] as String;
+        final appName = appMap['name'] as String;
+        final htmlContent = appMap['htmlContent'] as String;
+        
+        // Check if this app already has revisions
+        final existingRevisions = await db.query(
+          'app_revisions',
+          where: 'appId = ?',
+          whereArgs: [appId],
+        );
+        
+        if (existingRevisions.isNotEmpty) {
+          print('App $appId already has revisions, skipping...');
+          continue;
+        }
+        
+        // Create initial revision for this app
+        final revisionId = '${appId}_rev_1';
+        final revisionTimestamp = DateTime.now().millisecondsSinceEpoch;
+        
+        final revisionData = {
+          'id': revisionId,
+          'appId': appId,
+          'revisionNumber': 1,
+          'revisionTimestamp': revisionTimestamp,
+          'userPrompt': 'Initial app creation',
+          'aiResponse': 'This is the initial version of the app created during migration.',
+          'appCode': htmlContent,
+        };
+        
+        // Insert the revision
+        await db.insert('app_revisions', revisionData);
+        
+        // Update the app to set the selected revision
+        await db.update(
+          'user_apps',
+          {'selectedRevisionId': revisionId},
+          where: 'id = ?',
+          whereArgs: [appId],
+        );
+        
+        print('Created initial revision for app: $appName (ID: $appId)');
+      }
+      
+      print('Migration of existing apps to revisions completed successfully');
+    } catch (e) {
+      print('Error during migration of existing apps to revisions: $e');
+      // Don't rethrow - this is a migration helper, we don't want to break the entire migration
     }
   }
 
@@ -1183,6 +1292,7 @@ class DatabaseService {
       'htmlContent': app.htmlContent,
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
+      'selectedRevisionId': app.selectedRevisionId,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1220,6 +1330,7 @@ class DatabaseService {
       'htmlContent': app.htmlContent,
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
+      'selectedRevisionId': app.selectedRevisionId,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1229,6 +1340,9 @@ class DatabaseService {
 
   Future<void> deleteUserApp(String id) async {
     final db = await database;
+    // Delete app revisions first (foreign key constraint will handle this automatically)
+    await db.delete('app_revisions', where: 'appId = ?', whereArgs: [id]);
+    // Then delete the app
     await db.delete('user_apps', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1286,8 +1400,90 @@ class DatabaseService {
               orElse: () => UserAppType.normal,
             )
           : UserAppType.normal,
+      selectedRevisionId: map['selectedRevisionId'] as String?,
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );
+  }
+
+  // App Revisions CRUD
+  Future<String> insertAppRevision(AppRevision revision) async {
+    final db = await database;
+    final json = {
+      'id': revision.id,
+      'appId': revision.appId,
+      'revisionNumber': revision.revisionNumber,
+      'revisionTimestamp': revision.revisionTimestamp.millisecondsSinceEpoch,
+      'userPrompt': revision.userPrompt,
+      'aiResponse': revision.aiResponse,
+      'appCode': revision.appCode,
+    };
+    
+    print('DatabaseService.insertAppRevision: Inserting revision ${revision.id} for app ${revision.appId}');
+    await db.insert('app_revisions', json);
+    print('DatabaseService.insertAppRevision: Successfully inserted revision ${revision.id}');
+    return revision.id;
+  }
+
+  Future<List<AppRevision>> getAppRevisions(String appId) async {
+    final db = await database;
+    final maps = await db.query(
+      'app_revisions', 
+      where: 'appId = ?', 
+      whereArgs: [appId],
+      orderBy: 'revisionNumber ASC',
+    );
+    print('DatabaseService.getAppRevisions: Found ${maps.length} revisions for app $appId');
+    if (maps.isNotEmpty) {
+      print('First revision data: ${maps.first}');
+    }
+    final revisions = maps.map((map) => _appRevisionFromMap(map)).toList();
+    if (revisions.isNotEmpty) {
+      print('First revision appCode length: ${revisions.first.appCode.length}');
+    }
+    return revisions;
+  }
+
+  Future<AppRevision?> getAppRevision(String id) async {
+    final db = await database;
+    final maps = await db.query('app_revisions', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) {
+      return _appRevisionFromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<void> deleteAppRevision(String id) async {
+    final db = await database;
+    await db.delete('app_revisions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteAppRevisions(String appId) async {
+    final db = await database;
+    await db.delete('app_revisions', where: 'appId = ?', whereArgs: [appId]);
+  }
+
+  Future<int> getNextRevisionNumber(String appId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT MAX(revisionNumber) as maxRevision FROM app_revisions WHERE appId = ?',
+      [appId],
+    );
+    final maxRevision = result.first['maxRevision'] as int?;
+    return (maxRevision ?? 0) + 1;
+  }
+
+  AppRevision _appRevisionFromMap(Map<String, dynamic> map) {
+    final revision = AppRevision(
+      id: map['id'] as String,
+      appId: map['appId'] as String,
+      revisionNumber: map['revisionNumber'] as int,
+      revisionTimestamp: DateTime.fromMillisecondsSinceEpoch(map['revisionTimestamp'] as int),
+      userPrompt: map['userPrompt'] as String,
+      aiResponse: map['aiResponse'] as String,
+      appCode: map['appCode'] as String,
+    );
+    print('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
+    return revision;
   }
 }

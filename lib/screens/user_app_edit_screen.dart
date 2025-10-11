@@ -58,7 +58,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.newAppCreatedFromEdit),
+            content: Text('App updated successfully with new revision'),
             backgroundColor: Colors.green,
           ),
         );
