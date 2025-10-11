@@ -187,7 +187,7 @@ class _FilterDialogState extends State<_FilterDialog> {
           onPressed: () => _navigateToTagManagement(context),
           child: Text(l10n.manageTags),
         ),
-        const Spacer(),
+        const SizedBox(width: 16),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.close),
