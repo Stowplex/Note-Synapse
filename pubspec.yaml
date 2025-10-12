@@ -139,6 +139,8 @@ flutter:
     - assets/scripts/Readability.min.js
     - assets/scripts/chart.min.js
     - assets/scripts/bootstrap.min.css
+    - assets/scripts/highlight.min.js
+    - assets/scripts/highlight.min.css
 
   # Internationalization
   generate: true

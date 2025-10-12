@@ -438,6 +438,16 @@ IMPORTANT - REQUIREMENTS:
     ```html
     <link rel="stylesheet" href="synapse://bootstrap.min.css">
     ```
+  - You are provided with the highlight.js library (version 11.11.1) to highlight code. You can import it with:
+    ```html
+    <link rel="stylesheet" href="synapse://highlight.min.css">
+    <script src="synapse://highlight.min.js"></script>
+    ```
+    Then you can initiating highlight for the <pre><code></code></pre> block with the following, after the code block is generated:
+    ```javascript
+    const codeBlock = document.getElementById('my-code-block');
+    hljs.highlightBlock(codeBlock);
+    ```
 6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
 7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
    but be mindful of the latency, you should try to batch data in one request.
@@ -446,6 +456,7 @@ IMPORTANT - REQUIREMENTS:
    your code should be able to handle this.
 9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
 10. Prefer creating responsive layout with existing libraries over manual css.
+11. Use MathML to display mathematical formulas.
 
 ${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
 
@@ -536,6 +547,16 @@ IMPORTANT - REQUIREMENTS:
     ```html
     <link rel="stylesheet" href="synapse://bootstrap.min.css">
     ```
+  - You are provided with the highlight.js library (version 11.11.1) to highlight code. You can import it with:
+    ```html
+    <link rel="stylesheet" href="synapse://highlight.min.css">
+    <script src="synapse://highlight.min.js"></script>
+    ```
+    Then you can initiating highlight for the <pre><code></code></pre> block with the following, after the code block is generated:
+    ```javascript
+    const codeBlock = document.getElementById('my-code-block');
+    hljs.highlightBlock(codeBlock);
+    ```
 6. DO NOT mock Synapse or mock any data. If the API is not supported, show error message and do not proceed.
 7. If the data format cannot be safely assumed between each step, lean on using Synapse.chatAI to ask AI to extract data.
    but be mindful of the latency, you should try to batch data in one request.
@@ -544,6 +565,7 @@ IMPORTANT - REQUIREMENTS:
    your code should be able to handle this.
 9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
 10. Prefer creating responsive layout with existing libraries over manual css.
+11. Use MathML to display mathematical formulas.
 
 
 Database Schema:
