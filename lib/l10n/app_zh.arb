@@ -430,5 +430,7 @@
   "stateLoaded": "状态加载成功！",
   "errorSavingState": "保存状态时出错：{error}",
   "errorLoadingState": "加载状态时出错：{error}",
-  "appGenerationPrompt": "根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：{name}\n描述：{description}\n步骤：{steps}\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。"
+  "appGenerationPrompt": "根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：{name}\n描述：{description}\n步骤：{steps}\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。",
+  "editApp": "编辑应用",
+  "deleteApp": "删除应用"
 }

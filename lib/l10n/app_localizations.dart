@@ -2653,6 +2653,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: {name}\nDescription: {description}\nSteps: {steps}\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app\'s database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.'**
   String appGenerationPrompt(Object description, Object name, Object steps);
+
+  /// No description provided for @deleteApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete App'**
+  String get deleteApp;
 }
 
 class _AppLocalizationsDelegate

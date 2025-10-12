@@ -5,6 +5,7 @@ import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
+import 'user_app_edit_screen.dart';
 import 'note_selection_dialog.dart';
 
 class UserAppsListScreen extends StatefulWidget {
@@ -253,39 +254,48 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isEditing) ...[
-              IconButton(
-                icon: const Icon(Icons.check),
-                onPressed: _saveAppName,
-                tooltip: 'Save',
+        trailing: isEditing
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.check),
+                    onPressed: _saveAppName,
+                    tooltip: 'Save',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: _cancelEditing,
+                    tooltip: 'Cancel',
+                  ),
+                ],
+              )
+            : PopupMenuButton<String>(
+                onSelected: (value) => _handleMenuAction(context, value, app, appProvider),
+                itemBuilder: (context) => [
+                  PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit),
+                        const SizedBox(width: 8),
+                        Text(l10n.editApp),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete),
+                        const SizedBox(width: 8),
+                        Text(l10n.deleteApp),
+                      ],
+                    ),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert),
               ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _cancelEditing,
-                tooltip: 'Cancel',
-              ),
-            ] else ...[
-              IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () => _startEditingAppName(app),
-                tooltip: l10n.editAppName,
-              ),
-              IconButton(
-                icon: const Icon(Icons.play_arrow),
-                onPressed: () => _navigateToViewApp(context, app),
-                tooltip: l10n.toApp,
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () => _showDeleteDialog(context, app, appProvider),
-                tooltip: l10n.delete,
-              ),
-            ],
-          ],
-        ),
         onTap: isEditing ? null : () => _navigateToViewApp(context, app),
       ),
     );
@@ -312,6 +322,26 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           builder: (context) => UserAppViewScreen(app: app, selectedNotes: null),
         ),
       );
+    }
+  }
+
+  void _navigateToEditApp(BuildContext context, UserApp app) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserAppEditScreen(app: app),
+      ),
+    );
+  }
+
+  void _handleMenuAction(BuildContext context, String action, UserApp app, AppProvider appProvider) {
+    switch (action) {
+      case 'edit':
+        _navigateToEditApp(context, app);
+        break;
+      case 'delete':
+        _showDeleteDialog(context, app, appProvider);
+        break;
     }
   }
 
