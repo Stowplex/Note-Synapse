@@ -1,0 +1,439 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../l10n/app_localizations.dart';
+import '../providers/app_provider.dart';
+import '../models/user_app.dart';
+import 'user_app_result_screen.dart';
+
+class UserAppCreationScreen extends StatefulWidget {
+  const UserAppCreationScreen({super.key});
+
+  @override
+  State<UserAppCreationScreen> createState() => _UserAppCreationScreenState();
+}
+
+class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final List<TextEditingController> _stepControllers = [];
+  bool _isCreating = false;
+  bool _isNoteActionApp = false;
+  List<String> _attachmentPaths = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Add one initial step
+    _addStep();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    for (final controller in _stepControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addStep() {
+    setState(() {
+      _stepControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeStep(int index) {
+    if (_stepControllers.length > 1) {
+      setState(() {
+        _stepControllers[index].dispose();
+        _stepControllers.removeAt(index);
+      });
+    }
+  }
+
+  List<String> _getSteps() {
+    return _stepControllers
+        .map((controller) => controller.text.trim())
+        .where((step) => step.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _attachmentPaths.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      _attachmentPaths.removeAt(index);
+    });
+  }
+
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Image Source'),
+        content: const Text('Choose how you want to add an image'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _takePhoto();
+            },
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Camera'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickImage();
+            },
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Gallery'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createApp() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final steps = _getSteps();
+    if (steps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appStepsHint),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isCreating = true;
+    });
+
+    try {
+      final appProvider = context.read<AppProvider>();
+      
+      final app = await appProvider.createUserApp(
+        name: _nameController.text.trim(),
+        description: _descriptionController.text.trim(),
+        steps: steps,
+        type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
+        attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+      );
+      
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserAppResultScreen(
+              app: app,
+              isSuccess: true,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCreating = false;
+        });
+        
+        // Show error screen instead of clarification
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserAppResultScreen(
+              app: null,
+              isSuccess: false,
+              errorMessage: e.toString(),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.createNewApp),
+      ),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // App Name
+              TextFormField(
+                controller: _nameController,
+                decoration: InputDecoration(
+                  labelText: l10n.appName,
+                  hintText: l10n.appNameHint,
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter an app name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // App Description
+              TextFormField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: l10n.appDescription,
+                  hintText: l10n.appDescriptionHint,
+                  border: const OutlineInputBorder(),
+                ),
+                maxLines: 3,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter an app description';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Note Action App Checkbox
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CheckboxListTile(
+                        title: const Text(
+                          'Note Action App',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          'This type of app will operate specifically on pre-selected notes',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: _isNoteActionApp,
+                        onChanged: (value) {
+                          setState(() {
+                            _isNoteActionApp = value ?? false;
+                          });
+                        },
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Image Attachments Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Image Attachments (Optional)',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          IconButton(
+                            onPressed: _showImageSourceDialog,
+                            icon: const Icon(Icons.add_photo_alternate),
+                            tooltip: 'Add Image',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Attach images to help explain what you want the AI to create',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      if (_attachmentPaths.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ...List.generate(_attachmentPaths.length, (index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  child: Image.file(
+                                    File(_attachmentPaths[index]),
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _attachmentPaths[index].split('/').last,
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _removeAttachment(index),
+                                  icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                  tooltip: 'Remove Image',
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Steps Section
+              Text(
+                l10n.appSteps,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              
+              // Steps List
+              ...List.generate(_stepControllers.length, (index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _stepControllers[index],
+                          decoration: InputDecoration(
+                            hintText: '${l10n.stepHint} ${index + 1}',
+                            border: const OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Step cannot be empty';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _stepControllers.length > 1
+                            ? () => _removeStep(index)
+                            : null,
+                        icon: const Icon(Icons.remove_circle),
+                        tooltip: l10n.removeStep,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              
+              // Add Step Button
+              OutlinedButton.icon(
+                onPressed: _addStep,
+                icon: const Icon(Icons.add),
+                label: Text(l10n.addStep),
+              ),
+              const SizedBox(height: 24),
+              
+              // Create App Button
+              ElevatedButton(
+                onPressed: _isCreating ? null : _createApp,
+                child: _isCreating
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(l10n.creatingApp),
+                        ],
+                      )
+                    : Text(l10n.createApp),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
