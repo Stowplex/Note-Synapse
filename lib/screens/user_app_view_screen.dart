@@ -436,6 +436,40 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               setState(() {
                 _isLoading = false;
               });
+              
+              // Override navigator.clipboard.writeText for Android clipboard fix
+              controller.evaluateJavascript(
+                source: '''
+                  if (!navigator.clipboard) {
+                    navigator.clipboard = {
+                      writeText: (msg) => {
+                        return window.flutter_inappwebview?.callHandler("copy-to-clipboard", msg);
+                      }
+                    };
+                  } else {
+                    navigator.clipboard.writeText = (msg) => { 
+                      return window.flutter_inappwebview?.callHandler("copy-to-clipboard", msg); 
+                    };
+                  }
+
+                  
+                  // Fallback for older browsers - create a global copy function
+                  window.copyToClipboard = (text) => {
+                    return window.flutter_inappwebview?.callHandler("copy-to-clipboard", text);
+                  };
+                  
+                  // Override common copy functions
+                  if (typeof document !== 'undefined') {
+                    const originalExecCommand = document.execCommand;
+                    document.execCommand = function(command, showUI, value) {
+                      if (command === 'copy' && value) {
+                        return window.flutter_inappwebview?.callHandler("copy-to-clipboard", value);
+                      }
+                      return originalExecCommand.call(this, command, showUI, value);
+                    };
+                  }
+                '''
+              );
             },
             onConsoleMessage: (controller, consoleMessage) {
               setState(() {
@@ -786,6 +820,22 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           print('[UserApp.${level.toUpperCase()}] $message');
         } catch (e) {
           print('[UserApp.LOG] Error in log handler: $e');
+        }
+      },
+    );
+
+    // Add clipboard copy handler for Android clipboard fix
+    controller.addJavaScriptHandler(
+      handlerName: 'copy-to-clipboard',
+      callback: (args) async {
+        try {
+          final text = args[0] as String;
+          await Clipboard.setData(ClipboardData(text: text));
+          print('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? text.substring(0, 50) + '...' : text}');
+          return {'success': true};
+        } catch (e) {
+          print('[UserApp.CLIPBOARD] Error copying to clipboard: $e');
+          return {'success': false, 'error': e.toString()};
         }
       },
     );
