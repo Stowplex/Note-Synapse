@@ -16,7 +16,7 @@ class GeminiApiService {
   // Helper method to get API key
   static Future<String?> _getApiKeyWithFallback() async {
     String? apiKey = await SecureStorageService.getApiKey();
-    print('GeminiApiService: Retrieved API key length: ${apiKey?.length ?? 0}');
+    LoggerService.debug('GeminiApiService: Retrieved API key length: ${apiKey?.length ?? 0}');
     return apiKey;
   }
 
@@ -1085,13 +1085,13 @@ If creating multiple notes, ensure they are related and useful based on the cont
     
     if (apiKey == null || apiKey.isEmpty) {
       LoggerService.error('API key not found for content extraction', error: {'requestId': requestId});
-      print('GeminiApiService: API key is null or empty');
+      LoggerService.warning('GeminiApiService: API key is null or empty');
       return {
         'success': false,
         'error': 'API key not found',
       };
     }
-    print('GeminiApiService: API key found, proceeding with request');
+    LoggerService.debug('GeminiApiService: API key found, proceeding with request');
 
     try {
       final prompt = _buildContentExtractionPrompt(text, contentType, title);

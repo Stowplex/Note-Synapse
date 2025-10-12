@@ -11,6 +11,7 @@ import '../models/app_revision.dart';
 import '../services/database_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/user_app_service.dart';
+import '../services/logger_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
@@ -51,7 +52,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
-      print('Error in loadData: $e'); // Debug logging
+      LoggerService.error('Error in loadData: $e', error: e);
     } finally {
       _setLoading(false);
     }
@@ -536,7 +537,7 @@ class AppProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_dark_mode', _isDarkMode);
     } catch (e) {
-      print('Error saving theme preference: $e');
+      LoggerService.error('Error saving theme preference: $e', error: e);
     }
   }
 
@@ -546,7 +547,7 @@ class AppProvider extends ChangeNotifier {
       _isDarkMode = prefs.getBool('is_dark_mode') ?? false;
       notifyListeners();
     } catch (e) {
-      print('Error loading theme preference: $e');
+      LoggerService.error('Error loading theme preference: $e', error: e);
       _isDarkMode = false; // Default to light mode
     }
   }
@@ -563,7 +564,7 @@ class AppProvider extends ChangeNotifier {
       await prefs.setString('language_code', _locale.languageCode);
       await prefs.setString('country_code', _locale.countryCode ?? '');
     } catch (e) {
-      print('Error saving language preference: $e');
+      LoggerService.error('Error saving language preference: $e', error: e);
     }
   }
 
@@ -575,7 +576,7 @@ class AppProvider extends ChangeNotifier {
       _locale = Locale(languageCode, countryCode);
       notifyListeners();
     } catch (e) {
-      print('Error loading language preference: $e');
+      LoggerService.error('Error loading language preference: $e', error: e);
       _locale = const Locale('en', ''); // Default to English
     }
   }

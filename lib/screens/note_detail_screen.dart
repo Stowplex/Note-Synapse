@@ -19,6 +19,7 @@ import '../utils/date_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import '../services/logger_service.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -131,7 +132,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     _audioService!.playingStateStream.listen((isPlaying) {
-      print('Audio playing state changed: $isPlaying');
+      LoggerService.debug('Audio playing state changed: $isPlaying');
       if (mounted) {
         setState(() {
           _isPlaying = isPlaying;
@@ -207,7 +208,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         });
       }
     } catch (e) {
-      print('Error loading relationships: $e');
+      LoggerService.error('Error loading relationships: $e', error: e);
     }
   }
 
@@ -1940,7 +1941,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         }
       }
     } catch (e) {
-      print('Error playing audio: $e');
+      LoggerService.error('Error playing audio: $e', error: e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error playing audio: $e'),

@@ -8,6 +8,7 @@ import 'screens/setup_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'services/secure_storage_service.dart';
+import 'services/logger_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,24 +96,24 @@ class _AppWrapperState extends State<AppWrapper> {
   }
 
   Future<void> _checkApiKeyAndSharedContent() async {
-    print('AppWrapper: Checking API key and shared content...');
+    LoggerService.debug('AppWrapper: Checking API key and shared content...');
     
     // Add a small delay to ensure storage is properly initialized
     await Future.delayed(const Duration(milliseconds: 200));
     
     // Check both storage methods
     final hasKey = await SecureStorageService.hasApiKey();
-    print('AppWrapper: API key available (main method): $hasKey');
+    LoggerService.debug('AppWrapper: API key available (main method): $hasKey');
     
     if (hasKey) {
       final apiKey = await SecureStorageService.getApiKey();
-      print('AppWrapper: API key length (main method): ${apiKey?.length ?? 0}');
+      LoggerService.debug('AppWrapper: API key length (main method): ${apiKey?.length ?? 0}');
     }
     
     // Debug storage contents
     await SecureStorageService.debugStorageContents();
     
-    print('AppWrapper: Final API key available: $hasKey');
+    LoggerService.debug('AppWrapper: Final API key available: $hasKey');
     
     // Check for shared content from Android
     Map<String, dynamic>? sharedData;
@@ -121,11 +122,11 @@ class _AppWrapperState extends State<AppWrapper> {
       final result = await platform.invokeMethod('getSharedContent');
       if (result != null) {
         sharedData = Map<String, dynamic>.from(result);
-        print('AppWrapper: Shared content detected: ${sharedData.keys}');
+        LoggerService.debug('AppWrapper: Shared content detected: ${sharedData.keys}');
       }
     } catch (e) {
       // No shared content or error - continue normally
-      print('No shared content or error: $e');
+      LoggerService.debug('No shared content or error: $e');
     }
     
     setState(() {

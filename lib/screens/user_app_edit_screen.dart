@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../services/user_app_service.dart';
+import '../services/logger_service.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -47,7 +48,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
           });
         }
       } catch (e) {
-        print('Error loading revision attachments: $e');
+        LoggerService.error('Error loading revision attachments: $e', error: e);
       }
     }
   }

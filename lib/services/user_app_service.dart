@@ -4,6 +4,7 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
 import 'database_service.dart';
+import 'logger_service.dart';
 
 class UserAppService {
   
@@ -13,7 +14,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       return await databaseService.getAllUserApps();
     } catch (e) {
-      print('Error loading user apps: $e');
+      LoggerService.error('Error loading user apps: $e', error: e);
       return [];
     }
   }
@@ -24,7 +25,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       await databaseService.insertUserApp(app);
     } catch (e) {
-      print('Error saving user app: $e');
+      LoggerService.error('Error saving user app: $e', error: e);
       rethrow;
     }
   }
@@ -35,7 +36,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       await databaseService.updateUserApp(app);
     } catch (e) {
-      print('Error updating user app: $e');
+      LoggerService.error('Error updating user app: $e', error: e);
       rethrow;
     }
   }
@@ -46,7 +47,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       await databaseService.deleteUserApp(appId);
     } catch (e) {
-      print('Error deleting user app: $e');
+      LoggerService.error('Error deleting user app: $e', error: e);
       rethrow;
     }
   }
@@ -57,7 +58,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       return await databaseService.getUserAppState(appId);
     } catch (e) {
-      print('Error loading app state: $e');
+      LoggerService.error('Error loading app state: $e', error: e);
       return null;
     }
   }
@@ -68,7 +69,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       await databaseService.updateUserAppState(appId, state);
     } catch (e) {
-      print('Error saving app state: $e');
+      LoggerService.error('Error saving app state: $e', error: e);
       rethrow;
     }
   }
@@ -79,7 +80,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       return await databaseService.getAppRevisions(appId);
     } catch (e) {
-      print('Error loading app revisions: $e');
+      LoggerService.error('Error loading app revisions: $e', error: e);
       return [];
     }
   }
@@ -89,7 +90,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       return await databaseService.getAppRevision(revisionId);
     } catch (e) {
-      print('Error loading app revision: $e');
+      LoggerService.error('Error loading app revision: $e', error: e);
       return null;
     }
   }
@@ -99,7 +100,7 @@ class UserAppService {
       final databaseService = DatabaseService();
       await databaseService.deleteAppRevision(revisionId);
     } catch (e) {
-      print('Error deleting app revision: $e');
+      LoggerService.error('Error deleting app revision: $e', error: e);
       rethrow;
     }
   }
@@ -113,7 +114,7 @@ class UserAppService {
         await databaseService.updateUserApp(updatedApp);
       }
     } catch (e) {
-      print('Error setting selected revision: $e');
+      LoggerService.error('Error setting selected revision: $e', error: e);
       rethrow;
     }
   }
@@ -153,7 +154,7 @@ class UserAppService {
 
       return revision;
     } catch (e) {
-      print('Error creating initial revision: $e');
+      LoggerService.error('Error creating initial revision: $e', error: e);
       rethrow;
     }
   }
@@ -177,10 +178,10 @@ class UserAppService {
       final htmlContent = parsedResponse['code']?.isNotEmpty == true ? parsedResponse['code']! : aiResponse;
       final explanation = parsedResponse['explanation']?.isNotEmpty == true ? parsedResponse['explanation']! : '';
       
-      print('createUserApp: Parsed response - code length: ${parsedResponse['code']?.length ?? 0}, explanation length: ${parsedResponse['explanation']?.length ?? 0}');
-      print('createUserApp: Using parsed code: ${parsedResponse['code']?.isNotEmpty == true}');
-      print('createUserApp: Final htmlContent length: ${htmlContent.length}');
-      print('createUserApp: Final explanation length: ${explanation.length}');
+      LoggerService.debug('createUserApp: Parsed response - code length: ${parsedResponse['code']?.length ?? 0}, explanation length: ${parsedResponse['explanation']?.length ?? 0}');
+      LoggerService.debug('createUserApp: Using parsed code: ${parsedResponse['code']?.isNotEmpty == true}');
+      LoggerService.debug('createUserApp: Final htmlContent length: ${htmlContent.length}');
+      LoggerService.debug('createUserApp: Final explanation length: ${explanation.length}');
       
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -208,21 +209,21 @@ class UserAppService {
         attachmentPaths: attachmentPaths ?? [],
       );
       
-      print('Creating revision ${revision.id} for app ${app.id}');
-      print('Revision userPrompt: ${revision.userPrompt}');
-      print('Revision aiResponse length: ${revision.aiResponse.length}');
-      print('Revision appCode length: ${revision.appCode.length}');
-      print('Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...');
+      LoggerService.debug('Creating revision ${revision.id} for app ${app.id}');
+      LoggerService.debug('Revision userPrompt: ${revision.userPrompt}');
+      LoggerService.debug('Revision aiResponse length: ${revision.aiResponse.length}');
+      LoggerService.debug('Revision appCode length: ${revision.appCode.length}');
+      LoggerService.debug('Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...');
       
       await databaseService.insertAppRevision(revision);
       
       // Update app with selected revision
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
       await databaseService.updateUserApp(updatedApp);
-      print('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
+      LoggerService.debug('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
       return updatedApp;
     } catch (e) {
-      print('Error creating user app: $e');
+      LoggerService.error('Error creating user app: $e', error: e);
       rethrow;
     }
   }
@@ -280,7 +281,7 @@ class UserAppService {
       
       return revision;
     } catch (e) {
-      print('Error editing user app: $e');
+      LoggerService.error('Error editing user app: $e', error: e);
       rethrow;
     }
   }
@@ -312,7 +313,7 @@ class UserAppService {
       final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
-      print('Error generating app with AI: $e');
+      LoggerService.error('Error generating app with AI: $e', error: e);
       rethrow;
     }
   }
@@ -506,7 +507,7 @@ Here's the updated application with your requested changes:
       final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
-      print('Error generating app edit with AI: $e');
+      LoggerService.error('Error generating app edit with AI: $e', error: e);
       rethrow;
     }
   }
@@ -746,8 +747,8 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     
     // Remove leading and trailing whitespace
     String trimmed = response.trim();
-    print('parseAIResponse: Input length: ${trimmed.length}');
-    print('parseAIResponse: Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
+    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length}');
+    LoggerService.debug('parseAIResponse: Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
     
     // Look for HTML code blocks
     final htmlCodeBlockRegex = RegExp(r'```html\s*\n(.*?)\n```', dotAll: true);
@@ -757,13 +758,13 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     if (htmlCodeBlockRegex.hasMatch(trimmed)) {
       final match = htmlCodeBlockRegex.firstMatch(trimmed);
       code = match?.group(1)?.trim();
-      print('parseAIResponse: Found HTML code block, length: ${code?.length ?? 0}');
+      LoggerService.debug('parseAIResponse: Found HTML code block, length: ${code?.length ?? 0}');
     } else if (codeBlockRegex.hasMatch(trimmed)) {
       final match = codeBlockRegex.firstMatch(trimmed);
       code = match?.group(1)?.trim();
-      print('parseAIResponse: Found generic code block, length: ${code?.length ?? 0}');
+      LoggerService.debug('parseAIResponse: Found generic code block, length: ${code?.length ?? 0}');
     } else {
-      print('parseAIResponse: No code blocks found');
+      LoggerService.debug('parseAIResponse: No code blocks found');
     }
     
     if (code != null && code.isNotEmpty) {
@@ -778,7 +779,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
       result['explanation'] = trimmed;
     }
     
-    print('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
+    LoggerService.debug('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
     return result;
   }
 

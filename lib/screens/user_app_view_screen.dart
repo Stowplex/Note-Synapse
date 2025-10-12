@@ -14,6 +14,7 @@ import '../models/note.dart';
 import '../services/user_app_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/database_service.dart';
+import '../services/logger_service.dart';
 import 'user_app_edit_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
@@ -48,8 +49,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       final revisions = await appProvider.getAppRevisions(widget.app.id);
-      print('Loaded ${revisions.length} revisions for app ${widget.app.id}');
-      print('App selectedRevisionId: ${widget.app.selectedRevisionId}');
+      LoggerService.debug('Loaded ${revisions.length} revisions for app ${widget.app.id}');
+      LoggerService.debug('App selectedRevisionId: ${widget.app.selectedRevisionId}');
       
       setState(() {
         _revisions = revisions;
@@ -58,23 +59,23 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             _selectedRevision = revisions.firstWhere(
               (r) => r.id == widget.app.selectedRevisionId,
             );
-            print('Selected revision: ${_selectedRevision?.id} with code length: ${_selectedRevision?.appCode.length}');
+            LoggerService.debug('Selected revision: ${_selectedRevision?.id} with code length: ${_selectedRevision?.appCode.length}');
           } catch (e) {
-            print('Selected revision not found, using first available');
+            LoggerService.warning('Selected revision not found, using first available');
             _selectedRevision = revisions.isNotEmpty ? revisions.first : null;
           }
         } else if (revisions.isNotEmpty) {
           _selectedRevision = revisions.first;
-          print('No selected revision, using first: ${_selectedRevision?.id}');
+          LoggerService.debug('No selected revision, using first: ${_selectedRevision?.id}');
         } else {
           // Fallback: if no revisions exist, create a virtual revision from the app's htmlContent
           // This handles cases where the migration didn't run or apps were created before revisions
           _selectedRevision = null;
-          print('No revisions found, using app htmlContent');
+          LoggerService.info('No revisions found, using app htmlContent');
         }
       });
     } catch (e) {
-      print('Error loading revisions: $e');
+      LoggerService.error('Error loading revisions: $e', error: e);
       // Fallback: if loading revisions fails, set to null to use app's htmlContent
       setState(() {
         _selectedRevision = null;
@@ -387,9 +388,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   Widget _buildWebView() {
     final htmlData = _selectedRevision?.appCode ?? widget.app.htmlContent;
-    print('WebView loading data: ${htmlData.length} characters');
-    print('Using revision: ${_selectedRevision?.id ?? 'none'}');
-    print('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
+    LoggerService.debug('WebView loading data: ${htmlData.length} characters');
+    LoggerService.debug('Using revision: ${_selectedRevision?.id ?? 'none'}');
+    LoggerService.debug('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
     
     return Stack(
         children: [
@@ -411,7 +412,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               resourceCustomSchemes: ['synapse'],
             ),
             onLoadResourceWithCustomScheme: (controller, request) async {
-              print('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path} - ${request.url.path}');
+              LoggerService.debug('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path} - ${request.url.path}');
               if (request.url.scheme.toLowerCase() == 'synapse') {
                 final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
                 return CustomSchemeResponse(
@@ -702,18 +703,18 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         final startTime = DateTime.now();
         try {
           final sql = args[0] as String;
-          print('[Synapse.runQuery] Called with SQL: $sql');
+          LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
           
           // Execute the SQL query using the database service
           final result = await _executeSQLQuery(sql);
           final duration = DateTime.now().difference(startTime);
           
-          print('[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms');
+          LoggerService.debug('[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms');
           
           return {'success': true, 'data': result};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          print('[Synapse.runQuery] Error after ${duration.inMilliseconds}ms: $e');
+          LoggerService.error('[Synapse.runQuery] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -725,18 +726,18 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         final startTime = DateTime.now();
         try {
           final state = args[0] as Map<String, dynamic>;
-          print('[Synapse.storeAppState] Called with state keys: ${state.keys.toList()}');
+          LoggerService.debug('[Synapse.storeAppState] Called with state keys: ${state.keys.toList()}');
           
           final appProvider = context.read<AppProvider>();
           await appProvider.saveAppState(widget.app.id, state);
           final duration = DateTime.now().difference(startTime);
           
-          print('[Synapse.storeAppState] Success - State saved in ${duration.inMilliseconds}ms');
+          LoggerService.debug('[Synapse.storeAppState] Success - State saved in ${duration.inMilliseconds}ms');
           
           return {'success': true};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          print('[Synapse.storeAppState] Error after ${duration.inMilliseconds}ms: $e');
+          LoggerService.error('[Synapse.storeAppState] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -747,22 +748,22 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          print('[Synapse.loadAppState] Called for app: ${widget.app.id}');
+          LoggerService.debug('[Synapse.loadAppState] Called for app: ${widget.app.id}');
           
           final appProvider = context.read<AppProvider>();
           final state = await appProvider.getAppState(widget.app.id);
           final duration = DateTime.now().difference(startTime);
           
           if (state != null) {
-            print('[Synapse.loadAppState] Success - State loaded with keys: ${state.keys.toList()} in ${duration.inMilliseconds}ms');
+            LoggerService.debug('[Synapse.loadAppState] Success - State loaded with keys: ${state.keys.toList()} in ${duration.inMilliseconds}ms');
           } else {
-            print('[Synapse.loadAppState] Success - No state found in ${duration.inMilliseconds}ms');
+            LoggerService.debug('[Synapse.loadAppState] Success - No state found in ${duration.inMilliseconds}ms');
           }
           
           return {'success': true, 'data': state};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          print('[Synapse.loadAppState] Error after ${duration.inMilliseconds}ms: $e');
+          LoggerService.error('[Synapse.loadAppState] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -775,7 +776,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final prompt = args[0] as String;
           final options = args.length > 1 ? args[1] as Map<String, dynamic>? : <String, dynamic>{};
-          print('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
+          LoggerService.debug('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
           
           // Extract optional parameters
           final temperature = options?['temperature'] as double?;
@@ -799,12 +800,12 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           );
           final duration = DateTime.now().difference(startTime);
           
-          print('[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms');
+          LoggerService.debug('[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms');
           
           return {'success': true, 'response': response};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          print('[Synapse.chatAI] Error after ${duration.inMilliseconds}ms: $e');
+          LoggerService.error('[Synapse.chatAI] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -817,9 +818,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final message = args[0] as String;
           final level = args.length > 1 ? args[1] as String : 'LOG';
-          print('[UserApp.${level.toUpperCase()}] $message');
+          LoggerService.info('[UserApp.${level.toUpperCase()}] $message');
         } catch (e) {
-          print('[UserApp.LOG] Error in log handler: $e');
+          LoggerService.error('[UserApp.LOG] Error in log handler: $e', error: e);
         }
       },
     );
@@ -831,10 +832,10 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final text = args[0] as String;
           await Clipboard.setData(ClipboardData(text: text));
-          print('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? text.substring(0, 50) + '...' : text}');
+          LoggerService.debug('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? text.substring(0, 50) + '...' : text}');
           return {'success': true};
         } catch (e) {
-          print('[UserApp.CLIPBOARD] Error copying to clipboard: $e');
+          LoggerService.error('[UserApp.CLIPBOARD] Error copying to clipboard: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1048,7 +1049,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         // Verify that the attachment belongs to a note
         final isValid = await databaseService.verifyAttachmentPath(attachmentPath);
         if (!isValid) {
-          print('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
+          LoggerService.warning('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
           continue;
         }
         
@@ -1066,12 +1067,12 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           );
           
           validAttachments.add(platformFile);
-          print('[Synapse.chatAI] Added attachment: $fileName (${bytes.length} bytes)');
+          LoggerService.debug('[Synapse.chatAI] Added attachment: $fileName (${bytes.length} bytes)');
         } else {
-          print('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
+          LoggerService.warning('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
         }
       } catch (e) {
-        print('[Synapse.chatAI] Error processing attachment $attachmentPath: $e');
+        LoggerService.error('[Synapse.chatAI] Error processing attachment $attachmentPath: $e', error: e);
         // Continue with other attachments even if one fails
       }
     }

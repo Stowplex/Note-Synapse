@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'logger_service.dart';
 
 class AudioRecordingService {
   static final AudioRecordingService _instance = AudioRecordingService._internal();
@@ -40,7 +41,7 @@ class AudioRecordingService {
         _recorder = AudioRecorder();
         _player = AudioPlayer();
       } catch (e) {
-        print('Failed to initialize audio services: $e');
+        LoggerService.error('Failed to initialize audio services: $e', error: e);
         _isSupported = false;
         _recorder = null;
         _player = null;
@@ -89,7 +90,7 @@ class AudioRecordingService {
       final status = await Permission.microphone.request();
       return status == PermissionStatus.granted;
     } catch (e) {
-      print('Permission request failed: $e');
+      LoggerService.error('Permission request failed: $e', error: e);
       return false;
     }
   }
@@ -107,7 +108,7 @@ class AudioRecordingService {
       final status = await Permission.microphone.status;
       return status == PermissionStatus.granted;
     } catch (e) {
-      print('Permission check failed: $e');
+      LoggerService.error('Permission check failed: $e', error: e);
       return false;
     }
   }
@@ -175,7 +176,7 @@ class AudioRecordingService {
         return true;
       }
     } catch (e) {
-      print('Error starting recording: $e');
+      LoggerService.error('Error starting recording: $e', error: e);
       return false;
     }
   }
@@ -206,7 +207,7 @@ class AudioRecordingService {
         return path;
       }
     } catch (e) {
-      print('Error stopping recording: $e');
+      LoggerService.error('Error stopping recording: $e', error: e);
       return null;
     }
   }
@@ -241,7 +242,7 @@ class AudioRecordingService {
         _currentRecordingPath = null;
       }
     } catch (e) {
-      print('Error canceling recording: $e');
+      LoggerService.error('Error canceling recording: $e', error: e);
     }
   }
 
@@ -271,7 +272,7 @@ class AudioRecordingService {
       await _player!.play(DeviceFileSource(filePath));
       _isPlaying = true;
       _currentPlayingPath = filePath;
-      print('Audio playback started: $filePath');
+      LoggerService.debug('Audio playback started: $filePath');
       _playingStateController.add(true);
 
       // Start position tracking
@@ -279,7 +280,7 @@ class AudioRecordingService {
 
       return true;
     } catch (e) {
-      print('Error starting playback: $e');
+      LoggerService.error('Error starting playback: $e', error: e);
       return false;
     }
   }
@@ -294,11 +295,11 @@ class AudioRecordingService {
       if (_isPlaying) {
         await _player!.pause();
         _isPlaying = false;
-        print('Audio playback paused');
+        LoggerService.debug('Audio playback paused');
         _playingStateController.add(false);
       }
     } catch (e) {
-      print('Error pausing playback: $e');
+      LoggerService.error('Error pausing playback: $e', error: e);
       // Reset state if player is disposed
       _isPlaying = false;
       _playingStateController.add(false);
@@ -318,7 +319,7 @@ class AudioRecordingService {
         _playingStateController.add(true);
       }
     } catch (e) {
-      print('Error resuming playback: $e');
+      LoggerService.error('Error resuming playback: $e', error: e);
     }
   }
 
@@ -332,12 +333,12 @@ class AudioRecordingService {
       await _player!.stop();
       _isPlaying = false;
       _currentPlayingPath = null;
-      print('Audio playback stopped');
+      LoggerService.debug('Audio playback stopped');
       _playingStateController.add(false);
       _playerPositionSubscription?.cancel();
       _playerDurationSubscription?.cancel();
     } catch (e) {
-      print('Error stopping playback: $e');
+      LoggerService.error('Error stopping playback: $e', error: e);
       // Reset state if player is disposed
       _isPlaying = false;
       _currentPlayingPath = null;
@@ -362,7 +363,7 @@ class AudioRecordingService {
 
       await _player!.seek(position);
     } catch (e) {
-      print('Error seeking: $e');
+      LoggerService.error('Error seeking: $e', error: e);
     }
   }
 
@@ -402,7 +403,7 @@ class AudioRecordingService {
       // First check if gstreamer is available
       final gstCheck = await Process.run('which', ['gst-launch-1.0']);
       if (gstCheck.exitCode != 0) {
-        print('gst-launch-1.0 not found. Please install gstreamer1.0-tools');
+        LoggerService.warning('gst-launch-1.0 not found. Please install gstreamer1.0-tools');
         return false;
       }
 
@@ -430,7 +431,7 @@ class AudioRecordingService {
           const Duration(milliseconds: 100),
         );
         // If we get here, the process has already exited
-        print('Failed to start gstreamer recording process, exit code: $exitCode');
+        LoggerService.error('Failed to start gstreamer recording process, exit code: $exitCode');
         return false;
       } catch (e) {
         // Timeout means the process is still running, which is what we want
@@ -446,7 +447,7 @@ class AudioRecordingService {
 
       return true;
     } catch (e) {
-      print('Error starting Linux recording: $e');
+      LoggerService.error('Error starting Linux recording: $e', error: e);
       return false;
     }
   }
@@ -467,7 +468,7 @@ class AudioRecordingService {
 
       return _currentRecordingPath;
     } catch (e) {
-      print('Error stopping Linux recording: $e');
+      LoggerService.error('Error stopping Linux recording: $e', error: e);
       return null;
     }
   }
@@ -484,7 +485,7 @@ class AudioRecordingService {
       _recordingTimer?.cancel();
       _recordingTimer = null;
     } catch (e) {
-      print('Error canceling Linux recording: $e');
+      LoggerService.error('Error canceling Linux recording: $e', error: e);
     }
   }
 
@@ -548,7 +549,7 @@ class AudioRecordingService {
     try {
       _player?.stop();
     } catch (e) {
-      print('Error stopping player during reset: $e');
+      LoggerService.error('Error stopping player during reset: $e', error: e);
     }
   }
 }

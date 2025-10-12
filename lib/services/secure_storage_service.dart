@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'logger_service.dart';
 
 class SecureStorageService {
   static const _storage = FlutterSecureStorage(
@@ -19,44 +20,44 @@ class SecureStorageService {
     try {
       // Test if storage is accessible by trying to read a non-existent key
       await _storage.read(key: 'test_key');
-      print('SecureStorageService: Initialized successfully');
+      LoggerService.debug('SecureStorageService: Initialized successfully');
     } catch (e) {
-      print('SecureStorageService: Initialization failed: $e');
+      LoggerService.error('SecureStorageService: Initialization failed: $e', error: e);
     }
   }
 
   static const String _apiKeyKey = 'gemini_api_key';
 
   static Future<void> saveApiKey(String apiKey) async {
-    print('SecureStorageService: Saving API key, length: ${apiKey.length}');
+    LoggerService.debug('SecureStorageService: Saving API key, length: ${apiKey.length}');
     
     try {
       if (Platform.isLinux) {
         // Use shared_preferences as fallback for Linux only
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_apiKeyKey, apiKey);
-        print('SecureStorageService: API key saved to SharedPreferences (Linux)');
+        LoggerService.debug('SecureStorageService: API key saved to SharedPreferences (Linux)');
       } else {
         // Use FlutterSecureStorage for Android/iOS
         await _storage.write(key: _apiKeyKey, value: apiKey);
-        print('SecureStorageService: API key saved to FlutterSecureStorage');
+        LoggerService.debug('SecureStorageService: API key saved to FlutterSecureStorage');
       }
       
       // Verify the save worked
       await Future.delayed(const Duration(milliseconds: 100));
       final verifyKey = await getApiKey();
-      print('SecureStorageService: Verification - retrieved key length: ${verifyKey?.length ?? 0}');
+      LoggerService.debug('SecureStorageService: Verification - retrieved key length: ${verifyKey?.length ?? 0}');
       
     } catch (e) {
-      print('SecureStorageService: Secure storage failed: $e');
+      LoggerService.error('SecureStorageService: Secure storage failed: $e', error: e);
       if (Platform.isLinux) {
         // Only fallback to SharedPreferences on Linux
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_apiKeyKey, apiKey);
-        print('SecureStorageService: API key saved to SharedPreferences (Linux fallback)');
+        LoggerService.debug('SecureStorageService: API key saved to SharedPreferences (Linux fallback)');
       } else {
         // On Android/iOS, if secure storage fails, we should not store the key
-        print('SecureStorageService: Cannot store API key securely on Android/iOS');
+        LoggerService.warning('SecureStorageService: Cannot store API key securely on Android/iOS');
         rethrow;
       }
     }
@@ -64,16 +65,16 @@ class SecureStorageService {
 
   static Future<String?> getApiKey() async {
     try {
-      print('SecureStorageService: Getting API key...');
+      LoggerService.debug('SecureStorageService: Getting API key...');
       if (Platform.isLinux) {
         // Use shared_preferences as fallback for Linux
-        print('SecureStorageService: Using SharedPreferences for Linux');
+        LoggerService.debug('SecureStorageService: Using SharedPreferences for Linux');
         final prefs = await SharedPreferences.getInstance();
         final key = prefs.getString(_apiKeyKey);
-        print('SecureStorageService: Retrieved key length: ${key?.length ?? 0}');
+        LoggerService.debug('SecureStorageService: Retrieved key length: ${key?.length ?? 0}');
         return key;
       } else {
-        print('SecureStorageService: Using FlutterSecureStorage');
+        LoggerService.debug('SecureStorageService: Using FlutterSecureStorage');
         String? key;
         
         // Try multiple times with small delays
@@ -83,36 +84,36 @@ class SecureStorageService {
             if (key != null && key.isNotEmpty) break;
             
             if (attempt < 2) {
-              print('SecureStorageService: Attempt ${attempt + 1} failed, retrying...');
+              LoggerService.debug('SecureStorageService: Attempt ${attempt + 1} failed, retrying...');
               await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
             }
           } catch (e) {
-            print('SecureStorageService: Attempt ${attempt + 1} error: $e');
+            LoggerService.debug('SecureStorageService: Attempt ${attempt + 1} error: $e');
             if (attempt < 2) {
               await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
             }
           }
         }
         
-        print('SecureStorageService: Retrieved key length: ${key?.length ?? 0}');
+        LoggerService.debug('SecureStorageService: Retrieved key length: ${key?.length ?? 0}');
         return key;
       }
     } catch (e) {
-      print('SecureStorageService: Error in getApiKey: $e');
+      LoggerService.error('SecureStorageService: Error in getApiKey: $e', error: e);
       if (Platform.isLinux) {
         // Only fallback to SharedPreferences on Linux
         try {
           final prefs = await SharedPreferences.getInstance();
           final key = prefs.getString(_apiKeyKey);
-          print('SecureStorageService: Linux fallback key length: ${key?.length ?? 0}');
+          LoggerService.debug('SecureStorageService: Linux fallback key length: ${key?.length ?? 0}');
           return key;
         } catch (fallbackError) {
-          print('SecureStorageService: Linux fallback also failed: $fallbackError');
+          LoggerService.error('SecureStorageService: Linux fallback also failed: $fallbackError', error: fallbackError);
           return null;
         }
       } else {
         // On Android/iOS, if secure storage fails, return null
-        print('SecureStorageService: Cannot retrieve API key securely on Android/iOS');
+        LoggerService.warning('SecureStorageService: Cannot retrieve API key securely on Android/iOS');
         return null;
       }
     }
@@ -139,7 +140,7 @@ class SecureStorageService {
       final key = await getApiKey();
       return key != null && key.isNotEmpty;
     } catch (e) {
-      print('SecureStorageService: Error in hasApiKey: $e');
+      LoggerService.error('SecureStorageService: Error in hasApiKey: $e', error: e);
       return false;
     }
   }
@@ -147,17 +148,17 @@ class SecureStorageService {
 
   // Debug method to check FlutterSecureStorage
   static Future<void> debugStorageContents() async {
-    print('=== DEBUGGING STORAGE CONTENTS ===');
+    LoggerService.debug('=== DEBUGGING STORAGE CONTENTS ===');
     
     // Check FlutterSecureStorage
     try {
       final secureKey = await _storage.read(key: _apiKeyKey);
-      print('FlutterSecureStorage key length: ${secureKey?.length ?? 0}');
+      LoggerService.debug('FlutterSecureStorage key length: ${secureKey?.length ?? 0}');
     } catch (e) {
-      print('FlutterSecureStorage error: $e');
+      LoggerService.error('FlutterSecureStorage error: $e', error: e);
     }
     
-    print('=== END DEBUGGING ===');
+    LoggerService.debug('=== END DEBUGGING ===');
   }
 
 }

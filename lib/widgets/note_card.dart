@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../utils/date_utils.dart';
+import '../services/logger_service.dart';
 import 'interactive_checkbox_list.dart';
 
 class NoteCard extends StatelessWidget {
@@ -516,12 +517,12 @@ class NoteCard extends StatelessWidget {
       } else {
         // Note: We can't show a snackbar here since this is a stateless widget
         // The error will be silently handled
-        print('Cannot open link: $url');
+        LoggerService.warning('Cannot open link: $url');
       }
     } catch (e) {
       // Note: We can't show a snackbar here since this is a stateless widget
       // The error will be silently handled
-      print('Error opening link: $e');
+      LoggerService.error('Error opening link: $e', error: e);
     }
   }
 }

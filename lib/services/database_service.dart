@@ -12,6 +12,7 @@ import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import 'logger_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -245,7 +246,7 @@ class DatabaseService {
         }
       } catch (e) {
         // If migration fails, drop and recreate the database
-        print('Migration failed, recreating database: $e');
+        LoggerService.error('Migration failed, recreating database: $e', error: e);
         await db.execute('DROP TABLE IF EXISTS notes');
         await db.execute('DROP TABLE IF EXISTS subnotes');
         await db.execute('DROP TABLE IF EXISTS tags');
@@ -263,7 +264,7 @@ class DatabaseService {
         await db.execute('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
         await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
       } catch (e) {
-        print('Migration to version 3 failed: $e');
+        LoggerService.error('Migration to version 3 failed: $e', error: e);
         // If migration fails, drop and recreate the database
         await db.execute('DROP TABLE IF EXISTS notes');
         await db.execute('DROP TABLE IF EXISTS subnotes');
@@ -282,7 +283,7 @@ class DatabaseService {
         await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
         await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
       } catch (e) {
-        print('Migration to version 4 failed: $e');
+        LoggerService.error('Migration to version 4 failed: $e', error: e);
         // If migration fails, drop and recreate the database
         await db.execute('DROP TABLE IF EXISTS notes');
         await db.execute('DROP TABLE IF EXISTS subnotes');
@@ -307,7 +308,7 @@ class DatabaseService {
           await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
         }
       } catch (e) {
-        print('Migration to version 5 failed: $e');
+        LoggerService.error('Migration to version 5 failed: $e', error: e);
         // If migration fails, drop and recreate the database
         await db.execute('DROP TABLE IF EXISTS notes');
         await db.execute('DROP TABLE IF EXISTS subnotes');
@@ -335,7 +336,7 @@ class DatabaseService {
           )
         ''');
       } catch (e) {
-        print('Migration to version 6 failed: $e');
+        LoggerService.error('Migration to version 6 failed: $e', error: e);
         // If migration fails, drop and recreate the database
         await db.execute('DROP TABLE IF EXISTS notes');
         await db.execute('DROP TABLE IF EXISTS subnotes');
@@ -369,7 +370,7 @@ class DatabaseService {
           ''');
         }
       } catch (e) {
-        print('Migration to version 7 failed: $e');
+        LoggerService.error('Migration to version 7 failed: $e', error: e);
         // Only drop and recreate if the table creation actually failed
         try {
           await db.execute('DROP TABLE IF EXISTS user_apps');
@@ -386,7 +387,7 @@ class DatabaseService {
             )
           ''');
         } catch (e2) {
-          print('Failed to create user_apps table: $e2');
+          LoggerService.error('Failed to create user_apps table: $e2', error: e2);
           // Only as last resort, recreate entire database
           await db.execute('DROP TABLE IF EXISTS notes');
           await db.execute('DROP TABLE IF EXISTS subnotes');
@@ -413,7 +414,7 @@ class DatabaseService {
           await db.execute('ALTER TABLE user_apps ADD COLUMN type TEXT NOT NULL DEFAULT "normal"');
         }
       } catch (e) {
-        print('Migration to version 8 failed: $e');
+        LoggerService.error('Migration to version 8 failed: $e', error: e);
         // If migration fails, recreate the user_apps table
         try {
           await db.execute('DROP TABLE IF EXISTS user_apps');
@@ -431,7 +432,7 @@ class DatabaseService {
             )
           ''');
         } catch (e2) {
-          print('Failed to recreate user_apps table: $e2');
+          LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
         }
       }
     }
@@ -464,7 +465,7 @@ class DatabaseService {
         // Migrate existing apps to have initial revisions
         await _migrateExistingAppsToRevisions(db);
       } catch (e) {
-        print('Migration to version 9 failed: $e');
+        LoggerService.error('Migration to version 9 failed: $e', error: e);
       }
     }
     
@@ -479,7 +480,7 @@ class DatabaseService {
           await db.execute('ALTER TABLE user_apps ADD COLUMN attachmentPaths TEXT');
         }
       } catch (e) {
-        print('Migration to version 10 failed: $e');
+        LoggerService.error('Migration to version 10 failed: $e', error: e);
       }
     }
     
@@ -525,7 +526,7 @@ class DatabaseService {
           await db.execute('ALTER TABLE user_apps_new RENAME TO user_apps');
         }
       } catch (e) {
-        print('Migration to version 11 failed: $e');
+        LoggerService.error('Migration to version 11 failed: $e', error: e);
       }
     }
   }
@@ -533,11 +534,11 @@ class DatabaseService {
   // Migration helper method to create initial revisions for existing apps
   Future<void> _migrateExistingAppsToRevisions(Database db) async {
     try {
-      print('Starting migration of existing apps to revisions...');
+      LoggerService.info('Starting migration of existing apps to revisions...');
       
       // Get all existing apps
       final apps = await db.query('user_apps');
-      print('Found ${apps.length} existing apps to migrate');
+      LoggerService.info('Found ${apps.length} existing apps to migrate');
       
       for (final appMap in apps) {
         final appId = appMap['id'] as String;
@@ -552,7 +553,7 @@ class DatabaseService {
         );
         
         if (existingRevisions.isNotEmpty) {
-          print('App $appId already has revisions, skipping...');
+          LoggerService.debug('App $appId already has revisions, skipping...');
           continue;
         }
         
@@ -581,12 +582,12 @@ class DatabaseService {
           whereArgs: [appId],
         );
         
-        print('Created initial revision for app: $appName (ID: $appId)');
+        LoggerService.debug('Created initial revision for app: $appName (ID: $appId)');
       }
       
-      print('Migration of existing apps to revisions completed successfully');
+      LoggerService.info('Migration of existing apps to revisions completed successfully');
     } catch (e) {
-      print('Error during migration of existing apps to revisions: $e');
+      LoggerService.error('Error during migration of existing apps to revisions: $e', error: e);
       // Don't rethrow - this is a migration helper, we don't want to break the entire migration
     }
   }
@@ -638,7 +639,7 @@ class DatabaseService {
         final note = await _mapToNote(map);
         notes.add(note);
       } catch (e) {
-        print('Error mapping note with id ${map['id']}: $e');
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
         // Skip corrupted notes instead of crashing
         continue;
       }
@@ -669,7 +670,7 @@ class DatabaseService {
         final note = await _mapToNote(map);
         notes.add(note);
       } catch (e) {
-        print('Error mapping note with id ${map['id']}: $e');
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
         // Skip corrupted notes instead of crashing
         continue;
       }
@@ -692,7 +693,7 @@ class DatabaseService {
         final note = await _mapToNote(map);
         notes.add(note);
       } catch (e) {
-        print('Error mapping note with id ${map['id']}: $e');
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
         // Skip corrupted notes instead of crashing
         continue;
       }
@@ -715,7 +716,7 @@ class DatabaseService {
         final note = await _mapToNote(map);
         notes.add(note);
       } catch (e) {
-        print('Error mapping note with id ${map['id']}: $e');
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
         // Skip corrupted notes instead of crashing
         continue;
       }
@@ -1359,16 +1360,16 @@ class DatabaseService {
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
     
-    print('DatabaseService.insertUserApp: Inserting app ${app.id} - ${app.name}');
+    LoggerService.debug('DatabaseService.insertUserApp: Inserting app ${app.id} - ${app.name}');
     await db.insert('user_apps', json);
-    print('DatabaseService.insertUserApp: Successfully inserted app ${app.id}');
+    LoggerService.debug('DatabaseService.insertUserApp: Successfully inserted app ${app.id}');
     return app.id;
   }
 
   Future<List<UserApp>> getAllUserApps() async {
     final db = await database;
     final maps = await db.query('user_apps', orderBy: 'createdAt DESC');
-    print('DatabaseService.getAllUserApps: Found ${maps.length} user apps');
+    LoggerService.debug('DatabaseService.getAllUserApps: Found ${maps.length} user apps');
     return maps.map((map) => _userAppFromMap(map)).toList();
   }
 
@@ -1482,9 +1483,9 @@ class DatabaseService {
       'attachmentPaths': revision.attachmentPaths.join('|'), // Store attachment paths as pipe-separated string
     };
     
-    print('DatabaseService.insertAppRevision: Inserting revision ${revision.id} for app ${revision.appId}');
+    LoggerService.debug('DatabaseService.insertAppRevision: Inserting revision ${revision.id} for app ${revision.appId}');
     await db.insert('app_revisions', json);
-    print('DatabaseService.insertAppRevision: Successfully inserted revision ${revision.id}');
+    LoggerService.debug('DatabaseService.insertAppRevision: Successfully inserted revision ${revision.id}');
     return revision.id;
   }
 
@@ -1496,13 +1497,13 @@ class DatabaseService {
       whereArgs: [appId],
       orderBy: 'revisionNumber ASC',
     );
-    print('DatabaseService.getAppRevisions: Found ${maps.length} revisions for app $appId');
+    LoggerService.debug('DatabaseService.getAppRevisions: Found ${maps.length} revisions for app $appId');
     if (maps.isNotEmpty) {
-      print('First revision data: ${maps.first}');
+      LoggerService.debug('First revision data: ${maps.first}');
     }
     final revisions = maps.map((map) => _appRevisionFromMap(map)).toList();
     if (revisions.isNotEmpty) {
-      print('First revision appCode length: ${revisions.first.appCode.length}');
+      LoggerService.debug('First revision appCode length: ${revisions.first.appCode.length}');
     }
     return revisions;
   }
@@ -1549,7 +1550,7 @@ class DatabaseService {
           ? (map['attachmentPaths'] as String).split('|').where((path) => path.isNotEmpty).toList()
           : [],
     );
-    print('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
+    LoggerService.debug('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
     return revision;
   }
 }

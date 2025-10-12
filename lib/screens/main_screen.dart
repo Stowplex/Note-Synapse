@@ -16,6 +16,7 @@ import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
 import 'share_screen.dart';
 import 'settings_screen.dart';
+import '../services/logger_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -615,7 +616,7 @@ class _MainScreenState extends State<MainScreen> {
         );
       }
     } catch (e) {
-      print('Error creating file note: $e'); // Debug logging
+      LoggerService.error('Error creating file note: $e', error: e);
       if (context.mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -655,7 +656,7 @@ class _MainScreenState extends State<MainScreen> {
         );
       }
     } catch (e) {
-      print('Error creating file note from bytes: $e'); // Debug logging
+      LoggerService.error('Error creating file note from bytes: $e', error: e);
       if (context.mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(

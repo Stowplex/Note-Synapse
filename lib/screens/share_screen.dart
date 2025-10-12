@@ -12,6 +12,7 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/secure_storage_service.dart';
+import '../services/logger_service.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -64,38 +65,38 @@ class _ShareScreenState extends State<ShareScreen> {
     try {
       // Initialize secure storage
       await SecureStorageService.initialize();
-      print('ShareScreen: Storage initialized successfully');
+      LoggerService.debug('ShareScreen: Storage initialized successfully');
     } catch (e) {
-      print('ShareScreen: Storage initialization failed: $e');
+      LoggerService.error('ShareScreen: Storage initialization failed: $e', error: e);
       // Add a delay and try again
       await Future.delayed(const Duration(milliseconds: 500));
       try {
         await SecureStorageService.initialize();
-        print('ShareScreen: Storage initialized on retry');
+        LoggerService.debug('ShareScreen: Storage initialized on retry');
       } catch (e2) {
-        print('ShareScreen: Storage initialization failed on retry: $e2');
+        LoggerService.error('ShareScreen: Storage initialization failed on retry: $e2', error: e2);
       }
     }
   }
 
   Future<void> _checkApiKeyStatus() async {
     try {
-      print('ShareScreen: Checking API key status...');
+      LoggerService.debug('ShareScreen: Checking API key status...');
       
       // Add a small delay to ensure storage is properly initialized
       await Future.delayed(const Duration(milliseconds: 100));
       
       bool hasApiKey = await SecureStorageService.hasApiKey();
-      print('ShareScreen: API key available: $hasApiKey');
+      LoggerService.debug('ShareScreen: API key available: $hasApiKey');
       
       
       if (hasApiKey) {
         final apiKey = await SecureStorageService.getApiKey();
-        print('ShareScreen: API key length: ${apiKey?.length ?? 0}');
+        LoggerService.debug('ShareScreen: API key length: ${apiKey?.length ?? 0}');
         
         // If we got a key, verify it's not empty
         if (apiKey == null || apiKey.isEmpty) {
-          print('ShareScreen: API key is empty, treating as unavailable');
+          LoggerService.warning('ShareScreen: API key is empty, treating as unavailable');
           if (mounted) {
             setState(() {
               _hasApiKey = false;
@@ -111,7 +112,7 @@ class _ShareScreenState extends State<ShareScreen> {
         });
       }
     } catch (e) {
-      print('ShareScreen: Error checking API key: $e');
+      LoggerService.error('ShareScreen: Error checking API key: $e', error: e);
       if (mounted) {
         setState(() {
           _hasApiKey = false;
