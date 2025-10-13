@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:markdown_toolbar/markdown_toolbar.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +15,7 @@ import '../services/gemini_api_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
+import '../utils/file_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
@@ -1356,7 +1356,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ] else if (fileExists)
               IconButton(
                 icon: const Icon(Icons.open_in_new),
-                onPressed: () => _openAttachment(attachmentPath),
+                onPressed: () => FileUtils.openFile(attachmentPath, context),
                 tooltip: 'Open with default application',
               ),
             IconButton(
@@ -1366,7 +1366,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
         ),
-        onTap: fileExists && !isAudioFile ? () => _openAttachment(attachmentPath) : null,
+        onTap: fileExists && !isAudioFile ? () => FileUtils.openFile(attachmentPath, context) : null,
       ),
     );
   }
@@ -1436,57 +1436,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  Future<void> _openAttachment(String attachmentPath) async {
-    try {
-      final file = File(attachmentPath);
-      if (!file.existsSync()) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File not found'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      // Use open_file package for proper Android file handling
-      final result = await OpenFile.open(attachmentPath);
-      
-      if (result.type != ResultType.done) {
-        String errorMessage = 'Cannot open file';
-        switch (result.type) {
-          case ResultType.noAppToOpen:
-            errorMessage = 'No application found to open this file type';
-            break;
-          case ResultType.fileNotFound:
-            errorMessage = 'File not found';
-            break;
-          case ResultType.permissionDenied:
-            errorMessage = 'Permission denied to open file';
-            break;
-          case ResultType.error:
-            errorMessage = 'Error opening file: ${result.message}';
-            break;
-          default:
-            errorMessage = 'Unknown error opening file';
-        }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error opening file: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
   Future<void> _removeAttachment(String attachmentPath, Note currentNote) async {
     final l10n = AppLocalizations.of(context)!;
