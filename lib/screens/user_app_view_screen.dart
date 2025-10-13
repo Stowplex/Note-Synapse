@@ -35,7 +35,6 @@ class UserAppViewScreen extends StatefulWidget {
 class _UserAppViewScreenState extends State<UserAppViewScreen> {
   List<String> _consoleOutput = [];
   bool _isLoading = true;
-  List<AppRevision> _revisions = [];
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
 
@@ -46,42 +45,77 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     _loadRevisions();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Update selected revision when provider data changes
+    final appProvider = context.watch<AppProvider>();
+    final currentApp = appProvider.userApps.firstWhere(
+      (app) => app.id == widget.app.id,
+      orElse: () => widget.app,
+    );
+    final revisions = appProvider.appRevisions[widget.app.id] ?? [];
+    
+    // If the provider's selected revision is different from our local state, update it
+    if (currentApp.selectedRevisionId != null && 
+        _selectedRevision?.id != currentApp.selectedRevisionId) {
+      try {
+        final newSelectedRevision = revisions.firstWhere(
+          (r) => r.id == currentApp.selectedRevisionId,
+        );
+        setState(() {
+          _selectedRevision = newSelectedRevision;
+        });
+        LoggerService.debug('Updated selected revision from provider: ${newSelectedRevision.id}');
+      } catch (e) {
+        LoggerService.warning('Selected revision not found in provider data: ${currentApp.selectedRevisionId}');
+      }
+    }
+  }
+
   Future<void> _loadRevisions() async {
     try {
       final appProvider = context.read<AppProvider>();
-      final revisions = await appProvider.getAppRevisions(widget.app.id);
-      LoggerService.debug('Loaded ${revisions.length} revisions for app ${widget.app.id}');
-      LoggerService.debug('App selectedRevisionId: ${widget.app.selectedRevisionId}');
+      await appProvider.getAppRevisions(widget.app.id);
+      
+      // Get the current app from provider (it will be updated after editing)
+      final currentApp = appProvider.userApps.firstWhere(
+        (app) => app.id == widget.app.id,
+        orElse: () => widget.app,
+      );
+      
+      // Get revisions from provider (already sorted consistently)
+      final revisions = appProvider.appRevisions[widget.app.id] ?? [];
       
       setState(() {
-        _revisions = revisions;
-        if (widget.app.selectedRevisionId != null) {
+        if (currentApp.selectedRevisionId != null) {
           try {
             _selectedRevision = revisions.firstWhere(
-              (r) => r.id == widget.app.selectedRevisionId,
+              (r) => r.id == currentApp.selectedRevisionId,
             );
-            LoggerService.debug('Selected revision: ${_selectedRevision?.id} with code length: ${_selectedRevision?.appCode.length}');
           } catch (e) {
-            LoggerService.warning('Selected revision not found, using first available');
-            _selectedRevision = revisions.isNotEmpty ? revisions.first : null;
+            LoggerService.warning('Selected revision not found, using latest');
+            _selectedRevision = revisions.isNotEmpty ? revisions.last : null; // Use last (highest revision number)
           }
         } else if (revisions.isNotEmpty) {
-          _selectedRevision = revisions.first;
-          LoggerService.debug('No selected revision, using first: ${_selectedRevision?.id}');
+          _selectedRevision = revisions.last; // Use last (highest revision number)
         } else {
-          // Fallback: if no revisions exist, create a virtual revision from the app's htmlContent
-          // This handles cases where the migration didn't run or apps were created before revisions
           _selectedRevision = null;
-          LoggerService.info('No revisions found, using app htmlContent');
         }
+        _isLoading = false;
       });
     } catch (e) {
       LoggerService.error('Error loading revisions: $e', error: e);
-      // Fallback: if loading revisions fails, set to null to use app's htmlContent
       setState(() {
         _selectedRevision = null;
+        _isLoading = false;
       });
     }
+  }
+
+  Future<void> _refreshAppData() async {
+    // Simply reload revisions - the provider handles all state management
+    await _loadRevisions();
   }
 
   void _validateNoteActionApp() {
@@ -121,6 +155,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       _selectedRevision = revision;
       _showRevisionDetails = false;
     });
+    LoggerService.debug('Selected revision: ${revision.id} (revision ${revision.revisionNumber})');
   }
 
   void _toggleRevisionDetails(AppRevision revision) {
@@ -136,13 +171,11 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       final appProvider = context.read<AppProvider>();
       await appProvider.setSelectedRevision(widget.app.id, revision.id);
       
-      // Reload revisions to update the UI
-      await _loadRevisions();
-      
+      // The provider will notify listeners and the UI will update automatically
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Revision ${revision.revisionNumber} ${widget.app.selectedRevisionId == revision.id ? 'unpinned' : 'pinned'}'),
+            content: Text('Revision ${revision.revisionNumber} pinned'),
             backgroundColor: Colors.green,
           ),
         );
@@ -183,8 +216,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         final appProvider = context.read<AppProvider>();
         await appProvider.deleteAppRevision(revision.id);
         
-        // Reload revisions
-        await _loadRevisions();
+        // The provider will notify listeners and the UI will update automatically
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -210,6 +242,14 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.watch<AppProvider>();
+    
+    // Get current app and revisions from provider
+    final currentApp = appProvider.userApps.firstWhere(
+      (app) => app.id == widget.app.id,
+      orElse: () => widget.app,
+    );
+    final revisions = appProvider.appRevisions[widget.app.id] ?? [];
     
     // Check if WebView is supported
     if (!UserAppService.isWebViewSupported()) {
@@ -252,7 +292,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       body: Column(
         children: [
           // Revision tabs
-          if (_revisions.isNotEmpty)
+          if (revisions.isNotEmpty)
             Container(
               height: 60,
               decoration: BoxDecoration(
@@ -271,11 +311,11 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.only(left: 8.0, right: 16.0),
-                      itemCount: _revisions.length,
+                      itemCount: revisions.length,
                       itemBuilder: (context, index) {
-                        final revision = _revisions[index];
+                        final revision = revisions[index];
                         final isSelected = _selectedRevision?.id == revision.id;
-                        final isPinned = widget.app.selectedRevisionId == revision.id;
+                        final isPinned = currentApp.selectedRevisionId == revision.id;
                         
                         return Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
@@ -347,12 +387,12 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                         IconButton(
                           onPressed: () => _pinRevision(_selectedRevision!),
                           icon: Icon(
-                            widget.app.selectedRevisionId == _selectedRevision!.id 
+                            currentApp.selectedRevisionId == _selectedRevision!.id 
                                 ? Icons.push_pin 
                                 : Icons.push_pin_outlined,
                             size: 16,
                           ),
-                          tooltip: widget.app.selectedRevisionId == _selectedRevision!.id 
+                          tooltip: currentApp.selectedRevisionId == _selectedRevision!.id 
                               ? 'Unpin Revision' 
                               : 'Pin Revision',
                           padding: const EdgeInsets.all(4),
@@ -391,12 +431,14 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   Widget _buildWebView() {
     final htmlData = _selectedRevision?.appCode ?? widget.app.htmlContent;
     LoggerService.debug('WebView loading data: ${htmlData.length} characters');
-    LoggerService.debug('Using revision: ${_selectedRevision?.id ?? 'none'}');
+    LoggerService.debug('Using revision: ${_selectedRevision?.id ?? 'none'} (revision ${_selectedRevision?.revisionNumber ?? 'N/A'})');
     LoggerService.debug('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
+    LoggerService.debug('WebView key: ${_selectedRevision?.id ?? 'app_${widget.app.id}'}');
     
     return Stack(
         children: [
           InAppWebView(
+            key: ValueKey(_selectedRevision?.id ?? 'app_${widget.app.id}'), // Force rebuild when revision changes
             initialData: InAppWebViewInitialData(
             data: htmlData,
               mimeType: 'text/html',
@@ -1109,13 +1151,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
 
   void _navigateToEdit(BuildContext context) async {
+    final appProvider = context.read<AppProvider>();
+    final revisions = appProvider.appRevisions[widget.app.id] ?? [];
+    
     // If no revisions exist, create an initial revision first
-    if (_revisions.isEmpty) {
+    if (revisions.isEmpty) {
       try {
-        final appProvider = context.read<AppProvider>();
         await appProvider.createInitialRevision(widget.app.id);
-        // Reload revisions after creating initial revision
-        await _loadRevisions();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1129,12 +1171,17 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       }
     }
     
-    Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => UserAppEditScreen(app: widget.app),
       ),
     );
+    
+    // If we returned from edit screen, refresh the data to show latest changes
+    if (result == true && mounted) {
+      await _refreshAppData();
+    }
   }
 
   void _showDeleteDialog(BuildContext context, AppLocalizations l10n) {

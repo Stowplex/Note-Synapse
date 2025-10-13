@@ -68,7 +68,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
       );
       
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context, true); // Return true to indicate successful edit
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('App updated successfully with new revision'),
@@ -144,6 +144,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
           _originalCode = _codeController.text.trim();
           _isCodeEditable = false;
         });
+        
+        // Return true to indicate successful save
+        Navigator.pop(context, true);
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
