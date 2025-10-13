@@ -417,7 +417,7 @@ IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
 2. Do not reference any external resources
 3. Document the purpose, requirements, and approach in comments
-4. Use the following APIs to interact with the Flutter app, genereated code should strictly follow the API parameter types.
+4. Use the following APIs to interact with the Flutter app, generated code should strictly follow the API parameter types.
    - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
      Param format: a string of SQL query to execute
      Response format: {success: boolean, data: array, error?: string}
@@ -428,8 +428,35 @@ IMPORTANT - REQUIREMENTS:
    - Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
      Param format: 
        - prompt: a string of prompt to send to the app's AI channel
-       - options: optional object with temperature, topK, topP, attachments parameters, for example: {temperature: 0.1, topK: 32, topP: 1, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+       - options: optional object with the following parameters (IMPORTANT: Follow exact types):
+         * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
+         * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
+         * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
+         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+
+   CORRECT chatAI Usage Examples:
+   ```javascript
+   // Basic usage - no parameters
+   const result1 = await Synapse.chatAI('Explain quantum computing');
+   
+   // With correct parameter types
+   const result2 = await Synapse.chatAI('Analyze this data', {
+     temperature: 0.7,    // number (double) 0.0-1.0
+     topK: 40,           // integer 1-100
+     topP: 0.9,          // number (double) 0.0-1.0
+     attachments: ['/path/to/file.pdf']  // array of strings
+   });
+   
+   // WRONG - will cause parameter validation errors:
+   // const result3 = await Synapse.chatAI('Test', {
+   //   topK: 32.5,        // WRONG: topK must be integer, not double
+   //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
+   //   temperature: "0.7" // WRONG: temperature must be number, not string
+   // });
+   ```
+
 5. Libraries you can utilize:
   - You are provided with the chart.js libary (version 2.9.4). You can import it with:
     ```html
@@ -526,7 +553,7 @@ IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
 2. Do not reference any external resources
 3. Document the purpose, requirements, and approach in comments
-4. Use the following APIs to interact with the Flutter app, genereated code should strictly follow the API parameter types.
+4. Use the following APIs to interact with the Flutter app, generated code should strictly follow the API parameter types.
    - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
      Param format: a string of SQL query to execute
      Response format: {success: boolean, data: array, error?: string}
@@ -537,8 +564,35 @@ IMPORTANT - REQUIREMENTS:
    - Synapse.chatAI(prompt: string, options?: object) - Send prompt through the app's AI channel and get the response
      Param format: 
        - prompt: a string of prompt to send to the app's AI channel
-       - options: optional object with temperature, topK, topP, attachments parameters, for example: {temperature: 0.1, topK: 32, topP: 1, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+       - options: optional object with the following parameters (IMPORTANT: Follow exact types):
+         * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
+         * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
+         * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
+         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+
+   CORRECT chatAI Usage Examples:
+   ```javascript
+   // Basic usage - no parameters
+   const result1 = await Synapse.chatAI('Explain quantum computing');
+   
+   // With correct parameter types
+   const result2 = await Synapse.chatAI('Analyze this data', {
+     temperature: 0.7,    // number (double) 0.0-1.0
+     topK: 40,           // integer 1-100
+     topP: 0.9,          // number (double) 0.0-1.0
+     attachments: ['/path/to/file.pdf']  // array of strings
+   });
+   
+   // WRONG - will cause parameter validation errors:
+   // const result3 = await Synapse.chatAI('Test', {
+   //   topK: 32.5,        // WRONG: topK must be integer, not double
+   //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
+   //   temperature: "0.7" // WRONG: temperature must be number, not string
+   // });
+   ```
+
 5. Libraries you can utilize:
   - You are provided with the chart.js libary (version 2.9.4). You can import it with:
     ```html

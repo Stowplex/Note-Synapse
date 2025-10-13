@@ -710,20 +710,98 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         };
         
         window.Synapse = {
+          /**
+           * Execute a SQL query on the database
+           * @param {string} sql - SQL query to execute
+           * @returns {Promise<{success: boolean, data?: Array, error?: string}>}
+           */
           runQuery: async (sql) => {
             const result = await window.flutter_inappwebview.callHandler('runQuery', sql);
             return result;
           },
+          
+          /**
+           * Store application state
+           * @param {Object} state - State object to store
+           * @returns {Promise<{success: boolean, error?: string}>}
+           */
           storeAppState: async (state) => {
             const result = await window.flutter_inappwebview.callHandler('storeAppState', state);
             return result;
           },
+          
+          /**
+           * Load application state
+           * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+           */
           loadAppState: async () => {
             const result = await window.flutter_inappwebview.callHandler('loadAppState');
             return result;
           },
+          
+          /**
+           * Chat with AI using configurable parameters
+           * @param {string} prompt - The prompt to send to the AI
+           * @param {Object} [options={}] - Configuration options
+           * @param {number} [options.temperature] - Temperature (0.0 to 1.0), controls randomness
+           * @param {number} [options.topK] - Top-K (1 to 100), number of tokens to consider
+           * @param {number} [options.topP] - Top-P (0.0 to 1.0), nucleus sampling parameter
+           * @param {string[]} [options.attachments] - Array of attachment file paths
+           * @returns {Promise<{success: boolean, response?: string, error?: string}>}
+           * 
+           * @example
+           * // Basic usage
+           * const result = await Synapse.chatAI('Hello, world!');
+           * 
+           * @example
+           * // With parameters
+           * const result = await Synapse.chatAI('Explain quantum computing', {
+           *   temperature: 0.7,
+           *   topK: 40,
+           *   topP: 0.9,
+           *   attachments: ['/path/to/image.jpg']
+           * });
+           */
           chatAI: async (prompt, options = {}) => {
-            const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, options);
+            // Parameter validation and type conversion for JavaScript side
+            const validatedOptions = {};
+            
+            // Validate and convert temperature (number, 0.0 to 1.0)
+            if (options.temperature !== undefined) {
+              const temp = Number(options.temperature);
+              if (isNaN(temp) || temp < 0 || temp > 1) {
+                throw new Error('Parameter validation failed: temperature must be a number between 0.0 and 1.0, got ' + options.temperature);
+              }
+              validatedOptions.temperature = temp;
+            }
+            
+            // Validate and convert topK (integer, 1 to 100)
+            if (options.topK !== undefined) {
+              const topK = Number(options.topK);
+              if (isNaN(topK) || !Number.isInteger(topK) || topK < 1 || topK > 100) {
+                throw new Error('Parameter validation failed: topK must be an integer between 1 and 100, got ' + options.topK);
+              }
+              validatedOptions.topK = topK;
+            }
+            
+            // Validate and convert topP (number, 0.0 to 1.0)
+            if (options.topP !== undefined) {
+              const topP = Number(options.topP);
+              if (isNaN(topP) || topP < 0 || topP > 1) {
+                throw new Error('Parameter validation failed: topP must be a number between 0.0 and 1.0, got ' + options.topP);
+              }
+              validatedOptions.topP = topP;
+            }
+            
+            // Validate attachments (array of strings)
+            if (options.attachments !== undefined) {
+              if (!Array.isArray(options.attachments)) {
+                throw new Error('Parameter validation failed: attachments must be an array, got ' + typeof options.attachments);
+              }
+              validatedOptions.attachments = options.attachments;
+            }
+            
+            const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, validatedOptions);
             return result;
           },
           Notes: $notesJson
@@ -815,12 +893,71 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           final prompt = args[0] as String;
           final options = args.length > 1 ? args[1] as Map<String, dynamic>? : <String, dynamic>{};
           LoggerService.debug('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
+          LoggerService.debug('[Synapse.chatAI] Raw options received: $options');
           
-          // Extract optional parameters
-          final temperature = options?['temperature'] as double?;
-          final topK = options?['topK'] as int?;
-          final topP = options?['topP'] as double?;
-          final attachmentPaths = options?['attachments'] as List<dynamic>?;
+          // Extract and validate optional parameters with explicit type checking
+          double? temperature;
+          int? topK;
+          double? topP;
+          List<dynamic>? attachmentPaths;
+          
+          // Validate temperature parameter
+          if (options?.containsKey('temperature') == true) {
+            final tempValue = options!['temperature'];
+            if (tempValue is double) {
+              temperature = tempValue;
+            } else if (tempValue is int) {
+              temperature = tempValue.toDouble();
+            } else {
+              throw Exception('Parameter validation failed: temperature must be a number (double or int), got ${tempValue.runtimeType}');
+            }
+          }
+          
+          // Validate topK parameter - must be integer
+          if (options?.containsKey('topK') == true) {
+            final topKValue = options!['topK'];
+            if (topKValue is int) {
+              topK = topKValue;
+            } else if (topKValue is double && topKValue == topKValue.roundToDouble()) {
+              topK = topKValue.round();
+            } else {
+              throw Exception('Parameter validation failed: topK must be an integer, got ${topKValue.runtimeType} with value $topKValue');
+            }
+          }
+          
+          // Validate topP parameter - must be double between 0 and 1
+          if (options?.containsKey('topP') == true) {
+            final topPValue = options!['topP'];
+            if (topPValue is double) {
+              if (topPValue >= 0.0 && topPValue <= 1.0) {
+                topP = topPValue;
+              } else {
+                throw Exception('Parameter validation failed: topP must be between 0.0 and 1.0, got $topPValue');
+              }
+            } else if (topPValue is int) {
+              final doubleValue = topPValue.toDouble();
+              if (doubleValue >= 0.0 && doubleValue <= 1.0) {
+                topP = doubleValue;
+              } else {
+                throw Exception('Parameter validation failed: topP must be between 0.0 and 1.0, got $doubleValue');
+              }
+            } else {
+              throw Exception('Parameter validation failed: topP must be a number between 0.0 and 1.0, got ${topPValue.runtimeType}');
+            }
+          }
+          
+          // Validate attachments parameter
+          if (options?.containsKey('attachments') == true) {
+            final attachmentsValue = options!['attachments'];
+            if (attachmentsValue is List) {
+              attachmentPaths = attachmentsValue;
+            } else {
+              throw Exception('Parameter validation failed: attachments must be an array, got ${attachmentsValue.runtimeType}');
+            }
+          }
+          
+          // Log validated parameters for debugging
+          LoggerService.debug('[Synapse.chatAI] Validated parameters: temperature=$temperature, topK=$topK, topP=$topP, attachments=${attachmentPaths?.length ?? 0}');
           
           // Process and verify attachments
           List<PlatformFile>? attachedFiles;
