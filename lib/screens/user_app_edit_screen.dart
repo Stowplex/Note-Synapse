@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:open_file/open_file.dart';
 import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../utils/file_utils.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -240,30 +240,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     });
   }
 
-  Future<void> _openImage(String imagePath) async {
-    try {
-      final result = await OpenFile.open(imagePath);
-      if (result.type != ResultType.done) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error opening image: ${result.message}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   void _showImageSourceDialog() {
     showDialog(
@@ -457,7 +433,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
                         return Stack(
                           children: [
                             GestureDetector(
-                              onTap: () => _openImage(path),
+                              onTap: () => FileUtils.openFile(path, context),
                               child: Container(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8.0),

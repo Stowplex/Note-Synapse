@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:open_file/open_file.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -16,6 +15,7 @@ import '../services/user_app_service.dart';
 import '../services/gemini_api_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../utils/file_utils.dart';
 import 'user_app_edit_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
@@ -130,30 +130,6 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     });
   }
 
-  Future<void> _openImage(String imagePath) async {
-    try {
-      final result = await OpenFile.open(imagePath);
-      if (result.type != ResultType.done) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error opening image: ${result.message}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _pinRevision(AppRevision revision) async {
     try {
@@ -586,7 +562,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       runSpacing: 8.0,
                       children: _selectedRevision!.attachmentPaths.map((path) {
                         return GestureDetector(
-                          onTap: () => _openImage(path),
+                          onTap: () => FileUtils.openFile(path, context),
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8.0),
