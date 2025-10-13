@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:open_file/open_file.dart';
 import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
-import '../services/user_app_service.dart';
-import '../services/logger_service.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -39,18 +38,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
   }
 
   Future<void> _loadCurrentRevisionAttachments() async {
-    if (widget.app.selectedRevisionId != null) {
-      try {
-        final revision = await UserAppService.getAppRevision(widget.app.selectedRevisionId!);
-        if (revision != null) {
-          setState(() {
-            _attachmentPaths = List<String>.from(revision.attachmentPaths);
-          });
-        }
-      } catch (e) {
-        LoggerService.error('Error loading revision attachments: $e', error: e);
-      }
-    }
+    // Don't auto-load previous revision attachments - images should be for current revision only
+    setState(() {
+      _attachmentPaths = [];
+    });
   }
 
   @override
@@ -249,6 +240,31 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     });
   }
 
+  Future<void> _openImage(String imagePath) async {
+    try {
+      final result = await OpenFile.open(imagePath);
+      if (result.type != ResultType.done) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error opening image: ${result.message}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showImageSourceDialog() {
     showDialog(
       context: context,
@@ -309,19 +325,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        l10n.appName,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      IconButton(
-                        onPressed: _showImageSourceDialog,
-                        icon: const Icon(Icons.add_photo_alternate),
-                        tooltip: 'Add Image',
-                      ),
-                    ],
+                  Text(
+                    l10n.appName,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -338,53 +344,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
                     widget.app.description,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  if (_attachmentPaths.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Attached Images:',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 8.0,
-                      children: _attachmentPaths.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final path = entry.value;
-                        return Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8.0),
-                              child: Image.file(
-                                File(path),
-                                width: 80,
-                                height: 80,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: GestureDetector(
-                                onTap: () => _removeAttachment(index),
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -452,9 +411,19 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                l10n.editSuggestion,
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    l10n.editSuggestion,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  IconButton(
+                    onPressed: _showImageSourceDialog,
+                    icon: const Icon(Icons.add_photo_alternate),
+                    tooltip: 'Add Image',
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -471,6 +440,66 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
                   return null;
                 },
               ),
+              // Show attached images below the edit box
+              if (_attachmentPaths.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Attached Images:',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                      children: _attachmentPaths.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final path = entry.value;
+                        return Stack(
+                          children: [
+                            GestureDetector(
+                              onTap: () => _openImage(path),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  border: Border.all(
+                                    color: Colors.grey.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7.0),
+                                  child: Image.file(
+                                    File(path),
+                                    width: 80,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () => _removeAttachment(index),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                ),
+              ],
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _isEditing ? null : _submitEdit,

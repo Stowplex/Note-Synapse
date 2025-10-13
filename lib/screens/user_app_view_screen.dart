@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:open_file/open_file.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -127,6 +128,31 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       _selectedRevision = revision;
       _showRevisionDetails = true;
     });
+  }
+
+  Future<void> _openImage(String imagePath) async {
+    try {
+      final result = await OpenFile.open(imagePath);
+      if (result.type != ResultType.done) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error opening image: ${result.message}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _pinRevision(AppRevision revision) async {
@@ -547,6 +573,42 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       ),
                     ),
                   ),
+                  // Show attached images below the user prompt
+                  if (_selectedRevision!.attachmentPaths.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Attached Images:',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 8.0,
+                      children: _selectedRevision!.attachmentPaths.map((path) {
+                        return GestureDetector(
+                          onTap: () => _openImage(path),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8.0),
+                              border: Border.all(
+                                color: Colors.grey.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(7.0),
+                              child: Image.file(
+                                File(path),
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
             ),
