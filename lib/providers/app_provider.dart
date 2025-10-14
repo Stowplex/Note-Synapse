@@ -21,6 +21,7 @@ class AppProvider extends ChangeNotifier {
   List<AIInteraction> _aiInteractions = [];
   List<Filter> _filters = [];
   List<UserApp> _userApps = [];
+  Map<String, List<AppRevision>> _appRevisions = {}; // Cache revisions by appId
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;
@@ -31,6 +32,7 @@ class AppProvider extends ChangeNotifier {
   List<AIInteraction> get aiInteractions => _aiInteractions;
   List<Filter> get filters => _filters;
   List<UserApp> get userApps => _userApps;
+  Map<String, List<AppRevision>> get appRevisions => _appRevisions;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
@@ -948,7 +950,18 @@ class AppProvider extends ChangeNotifier {
         }
       }
       
-      notifyListeners();
+      // Clear and refresh revisions cache for this app
+      clearAppRevisionsCache(originalApp.id);
+      await refreshAppRevisions(originalApp.id);
+      
+      // Automatically pin the latest revision after editing
+      final latestRevisions = _appRevisions[originalApp.id] ?? [];
+      if (latestRevisions.isNotEmpty) {
+        // Find the latest revision (highest revision number)
+        final latestRevision = latestRevisions.reduce((a, b) => a.revisionNumber > b.revisionNumber ? a : b);
+        await setSelectedRevision(originalApp.id, latestRevision.id);
+      }
+      
       _error = null;
       return revision;
     } catch (e) {
@@ -982,7 +995,18 @@ class AppProvider extends ChangeNotifier {
   // App Revisions management
   Future<List<AppRevision>> getAppRevisions(String appId) async {
     try {
-      return await UserAppService.getAppRevisions(appId);
+      // Check if we have cached revisions for this app
+      if (_appRevisions.containsKey(appId)) {
+        return _appRevisions[appId]!;
+      }
+      
+      // Load revisions from database
+      final revisions = await UserAppService.getAppRevisions(appId);
+      
+      // Cache the revisions (already sorted by revisionNumber ASC from database)
+      _appRevisions[appId] = revisions;
+      
+      return revisions;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1003,6 +1027,17 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteAppRevision(String revisionId) async {
     try {
       await UserAppService.deleteAppRevision(revisionId);
+      
+      // Find which app this revision belonged to and clear its cache
+      for (final appId in _appRevisions.keys) {
+        final revisions = _appRevisions[appId]!;
+        if (revisions.any((r) => r.id == revisionId)) {
+          clearAppRevisionsCache(appId);
+          await refreshAppRevisions(appId);
+          break;
+        }
+      }
+      
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -1030,6 +1065,25 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  // Refresh revisions for a specific app
+  Future<void> refreshAppRevisions(String appId) async {
+    try {
+      final revisions = await UserAppService.getAppRevisions(appId);
+      _appRevisions[appId] = revisions;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // Clear revisions cache for an app (useful when revisions are modified)
+  void clearAppRevisionsCache(String appId) {
+    _appRevisions.remove(appId);
+    notifyListeners();
   }
 
   Future<AppRevision> createInitialRevision(String appId) async {
