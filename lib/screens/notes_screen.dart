@@ -137,6 +137,18 @@ class _NotesScreenState extends State<NotesScreen> {
                 // Filter tab strip
                 Consumer<AppProvider>(
                   builder: (context, appProvider, child) {
+                    // Update available tags when provider data changes
+                    final allTags = appProvider.getAllAvailableTags();
+                    final updatedAvailableTags = ['all', ...allTags];
+                    if (updatedAvailableTags.length != _availableTags.length || 
+                        !updatedAvailableTags.every((tag) => _availableTags.contains(tag))) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        setState(() {
+                          _availableTags = updatedAvailableTags;
+                        });
+                      });
+                    }
+                    
                     return FilterTabStrip(
                       selectedFilterId: _selectedFilterId,
                       customFilters: appProvider.filters,
@@ -155,8 +167,8 @@ class _NotesScreenState extends State<NotesScreen> {
       ),
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          // Load tags when data becomes available
-          if (!appProvider.isLoading && appProvider.notes.isNotEmpty && _availableTags.length <= 1) {
+          // Load tags when data becomes available or when provider notifies of changes
+          if (!appProvider.isLoading && appProvider.notes.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadTags();
             });
