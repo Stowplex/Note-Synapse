@@ -49,6 +49,20 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     });
   }
 
+  void _showEditFilterDialog(Filter filter) {
+    showDialog(
+      context: context,
+      builder: (context) => CustomFilterDialog(
+        availableTags: widget.availableTags,
+        existingFilter: filter,
+      ),
+    ).then((result) {
+      if (result is Filter) {
+        widget.onFilterUpdated(result);
+      }
+    });
+  }
+
 
   void _showDeleteConfirmation(Filter filter) {
     final l10n = AppLocalizations.of(context)!;
@@ -183,7 +197,18 @@ class _FilterTabStripState extends State<FilterTabStrip> {
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-            const SizedBox(width: 8),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _showEditFilterDialog(filter),
+                child: Icon(
+                  Icons.edit,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
             GestureDetector(
               onTap: () => _showDeleteConfirmation(filter),
               child: Icon(
