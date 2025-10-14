@@ -737,18 +737,21 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         const originalConsoleWarn = console.warn;
         
         console.log = function(...args) {
-          originalConsoleLog.apply(console, args);
-          window.flutter_inappwebview.callHandler('log', args.join(' '), 'LOG');
+          const msg = args.map((arg) => JSON.stringify(arg, null, 2)).join('\\n');
+          originalConsoleLog(msg);
+          window.flutter_inappwebview.callHandler('log', msg, 'LOG');
         };
         
         console.error = function(...args) {
-          originalConsoleError.apply(console, args);
-          window.flutter_inappwebview.callHandler('log', args.join(' '), 'ERROR');
+          const msg = args.map((arg) => JSON.stringify(arg, null, 2)).join('\\n');
+          originalConsoleError(msg);
+          window.flutter_inappwebview.callHandler('log', msg, 'ERROR');
         };
         
         console.warn = function(...args) {
-          originalConsoleWarn.apply(console, args);
-          window.flutter_inappwebview.callHandler('log', args.join(' '), 'WARN');
+          const msg = args.map((arg) => JSON.stringify(arg, null, 2)).join('\\n');
+          originalConsoleError(msg);
+          window.flutter_inappwebview.callHandler('log', msg, 'WARN');
         };
         
         window.Synapse = {

@@ -462,6 +462,7 @@ IMPORTANT - REQUIREMENTS:
     ```html
     <script src="synapse://chart.min.js"></script>
     ```
+    DO NOT USE time scale due to lack of adapter.
   - You are provided with the bootstrap library (version 4.6). You can import it with:
     ```html
     <link rel="stylesheet" href="synapse://bootstrap.min.css">
@@ -485,6 +486,7 @@ IMPORTANT - REQUIREMENTS:
 9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
 10. Prefer creating responsive layout with existing libraries over manual css.
 11. Use MathML to display mathematical formulas.
+12. Place adequate console logging to help tracking key steps in the code.
 
 ${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
 
@@ -598,6 +600,7 @@ IMPORTANT - REQUIREMENTS:
     ```html
     <script src="synapse://chart.min.js"></script>
     ```
+    DO NOT USE time scale due to lack of adapter.
   - You are provided with the bootstrap library (version 4.6). You can import it with:
     ```html
     <link rel="stylesheet" href="synapse://bootstrap.min.css">
@@ -621,6 +624,7 @@ IMPORTANT - REQUIREMENTS:
 9.  Be reminded that notes can have attachments. You should include them in chatAI if needed.
 10. Prefer creating responsive layout with existing libraries over manual css.
 11. Use MathML to display mathematical formulas.
+12. Place adequate console logging to help tracking key steps in the code.
 
 
 Database Schema:
