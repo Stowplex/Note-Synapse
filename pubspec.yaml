@@ -104,6 +104,9 @@ dependencies:
   
   # HTML to Markdown conversion
   html2md: ^1.3.2
+  
+  # Debug overlay
+  flutter_debug_overlay: ^0.1.0
 
 dev_dependencies:
   flutter_test:
