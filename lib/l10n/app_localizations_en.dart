@@ -1406,4 +1406,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteApp => 'Delete App';
+
+  @override
+  String get aiDebugOverlay => 'AI Debug Overlay';
+
+  @override
+  String get aiDebugOverlaySubtitle => 'View AI request/response logs';
+
+  @override
+  String get aiDebugOverlayTitle => 'AI Debug Overlay';
+
+  @override
+  String get refreshLogs => 'Refresh logs';
+
+  @override
+  String get clearLogs => 'Clear logs';
+
+  @override
+  String get noAiLogsAvailable => 'No AI logs available';
+
+  @override
+  String get aiLogsDescription => 'AI requests and responses will appear here';
+
+  @override
+  String get headers => 'Headers';
+
+  @override
+  String get body => 'Body';
+
+  @override
+  String get statusCode => 'Status Code';
+
+  @override
+  String get error => 'Error';
 }

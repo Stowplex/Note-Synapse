@@ -1,6 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
+class AiLogEntry {
+  final String id;
+  final String type; // 'request' or 'response'
+  final String endpoint;
+  final Map<String, dynamic> data;
+  final DateTime timestamp;
+
+  AiLogEntry({
+    required this.id,
+    required this.type,
+    required this.endpoint,
+    required this.data,
+    required this.timestamp,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type,
+    'endpoint': endpoint,
+    'data': data,
+    'timestamp': timestamp.toIso8601String(),
+  };
+}
+
 class LoggerService {
   static final Logger _logger = Logger(
     printer: PrettyPrinter(
@@ -12,6 +36,23 @@ class LoggerService {
       dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
     ),
   );
+
+  // Global singleton log bucket for AI requests and responses
+  static final List<AiLogEntry> _aiLogBucket = [];
+  static const int _maxLogEntries = 100;
+
+  static List<AiLogEntry> get aiLogBucket => List.unmodifiable(_aiLogBucket);
+
+  static void clearAiLogBucket() {
+    _aiLogBucket.clear();
+  }
+
+  static void _addToLogBucket(AiLogEntry entry) {
+    _aiLogBucket.add(entry);
+    if (_aiLogBucket.length > _maxLogEntries) {
+      _aiLogBucket.removeAt(0); // Remove oldest entry
+    }
+  }
 
   static void debug(String message, {dynamic error, StackTrace? stackTrace}) {
     if (kDebugMode) {
@@ -52,12 +93,26 @@ class LoggerService {
   }) {
     if (kDebugMode) {
       final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final timestamp = DateTime.now();
+      
       _logger.d('🤖 AI REQUEST [$requestIdStr]', error: {
         'endpoint': endpoint,
         'headers': headers,
         'body': requestBody,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': timestamp.toIso8601String(),
       });
+
+      // Add to log bucket
+      _addToLogBucket(AiLogEntry(
+        id: requestIdStr,
+        type: 'request',
+        endpoint: endpoint,
+        data: {
+          'headers': headers,
+          'body': requestBody,
+        },
+        timestamp: timestamp,
+      ));
     }
   }
 
@@ -71,13 +126,28 @@ class LoggerService {
     if (kDebugMode) {
       final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final durationStr = duration != null ? ' (${duration.inMilliseconds}ms)' : '';
+      final timestamp = DateTime.now();
       
       _logger.d('🤖 AI RESPONSE [$requestIdStr]$durationStr', error: {
         'statusCode': statusCode,
         'headers': headers,
         'body': responseBody,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': timestamp.toIso8601String(),
       });
+
+      // Add to log bucket
+      _addToLogBucket(AiLogEntry(
+        id: requestIdStr,
+        type: 'response',
+        endpoint: '', // Will be filled by matching request if available
+        data: {
+          'statusCode': statusCode,
+          'headers': headers,
+          'body': responseBody,
+          'duration': duration?.inMilliseconds,
+        },
+        timestamp: timestamp,
+      ));
     }
   }
 
@@ -90,12 +160,25 @@ class LoggerService {
     if (kDebugMode) {
       final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final durationStr = duration != null ? ' (${duration.inMilliseconds}ms)' : '';
+      final timestamp = DateTime.now();
       
       _logger.e('🤖 AI ERROR [$requestIdStr]$durationStr', error: {
         'endpoint': endpoint,
         'error': error,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': timestamp.toIso8601String(),
       });
+
+      // Add to log bucket
+      _addToLogBucket(AiLogEntry(
+        id: requestIdStr,
+        type: 'error',
+        endpoint: endpoint,
+        data: {
+          'error': error,
+          'duration': duration?.inMilliseconds,
+        },
+        timestamp: timestamp,
+      ));
     }
   }
 }

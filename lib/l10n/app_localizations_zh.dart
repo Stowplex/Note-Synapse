@@ -754,7 +754,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioAttachment => '音频附件';
 
   @override
-  String get duration => '时长';
+  String get duration => '持续时间';
 
   @override
   String get position => '位置';
@@ -1386,4 +1386,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteApp => '删除应用';
+
+  @override
+  String get aiDebugOverlay => 'AI调试覆盖层';
+
+  @override
+  String get aiDebugOverlaySubtitle => '查看AI请求/响应日志';
+
+  @override
+  String get aiDebugOverlayTitle => 'AI调试覆盖层';
+
+  @override
+  String get refreshLogs => '刷新日志';
+
+  @override
+  String get clearLogs => '清除日志';
+
+  @override
+  String get noAiLogsAvailable => '没有AI日志可用';
+
+  @override
+  String get aiLogsDescription => 'AI请求和响应将显示在这里';
+
+  @override
+  String get headers => '请求头';
+
+  @override
+  String get body => '请求体';
+
+  @override
+  String get statusCode => '状态码';
+
+  @override
+  String get error => '错误';
 }

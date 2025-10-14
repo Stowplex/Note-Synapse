@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
+import '../services/logger_service.dart';
 import 'setup_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -60,6 +62,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AIApiSettingsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.bug_report),
+              title: Text(l10n.aiDebugOverlay),
+              subtitle: Text(l10n.aiDebugOverlaySubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AIDebugOverlayScreen()),
               ),
             ),
           ),
@@ -434,6 +449,159 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
         });
       }
     }
+  }
+}
+
+class AIDebugOverlayScreen extends StatefulWidget {
+  const AIDebugOverlayScreen({super.key});
+
+  @override
+  State<AIDebugOverlayScreen> createState() => _AIDebugOverlayScreenState();
+}
+
+class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final logs = LoggerService.aiLogBucket;
+    final l10n = AppLocalizations.of(context)!;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.aiDebugOverlayTitle),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {});
+            },
+            tooltip: l10n.refreshLogs,
+          ),
+          IconButton(
+            icon: const Icon(Icons.clear_all),
+            onPressed: () {
+              setState(() {
+                LoggerService.clearAiLogBucket();
+              });
+            },
+            tooltip: l10n.clearLogs,
+          ),
+        ],
+      ),
+      body: logs.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.bug_report, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.noAiLogsAvailable,
+                    style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.aiLogsDescription,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: logs.length,
+              itemBuilder: (context, index) {
+                final log = logs[logs.length - 1 - index]; // Show newest first
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ExpansionTile(
+                    leading: Icon(
+                      log.type == 'request' 
+                          ? Icons.arrow_upward 
+                          : log.type == 'response' 
+                              ? Icons.arrow_downward 
+                              : Icons.error,
+                      color: log.type == 'request' 
+                          ? Colors.blue 
+                          : log.type == 'response' 
+                              ? Colors.green 
+                              : Colors.red,
+                    ),
+                    title: Text(
+                      '${log.type.toUpperCase()} - ${log.endpoint.isNotEmpty ? log.endpoint : 'Unknown Endpoint'}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      'ID: ${log.id} • ${log.timestamp.toString().substring(11, 19)}',
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (log.data.containsKey('headers'))
+                              _buildDataSection(l10n.headers, log.data['headers']),
+                            if (log.data.containsKey('body'))
+                              _buildDataSection(l10n.body, log.data['body']),
+                            if (log.data.containsKey('statusCode'))
+                              _buildDataSection(l10n.statusCode, log.data['statusCode']),
+                            if (log.data.containsKey('error'))
+                              _buildDataSection(l10n.error, log.data['error']),
+                            if (log.data.containsKey('duration'))
+                              _buildDataSection(l10n.duration, '${log.data['duration']}ms'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildDataSection(String title, dynamic data) {
+    final theme = Theme.of(context);
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: theme.textTheme.titleMedium?.color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.dividerColor,
+                width: 1,
+              ),
+            ),
+            child: SelectableText(
+              data is Map || data is List
+                  ? const JsonEncoder.withIndent('  ').convert(data)
+                  : data.toString(),
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
