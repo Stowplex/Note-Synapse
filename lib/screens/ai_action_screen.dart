@@ -8,9 +8,14 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
-import '../models/ai_interaction.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import 'note_detail_screen.dart';
+
+enum AIInteractionType {
+  noteQa,
+  noteTransformation,
+  newNoteCreation,
+}
 
 class AIActionScreen extends StatefulWidget {
   final List<Note> selectedNotes;

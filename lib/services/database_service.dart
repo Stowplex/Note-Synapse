@@ -7,7 +7,6 @@ import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
-import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
@@ -45,7 +44,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 11,
+      version: 13,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -131,20 +130,6 @@ class DatabaseService {
       )
     ''');
 
-    // AI Interactions table
-    await db.execute('''
-      CREATE TABLE ai_interactions(
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        prompt TEXT NOT NULL,
-        response TEXT NOT NULL,
-        contextNoteIds TEXT NOT NULL,
-        transformedNoteId TEXT,
-        createdNoteIds TEXT,
-        createdAt INTEGER NOT NULL,
-        expiresAt INTEGER NOT NULL
-      )
-    ''');
 
     // Filters table
     await db.execute('''
@@ -199,7 +184,6 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
-    await db.execute('CREATE INDEX idx_ai_interactions_expiresAt ON ai_interactions(expiresAt)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -253,7 +237,6 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS note_tags');
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await _onCreate(db, newVersion);
       }
     }
@@ -272,7 +255,6 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS note_tags');
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await _onCreate(db, newVersion);
       }
     }
@@ -291,7 +273,6 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS note_tags');
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await _onCreate(db, newVersion);
       }
     }
@@ -316,7 +297,6 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS note_tags');
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await _onCreate(db, newVersion);
       }
     }
@@ -344,7 +324,6 @@ class DatabaseService {
         await db.execute('DROP TABLE IF EXISTS note_tags');
         await db.execute('DROP TABLE IF EXISTS attachments');
         await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS ai_interactions');
         await db.execute('DROP TABLE IF EXISTS filters');
         await _onCreate(db, newVersion);
       }
@@ -395,7 +374,6 @@ class DatabaseService {
           await db.execute('DROP TABLE IF EXISTS note_tags');
           await db.execute('DROP TABLE IF EXISTS attachments');
           await db.execute('DROP TABLE IF EXISTS relationships');
-          await db.execute('DROP TABLE IF EXISTS ai_interactions');
           await db.execute('DROP TABLE IF EXISTS filters');
           await db.execute('DROP TABLE IF EXISTS user_apps');
           await _onCreate(db, newVersion);
@@ -529,6 +507,60 @@ class DatabaseService {
         LoggerService.error('Migration to version 11 failed: $e', error: e);
       }
     }
+    
+    if (oldVersion < 12) {
+      // Migration from version 11 to 12: Remove AI interactions table
+      try {
+        // Check if ai_interactions table exists and drop it
+        final tables = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_interactions'"
+        );
+        
+        if (tables.isNotEmpty) {
+          await db.execute('DROP TABLE IF EXISTS ai_interactions');
+          LoggerService.info('Dropped ai_interactions table');
+        }
+      } catch (e) {
+        // Ignore any errors - table might already be dropped
+        LoggerService.warning('Migration to version 12: $e', error: e);
+      }
+    }
+    
+    if (oldVersion < 13) {
+      // Migration from version 12 to 13: Fix string timestamps in filters table
+      try {
+        // Check if filters table exists
+        final tables = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='filters'"
+        );
+        
+        if (tables.isNotEmpty) {
+          // Find records with string timestamps and fix them
+          final corruptedRecords = await db.rawQuery(
+            "SELECT id, createdAt, updatedAt FROM filters WHERE typeof(createdAt) = 'text' OR typeof(updatedAt) = 'text'"
+          );
+          
+          if (corruptedRecords.isNotEmpty) {
+            LoggerService.warning('Found ${corruptedRecords.length} filter records with string timestamps, fixing...');
+            
+            for (final record in corruptedRecords) {
+              final id = record['id'] as String;
+              final now = DateTime.now().millisecondsSinceEpoch;
+              
+              // Update with current timestamp as fallback
+              await db.execute(
+                'UPDATE filters SET createdAt = ?, updatedAt = ? WHERE id = ?',
+                [now, now, id]
+              );
+            }
+            
+            LoggerService.info('Fixed ${corruptedRecords.length} filter records with corrupted timestamps');
+          }
+        }
+      } catch (e) {
+        LoggerService.warning('Migration to version 13: $e', error: e);
+      }
+    }
   }
 
   // Migration helper method to create initial revisions for existing apps
@@ -628,22 +660,27 @@ class DatabaseService {
 
   Future<List<Note>> getAllNotes() async {
     final db = await database;
+    LoggerService.info('Querying notes table...');
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
       orderBy: 'pinned DESC, createdAt DESC',
     );
+    LoggerService.info('Found ${maps.length} notes in database');
 
     final List<Note> notes = [];
     for (final map in maps) {
       try {
+        LoggerService.info('Mapping note with id: ${map['id']}');
         final note = await _mapToNote(map);
         notes.add(note);
       } catch (e) {
         LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
+        LoggerService.error('Note data: $map');
         // Skip corrupted notes instead of crashing
         continue;
       }
     }
+    LoggerService.info('Successfully mapped ${notes.length} notes');
     return notes;
   }
 
@@ -833,7 +870,7 @@ class DatabaseService {
         name: maps[i]['name'],
         color: maps[i]['color'],
         createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        usageCount: maps[i]['usageCount'],
+        usageCount: maps[i]['usageCount'] ?? 0,
       );
     });
   }
@@ -1029,46 +1066,31 @@ class DatabaseService {
     return maps.isNotEmpty;
   }
 
-  // AI Interactions CRUD
-  Future<String> insertAIInteraction(AIInteraction interaction) async {
-    final db = await database;
-    final json = interaction.toJson();
-    json['createdAt'] = interaction.createdAt.millisecondsSinceEpoch;
-    json['expiresAt'] = interaction.expiresAt.millisecondsSinceEpoch;
-    json['contextNoteIds'] = interaction.contextNoteIds.join(',');
-    if (interaction.createdNoteIds != null) {
-      json['createdNoteIds'] = interaction.createdNoteIds!.join(',');
-    }
-    await db.insert('ai_interactions', json);
-    return interaction.id;
-  }
-
-  Future<List<AIInteraction>> getAllAIInteractions() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'ai_interactions',
-      orderBy: 'createdAt DESC',
-    );
-
-    return List.generate(maps.length, (i) {
-      return AIInteraction(
-        id: maps[i]['id'],
-        type: AIInteractionType.values.firstWhere(
-          (e) => e.toString().split('.').last == maps[i]['type'],
-          orElse: () => AIInteractionType.noteQa,
-        ),
-        prompt: maps[i]['prompt'],
-        response: maps[i]['response'],
-        contextNoteIds: maps[i]['contextNoteIds']?.split(',') ?? [],
-        transformedNoteId: maps[i]['transformedNoteId'],
-        createdNoteIds: maps[i]['createdNoteIds']?.split(','),
-        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        expiresAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['expiresAt']),
-      );
-    });
-  }
 
   // Helper methods
+  DateTime _validateTimestamp(dynamic timestamp, String fieldName, String recordId) {
+    if (timestamp is int) {
+      return DateTime.fromMillisecondsSinceEpoch(timestamp);
+    } else if (timestamp is String) {
+      // This indicates a schema violation - string timestamps should not exist
+      LoggerService.error(
+        'Database schema violation: $fieldName field contains string timestamp in record $recordId',
+        error: 'Expected integer timestamp, got string: $timestamp'
+      );
+      throw FormatException(
+        'Database schema violation: $fieldName field should contain integer timestamp, but contains string: $timestamp'
+      );
+    } else {
+      LoggerService.error(
+        'Database schema violation: $fieldName field has invalid type in record $recordId',
+        error: 'Expected integer timestamp, got ${timestamp.runtimeType}: $timestamp'
+      );
+      throw FormatException(
+        'Database schema violation: $fieldName field should contain integer timestamp, but got ${timestamp.runtimeType}: $timestamp'
+      );
+    }
+  }
+
   Future<Note> _mapToNote(Map<String, dynamic> map) async {
     final subNotes = await getSubNotes(map['id']);
     final tags = await _getNoteTags(map['id']);
@@ -1196,23 +1218,12 @@ class DatabaseService {
     });
   }
 
-  // Cleanup expired AI interactions
-  Future<void> cleanupExpiredAIInteractions() async {
-    final db = await database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await db.delete(
-      'ai_interactions',
-      where: 'expiresAt < ?',
-      whereArgs: [now],
-    );
-  }
 
   // Clear all data
   Future<void> clearAllData() async {
     final db = await database;
     
     // Delete all data from all tables
-    await db.delete('ai_interactions');
     await db.delete('relationships');
     await db.delete('attachments');
     await db.delete('note_tags');
@@ -1247,11 +1258,17 @@ class DatabaseService {
   // Filters CRUD
   Future<String> insertFilter(Filter filter) async {
     final db = await database;
-    final json = filter.toJson();
-    json['createdAt'] = filter.createdAt.millisecondsSinceEpoch;
-    json['updatedAt'] = filter.updatedAt.millisecondsSinceEpoch;
-    json['includeArchived'] = filter.includeArchived ? 1 : 0;
-    json['includeTags'] = filter.includeTags.join(',');
+    
+    // Build the map directly for database insertion
+    final json = {
+      'id': filter.id,
+      'name': filter.name,
+      'includeText': filter.includeText,
+      'includeTags': filter.includeTags.join(','),
+      'includeArchived': filter.includeArchived ? 1 : 0,
+      'createdAt': filter.createdAt.millisecondsSinceEpoch,
+      'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
+    };
     
     await db.insert('filters', json);
     return filter.id;
@@ -1273,9 +1290,9 @@ class DatabaseService {
         name: maps[i]['name'],
         includeText: maps[i]['includeText'],
         includeTags: includeTags,
-        includeArchived: maps[i]['includeArchived'] == 1,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['updatedAt']),
+        includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
+        createdAt: _validateTimestamp(maps[i]['createdAt'], 'createdAt', maps[i]['id']),
+        updatedAt: _validateTimestamp(maps[i]['updatedAt'], 'updatedAt', maps[i]['id']),
       );
     });
   }
@@ -1299,18 +1316,25 @@ class DatabaseService {
       name: map['name'],
       includeText: map['includeText'],
       includeTags: includeTags,
-      includeArchived: map['includeArchived'] == 1,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
+      includeArchived: (map['includeArchived'] ?? 0) == 1,
+      createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
+      updatedAt: _validateTimestamp(map['updatedAt'], 'updatedAt', map['id']),
     );
   }
 
   Future<void> updateFilter(Filter filter) async {
     final db = await database;
-    final json = filter.toJson();
-    json['updatedAt'] = filter.updatedAt.millisecondsSinceEpoch;
-    json['includeArchived'] = filter.includeArchived ? 1 : 0;
-    json['includeTags'] = filter.includeTags.join(',');
+    
+    // Build the map directly for database update
+    final json = {
+      'id': filter.id,
+      'name': filter.name,
+      'includeText': filter.includeText,
+      'includeTags': filter.includeTags.join(','),
+      'includeArchived': filter.includeArchived ? 1 : 0,
+      'createdAt': filter.createdAt.millisecondsSinceEpoch,
+      'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
+    };
     
     await db.update(
       'filters',

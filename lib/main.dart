@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_debug_overlay/flutter_debug_overlay.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/app_provider.dart';
 import 'screens/setup_screen.dart';
@@ -61,6 +62,12 @@ class NoteSynapseApp extends StatelessWidget {
                 }
                 return const MainScreen();
               },
+            },
+            builder: (context, child) {
+              return DebugOverlay(
+                visible: false, // Disable the default two finger tap trigger
+                child: child ?? const SizedBox.shrink(),
+              );
             },
           );
         },

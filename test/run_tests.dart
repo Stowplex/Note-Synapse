@@ -70,23 +70,6 @@ void main() {
       expect(relationship.type, 'related');
     });
 
-    test('should create AI interaction', () {
-      final interaction = AIInteraction(
-        id: 'ai-1',
-        type: AIInteractionType.noteQa,
-        prompt: 'Test prompt',
-        response: 'Test response',
-        contextNoteIds: ['note-1', 'note-2'],
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-
-      expect(interaction.id, 'ai-1');
-      expect(interaction.type, AIInteractionType.noteQa);
-      expect(interaction.prompt, 'Test prompt');
-      expect(interaction.response, 'Test response');
-      expect(interaction.contextNoteIds, contains('note-1'));
-    });
 
     test('should create tag', () {
       final tag = Tag(
@@ -111,30 +94,6 @@ void main() {
       expect(RelationshipType.isValidType('ANSWERS'), isTrue); // Case insensitive
     });
 
-    test('should check if AI interaction is expired', () {
-      final expiredInteraction = AIInteraction(
-        id: 'ai-1',
-        type: AIInteractionType.noteQa,
-        prompt: 'Test',
-        response: 'Test',
-        contextNoteIds: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 11)),
-        expiresAt: DateTime.now().subtract(const Duration(days: 1)),
-      );
-
-      final validInteraction = AIInteraction(
-        id: 'ai-2',
-        type: AIInteractionType.noteQa,
-        prompt: 'Test',
-        response: 'Test',
-        contextNoteIds: [],
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-
-      expect(expiredInteraction.isExpired, isTrue);
-      expect(validInteraction.isExpired, isFalse);
-    });
 
     test('should copy note with new values', () {
       final originalNote = Note(

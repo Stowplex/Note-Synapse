@@ -2659,6 +2659,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete App'**
   String get deleteApp;
+
+  /// No description provided for @aiDebugOverlay.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Debug Overlay'**
+  String get aiDebugOverlay;
+
+  /// No description provided for @aiDebugOverlaySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View AI request/response logs'**
+  String get aiDebugOverlaySubtitle;
+
+  /// No description provided for @aiDebugOverlayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Debug Overlay'**
+  String get aiDebugOverlayTitle;
+
+  /// No description provided for @refreshLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh logs'**
+  String get refreshLogs;
+
+  /// No description provided for @clearLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear logs'**
+  String get clearLogs;
+
+  /// No description provided for @noAiLogsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No AI logs available'**
+  String get noAiLogsAvailable;
+
+  /// No description provided for @aiLogsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'AI requests and responses will appear here'**
+  String get aiLogsDescription;
+
+  /// No description provided for @headers.
+  ///
+  /// In en, this message translates to:
+  /// **'Headers'**
+  String get headers;
+
+  /// No description provided for @body.
+  ///
+  /// In en, this message translates to:
+  /// **'Body'**
+  String get body;
+
+  /// No description provided for @statusCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Status Code'**
+  String get statusCode;
+
+  /// No description provided for @error.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get error;
 }
 
 class _AppLocalizationsDelegate

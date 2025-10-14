@@ -37,14 +37,13 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
       );
       
-      expect(tables.length, 7); // notes, subnotes, tags, note_tags, attachments, relationships, ai_interactions
+      expect(tables.length, 9); // notes, subnotes, tags, note_tags, attachments, relationships, filters, user_apps, app_revisions
       expect(tables.any((table) => table['name'] == 'notes'), isTrue);
       expect(tables.any((table) => table['name'] == 'subnotes'), isTrue);
       expect(tables.any((table) => table['name'] == 'tags'), isTrue);
       expect(tables.any((table) => table['name'] == 'note_tags'), isTrue);
       expect(tables.any((table) => table['name'] == 'attachments'), isTrue);
       expect(tables.any((table) => table['name'] == 'relationships'), isTrue);
-      expect(tables.any((table) => table['name'] == 'ai_interactions'), isTrue);
     });
 
     test('should insert and retrieve note', () async {
@@ -157,28 +156,6 @@ void main() {
       expect(relationships.first.toNoteId, 'note-2');
     });
 
-    test('should insert and retrieve AI interaction', () async {
-      final interaction = AIInteraction(
-        id: 'ai-1',
-        type: AIInteractionType.noteQa,
-        prompt: 'Test prompt',
-        response: 'Test response',
-        contextNoteIds: ['note-1', 'note-2'],
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-
-      // Insert AI interaction
-      final insertedId = await databaseService.insertAIInteraction(interaction);
-      expect(insertedId, 'ai-1');
-
-      // Retrieve AI interactions
-      final interactions = await databaseService.getAllAIInteractions();
-      expect(interactions.length, 1);
-      expect(interactions.first.type, AIInteractionType.noteQa);
-      expect(interactions.first.prompt, 'Test prompt');
-      expect(interactions.first.contextNoteIds, contains('note-1'));
-    });
 
     test('should handle multiple notes correctly', () async {
       final notes = [
@@ -229,11 +206,8 @@ void main() {
     test('should handle empty database', () async {
       final notes = await databaseService.getAllNotes();
       final tags = await databaseService.getAllTags();
-      final interactions = await databaseService.getAllAIInteractions();
-
       expect(notes.length, 0);
       expect(tags.length, 0);
-      expect(interactions.length, 0);
     });
 
     test('should delete note and cascade to related data', () async {

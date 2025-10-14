@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
-import '../models/ai_interaction.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
@@ -18,7 +17,6 @@ class AppProvider extends ChangeNotifier {
   
   List<Note> _notes = [];
   List<Tag> _tags = [];
-  List<AIInteraction> _aiInteractions = [];
   List<Filter> _filters = [];
   List<UserApp> _userApps = [];
   Map<String, List<AppRevision>> _appRevisions = {}; // Cache revisions by appId
@@ -29,7 +27,6 @@ class AppProvider extends ChangeNotifier {
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
-  List<AIInteraction> get aiInteractions => _aiInteractions;
   List<Filter> get filters => _filters;
   List<UserApp> get userApps => _userApps;
   Map<String, List<AppRevision>> get appRevisions => _appRevisions;
@@ -41,16 +38,21 @@ class AppProvider extends ChangeNotifier {
   Future<void> loadData() async {
     _setLoading(true);
     try {
+      LoggerService.info('Starting loadData');
       _notes = await _databaseService.getAllNotes();
-      _tags = await _databaseService.getAllTags();
-      _aiInteractions = await _databaseService.getAllAIInteractions();
-      _filters = await _databaseService.getAllFilters();
-      _userApps = await UserAppService.getAllUserApps();
+      LoggerService.debug('Successfully loaded ${_notes.length} notes');
       
-      // Clean up expired AI interactions
-      await _databaseService.cleanupExpiredAIInteractions();
+      _tags = await _databaseService.getAllTags();
+      LoggerService.debug('Successfully loaded ${_tags.length} tags');
+      
+      _filters = await _databaseService.getAllFilters();
+      LoggerService.debug('Successfully loaded ${_filters.length} filters');
+      
+      _userApps = await UserAppService.getAllUserApps();
+      LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
       
       _error = null;
+      LoggerService.info('loadData completed successfully');
       notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
@@ -261,18 +263,6 @@ class AppProvider extends ChangeNotifier {
         useOwnKnowledge: useOwnKnowledge,
       );
       
-      // Save AI interaction
-      final interaction = AIInteraction(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: AIInteractionType.noteQa,
-        prompt: question,
-        response: response,
-        contextNoteIds: contextNotes.map((n) => n.id).toList(),
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-      await _databaseService.insertAIInteraction(interaction);
-      await loadData();
       
       return response;
     } catch (e) {
@@ -294,18 +284,6 @@ class AppProvider extends ChangeNotifier {
         attachedFiles: attachedFiles,
       );
       
-      // Save AI interaction
-      final interaction = AIInteraction(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: AIInteractionType.noteTransformation,
-        prompt: transformationPrompt,
-        response: response,
-        contextNoteIds: [note.id],
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-      await _databaseService.insertAIInteraction(interaction);
-      await loadData();
       
       return response;
     } catch (e) {
@@ -332,19 +310,6 @@ class AppProvider extends ChangeNotifier {
         await _databaseService.insertNote(note);
       }
       
-      // Save AI interaction
-      final interaction = AIInteraction(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: AIInteractionType.newNoteCreation,
-        prompt: prompt,
-        response: 'Created ${newNotes.length} new notes',
-        contextNoteIds: contextNotes.map((n) => n.id).toList(),
-        createdNoteIds: newNotes.map((n) => n.id).toList(),
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 10)),
-      );
-      await _databaseService.insertAIInteraction(interaction);
-      await loadData();
       
       return newNotes;
     } catch (e) {
@@ -592,7 +557,6 @@ class AppProvider extends ChangeNotifier {
       // Reset local state
       _notes = [];
       _tags = [];
-      _aiInteractions = [];
       _error = null;
       
       // Reset theme to default (light mode)
