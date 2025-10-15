@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
@@ -185,6 +186,7 @@ class UserAppService {
       
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
+        uuid: const Uuid().v4(),
         name: name,
         description: description,
         steps: steps,

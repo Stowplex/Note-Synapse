@@ -4,8 +4,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/models/relationship.dart';
-import 'package:note_synapse/models/ai_interaction.dart';
-import 'package:note_synapse/models/tag.dart';
 
 void main() {
   group('Database Service Tests', () {

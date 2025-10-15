@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
@@ -44,7 +45,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -148,6 +149,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE user_apps(
         id TEXT PRIMARY KEY,
+        uuid TEXT NOT NULL,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         steps TEXT NOT NULL,
@@ -561,6 +563,46 @@ class DatabaseService {
         LoggerService.warning('Migration to version 13: $e', error: e);
       }
     }
+    
+    if (oldVersion < 14) {
+      // Migration from version 13 to 14: Add UUID column to user_apps table
+      try {
+        // Check if uuid column exists in user_apps table
+        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('uuid')) {
+          // Add uuid column
+          await db.execute('ALTER TABLE user_apps ADD COLUMN uuid TEXT');
+          
+          // Generate UUIDs for existing records that have null uuid
+          await _migrateUserAppsWithUuid(db);
+        }
+      } catch (e) {
+        LoggerService.error('Migration to version 14 failed: $e', error: e);
+        // If migration fails, recreate the user_apps table
+        try {
+          await db.execute('DROP TABLE IF EXISTS user_apps');
+          await db.execute('''
+            CREATE TABLE user_apps(
+              id TEXT PRIMARY KEY,
+              uuid TEXT NOT NULL,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              type TEXT NOT NULL DEFAULT 'normal',
+              selectedRevisionId TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        } catch (e2) {
+          LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
+        }
+      }
+    }
   }
 
   // Migration helper method to create initial revisions for existing apps
@@ -620,6 +662,40 @@ class DatabaseService {
       LoggerService.info('Migration of existing apps to revisions completed successfully');
     } catch (e) {
       LoggerService.error('Error during migration of existing apps to revisions: $e', error: e);
+      // Don't rethrow - this is a migration helper, we don't want to break the entire migration
+    }
+  }
+
+  // Migration helper method to add UUIDs to existing user apps
+  Future<void> _migrateUserAppsWithUuid(Database db) async {
+    try {
+      LoggerService.info('Starting migration of user apps with UUID...');
+      
+      // Get all existing apps that don't have a UUID
+      final apps = await db.query('user_apps', where: 'uuid IS NULL');
+      LoggerService.info('Found ${apps.length} user apps without UUID to migrate');
+      
+      for (final appMap in apps) {
+        final appId = appMap['id'] as String;
+        final appName = appMap['name'] as String;
+        
+        // Generate a new UUID
+        final uuid = const Uuid().v4();
+        
+        // Update the app with the new UUID
+        await db.update(
+          'user_apps',
+          {'uuid': uuid},
+          where: 'id = ?',
+          whereArgs: [appId],
+        );
+        
+        LoggerService.debug('Added UUID $uuid to app: $appName (ID: $appId)');
+      }
+      
+      LoggerService.info('Migration of user apps with UUID completed successfully');
+    } catch (e) {
+      LoggerService.error('Error during migration of user apps with UUID: $e', error: e);
       // Don't rethrow - this is a migration helper, we don't want to break the entire migration
     }
   }
@@ -1373,6 +1449,7 @@ class DatabaseService {
     // Build JSON manually to avoid conflicts with toJson() DateTime serialization
     final json = {
       'id': app.id,
+      'uuid': app.uuid,
       'name': app.name,
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
@@ -1411,6 +1488,7 @@ class DatabaseService {
     // Build JSON manually to avoid conflicts with toJson() DateTime serialization
     final json = {
       'id': app.id,
+      'uuid': app.uuid,
       'name': app.name,
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
@@ -1474,6 +1552,7 @@ class DatabaseService {
 
     return UserApp(
       id: map['id'] as String,
+      uuid: map['uuid'] as String? ?? const Uuid().v4(), // Generate UUID if missing for backward compatibility
       name: map['name'] as String,
       description: map['description'] as String,
       steps: (map['steps'] as String).split('|'), // Parse pipe-separated steps

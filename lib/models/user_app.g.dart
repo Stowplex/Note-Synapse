@@ -8,6 +8,7 @@ part of 'user_app.dart';
 
 UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
   id: json['id'] as String,
+  uuid: json['uuid'] as String,
   name: json['name'] as String,
   description: json['description'] as String,
   steps: (json['steps'] as List<dynamic>).map((e) => e as String).toList(),
@@ -23,6 +24,7 @@ UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
 
 Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
   'id': instance.id,
+  'uuid': instance.uuid,
   'name': instance.name,
   'description': instance.description,
   'steps': instance.steps,

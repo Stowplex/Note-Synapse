@@ -10,6 +10,7 @@ enum UserAppType {
 @JsonSerializable()
 class UserApp {
   final String id;
+  final String uuid;
   final String name;
   final String description;
   final List<String> steps;
@@ -22,6 +23,7 @@ class UserApp {
 
   const UserApp({
     required this.id,
+    required this.uuid,
     required this.name,
     required this.description,
     required this.steps,
@@ -38,6 +40,7 @@ class UserApp {
 
   UserApp copyWith({
     String? id,
+    String? uuid,
     String? name,
     String? description,
     List<String>? steps,
@@ -50,6 +53,7 @@ class UserApp {
   }) {
     return UserApp(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
       name: name ?? this.name,
       description: description ?? this.description,
       steps: steps ?? this.steps,
