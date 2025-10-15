@@ -435,6 +435,97 @@ IMPORTANT - REQUIREMENTS:
          * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
+     Param format: array of note objects with the following structure:
+       - title: string (required) - Note title
+       - content: string (required) - Note content
+       - type: string (required) - 'note' or 'task'
+       - subNotes: array (optional) - Array of subnote objects with:
+         * name: string (required) - Subnote name
+         * content: string (optional) - Subnote content
+         * isCompleted: boolean (optional, default: false) - Completion status
+       - attachments: array (optional) - Array of attachment objects:
+         * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+         * Base64: object with:
+           - type: 'base64' (required)
+           - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+           - fileName: string (required) - Original filename (e.g., 'image.jpg')
+       - For tasks only:
+         * scheduledAt: string (optional) - ISO date string when task is scheduled to start
+         * completeBy: string (optional) - ISO date string when task needs to be completed
+         * status: string (optional, default: 'todo') - 'todo', 'in_progress', 'complete', 'abandoned'
+         * completionPercentage: number (optional, default: 0.0) - 0.0 to 1.0
+         * pinned: boolean (optional, default: false) - Whether note is pinned
+         * isArchived: boolean (optional, default: false) - Whether note is archived
+     Response format: {success: boolean, savedCount?: number, error?: string}
+
+   CORRECT saveNotes Usage Examples:
+   ```javascript
+   // Basic note creation
+   const result1 = await Synapse.saveNotes([
+     {
+       title: 'My Note',
+       content: 'Note content',
+       type: 'note',
+     }
+   ]);
+   
+   // Note with subnotes and file attachments
+   const result2 = await Synapse.saveNotes([
+     {
+       title: 'Project Planning',
+       content: 'Planning document for new project',
+       type: 'note',
+       subNotes: [
+         {
+           name: 'Research Phase',
+           content: 'Gather requirements and analyze market',
+           isCompleted: false
+         },
+         {
+           name: 'Design Phase',
+           content: 'Create wireframes and mockups',
+           isCompleted: true
+         }
+       ],
+       attachments: ['/path/to/existing/file.pdf']
+     }
+   ]);
+   
+   // Task with base64 attachment
+   const result3 = await Synapse.saveNotes([
+     {
+       title: 'Review Document',
+       content: 'Review the attached document',
+       type: 'task',
+       subNotes: [
+         {
+           name: 'Read Document',
+           content: 'Read through the entire document',
+           isCompleted: false
+         },
+         {
+           name: 'Write Summary',
+           content: 'Write a summary of key points',
+           isCompleted: false
+         }
+       ],
+       attachments: [
+         {
+           type: 'base64',
+           data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+           fileName: 'document.jpg'
+         }
+       ],
+       scheduledAt: '2024-01-15T09:00:00.000Z',
+       completeBy: '2024-01-20T17:00:00.000Z',
+       status: 'todo',
+       completionPercentage: 0.0,
+       pinned: true,
+       isArchived: false
+     }
+   ]);
+   ```
 
    CORRECT chatAI Usage Examples:
    ```javascript
@@ -573,6 +664,97 @@ IMPORTANT - REQUIREMENTS:
          * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
+     Param format: array of note objects with the following structure:
+       - title: string (required) - Note title
+       - content: string (required) - Note content
+       - type: string (required) - 'note' or 'task'
+       - subNotes: array (optional) - Array of subnote objects with:
+         * name: string (required) - Subnote name
+         * content: string (optional) - Subnote content
+         * isCompleted: boolean (optional, default: false) - Completion status
+       - attachments: array (optional) - Array of attachment objects:
+         * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+         * Base64: object with:
+           - type: 'base64' (required)
+           - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+           - fileName: string (required) - Original filename (e.g., 'image.jpg')
+       - For tasks only:
+         * scheduledAt: string (optional) - ISO date string when task is scheduled to start
+         * completeBy: string (optional) - ISO date string when task needs to be completed
+         * status: string (optional, default: 'todo') - 'todo', 'in_progress', 'complete', 'abandoned'
+         * completionPercentage: number (optional, default: 0.0) - 0.0 to 1.0
+         * pinned: boolean (optional, default: false) - Whether note is pinned
+         * isArchived: boolean (optional, default: false) - Whether note is archived
+     Response format: {success: boolean, savedCount?: number, error?: string}
+
+   CORRECT saveNotes Usage Examples:
+   ```javascript
+   // Basic note creation
+   const result1 = await Synapse.saveNotes([
+     {
+       title: 'My Note',
+       content: 'Note content',
+       type: 'note',
+     }
+   ]);
+   
+   // Note with subnotes and file attachments
+   const result2 = await Synapse.saveNotes([
+     {
+       title: 'Project Planning',
+       content: 'Planning document for new project',
+       type: 'note',
+       subNotes: [
+         {
+           name: 'Research Phase',
+           content: 'Gather requirements and analyze market',
+           isCompleted: false
+         },
+         {
+           name: 'Design Phase',
+           content: 'Create wireframes and mockups',
+           isCompleted: true
+         }
+       ],
+       attachments: ['/path/to/existing/file.pdf']
+     }
+   ]);
+   
+   // Task with base64 attachment
+   const result3 = await Synapse.saveNotes([
+     {
+       title: 'Review Document',
+       content: 'Review the attached document',
+       type: 'task',
+       subNotes: [
+         {
+           name: 'Read Document',
+           content: 'Read through the entire document',
+           isCompleted: false
+         },
+         {
+           name: 'Write Summary',
+           content: 'Write a summary of key points',
+           isCompleted: false
+         }
+       ],
+       attachments: [
+         {
+           type: 'base64',
+           data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+           fileName: 'document.jpg'
+         }
+       ],
+       scheduledAt: '2024-01-15T09:00:00.000Z',
+       completeBy: '2024-01-20T17:00:00.000Z',
+       status: 'todo',
+       completionPercentage: 0.0,
+       pinned: true,
+       isArchived: false
+     }
+   ]);
+   ```
 
    CORRECT chatAI Usage Examples:
    ```javascript

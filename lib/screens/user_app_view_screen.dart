@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -849,6 +850,60 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, validatedOptions);
             return result;
           },
+          
+          /**
+           * Save new notes to the database
+           * @param {Array} notes - Array of note objects to save (IDs will be generated automatically)
+           * @returns {Promise<{success: boolean, savedCount?: number, error?: string}>}
+           * 
+           * @example
+           * // Basic usage
+           * const result = await Synapse.saveNotes([
+           *   {
+           *     title: 'My Note',
+           *     content: 'Note content', // Required
+           *     type: 'note',
+           *     subNotes: [],
+           *     attachments: ['file:///path/to/file.jpg'] // File URI
+           *   }
+           * ]);
+           * 
+           * @example
+           * // With base64 attachments
+           * const result = await Synapse.saveNotes([
+           *   {
+           *     title: 'Note with Base64',
+           *     content: 'Note content', // Required
+           *     type: 'task',
+           *     subNotes: [
+           *       {
+           *         name: 'Sub Task',
+           *         content: 'Sub task content',
+           *         isCompleted: false
+           *       }
+           *     ],
+           *     attachments: [
+           *       {
+           *         type: 'base64',
+           *         data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+           *         fileName: 'image.jpg'
+           *       }
+           *     ],
+           *     status: 'todo',
+           *     completionPercentage: 0.0,
+           *     pinned: false,
+           *     isArchived: false
+           *   }
+           * ]);
+           */
+          saveNotes: async (notes) => {
+            if (!Array.isArray(notes)) {
+              throw new Error('Parameter validation failed: notes must be an array, got ' + typeof notes);
+            }
+            
+            const result = await window.flutter_inappwebview.callHandler('saveNotes', notes);
+            return result;
+          },
           Notes: $notesJson
         };
       ''',
@@ -1056,6 +1111,29 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           return {'success': true};
         } catch (e) {
           LoggerService.error('[UserApp.CLIPBOARD] Error copying to clipboard: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    // Add saveNotes handler
+    controller.addJavaScriptHandler(
+      handlerName: 'saveNotes',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final notesData = args[0] as List<dynamic>;
+          LoggerService.debug('[Synapse.saveNotes] Called with ${notesData.length} notes');
+          
+          final savedCount = await _saveNotesFromJavaScript(notesData);
+          final duration = DateTime.now().difference(startTime);
+          
+          LoggerService.debug('[Synapse.saveNotes] Success - Saved $savedCount notes in ${duration.inMilliseconds}ms');
+          
+          return {'success': true, 'savedCount': savedCount};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error('[Synapse.saveNotes] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1303,6 +1381,200 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     }
     
     return validAttachments;
+  }
+
+  // Save notes from JavaScript API
+  Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
+    final databaseService = DatabaseService();
+    int savedCount = 0;
+    
+    for (final noteData in notesData) {
+      try {
+        final note = await _createNoteFromJavaScriptData(noteData);
+        await databaseService.insertNote(note);
+        savedCount++;
+        LoggerService.debug('[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}');
+      } catch (e) {
+        LoggerService.error('[Synapse.saveNotes] Error saving note: $e', error: e);
+        // Continue with other notes even if one fails
+      }
+    }
+    
+    return savedCount;
+  }
+
+  // Create Note object from JavaScript data
+  Future<Note> _createNoteFromJavaScriptData(Map<String, dynamic> data) async {
+    // Validate required fields
+    if (data['title'] == null || data['title'].toString().trim().isEmpty) {
+      throw Exception('Note title is required and cannot be empty');
+    }
+    if (data['content'] == null) {
+      throw Exception('Note content is required and cannot be empty');
+    }
+    if (data['type'] == null) throw Exception('Note type is required');
+
+    // Generate unique ID on Flutter side
+    final noteId = _generateUniqueId();
+    final now = DateTime.now();
+
+    // Parse note type
+    final noteType = _parseNoteType(data['type']);
+
+    // Parse subnotes
+    final subNotes = <SubNote>[];
+    if (data['subNotes'] != null && data['subNotes'] is List) {
+      for (final subNoteData in data['subNotes']) {
+        if (subNoteData is Map<String, dynamic>) {
+          subNotes.add(_createSubNoteFromJavaScriptData(subNoteData));
+        }
+      }
+    }
+
+    // Skip tags for now - complex logic to create tags if they don't exist
+    final tags = <String>[];
+
+    // Process attachments - throw exception if invalid
+    final attachmentPaths = <String>[];
+    if (data['attachments'] != null && data['attachments'] is List) {
+      for (final attachment in data['attachments']) {
+        final attachmentPath = await _processAttachmentFromJavaScript(attachment);
+        attachmentPaths.add(attachmentPath); // This will throw if invalid
+      }
+    }
+
+    // Parse task-specific fields
+    String? scheduledAt;
+    String? completeBy;
+    TaskStatus? status;
+    double? completionPercentage;
+
+    if (noteType == NoteType.task) {
+      scheduledAt = data['scheduledAt']?.toString();
+      completeBy = data['completeBy']?.toString();
+      status = data['status'] != null ? _parseTaskStatus(data['status'].toString()) : TaskStatus.todo;
+      completionPercentage = data['completionPercentage'] != null 
+          ? (data['completionPercentage'] as num).toDouble() 
+          : 0.0;
+    }
+
+    return Note(
+      id: noteId,
+      title: data['title'].toString().trim(),
+      content: data['content'].toString().trim(),
+      type: noteType,
+      createdAt: now,
+      updatedAt: now,
+      subNotes: subNotes,
+      tags: tags,
+      attachmentPaths: attachmentPaths,
+      scheduledAt: scheduledAt,
+      completeBy: completeBy,
+      status: status,
+      completionPercentage: completionPercentage,
+      pinned: data['pinned'] == true,
+      isArchived: data['isArchived'] == true,
+    );
+  }
+
+  // Create SubNote object from JavaScript data
+  SubNote _createSubNoteFromJavaScriptData(Map<String, dynamic> data) {
+    if (data['name'] == null || data['name'].toString().trim().isEmpty) {
+      throw Exception('SubNote name is required and cannot be empty');
+    }
+
+    return SubNote(
+      id: _generateUniqueId(),
+      name: data['name'].toString().trim(),
+      content: data['content']?.toString().trim() ?? '',
+      createdAt: DateTime.now(),
+      isCompleted: data['isCompleted'] == true,
+    );
+  }
+
+  // Generate unique ID for notes and subnotes
+  String _generateUniqueId() {
+    return '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  // Parse NoteType from string
+  NoteType _parseNoteType(String typeString) {
+    switch (typeString.toLowerCase()) {
+      case 'note':
+        return NoteType.note;
+      case 'task':
+        return NoteType.task;
+      default:
+        throw Exception('Invalid note type: $typeString');
+    }
+  }
+
+  // Parse TaskStatus from string
+  TaskStatus _parseTaskStatus(String statusString) {
+    switch (statusString.toLowerCase()) {
+      case 'todo':
+        return TaskStatus.todo;
+      case 'in_progress':
+        return TaskStatus.inProgress;
+      case 'complete':
+        return TaskStatus.complete;
+      case 'abandoned':
+        return TaskStatus.abandoned;
+      default:
+        return TaskStatus.todo;
+    }
+  }
+
+  // Process attachment from JavaScript data
+  Future<String> _processAttachmentFromJavaScript(dynamic attachment) async {
+    if (attachment is String) {
+      // File URI - verify it exists in database
+      final databaseService = DatabaseService();
+      final isValid = await databaseService.verifyAttachmentPath(attachment);
+      if (isValid) {
+        return attachment;
+      } else {
+        throw Exception('Invalid attachment path: $attachment - file not found in database');
+      }
+    } else if (attachment is Map<String, dynamic>) {
+      // Base64 attachment
+      if (attachment['type'] == 'base64' && attachment['data'] != null && attachment['fileName'] != null) {
+        return await _saveBase64Attachment(attachment['data'], attachment['fileName']);
+      } else {
+        throw Exception('Invalid base64 attachment format: missing type, data, or fileName');
+      }
+    }
+    
+    throw Exception('Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}');
+  }
+
+  // Save base64 attachment to cache directory and database
+  Future<String> _saveBase64Attachment(String base64Data, String fileName) async {
+    try {
+      // Extract base64 data (remove data:image/jpeg;base64, prefix if present)
+      String base64String = base64Data;
+      if (base64String.contains(',')) {
+        base64String = base64String.split(',').last;
+      }
+
+      // Decode base64 data
+      final bytes = base64Decode(base64String);
+
+      // Get cache directory
+      final cacheDir = await getTemporaryDirectory();
+      final filePath = '${cacheDir.path}/$fileName';
+
+      // Write file to cache directory
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      LoggerService.debug('[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $filePath');
+      
+      return filePath;
+    } catch (e) {
+      LoggerService.error('[Synapse.saveNotes] Error saving base64 attachment: $e', error: e);
+      rethrow;
+    }
   }
 
 }
