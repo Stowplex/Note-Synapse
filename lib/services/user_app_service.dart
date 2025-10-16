@@ -6,6 +6,7 @@ import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'user_app_library_service.dart';
 
 class UserAppService {
   
@@ -257,6 +258,31 @@ class UserAppService {
       // Save the revision
       await databaseService.insertAppRevision(revision);
       
+      // Copy dependencies from the current revision to the new revision
+      if (originalApp.selectedRevisionId != null) {
+        try {
+          LoggerService.debug('Manual edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
+          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          if (currentRevision != null) {
+            LoggerService.debug('Manual edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            final libraryService = UserAppLibraryService();
+            await libraryService.copyLibrariesToRevision(
+              appUuid: originalApp.uuid,
+              fromRevisionId: currentRevision.revisionNumber,
+              toRevisionId: revisionNumber,
+            );
+            LoggerService.debug('Manual edit: Successfully copied dependencies to revision $revisionNumber');
+          } else {
+            LoggerService.warning('Manual edit: Current revision not found: ${originalApp.selectedRevisionId}');
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to copy dependencies for manual edit: $e');
+          // Don't rethrow - the revision creation should still succeed
+        }
+      } else {
+        LoggerService.warning('Manual edit: No selectedRevisionId found in originalApp');
+      }
+      
       // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(
         selectedRevisionId: revision.id,
@@ -312,6 +338,31 @@ class UserAppService {
       
       // Save the revision
       await databaseService.insertAppRevision(revision);
+      
+      // Copy dependencies from the current revision to the new revision
+      if (originalApp.selectedRevisionId != null) {
+        try {
+          LoggerService.debug('AI edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
+          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          if (currentRevision != null) {
+            LoggerService.debug('AI edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            final libraryService = UserAppLibraryService();
+            await libraryService.copyLibrariesToRevision(
+              appUuid: originalApp.uuid,
+              fromRevisionId: currentRevision.revisionNumber,
+              toRevisionId: revisionNumber,
+            );
+            LoggerService.debug('AI edit: Successfully copied dependencies to revision $revisionNumber');
+          } else {
+            LoggerService.warning('AI edit: Current revision not found: ${originalApp.selectedRevisionId}');
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to copy dependencies for AI edit: $e');
+          // Don't rethrow - the revision creation should still succeed
+        }
+      } else {
+        LoggerService.warning('AI edit: No selectedRevisionId found in originalApp');
+      }
       
       // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(

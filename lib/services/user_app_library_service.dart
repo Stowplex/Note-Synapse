@@ -182,6 +182,61 @@ class UserAppLibraryService {
       rethrow;
     }
   }
+
+  /// Copy all libraries and dependencies from one revision to another
+  Future<void> copyLibrariesToRevision({
+    required String appUuid,
+    required int fromRevisionId,
+    required int toRevisionId,
+  }) async {
+    try {
+      LoggerService.info('Copying libraries from revision $fromRevisionId to revision $toRevisionId for app $appUuid');
+      
+      // Get all libraries from the source revision
+      final sourceLibraries = await getLibraries(appUuid, fromRevisionId);
+      LoggerService.debug('Found ${sourceLibraries.length} libraries in source revision $fromRevisionId');
+      
+      if (sourceLibraries.isEmpty) {
+        LoggerService.warning('No libraries found in source revision $fromRevisionId for app $appUuid');
+        return;
+      }
+      
+      for (final library in sourceLibraries) {
+        LoggerService.debug('Copying library: ${library.name} (ID: ${library.id})');
+        
+        // Get all dependencies for this library
+        final dependencies = await getDependencies(library.id);
+        LoggerService.debug('Found ${dependencies.length} dependencies for library ${library.name}');
+        
+        // Create the library in the new revision
+        final newLibraryId = await _databaseService.insertUserAppLibrary(
+          appUuid: appUuid,
+          revisionId: toRevisionId,
+          name: library.name,
+          usageInstructions: library.usageInstructions,
+        );
+        LoggerService.debug('Created new library with ID: $newLibraryId');
+        
+        // Copy all dependencies
+        for (final dependency in dependencies) {
+          await _databaseService.insertUserAppLibraryDependency(
+            originalUrl: dependency.originalUrl,
+            localPath: dependency.localPath,
+            bytes: dependency.bytes,
+            libraryId: newLibraryId,
+          );
+          LoggerService.debug('Copied dependency: ${dependency.localPath}');
+        }
+        
+        LoggerService.debug('Copied library ${library.name} with ${dependencies.length} dependencies');
+      }
+      
+      LoggerService.info('Successfully copied ${sourceLibraries.length} libraries to revision $toRevisionId');
+    } catch (e) {
+      LoggerService.error('Error copying libraries: $e', error: e);
+      rethrow;
+    }
+  }
 }
 
 /// Helper class for library dependencies

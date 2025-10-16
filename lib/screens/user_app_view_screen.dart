@@ -1255,10 +1255,19 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       }
     }
     
+    // Get the current app from the provider
+    final currentApp = appProvider.userApps.firstWhere(
+      (app) => app.id == widget.app.id,
+      orElse: () => widget.app,
+    );
+    
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => UserAppEditScreen(app: widget.app),
+        builder: (context) => UserAppEditScreen(
+          app: currentApp,
+          selectedRevision: _selectedRevision,
+        ),
       ),
     );
     

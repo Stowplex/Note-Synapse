@@ -5,14 +5,17 @@ import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../models/app_revision.dart';
 import '../utils/file_utils.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
+  final AppRevision? selectedRevision;
 
   const UserAppEditScreen({
     super.key,
     required this.app,
+    this.selectedRevision,
   });
 
   @override
@@ -36,37 +39,48 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     _loadCurrentRevisionAttachments();
   }
 
+  AppRevision? _currentRevision;
+
   Future<void> _loadCurrentRevisionCode() async {
     try {
       final appProvider = context.read<AppProvider>();
       await appProvider.getAppRevisions(widget.app.id);
-      
-      // Get the current app from provider
-      final currentApp = appProvider.userApps.firstWhere(
-        (app) => app.id == widget.app.id,
-        orElse: () => widget.app,
-      );
       
       // Get revisions from provider
       final revisions = appProvider.appRevisions[widget.app.id] ?? [];
       
       String codeToLoad = '';
       
-      if (currentApp.selectedRevisionId != null) {
-        try {
-          final selectedRevision = revisions.firstWhere(
-            (r) => r.id == currentApp.selectedRevisionId,
-          );
-          codeToLoad = selectedRevision.appCode;
-        } catch (e) {
-          // If selected revision not found, use the latest revision
-          if (revisions.isNotEmpty) {
-            codeToLoad = revisions.last.appCode;
+      // Use the passed selected revision if available, otherwise fall back to pinned revision
+      if (widget.selectedRevision != null) {
+        // Use the temporarily selected revision
+        _currentRevision = widget.selectedRevision;
+        codeToLoad = widget.selectedRevision!.appCode;
+      } else {
+        // Fall back to the pinned revision (current app's selectedRevisionId)
+        final currentApp = appProvider.userApps.firstWhere(
+          (app) => app.id == widget.app.id,
+          orElse: () => widget.app,
+        );
+        
+        if (currentApp.selectedRevisionId != null) {
+          try {
+            _currentRevision = revisions.firstWhere(
+              (r) => r.id == currentApp.selectedRevisionId,
+            );
+            codeToLoad = _currentRevision!.appCode;
+          } catch (e) {
+            // If pinned revision not found, use the latest revision
+            if (revisions.isNotEmpty) {
+              _currentRevision = revisions.last;
+              codeToLoad = _currentRevision!.appCode;
+            }
           }
+        } else if (revisions.isNotEmpty) {
+          // If no pinned revision, use the latest revision
+          _currentRevision = revisions.last;
+          codeToLoad = _currentRevision!.appCode;
         }
-      } else if (revisions.isNotEmpty) {
-        // If no selected revision, use the latest revision
-        codeToLoad = revisions.last.appCode;
       }
       
       setState(() {
@@ -78,6 +92,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
       setState(() {
         _originalCode = '';
         _codeController.text = '';
+        _currentRevision = null;
       });
     }
   }
@@ -106,8 +121,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       
+      // Create a modified app that represents the current revision
+      final currentApp = widget.app.copyWith(
+        htmlContent: _currentRevision?.appCode ?? widget.app.htmlContent,
+        selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
+      );
+      
       await appProvider.editUserApp(
-        originalApp: widget.app,
+        originalApp: currentApp,
         editSuggestion: _editSuggestionController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
@@ -176,9 +197,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       
+      // Create a modified app that represents the current revision
+      final currentApp = widget.app.copyWith(
+        htmlContent: _currentRevision?.appCode ?? widget.app.htmlContent,
+        selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
+      );
+      
       // Save manual code edit by creating a new revision
       await appProvider.saveManualCodeEdit(
-        originalApp: widget.app,
+        originalApp: currentApp,
         newCode: _codeController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
