@@ -18,6 +18,8 @@ class UserApp {
   final Map<String, dynamic>? appState;
   final UserAppType type;
   final String? selectedRevisionId;
+  final String author;
+  final String license;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -31,6 +33,8 @@ class UserApp {
     this.appState,
     this.type = UserAppType.normal,
     this.selectedRevisionId,
+    this.author = '',
+    this.license = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -48,6 +52,8 @@ class UserApp {
     Map<String, dynamic>? appState,
     UserAppType? type,
     String? selectedRevisionId,
+    String? author,
+    String? license,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -61,6 +67,8 @@ class UserApp {
       appState: appState ?? this.appState,
       type: type ?? this.type,
       selectedRevisionId: selectedRevisionId ?? this.selectedRevisionId,
+      author: author ?? this.author,
+      license: license ?? this.license,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

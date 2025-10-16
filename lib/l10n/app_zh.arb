@@ -444,5 +444,17 @@
   "body": "请求体",
   "statusCode": "状态码",
   "error": "错误",
-  "duration": "持续时间"
+  "duration": "持续时间",
+  "importApp": "导入应用",
+  "viewApp": "查看应用",
+  "exportApp": "导出应用",
+  "exportAppDescription": "在导出前查看和更新应用信息。应用将保存为YAML文件，可以与他人分享或导入。",
+  "nameRequired": "名称为必填项",
+  "name": "名称",
+  "description": "描述",
+  "author": "作者",
+  "license": "许可证",
+  "save": "保存",
+  "appExportedSuccessfully": "应用导出成功",
+  "errorExportingApp": "导出应用时出错：{error}"
 }

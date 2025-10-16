@@ -8,6 +8,7 @@ import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
 import 'import_app_screen.dart';
+import 'export_app_screen.dart';
 import 'note_selection_dialog.dart';
 
 class UserAppsListScreen extends StatefulWidget {
@@ -309,6 +310,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                     ),
                   ),
                   PopupMenuItem<String>(
+                    value: 'export',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.file_download),
+                        const SizedBox(width: 8),
+                        Text(l10n.exportApp),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -455,10 +466,22 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
+  void _navigateToExportApp(BuildContext context, UserApp app) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExportAppScreen(app: app),
+      ),
+    );
+  }
+
   void _handleMenuAction(BuildContext context, String action, UserApp app, AppProvider appProvider) {
     switch (action) {
       case 'edit':
         _navigateToEditApp(context, app);
+        break;
+      case 'export':
+        _navigateToExportApp(context, app);
         break;
       case 'delete':
         _showDeleteDialog(context, app, appProvider);

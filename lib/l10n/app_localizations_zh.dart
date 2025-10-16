@@ -1421,8 +1421,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get error => '错误';
 
   @override
-  String get importApp => 'Import App';
+  String get importApp => '导入应用';
 
   @override
-  String get viewApp => 'View App';
+  String get viewApp => '查看应用';
+
+  @override
+  String get exportApp => '导出应用';
+
+  @override
+  String get exportAppDescription => '在导出前查看和更新应用信息。应用将保存为YAML文件，可以与他人分享或导入。';
+
+  @override
+  String get nameRequired => '名称为必填项';
+
+  @override
+  String get name => '名称';
+
+  @override
+  String get description => '描述';
+
+  @override
+  String get author => '作者';
+
+  @override
+  String get license => '许可证';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get appExportedSuccessfully => '应用导出成功';
+
+  @override
+  String errorExportingApp(Object error) {
+    return '导出应用时出错：$error';
+  }
 }

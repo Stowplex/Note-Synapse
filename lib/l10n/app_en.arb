@@ -454,5 +454,15 @@
   "error": "Error",
   "duration": "Duration",
   "importApp": "Import App",
-  "viewApp": "View App"
+  "viewApp": "View App",
+  "exportApp": "Export App",
+  "exportAppDescription": "Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.",
+  "nameRequired": "Name is required",
+  "name": "Name",
+  "description": "Description",
+  "author": "Author",
+  "license": "License",
+  "save": "Save",
+  "appExportedSuccessfully": "App exported successfully",
+  "errorExportingApp": "Error exporting app: {error}"
 }

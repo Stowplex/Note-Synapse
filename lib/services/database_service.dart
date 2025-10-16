@@ -46,7 +46,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 15,
+      version: 16,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -669,6 +669,19 @@ class DatabaseService {
         LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
       } catch (e) {
         LoggerService.error('Migration to version 15 failed: $e', error: e);
+      }
+    }
+    
+    if (oldVersion < 16) {
+      // Migration from version 15 to 16: Add author and license fields to user_apps table
+      try {
+        // Add author and license columns to user_apps table
+        await db.execute('ALTER TABLE user_apps ADD COLUMN author TEXT DEFAULT ""');
+        await db.execute('ALTER TABLE user_apps ADD COLUMN license TEXT DEFAULT ""');
+        
+        LoggerService.info('Migration to version 16 completed: Added author and license fields to user_apps table');
+      } catch (e) {
+        LoggerService.error('Migration to version 16 failed: $e', error: e);
       }
     }
   }
@@ -1525,6 +1538,8 @@ class DatabaseService {
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
+      'author': app.author,
+      'license': app.license,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1564,6 +1579,8 @@ class DatabaseService {
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
+      'author': app.author,
+      'license': app.license,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1645,6 +1662,8 @@ class DatabaseService {
             )
           : UserAppType.normal,
       selectedRevisionId: map['selectedRevisionId'] as String?,
+      author: map['author'] as String? ?? '',
+      license: map['license'] as String? ?? '',
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );

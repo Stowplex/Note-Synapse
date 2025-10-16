@@ -18,6 +18,8 @@ UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
       $enumDecodeNullable(_$UserAppTypeEnumMap, json['type']) ??
       UserAppType.normal,
   selectedRevisionId: json['selectedRevisionId'] as String?,
+  author: json['author'] as String? ?? '',
+  license: json['license'] as String? ?? '',
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
 );
@@ -32,6 +34,8 @@ Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
   'appState': instance.appState,
   'type': _$UserAppTypeEnumMap[instance.type]!,
   'selectedRevisionId': instance.selectedRevisionId,
+  'author': instance.author,
+  'license': instance.license,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
 };

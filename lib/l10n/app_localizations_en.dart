@@ -1445,4 +1445,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get viewApp => 'View App';
+
+  @override
+  String get exportApp => 'Export App';
+
+  @override
+  String get exportAppDescription =>
+      'Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.';
+
+  @override
+  String get nameRequired => 'Name is required';
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get description => 'Description';
+
+  @override
+  String get author => 'Author';
+
+  @override
+  String get license => 'License';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get appExportedSuccessfully => 'App exported successfully';
+
+  @override
+  String errorExportingApp(Object error) {
+    return 'Error exporting app: $error';
+  }
 }

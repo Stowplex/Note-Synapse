@@ -2737,6 +2737,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View App'**
   String get viewApp;
+
+  /// No description provided for @exportApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Export App'**
+  String get exportApp;
+
+  /// No description provided for @exportAppDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.'**
+  String get exportAppDescription;
+
+  /// No description provided for @nameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Name is required'**
+  String get nameRequired;
+
+  /// No description provided for @name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get name;
+
+  /// No description provided for @description.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get description;
+
+  /// No description provided for @author.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get author;
+
+  /// No description provided for @license.
+  ///
+  /// In en, this message translates to:
+  /// **'License'**
+  String get license;
+
+  /// No description provided for @save.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get save;
+
+  /// No description provided for @appExportedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'App exported successfully'**
+  String get appExportedSuccessfully;
+
+  /// No description provided for @errorExportingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error exporting app: {error}'**
+  String errorExportingApp(Object error);
 }
 
 class _AppLocalizationsDelegate
