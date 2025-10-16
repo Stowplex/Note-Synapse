@@ -229,9 +229,14 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         }
       } catch (e) {
         if (mounted) {
+          String errorMessage = 'Error deleting revision: $e';
+          if (e.toString().contains('Cannot delete the only remaining revision')) {
+            errorMessage = 'Cannot delete the only remaining revision. At least one revision must exist.';
+          }
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error deleting revision: $e'),
+              content: Text(errorMessage),
               backgroundColor: Colors.red,
             ),
           );

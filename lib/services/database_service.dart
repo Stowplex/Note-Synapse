@@ -1573,9 +1573,19 @@ class DatabaseService {
 
   Future<void> deleteUserApp(String id) async {
     final db = await database;
-    // Delete app revisions first (foreign key constraint will handle this automatically)
+    
+    // Get the app to find its UUID for library deletion
+    final app = await getUserApp(id);
+    if (app == null) return;
+    
+    // Delete app libraries and their dependencies first
+    // (foreign key constraints will handle cascade deletion)
+    await db.delete('user_app_libraries', where: 'app_uuid = ?', whereArgs: [app.uuid]);
+    
+    // Delete app revisions (this will also delete any remaining libraries via foreign key)
     await db.delete('app_revisions', where: 'appId = ?', whereArgs: [id]);
-    // Then delete the app
+    
+    // Finally delete the app
     await db.delete('user_apps', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1690,6 +1700,40 @@ class DatabaseService {
 
   Future<void> deleteAppRevision(String id) async {
     final db = await database;
+    
+    // Get the revision to find its appId and revision number
+    final revision = await getAppRevision(id);
+    if (revision == null) return;
+    
+    // Get all revisions for this app to check if this is the only one
+    final allRevisions = await getAppRevisions(revision.appId);
+    if (allRevisions.length <= 1) {
+      throw Exception('Cannot delete the only remaining revision. At least one revision must exist.');
+    }
+    
+    // Get the app to check if this is the pinned revision
+    final app = await getUserApp(revision.appId);
+    if (app == null) return;
+    
+    // If this is the pinned revision, move the pin to the previous "latest" revision
+    if (app.selectedRevisionId == id) {
+      // Find the latest remaining revision (highest revision number)
+      final remainingRevisions = allRevisions.where((r) => r.id != id).toList();
+      if (remainingRevisions.isNotEmpty) {
+        // Sort by revision number descending to get the latest
+        remainingRevisions.sort((a, b) => b.revisionNumber.compareTo(a.revisionNumber));
+        final newPinnedRevision = remainingRevisions.first;
+        
+        // Update the app's selectedRevisionId
+        final updatedApp = app.copyWith(selectedRevisionId: newPinnedRevision.id);
+        await updateUserApp(updatedApp);
+      }
+    }
+    
+    // Delete libraries and dependencies for this specific revision
+    await deleteUserAppLibrariesForRevision(revision.revisionNumber);
+    
+    // Finally delete the revision
     await db.delete('app_revisions', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1706,6 +1750,18 @@ class DatabaseService {
     );
     final maxRevision = result.first['maxRevision'] as int?;
     return (maxRevision ?? 0) + 1;
+  }
+
+  Future<AppRevision?> getLatestAppRevision(String appId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT * FROM app_revisions WHERE appId = ? ORDER BY revisionNumber DESC LIMIT 1',
+      [appId],
+    );
+    if (result.isNotEmpty) {
+      return _appRevisionFromMap(result.first);
+    }
+    return null;
   }
 
   AppRevision _appRevisionFromMap(Map<String, dynamic> map) {
@@ -1754,6 +1810,11 @@ class DatabaseService {
   Future<void> deleteUserAppLibrary(int libraryId) async {
     final db = await database;
     await db.delete('user_app_libraries', where: 'id = ?', whereArgs: [libraryId]);
+  }
+
+  Future<void> deleteUserAppLibrariesForRevision(int revisionId) async {
+    final db = await database;
+    await db.delete('user_app_libraries', where: 'revision_id = ?', whereArgs: [revisionId]);
   }
 
   // User App Library Dependencies CRUD
