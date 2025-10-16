@@ -2786,6 +2786,12 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get save;
 
+  /// No description provided for @private.
+  ///
+  /// In en, this message translates to:
+  /// **'Private'**
+  String get private;
+
   /// No description provided for @appExportedSuccessfully.
   ///
   /// In en, this message translates to:

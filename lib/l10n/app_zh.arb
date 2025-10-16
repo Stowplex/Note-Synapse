@@ -455,6 +455,7 @@
   "author": "作者",
   "license": "许可证",
   "save": "保存",
+  "private": "私有",
   "appExportedSuccessfully": "应用导出成功",
   "errorExportingApp": "导出应用时出错：{error}"
 }

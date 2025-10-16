@@ -1451,6 +1451,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get save => '保存';
 
   @override
+  String get private => '私有';
+
+  @override
   String get appExportedSuccessfully => '应用导出成功';
 
   @override

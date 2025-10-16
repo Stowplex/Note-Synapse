@@ -1472,6 +1472,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get save => 'Save';
 
   @override
+  String get private => 'Private';
+
+  @override
   String get appExportedSuccessfully => 'App exported successfully';
 
   @override

@@ -463,6 +463,7 @@
   "author": "Author",
   "license": "License",
   "save": "Save",
+  "private": "Private",
   "appExportedSuccessfully": "App exported successfully",
   "errorExportingApp": "Error exporting app: {error}"
 }
