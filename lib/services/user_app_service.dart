@@ -190,7 +190,7 @@ class UserAppService {
         name: name,
         description: description,
         steps: steps,
-        htmlContent: htmlContent,
+        htmlContent: '', // No longer used - code is stored in revisions
         type: type,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -231,6 +231,46 @@ class UserAppService {
   }
   
   
+  // Save manual code edit by creating a new revision
+  static Future<AppRevision> saveManualCodeEdit({
+    required UserApp originalApp,
+    required String newCode,
+    List<String>? attachmentPaths,
+  }) async {
+    try {
+      // Get the next revision number
+      final databaseService = DatabaseService();
+      final revisionNumber = await databaseService.getNextRevisionNumber(originalApp.id);
+      
+      // Create the revision for manual edit
+      final revision = AppRevision(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        appId: originalApp.id,
+        revisionNumber: revisionNumber,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: 'Manual code edit',
+        aiResponse: 'User manually edited the app code.',
+        appCode: newCode,
+        attachmentPaths: attachmentPaths ?? [],
+      );
+      
+      // Save the revision
+      await databaseService.insertAppRevision(revision);
+      
+      // Update the app's selected revision (but NOT the htmlContent)
+      final updatedApp = originalApp.copyWith(
+        selectedRevisionId: revision.id,
+        updatedAt: DateTime.now(),
+      );
+      await databaseService.updateUserApp(updatedApp);
+      
+      return revision;
+    } catch (e) {
+      LoggerService.error('Error saving manual code edit: $e', error: e);
+      rethrow;
+    }
+  }
+
   // Edit an existing app by creating a new revision
   static Future<AppRevision> editUserApp({
     required UserApp originalApp,
@@ -273,10 +313,9 @@ class UserAppService {
       // Save the revision
       await databaseService.insertAppRevision(revision);
       
-      // Update the app's selected revision and HTML content
+      // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(
         selectedRevisionId: revision.id,
-        htmlContent: newHtmlContent,
         updatedAt: DateTime.now(),
       );
       await databaseService.updateUserApp(updatedApp);

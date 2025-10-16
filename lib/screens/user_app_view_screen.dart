@@ -430,7 +430,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   }
 
   Widget _buildWebView() {
-    final htmlData = _selectedRevision?.appCode ?? widget.app.htmlContent;
+    final htmlData = _selectedRevision?.appCode ?? '';
     LoggerService.debug('WebView loading data: ${htmlData.length} characters');
     LoggerService.debug('Using revision: ${_selectedRevision?.id ?? 'none'} (revision ${_selectedRevision?.revisionNumber ?? 'N/A'})');
     LoggerService.debug('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
@@ -454,16 +454,19 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               supportZoom: true,
               builtInZoomControls: true,
               displayZoomControls: false,
-              resourceCustomSchemes: ['synapse'],
+              resourceCustomSchemes: ['synapse', 'synapseuser'],
             ),
             onLoadResourceWithCustomScheme: (controller, request) async {
-              LoggerService.debug('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path} - ${request.url.path}');
+              LoggerService.debug('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}');
               if (request.url.scheme.toLowerCase() == 'synapse') {
                 final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
                 return CustomSchemeResponse(
                   contentType: 'text/plain',
                   data: Uint8List.fromList(utf8.encode(data)),
                 );
+              } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
+                print("handling synapseuser scheme: ${request.url}");
+                return await _handleSynapseUserScheme(request);
               }
               return null;            
             },
@@ -1574,6 +1577,90 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     } catch (e) {
       LoggerService.error('[Synapse.saveNotes] Error saving base64 attachment: $e', error: e);
       rethrow;
+    }
+  }
+
+  // Handle synapse_user:// URL scheme for custom dependencies
+  Future<CustomSchemeResponse?> _handleSynapseUserScheme(dynamic request) async {
+    try {
+      final path = request.url.path;
+      LoggerService.debug('[SynapseUser] Handling request for path: $path');
+      
+      // Get current app and revision info
+      final appProvider = context.read<AppProvider>();
+      final currentApp = appProvider.userApps.firstWhere(
+        (app) => app.id == widget.app.id,
+        orElse: () => widget.app,
+      );
+      
+      // Get the selected revision ID
+      final revisionId = _selectedRevision?.revisionNumber ?? 1;
+      
+      LoggerService.debug('[SynapseUser] Looking for dependency: app_uuid=${currentApp.uuid}, revision_id=$revisionId, path=$path');
+      
+      // Query the database for the dependency
+      final databaseService = DatabaseService();
+      final dependency = await databaseService.getDependencyByAppAndPath(
+        currentApp.uuid,
+        revisionId,
+        path,
+      );
+      
+      if (dependency == null) {
+        LoggerService.warning('[SynapseUser] Dependency not found for path: $path');
+        return CustomSchemeResponse(
+          contentType: 'text/plain',
+          data: Uint8List.fromList(utf8.encode('// Dependency not found: $path')),
+        );
+      }
+      
+      // Get the bytes from the dependency
+      final bytes = dependency['bytes'] as List<int>;
+      LoggerService.debug('[SynapseUser] Found dependency: ${bytes.length} bytes');
+      
+      // Determine content type based on file extension
+      String contentType = 'text/plain';
+      final extension = path.split('.').last.toLowerCase();
+      switch (extension) {
+        case 'js':
+          contentType = 'application/javascript';
+          break;
+        case 'css':
+          contentType = 'text/css';
+          break;
+        case 'html':
+          contentType = 'text/html';
+          break;
+        case 'json':
+          contentType = 'application/json';
+          break;
+        case 'png':
+          contentType = 'image/png';
+          break;
+        case 'jpg':
+        case 'jpeg':
+          contentType = 'image/jpeg';
+          break;
+        case 'gif':
+          contentType = 'image/gif';
+          break;
+        case 'svg':
+          contentType = 'image/svg+xml';
+          break;
+        default:
+          contentType = 'text/plain';
+      }
+      
+      return CustomSchemeResponse(
+        contentType: contentType,
+        data: Uint8List.fromList(bytes),
+      );
+    } catch (e) {
+      LoggerService.error('[SynapseUser] Error handling synapse_user scheme: $e', error: e);
+      return CustomSchemeResponse(
+        contentType: 'text/plain',
+        data: Uint8List.fromList(utf8.encode('// Error loading dependency: $e')),
+      );
     }
   }
 

@@ -1419,4 +1419,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get error => '错误';
+
+  @override
+  String get importApp => 'Import App';
+
+  @override
+  String get viewApp => 'View App';
 }

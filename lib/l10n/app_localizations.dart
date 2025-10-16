@@ -2725,6 +2725,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error'**
   String get error;
+
+  /// No description provided for @importApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Import App'**
+  String get importApp;
+
+  /// No description provided for @viewApp.
+  ///
+  /// In en, this message translates to:
+  /// **'View App'**
+  String get viewApp;
 }
 
 class _AppLocalizationsDelegate

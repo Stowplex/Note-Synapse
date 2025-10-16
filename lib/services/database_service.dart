@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
@@ -45,7 +46,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 14,
+      version: 15,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -177,6 +178,30 @@ class DatabaseService {
       )
     ''');
 
+    // User App Libraries table
+    await db.execute('''
+      CREATE TABLE user_app_libraries(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_uuid TEXT NOT NULL,
+        revision_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        usage_instructions TEXT,
+        FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
+      )
+    ''');
+
+    // User App Library Dependencies table
+    await db.execute('''
+      CREATE TABLE user_app_library_dependencies(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_url TEXT,
+        local_path TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        library_id INTEGER NOT NULL,
+        FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
+      )
+    ''');
+
     // Create indexes for better performance
     await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
     await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
@@ -186,6 +211,10 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
+    await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
+    await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -601,6 +630,45 @@ class DatabaseService {
         } catch (e2) {
           LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
         }
+      }
+    }
+    
+    if (oldVersion < 15) {
+      // Migration from version 14 to 15: Add user app libraries and dependencies tables
+      try {
+        // Create User App Libraries table
+        await db.execute('''
+          CREATE TABLE user_app_libraries(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_uuid TEXT NOT NULL,
+            revision_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            usage_instructions TEXT,
+            FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
+          )
+        ''');
+
+        // Create User App Library Dependencies table
+        await db.execute('''
+          CREATE TABLE user_app_library_dependencies(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_url TEXT,
+            local_path TEXT NOT NULL,
+            bytes BLOB NOT NULL,
+            library_id INTEGER NOT NULL,
+            FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
+          )
+        ''');
+        
+        // Create indexes for better performance
+        await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
+        await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
+        await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
+        await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
+        
+        LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
+      } catch (e) {
+        LoggerService.error('Migration to version 15 failed: $e', error: e);
       }
     }
   }
@@ -1655,5 +1723,112 @@ class DatabaseService {
     );
     LoggerService.debug('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
     return revision;
+  }
+
+  // User App Libraries CRUD
+  Future<int> insertUserAppLibrary({
+    required String appUuid,
+    required int revisionId,
+    required String name,
+    String? usageInstructions,
+  }) async {
+    final db = await database;
+    final result = await db.insert('user_app_libraries', {
+      'app_uuid': appUuid,
+      'revision_id': revisionId,
+      'name': name,
+      'usage_instructions': usageInstructions,
+    });
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> getUserAppLibraries(String appUuid, int revisionId) async {
+    final db = await database;
+    return await db.query(
+      'user_app_libraries',
+      where: 'app_uuid = ? AND revision_id = ?',
+      whereArgs: [appUuid, revisionId],
+    );
+  }
+
+  Future<void> deleteUserAppLibrary(int libraryId) async {
+    final db = await database;
+    await db.delete('user_app_libraries', where: 'id = ?', whereArgs: [libraryId]);
+  }
+
+  // User App Library Dependencies CRUD
+  Future<int> insertUserAppLibraryDependency({
+    String? originalUrl,
+    required String localPath,
+    required List<int> bytes,
+    required int libraryId,
+  }) async {
+    final db = await database;
+    final result = await db.insert('user_app_library_dependencies', {
+      'original_url': originalUrl,
+      'local_path': localPath,
+      'bytes': Uint8List.fromList(bytes),
+      'library_id': libraryId,
+    });
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> getUserAppLibraryDependencies(int libraryId) async {
+    final db = await database;
+    final results = await db.query(
+      'user_app_library_dependencies',
+      where: 'library_id = ?',
+      whereArgs: [libraryId],
+    );
+    
+    // Convert Uint8List back to List<int> for consistency
+    return results.map((map) {
+      final newMap = Map<String, dynamic>.from(map);
+      if (newMap['bytes'] is Uint8List) {
+        newMap['bytes'] = (newMap['bytes'] as Uint8List).toList();
+      }
+      return newMap;
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>?> getUserAppLibraryDependencyByPath(String localPath) async {
+    final db = await database;
+    final results = await db.query(
+      'user_app_library_dependencies',
+      where: 'local_path = ?',
+      whereArgs: [localPath],
+    );
+    if (results.isNotEmpty) {
+      final result = Map<String, dynamic>.from(results.first);
+      if (result['bytes'] is Uint8List) {
+        result['bytes'] = (result['bytes'] as Uint8List).toList();
+      }
+      return result;
+    }
+    return null;
+  }
+
+  Future<void> deleteUserAppLibraryDependency(int dependencyId) async {
+    final db = await database;
+    await db.delete('user_app_library_dependencies', where: 'id = ?', whereArgs: [dependencyId]);
+  }
+
+  // Get dependency by app UUID, revision ID, and local path
+  Future<Map<String, dynamic>?> getDependencyByAppAndPath(String appUuid, int revisionId, String localPath) async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT d.* 
+      FROM user_app_library_dependencies d
+      JOIN user_app_libraries l ON d.library_id = l.id
+      WHERE l.app_uuid = ? AND l.revision_id = ? AND d.local_path = ?
+    ''', [appUuid, revisionId, localPath]);
+    if (results.isNotEmpty) {
+      final result = Map<String, dynamic>.from(results.first);
+      if (result['bytes'] is Uint8List) {
+        result['bytes'] = (result['bytes'] as Uint8List).toList();
+      }
+      return result;
+    }
+    return null;
   }
 }

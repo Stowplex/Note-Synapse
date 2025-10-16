@@ -32,9 +32,54 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
   @override
   void initState() {
     super.initState();
-    _originalCode = widget.app.htmlContent;
-    _codeController.text = widget.app.htmlContent;
+    _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
+  }
+
+  Future<void> _loadCurrentRevisionCode() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.getAppRevisions(widget.app.id);
+      
+      // Get the current app from provider
+      final currentApp = appProvider.userApps.firstWhere(
+        (app) => app.id == widget.app.id,
+        orElse: () => widget.app,
+      );
+      
+      // Get revisions from provider
+      final revisions = appProvider.appRevisions[widget.app.id] ?? [];
+      
+      String codeToLoad = '';
+      
+      if (currentApp.selectedRevisionId != null) {
+        try {
+          final selectedRevision = revisions.firstWhere(
+            (r) => r.id == currentApp.selectedRevisionId,
+          );
+          codeToLoad = selectedRevision.appCode;
+        } catch (e) {
+          // If selected revision not found, use the latest revision
+          if (revisions.isNotEmpty) {
+            codeToLoad = revisions.last.appCode;
+          }
+        }
+      } else if (revisions.isNotEmpty) {
+        // If no selected revision, use the latest revision
+        codeToLoad = revisions.last.appCode;
+      }
+      
+      setState(() {
+        _originalCode = codeToLoad;
+        _codeController.text = codeToLoad;
+      });
+    } catch (e) {
+      // If there's an error loading revisions, show empty code
+      setState(() {
+        _originalCode = '';
+        _codeController.text = '';
+      });
+    }
   }
 
   Future<void> _loadCurrentRevisionAttachments() async {
@@ -131,13 +176,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       
-      // Create updated app with new code
-      final updatedApp = widget.app.copyWith(
-        htmlContent: _codeController.text.trim(),
-        updatedAt: DateTime.now(),
+      // Save manual code edit by creating a new revision
+      await appProvider.saveManualCodeEdit(
+        originalApp: widget.app,
+        newCode: _codeController.text.trim(),
+        attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
-      
-      await appProvider.updateUserApp(updatedApp);
       
       if (mounted) {
         setState(() {

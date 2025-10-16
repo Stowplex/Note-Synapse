@@ -849,6 +849,40 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<AppRevision> saveManualCodeEdit({
+    required UserApp originalApp,
+    required String newCode,
+    List<String>? attachmentPaths,
+  }) async {
+    try {
+      final revision = await UserAppService.saveManualCodeEdit(
+        originalApp: originalApp,
+        newCode: newCode,
+        attachmentPaths: attachmentPaths,
+      );
+      
+      // Update the app in our local list
+      final appIndex = _userApps.indexWhere((app) => app.id == originalApp.id);
+      if (appIndex != -1) {
+        final updatedApp = await _databaseService.getUserApp(originalApp.id);
+        if (updatedApp != null) {
+          _userApps[appIndex] = updatedApp;
+        }
+      }
+      
+      // Clear and refresh revisions cache for this app
+      clearAppRevisionsCache(originalApp.id);
+      await refreshAppRevisions(originalApp.id);
+      
+      _error = null;
+      return revision;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> deleteUserApp(String appId) async {
     try {
       await UserAppService.deleteUserApp(appId);
