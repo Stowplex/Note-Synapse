@@ -57,12 +57,6 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         _progress = 0.1;
       });
 
-      // Check if file has YAML extension
-      final filePath = widget.yamlFilePath.toLowerCase();
-      if (!filePath.endsWith('.yaml') && !filePath.endsWith('.yml')) {
-        throw Exception('Please select a YAML file (.yaml or .yml)');
-      }
-
       // Read and parse YAML file
       final yamlFile = File(widget.yamlFilePath);
       final yamlContent = await yamlFile.readAsString();
