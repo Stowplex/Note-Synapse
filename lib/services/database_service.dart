@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
@@ -44,7 +47,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 13,
+      version: 16,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -148,6 +151,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE user_apps(
         id TEXT PRIMARY KEY,
+        uuid TEXT NOT NULL,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         steps TEXT NOT NULL,
@@ -175,6 +179,30 @@ class DatabaseService {
       )
     ''');
 
+    // User App Libraries table
+    await db.execute('''
+      CREATE TABLE user_app_libraries(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_uuid TEXT NOT NULL,
+        revision_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        usage_instructions TEXT,
+        FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
+      )
+    ''');
+
+    // User App Library Dependencies table
+    await db.execute('''
+      CREATE TABLE user_app_library_dependencies(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_url TEXT,
+        local_path TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        library_id INTEGER NOT NULL,
+        FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
+      )
+    ''');
+
     // Create indexes for better performance
     await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
     await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
@@ -184,6 +212,10 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
+    await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
+    await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -561,6 +593,99 @@ class DatabaseService {
         LoggerService.warning('Migration to version 13: $e', error: e);
       }
     }
+    
+    if (oldVersion < 14) {
+      // Migration from version 13 to 14: Add UUID column to user_apps table
+      try {
+        // Check if uuid column exists in user_apps table
+        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+        final columnNames = columns.map((col) => col['name'] as String).toList();
+        
+        if (!columnNames.contains('uuid')) {
+          // Add uuid column
+          await db.execute('ALTER TABLE user_apps ADD COLUMN uuid TEXT');
+          
+          // Generate UUIDs for existing records that have null uuid
+          await _migrateUserAppsWithUuid(db);
+        }
+      } catch (e) {
+        LoggerService.error('Migration to version 14 failed: $e', error: e);
+        // If migration fails, recreate the user_apps table
+        try {
+          await db.execute('DROP TABLE IF EXISTS user_apps');
+          await db.execute('''
+            CREATE TABLE user_apps(
+              id TEXT PRIMARY KEY,
+              uuid TEXT NOT NULL,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              steps TEXT NOT NULL,
+              htmlContent TEXT NOT NULL,
+              appState TEXT,
+              type TEXT NOT NULL DEFAULT 'normal',
+              selectedRevisionId TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        } catch (e2) {
+          LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
+        }
+      }
+    }
+    
+    if (oldVersion < 15) {
+      // Migration from version 14 to 15: Add user app libraries and dependencies tables
+      try {
+        // Create User App Libraries table
+        await db.execute('''
+          CREATE TABLE user_app_libraries(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_uuid TEXT NOT NULL,
+            revision_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            usage_instructions TEXT,
+            FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
+          )
+        ''');
+
+        // Create User App Library Dependencies table
+        await db.execute('''
+          CREATE TABLE user_app_library_dependencies(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_url TEXT,
+            local_path TEXT NOT NULL,
+            bytes BLOB NOT NULL,
+            library_id INTEGER NOT NULL,
+            FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
+          )
+        ''');
+        
+        // Create indexes for better performance
+        await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
+        await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
+        await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
+        await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
+        
+        LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
+      } catch (e) {
+        LoggerService.error('Migration to version 15 failed: $e', error: e);
+      }
+    }
+    
+    if (oldVersion < 16) {
+      // Migration from version 15 to 16: Add author and license fields to user_apps table
+      try {
+        // Add author and license columns to user_apps table
+        await db.execute('ALTER TABLE user_apps ADD COLUMN author TEXT DEFAULT ""');
+        await db.execute('ALTER TABLE user_apps ADD COLUMN license TEXT DEFAULT ""');
+        
+        LoggerService.info('Migration to version 16 completed: Added author and license fields to user_apps table');
+      } catch (e) {
+        LoggerService.error('Migration to version 16 failed: $e', error: e);
+      }
+    }
+    
   }
 
   // Migration helper method to create initial revisions for existing apps
@@ -620,6 +745,40 @@ class DatabaseService {
       LoggerService.info('Migration of existing apps to revisions completed successfully');
     } catch (e) {
       LoggerService.error('Error during migration of existing apps to revisions: $e', error: e);
+      // Don't rethrow - this is a migration helper, we don't want to break the entire migration
+    }
+  }
+
+  // Migration helper method to add UUIDs to existing user apps
+  Future<void> _migrateUserAppsWithUuid(Database db) async {
+    try {
+      LoggerService.info('Starting migration of user apps with UUID...');
+      
+      // Get all existing apps that don't have a UUID
+      final apps = await db.query('user_apps', where: 'uuid IS NULL');
+      LoggerService.info('Found ${apps.length} user apps without UUID to migrate');
+      
+      for (final appMap in apps) {
+        final appId = appMap['id'] as String;
+        final appName = appMap['name'] as String;
+        
+        // Generate a new UUID
+        final uuid = const Uuid().v4();
+        
+        // Update the app with the new UUID
+        await db.update(
+          'user_apps',
+          {'uuid': uuid},
+          where: 'id = ?',
+          whereArgs: [appId],
+        );
+        
+        LoggerService.debug('Added UUID $uuid to app: $appName (ID: $appId)');
+      }
+      
+      LoggerService.info('Migration of user apps with UUID completed successfully');
+    } catch (e) {
+      LoggerService.error('Error during migration of user apps with UUID: $e', error: e);
       // Don't rethrow - this is a migration helper, we don't want to break the entire migration
     }
   }
@@ -1373,6 +1532,7 @@ class DatabaseService {
     // Build JSON manually to avoid conflicts with toJson() DateTime serialization
     final json = {
       'id': app.id,
+      'uuid': app.uuid,
       'name': app.name,
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
@@ -1380,6 +1540,8 @@ class DatabaseService {
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
+      'author': app.author,
+      'license': app.license,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1411,6 +1573,7 @@ class DatabaseService {
     // Build JSON manually to avoid conflicts with toJson() DateTime serialization
     final json = {
       'id': app.id,
+      'uuid': app.uuid,
       'name': app.name,
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
@@ -1418,6 +1581,8 @@ class DatabaseService {
       'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
+      'author': app.author,
+      'license': app.license,
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -1427,9 +1592,19 @@ class DatabaseService {
 
   Future<void> deleteUserApp(String id) async {
     final db = await database;
-    // Delete app revisions first (foreign key constraint will handle this automatically)
+    
+    // Get the app to find its UUID for library deletion
+    final app = await getUserApp(id);
+    if (app == null) return;
+    
+    // Delete app libraries and their dependencies first
+    // (foreign key constraints will handle cascade deletion)
+    await db.delete('user_app_libraries', where: 'app_uuid = ?', whereArgs: [app.uuid]);
+    
+    // Delete app revisions (this will also delete any remaining libraries via foreign key)
     await db.delete('app_revisions', where: 'appId = ?', whereArgs: [id]);
-    // Then delete the app
+    
+    // Finally delete the app
     await db.delete('user_apps', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1474,6 +1649,7 @@ class DatabaseService {
 
     return UserApp(
       id: map['id'] as String,
+      uuid: map['uuid'] as String? ?? const Uuid().v4(), // Generate UUID if missing for backward compatibility
       name: map['name'] as String,
       description: map['description'] as String,
       steps: (map['steps'] as String).split('|'), // Parse pipe-separated steps
@@ -1488,6 +1664,8 @@ class DatabaseService {
             )
           : UserAppType.normal,
       selectedRevisionId: map['selectedRevisionId'] as String?,
+      author: map['author'] as String? ?? '',
+      license: map['license'] as String? ?? '',
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );
@@ -1543,6 +1721,40 @@ class DatabaseService {
 
   Future<void> deleteAppRevision(String id) async {
     final db = await database;
+    
+    // Get the revision to find its appId and revision number
+    final revision = await getAppRevision(id);
+    if (revision == null) return;
+    
+    // Get all revisions for this app to check if this is the only one
+    final allRevisions = await getAppRevisions(revision.appId);
+    if (allRevisions.length <= 1) {
+      throw Exception('Cannot delete the only remaining revision. At least one revision must exist.');
+    }
+    
+    // Get the app to check if this is the pinned revision
+    final app = await getUserApp(revision.appId);
+    if (app == null) return;
+    
+    // If this is the pinned revision, move the pin to the previous "latest" revision
+    if (app.selectedRevisionId == id) {
+      // Find the latest remaining revision (highest revision number)
+      final remainingRevisions = allRevisions.where((r) => r.id != id).toList();
+      if (remainingRevisions.isNotEmpty) {
+        // Sort by revision number descending to get the latest
+        remainingRevisions.sort((a, b) => b.revisionNumber.compareTo(a.revisionNumber));
+        final newPinnedRevision = remainingRevisions.first;
+        
+        // Update the app's selectedRevisionId
+        final updatedApp = app.copyWith(selectedRevisionId: newPinnedRevision.id);
+        await updateUserApp(updatedApp);
+      }
+    }
+    
+    // Delete libraries and dependencies for this specific revision
+    await deleteUserAppLibrariesForRevision(revision.revisionNumber);
+    
+    // Finally delete the revision
     await db.delete('app_revisions', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1561,6 +1773,18 @@ class DatabaseService {
     return (maxRevision ?? 0) + 1;
   }
 
+  Future<AppRevision?> getLatestAppRevision(String appId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT * FROM app_revisions WHERE appId = ? ORDER BY revisionNumber DESC LIMIT 1',
+      [appId],
+    );
+    if (result.isNotEmpty) {
+      return _appRevisionFromMap(result.first);
+    }
+    return null;
+  }
+
   AppRevision _appRevisionFromMap(Map<String, dynamic> map) {
     final revision = AppRevision(
       id: map['id'] as String,
@@ -1576,5 +1800,214 @@ class DatabaseService {
     );
     LoggerService.debug('_appRevisionFromMap: Created revision ${revision.id} with appCode length: ${revision.appCode.length}');
     return revision;
+  }
+
+  // User App Libraries CRUD
+  Future<int> insertUserAppLibrary({
+    required String appUuid,
+    required int revisionId,
+    required String name,
+    String? usageInstructions,
+  }) async {
+    final db = await database;
+    final result = await db.insert('user_app_libraries', {
+      'app_uuid': appUuid,
+      'revision_id': revisionId,
+      'name': name,
+      'usage_instructions': usageInstructions,
+    });
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> getUserAppLibraries(String appUuid, int revisionId) async {
+    final db = await database;
+    return await db.query(
+      'user_app_libraries',
+      where: 'app_uuid = ? AND revision_id = ?',
+      whereArgs: [appUuid, revisionId],
+    );
+  }
+
+  Future<void> deleteUserAppLibrary(int libraryId) async {
+    final db = await database;
+    await db.delete('user_app_libraries', where: 'id = ?', whereArgs: [libraryId]);
+  }
+
+  Future<void> deleteUserAppLibrariesForRevision(int revisionId) async {
+    final db = await database;
+    await db.delete('user_app_libraries', where: 'revision_id = ?', whereArgs: [revisionId]);
+  }
+
+  // User App Library Dependencies CRUD
+  Future<int> insertUserAppLibraryDependency({
+    String? originalUrl,
+    required String localPath,
+    required List<int> bytes,
+    required int libraryId,
+  }) async {
+    final db = await database;
+    final result = await db.insert('user_app_library_dependencies', {
+      'original_url': originalUrl,
+      'local_path': localPath,
+      'bytes': Uint8List.fromList(bytes),
+      'library_id': libraryId,
+    });
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> getUserAppLibraryDependencies(int libraryId) async {
+    final db = await database;
+    
+    // Use raw query with chunked BLOB reading to avoid cursor window issues
+    final results = await db.rawQuery('''
+      SELECT id, original_url, local_path, library_id,
+             CASE 
+               WHEN length(bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
+      FROM user_app_library_dependencies 
+      WHERE library_id = ?
+    ''', [libraryId]);
+    
+    final List<Map<String, dynamic>> processedResults = [];
+    for (final map in results) {
+      final newMap = Map<String, dynamic>.from(map);
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (map['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, map['id'] as int);
+          newMap['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${map['id']}: $e', error: e);
+          newMap['bytes'] = <int>[];
+        }
+      } else {
+        newMap['bytes'] = <int>[];
+      }
+      
+      processedResults.add(newMap);
+    }
+    
+    return processedResults;
+  }
+
+  Future<Map<String, dynamic>?> getUserAppLibraryDependencyByPath(String localPath) async {
+    final db = await database;
+    
+    // Use raw query to avoid cursor window issues
+    final results = await db.rawQuery('''
+      SELECT id, original_url, local_path, library_id,
+             CASE 
+               WHEN length(bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
+      FROM user_app_library_dependencies 
+      WHERE local_path = ?
+    ''', [localPath]);
+    
+    if (results.isNotEmpty) {
+      final result = Map<String, dynamic>.from(results.first);
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (result['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          result['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${result['id']}: $e', error: e);
+          result['bytes'] = <int>[];
+        }
+      } else {
+        result['bytes'] = <int>[];
+      }
+      
+      return result;
+    }
+    return null;
+  }
+
+  Future<void> deleteUserAppLibraryDependency(int dependencyId) async {
+    final db = await database;
+    await db.delete('user_app_library_dependencies', where: 'id = ?', whereArgs: [dependencyId]);
+  }
+
+  // Get dependency by app UUID, revision ID, and local path
+  Future<Map<String, dynamic>?> getDependencyByAppAndPath(String appUuid, int revisionId, String localPath) async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT d.id, d.original_url, d.local_path, d.library_id,
+             CASE 
+               WHEN length(d.bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
+      FROM user_app_library_dependencies d
+      JOIN user_app_libraries l ON d.library_id = l.id
+      WHERE l.app_uuid = ? AND l.revision_id = ? AND d.local_path = ?
+    ''', [appUuid, revisionId, localPath]);
+    
+    if (results.isNotEmpty) {
+      final result = Map<String, dynamic>.from(results.first);
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (result['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          result['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${result['id']}: $e', error: e);
+          result['bytes'] = <int>[];
+        }
+      } else {
+        result['bytes'] = <int>[];
+      }
+      
+      return result;
+    }
+    return null;
+  }
+
+  // Helper method to read BLOB data in chunks to avoid cursor window issues
+  Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
+    const int chunkSize = 1024 * 1024; // 1MB chunks
+    final List<int> allBytes = [];
+    
+    try {
+      // Get the total size of the BLOB
+      final sizeResult = await db.rawQuery('''
+        SELECT length(bytes) as blob_size 
+        FROM user_app_library_dependencies 
+        WHERE id = ?
+      ''', [dependencyId]);
+      
+      if (sizeResult.isEmpty) {
+        return <int>[];
+      }
+      
+      final int totalSize = sizeResult.first['blob_size'] as int;
+      
+      // Read BLOB in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize) 
+            ? totalSize - offset 
+            : chunkSize;
+            
+        final chunkResult = await db.rawQuery('''
+          SELECT substr(bytes, ?, ?) as chunk
+          FROM user_app_library_dependencies 
+          WHERE id = ?
+        ''', [offset + 1, currentChunkSize, dependencyId]);
+        
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as Uint8List;
+          allBytes.addAll(chunk);
+        }
+      }
+      
+      return allBytes;
+    } catch (e) {
+      LoggerService.error('Error reading BLOB in chunks: $e', error: e);
+      return <int>[];
+    }
   }
 }

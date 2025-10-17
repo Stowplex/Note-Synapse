@@ -10,6 +10,7 @@ enum UserAppType {
 @JsonSerializable()
 class UserApp {
   final String id;
+  final String uuid;
   final String name;
   final String description;
   final List<String> steps;
@@ -17,11 +18,14 @@ class UserApp {
   final Map<String, dynamic>? appState;
   final UserAppType type;
   final String? selectedRevisionId;
+  final String author;
+  final String license;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   const UserApp({
     required this.id,
+    required this.uuid,
     required this.name,
     required this.description,
     required this.steps,
@@ -29,6 +33,8 @@ class UserApp {
     this.appState,
     this.type = UserAppType.normal,
     this.selectedRevisionId,
+    this.author = '',
+    this.license = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -38,6 +44,7 @@ class UserApp {
 
   UserApp copyWith({
     String? id,
+    String? uuid,
     String? name,
     String? description,
     List<String>? steps,
@@ -45,11 +52,14 @@ class UserApp {
     Map<String, dynamic>? appState,
     UserAppType? type,
     String? selectedRevisionId,
+    String? author,
+    String? license,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
     return UserApp(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
       name: name ?? this.name,
       description: description ?? this.description,
       steps: steps ?? this.steps,
@@ -57,6 +67,8 @@ class UserApp {
       appState: appState ?? this.appState,
       type: type ?? this.type,
       selectedRevisionId: selectedRevisionId ?? this.selectedRevisionId,
+      author: author ?? this.author,
+      license: license ?? this.license,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

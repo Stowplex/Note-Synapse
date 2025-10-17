@@ -8,6 +8,7 @@ part of 'user_app.dart';
 
 UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
   id: json['id'] as String,
+  uuid: json['uuid'] as String,
   name: json['name'] as String,
   description: json['description'] as String,
   steps: (json['steps'] as List<dynamic>).map((e) => e as String).toList(),
@@ -17,12 +18,15 @@ UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
       $enumDecodeNullable(_$UserAppTypeEnumMap, json['type']) ??
       UserAppType.normal,
   selectedRevisionId: json['selectedRevisionId'] as String?,
+  author: json['author'] as String? ?? '',
+  license: json['license'] as String? ?? '',
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
 );
 
 Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
   'id': instance.id,
+  'uuid': instance.uuid,
   'name': instance.name,
   'description': instance.description,
   'steps': instance.steps,
@@ -30,6 +34,8 @@ Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
   'appState': instance.appState,
   'type': _$UserAppTypeEnumMap[instance.type]!,
   'selectedRevisionId': instance.selectedRevisionId,
+  'author': instance.author,
+  'license': instance.license,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
 };

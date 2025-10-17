@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'gemini_api_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'user_app_library_service.dart';
 
 class UserAppService {
   
@@ -185,10 +187,11 @@ class UserAppService {
       
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
+        uuid: const Uuid().v4(),
         name: name,
         description: description,
         steps: steps,
-        htmlContent: htmlContent,
+        htmlContent: '', // No longer used - code is stored in revisions
         type: type,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -229,6 +232,71 @@ class UserAppService {
   }
   
   
+  // Save manual code edit by creating a new revision
+  static Future<AppRevision> saveManualCodeEdit({
+    required UserApp originalApp,
+    required String newCode,
+    List<String>? attachmentPaths,
+  }) async {
+    try {
+      // Get the next revision number
+      final databaseService = DatabaseService();
+      final revisionNumber = await databaseService.getNextRevisionNumber(originalApp.id);
+      
+      // Create the revision for manual edit
+      final revision = AppRevision(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        appId: originalApp.id,
+        revisionNumber: revisionNumber,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: 'Manual code edit',
+        aiResponse: 'User manually edited the app code.',
+        appCode: newCode,
+        attachmentPaths: attachmentPaths ?? [],
+      );
+      
+      // Save the revision
+      await databaseService.insertAppRevision(revision);
+      
+      // Copy dependencies from the current revision to the new revision
+      if (originalApp.selectedRevisionId != null) {
+        try {
+          LoggerService.debug('Manual edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
+          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          if (currentRevision != null) {
+            LoggerService.debug('Manual edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            final libraryService = UserAppLibraryService();
+            await libraryService.copyLibrariesToRevision(
+              appUuid: originalApp.uuid,
+              fromRevisionId: currentRevision.revisionNumber,
+              toRevisionId: revisionNumber,
+            );
+            LoggerService.debug('Manual edit: Successfully copied dependencies to revision $revisionNumber');
+          } else {
+            LoggerService.warning('Manual edit: Current revision not found: ${originalApp.selectedRevisionId}');
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to copy dependencies for manual edit: $e');
+          // Don't rethrow - the revision creation should still succeed
+        }
+      } else {
+        LoggerService.warning('Manual edit: No selectedRevisionId found in originalApp');
+      }
+      
+      // Update the app's selected revision (but NOT the htmlContent)
+      final updatedApp = originalApp.copyWith(
+        selectedRevisionId: revision.id,
+        updatedAt: DateTime.now(),
+      );
+      await databaseService.updateUserApp(updatedApp);
+      
+      return revision;
+    } catch (e) {
+      LoggerService.error('Error saving manual code edit: $e', error: e);
+      rethrow;
+    }
+  }
+
   // Edit an existing app by creating a new revision
   static Future<AppRevision> editUserApp({
     required UserApp originalApp,
@@ -271,10 +339,34 @@ class UserAppService {
       // Save the revision
       await databaseService.insertAppRevision(revision);
       
-      // Update the app's selected revision and HTML content
+      // Copy dependencies from the current revision to the new revision
+      if (originalApp.selectedRevisionId != null) {
+        try {
+          LoggerService.debug('AI edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
+          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          if (currentRevision != null) {
+            LoggerService.debug('AI edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            final libraryService = UserAppLibraryService();
+            await libraryService.copyLibrariesToRevision(
+              appUuid: originalApp.uuid,
+              fromRevisionId: currentRevision.revisionNumber,
+              toRevisionId: revisionNumber,
+            );
+            LoggerService.debug('AI edit: Successfully copied dependencies to revision $revisionNumber');
+          } else {
+            LoggerService.warning('AI edit: Current revision not found: ${originalApp.selectedRevisionId}');
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to copy dependencies for AI edit: $e');
+          // Don't rethrow - the revision creation should still succeed
+        }
+      } else {
+        LoggerService.warning('AI edit: No selectedRevisionId found in originalApp');
+      }
+      
+      // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(
         selectedRevisionId: revision.id,
-        htmlContent: newHtmlContent,
         updatedAt: DateTime.now(),
       );
       await databaseService.updateUserApp(updatedApp);
@@ -435,6 +527,97 @@ IMPORTANT - REQUIREMENTS:
          * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
+     Param format: array of note objects with the following structure:
+       - title: string (required) - Note title
+       - content: string (required) - Note content
+       - type: string (required) - 'note' or 'task'
+       - subNotes: array (optional) - Array of subnote objects with:
+         * name: string (required) - Subnote name
+         * content: string (optional) - Subnote content
+         * isCompleted: boolean (optional, default: false) - Completion status
+       - attachments: array (optional) - Array of attachment objects:
+         * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+         * Base64: object with:
+           - type: 'base64' (required)
+           - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+           - fileName: string (required) - Original filename (e.g., 'image.jpg')
+       - For tasks only:
+         * scheduledAt: string (optional) - ISO date string when task is scheduled to start
+         * completeBy: string (optional) - ISO date string when task needs to be completed
+         * status: string (optional, default: 'todo') - 'todo', 'in_progress', 'complete', 'abandoned'
+         * completionPercentage: number (optional, default: 0.0) - 0.0 to 1.0
+         * pinned: boolean (optional, default: false) - Whether note is pinned
+         * isArchived: boolean (optional, default: false) - Whether note is archived
+     Response format: {success: boolean, savedCount?: number, error?: string}
+
+   CORRECT saveNotes Usage Examples:
+   ```javascript
+   // Basic note creation
+   const result1 = await Synapse.saveNotes([
+     {
+       title: 'My Note',
+       content: 'Note content',
+       type: 'note',
+     }
+   ]);
+   
+   // Note with subnotes and file attachments
+   const result2 = await Synapse.saveNotes([
+     {
+       title: 'Project Planning',
+       content: 'Planning document for new project',
+       type: 'note',
+       subNotes: [
+         {
+           name: 'Research Phase',
+           content: 'Gather requirements and analyze market',
+           isCompleted: false
+         },
+         {
+           name: 'Design Phase',
+           content: 'Create wireframes and mockups',
+           isCompleted: true
+         }
+       ],
+       attachments: ['/path/to/existing/file.pdf']
+     }
+   ]);
+   
+   // Task with base64 attachment
+   const result3 = await Synapse.saveNotes([
+     {
+       title: 'Review Document',
+       content: 'Review the attached document',
+       type: 'task',
+       subNotes: [
+         {
+           name: 'Read Document',
+           content: 'Read through the entire document',
+           isCompleted: false
+         },
+         {
+           name: 'Write Summary',
+           content: 'Write a summary of key points',
+           isCompleted: false
+         }
+       ],
+       attachments: [
+         {
+           type: 'base64',
+           data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+           fileName: 'document.jpg'
+         }
+       ],
+       scheduledAt: '2024-01-15T09:00:00.000Z',
+       completeBy: '2024-01-20T17:00:00.000Z',
+       status: 'todo',
+       completionPercentage: 0.0,
+       pinned: true,
+       isArchived: false
+     }
+   ]);
+   ```
 
    CORRECT chatAI Usage Examples:
    ```javascript
@@ -573,6 +756,97 @@ IMPORTANT - REQUIREMENTS:
          * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
+     Param format: array of note objects with the following structure:
+       - title: string (required) - Note title
+       - content: string (required) - Note content
+       - type: string (required) - 'note' or 'task'
+       - subNotes: array (optional) - Array of subnote objects with:
+         * name: string (required) - Subnote name
+         * content: string (optional) - Subnote content
+         * isCompleted: boolean (optional, default: false) - Completion status
+       - attachments: array (optional) - Array of attachment objects:
+         * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+         * Base64: object with:
+           - type: 'base64' (required)
+           - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+           - fileName: string (required) - Original filename (e.g., 'image.jpg')
+       - For tasks only:
+         * scheduledAt: string (optional) - ISO date string when task is scheduled to start
+         * completeBy: string (optional) - ISO date string when task needs to be completed
+         * status: string (optional, default: 'todo') - 'todo', 'in_progress', 'complete', 'abandoned'
+         * completionPercentage: number (optional, default: 0.0) - 0.0 to 1.0
+         * pinned: boolean (optional, default: false) - Whether note is pinned
+         * isArchived: boolean (optional, default: false) - Whether note is archived
+     Response format: {success: boolean, savedCount?: number, error?: string}
+
+   CORRECT saveNotes Usage Examples:
+   ```javascript
+   // Basic note creation
+   const result1 = await Synapse.saveNotes([
+     {
+       title: 'My Note',
+       content: 'Note content',
+       type: 'note',
+     }
+   ]);
+   
+   // Note with subnotes and file attachments
+   const result2 = await Synapse.saveNotes([
+     {
+       title: 'Project Planning',
+       content: 'Planning document for new project',
+       type: 'note',
+       subNotes: [
+         {
+           name: 'Research Phase',
+           content: 'Gather requirements and analyze market',
+           isCompleted: false
+         },
+         {
+           name: 'Design Phase',
+           content: 'Create wireframes and mockups',
+           isCompleted: true
+         }
+       ],
+       attachments: ['/path/to/existing/file.pdf']
+     }
+   ]);
+   
+   // Task with base64 attachment
+   const result3 = await Synapse.saveNotes([
+     {
+       title: 'Review Document',
+       content: 'Review the attached document',
+       type: 'task',
+       subNotes: [
+         {
+           name: 'Read Document',
+           content: 'Read through the entire document',
+           isCompleted: false
+         },
+         {
+           name: 'Write Summary',
+           content: 'Write a summary of key points',
+           isCompleted: false
+         }
+       ],
+       attachments: [
+         {
+           type: 'base64',
+           data: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
+           fileName: 'document.jpg'
+         }
+       ],
+       scheduledAt: '2024-01-15T09:00:00.000Z',
+       completeBy: '2024-01-20T17:00:00.000Z',
+       status: 'todo',
+       completionPercentage: 0.0,
+       pinned: true,
+       isArchived: false
+     }
+   ]);
+   ```
 
    CORRECT chatAI Usage Examples:
    ```javascript

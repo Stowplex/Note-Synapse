@@ -849,6 +849,40 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<AppRevision> saveManualCodeEdit({
+    required UserApp originalApp,
+    required String newCode,
+    List<String>? attachmentPaths,
+  }) async {
+    try {
+      final revision = await UserAppService.saveManualCodeEdit(
+        originalApp: originalApp,
+        newCode: newCode,
+        attachmentPaths: attachmentPaths,
+      );
+      
+      // Update the app in our local list
+      final appIndex = _userApps.indexWhere((app) => app.id == originalApp.id);
+      if (appIndex != -1) {
+        final updatedApp = await _databaseService.getUserApp(originalApp.id);
+        if (updatedApp != null) {
+          _userApps[appIndex] = updatedApp;
+        }
+      }
+      
+      // Clear and refresh revisions cache for this app
+      clearAppRevisionsCache(originalApp.id);
+      await refreshAppRevisions(originalApp.id);
+      
+      _error = null;
+      return revision;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> deleteUserApp(String appId) async {
     try {
       await UserAppService.deleteUserApp(appId);
@@ -990,15 +1024,32 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteAppRevision(String revisionId) async {
     try {
+      // Find which app this revision belonged to before deletion
+      String? appId;
+      for (final id in _appRevisions.keys) {
+        final revisions = _appRevisions[id]!;
+        if (revisions.any((r) => r.id == revisionId)) {
+          appId = id;
+          break;
+        }
+      }
+      
+      if (appId == null) {
+        throw Exception('Revision not found in any app');
+      }
+      
       await UserAppService.deleteAppRevision(revisionId);
       
-      // Find which app this revision belonged to and clear its cache
-      for (final appId in _appRevisions.keys) {
-        final revisions = _appRevisions[appId]!;
-        if (revisions.any((r) => r.id == revisionId)) {
-          clearAppRevisionsCache(appId);
-          await refreshAppRevisions(appId);
-          break;
+      // Clear and refresh revisions cache for this app
+      clearAppRevisionsCache(appId);
+      await refreshAppRevisions(appId);
+      
+      // Also refresh the app data in case the pinned revision changed
+      final updatedApp = await _databaseService.getUserApp(appId);
+      if (updatedApp != null) {
+        final appIndex = _userApps.indexWhere((app) => app.id == appId);
+        if (appIndex != -1) {
+          _userApps[appIndex] = updatedApp;
         }
       }
       

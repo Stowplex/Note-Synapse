@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../services/logger_service.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
+import 'import_app_screen.dart';
+import 'export_app_screen.dart';
 import 'note_selection_dialog.dart';
 
 class UserAppsListScreen extends StatefulWidget {
@@ -19,6 +23,8 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   String? _editingAppId;
   final TextEditingController _editingController = TextEditingController();
   final FocusNode _editingFocusNode = FocusNode();
+  String? _selectedYamlFile;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -116,12 +122,33 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
               ? _buildEmptyState(context)
               : _buildAppsList(context, appProvider),
           floatingActionButton: FloatingActionButton(
-            onPressed: () => _navigateToCreateApp(context),
+            onPressed: () => _showAddAppMenu(context),
             child: const Icon(Icons.add),
           ),
         );
       },
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Show error message if there's one
+    if (_errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_errorMessage!),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          setState(() {
+            _errorMessage = null; // Clear the error
+          });
+        }
+      });
+    }
   }
 
   Widget _buildWebViewNotSupportedScreen(BuildContext context) {
@@ -189,7 +216,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => _navigateToCreateApp(context),
+              onPressed: () => _showAddAppMenu(context),
               icon: const Icon(Icons.add),
               label: Text(l10n.createNewApp),
             ),
@@ -284,6 +311,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                     ),
                   ),
                   PopupMenuItem<String>(
+                    value: 'export',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.file_download),
+                        const SizedBox(width: 8),
+                        Text(l10n.exportApp),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -301,6 +338,36 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
+  void _showAddAppMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: Text(AppLocalizations.of(context)!.createNewApp),
+              onTap: () {
+                Navigator.pop(context);
+                _navigateToCreateApp(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_upload),
+              title: Text(AppLocalizations.of(context)!.importApp),
+              onTap: () {
+                Navigator.pop(context);
+                _importApp(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _navigateToCreateApp(BuildContext context) {
     Navigator.push(
       context,
@@ -308,6 +375,66 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
         builder: (context) => const UserAppCreationScreen(),
       ),
     );
+  }
+
+  Future<void> _importApp(BuildContext context) async {
+    try {
+      LoggerService.debug('Starting file picker...');
+      
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+
+      LoggerService.debug('File picker result: $result');
+      
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        
+        if (file.path != null) {
+          LoggerService.debug('Selected file: ${file.name}, path: ${file.path}');
+          
+          // Store the file path and trigger navigation in the next frame
+          _selectedYamlFile = file.path!;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _navigateToImportScreen();
+            }
+          });
+        } else {
+          LoggerService.debug('File path is null');
+          setState(() {
+            _errorMessage = 'File path is null';
+          });
+        }
+      } else {
+        LoggerService.debug('No file selected or result is null');
+        setState(() {
+          _errorMessage = 'No file selected or result is null';
+        });
+      }
+    } catch (e) {
+      LoggerService.error('Error in file picker: $e');
+      setState(() {
+        _errorMessage = 'Error selecting file: $e';
+      });
+    }
+  }
+
+  void _navigateToImportScreen() {
+    if (_selectedYamlFile != null) {
+      LoggerService.debug('Navigating to ImportAppScreen with file: $_selectedYamlFile');
+      final filePath = _selectedYamlFile!; // Store the path before clearing
+      _selectedYamlFile = null; // Clear before navigation
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ImportAppScreen(
+            yamlFilePath: filePath,
+          ),
+        ),
+      );
+    }
   }
 
   void _navigateToViewApp(BuildContext context, UserApp app) {
@@ -334,10 +461,22 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
+  void _navigateToExportApp(BuildContext context, UserApp app) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExportAppScreen(app: app),
+      ),
+    );
+  }
+
   void _handleMenuAction(BuildContext context, String action, UserApp app, AppProvider appProvider) {
     switch (action) {
       case 'edit':
         _navigateToEditApp(context, app);
+        break;
+      case 'export':
+        _navigateToExportApp(context, app);
         break;
       case 'delete':
         _showDeleteDialog(context, app, appProvider);

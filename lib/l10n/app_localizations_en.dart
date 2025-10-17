@@ -1261,7 +1261,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creatingApp => 'Creating app...';
 
   @override
-  String get appCreatedSuccessfully => 'App created successfully!';
+  String get appCreatedSuccessfully => 'App created successfully';
 
   @override
   String get appCreationFailed => 'App creation failed';
@@ -1439,4 +1439,156 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get error => 'Error';
+
+  @override
+  String get importApp => 'Import App';
+
+  @override
+  String get viewApp => 'View App';
+
+  @override
+  String get exportApp => 'Export App';
+
+  @override
+  String get exportAppDescription =>
+      'Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.';
+
+  @override
+  String get nameRequired => 'Name is required';
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get description => 'Description';
+
+  @override
+  String get author => 'Author';
+
+  @override
+  String get license => 'License';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get private => 'Private';
+
+  @override
+  String get appExportedSuccessfully => 'App exported successfully';
+
+  @override
+  String errorExportingApp(Object error) {
+    return 'Error exporting app: $error';
+  }
+
+  @override
+  String get importProgress => 'Import Progress';
+
+  @override
+  String get importLog => 'Import Log';
+
+  @override
+  String get copyLog => 'Copy log';
+
+  @override
+  String get logCopiedToClipboard => 'Log copied to clipboard';
+
+  @override
+  String importingFromFile(Object filePath) {
+    return 'Importing from File: $filePath';
+  }
+
+  @override
+  String downloading(Object item) {
+    return 'Downloading: $item';
+  }
+
+  @override
+  String downloaded(Object item) {
+    return 'Downloaded: $item';
+  }
+
+  @override
+  String failedToDownload(Object item, Object status) {
+    return 'Failed to download: $item (Status: $status)';
+  }
+
+  @override
+  String errorDownloading(Object error, Object item) {
+    return 'Error downloading $item: $error';
+  }
+
+  @override
+  String get importComplete => 'Import complete!';
+
+  @override
+  String get importCompletedSuccessfully => 'Import completed successfully!';
+
+  @override
+  String get readingYamlFile => 'Reading YAML file...';
+
+  @override
+  String get validatingYamlStructure => 'Validating YAML structure...';
+
+  @override
+  String get processingAppData => 'Processing app data...';
+
+  @override
+  String get checkingForExistingApp => 'Checking for existing app...';
+
+  @override
+  String get creatingNewApp => 'Creating new app...';
+
+  @override
+  String get downloadingLibraries => 'Downloading libraries...';
+
+  @override
+  String get yamlFileReadSuccessfully => 'YAML file read successfully';
+
+  @override
+  String get yamlStructureValidated => 'YAML structure validated';
+
+  @override
+  String get appDataExtracted => 'App data extracted';
+
+  @override
+  String processingLibrary(Object libraryName) {
+    return 'Processing library: $libraryName';
+  }
+
+  @override
+  String downloadingLibrary(Object libraryName) {
+    return 'Downloading library: $libraryName...';
+  }
+
+  @override
+  String downloadingDependency(Object fileName) {
+    return 'Downloading: $fileName...';
+  }
+
+  @override
+  String get errorYamlFilePathEmpty => 'Error: YAML file path is empty';
+
+  @override
+  String get errorInvalidYamlFormat =>
+      'Error: Invalid YAML format - expected a map';
+
+  @override
+  String get errorMissingRequiredFields =>
+      'Error: Missing required fields in YAML';
+
+  @override
+  String get errorAppAlreadyExists =>
+      'Error: App with this UUID already exists';
+
+  @override
+  String errorCreatingApp(Object error) {
+    return 'Error creating app: $error';
+  }
+
+  @override
+  String errorImportingApp(Object error) {
+    return 'Error importing app: $error';
+  }
 }

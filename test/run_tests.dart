@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/models/relationship.dart';
-import 'package:note_synapse/models/ai_interaction.dart';
 import 'package:note_synapse/models/tag.dart';
 
 void main() {
