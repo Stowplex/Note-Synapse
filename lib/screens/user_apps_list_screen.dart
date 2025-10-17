@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../services/logger_service.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
@@ -378,33 +379,21 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   Future<void> _importApp(BuildContext context) async {
     try {
-      print('DEBUG: Starting file picker...');
+      LoggerService.debug('Starting file picker...');
       
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
       );
 
-      print('DEBUG: File picker result: $result');
+      LoggerService.debug('File picker result: $result');
       
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        print('DEBUG: Selected file: ${file.name}, path: ${file.path}');
         
         if (file.path != null) {
-          // Check if it's a YAML file
-          final fileName = file.name.toLowerCase();
-          print('DEBUG: File name (lowercase): $fileName');
+          LoggerService.debug('Selected file: ${file.name}, path: ${file.path}');
           
-          if (!fileName.endsWith('.yaml') && !fileName.endsWith('.yml')) {
-            print('DEBUG: File is not YAML');
-            setState(() {
-              _errorMessage = 'Please select a YAML file (.yaml or .yml)';
-            });
-            return;
-          }
-          
-          print('DEBUG: File is YAML, storing file path for navigation');
           // Store the file path and trigger navigation in the next frame
           _selectedYamlFile = file.path!;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -413,13 +402,19 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             }
           });
         } else {
-          print('DEBUG: File path is null');
+          LoggerService.debug('File path is null');
+          setState(() {
+            _errorMessage = 'File path is null';
+          });
         }
       } else {
-        print('DEBUG: No file selected or result is null');
+        LoggerService.debug('No file selected or result is null');
+        setState(() {
+          _errorMessage = 'No file selected or result is null';
+        });
       }
     } catch (e) {
-      print('DEBUG: Error in file picker: $e');
+      LoggerService.error('Error in file picker: $e');
       setState(() {
         _errorMessage = 'Error selecting file: $e';
       });
@@ -428,7 +423,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   void _navigateToImportScreen() {
     if (_selectedYamlFile != null) {
-      print('DEBUG: Navigating to ImportAppScreen with file: $_selectedYamlFile');
+      LoggerService.debug('Navigating to ImportAppScreen with file: $_selectedYamlFile');
       final filePath = _selectedYamlFile!; // Store the path before clearing
       _selectedYamlFile = null; // Clear before navigation
       Navigator.push(

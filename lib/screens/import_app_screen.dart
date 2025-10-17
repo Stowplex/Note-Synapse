@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yaml/yaml.dart';
 import 'package:http/http.dart' as http;
@@ -20,7 +21,6 @@ class ImportAppScreen extends StatefulWidget {
 
   @override
   State<ImportAppScreen> createState() {
-    print('DEBUG: ImportAppScreen createState called');
     return _ImportAppScreenState();
   }
 }
@@ -30,13 +30,13 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   double _progress = 0.0;
   bool _isComplete = false;
   bool _hasError = false;
-  List<String> _progressSteps = [];
+  final List<String> _progressSteps = [];
   UserApp? _importedApp;
 
   @override
   void initState() {
     super.initState();
-    print('DEBUG: ImportAppScreen initState called with file: ${widget.yamlFilePath}');
+    LoggerService.debug('ImportAppScreen initState called with file: ${widget.yamlFilePath}');
     
     if (widget.yamlFilePath.isEmpty) {
       setState(() {
@@ -349,7 +349,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       setState(() {
         _currentStatus = 'Downloading library: $libraryName...';
         _progress = 0.6 + (0.2 * (i + 1) / libraries.length);
-        _progressSteps.add('→ Processing library: $libraryName');
+        _progressSteps.add('Downloading: $libraryName');
       });
 
       // Create library entry
@@ -377,6 +377,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         setState(() {
           _currentStatus = 'Downloading: ${Uri.parse(link).pathSegments.last}...';
           _progress = 0.6 + (0.2 * (i + 1) / libraries.length) + (0.1 * (j + 1) / dependencies.length);
+          _progressSteps.add('Downloading: ${Uri.parse(link).pathSegments.last}');
         });
 
         try {
@@ -411,36 +412,152 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('DEBUG: ImportAppScreen build called');
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Import App'),
-        leading: _isComplete || _hasError
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
-              )
-            : null,
+        automaticallyImplyLeading: false,
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Import App Screen'),
-            const SizedBox(height: 20),
-            Text('File: ${widget.yamlFilePath}'),
-            const SizedBox(height: 20),
-            Text('Status: $_currentStatus'),
-            const SizedBox(height: 20),
-            Text('Progress: ${(_progress * 100).toInt()}%'),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+            // Progress section
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Import Progress',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(
+                      value: _progress,
+                      backgroundColor: Colors.grey[300],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        _hasError ? Colors.red : Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${(_progress * 100).toInt()}%',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _currentStatus,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Log section
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Import Log',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.copy),
+                            onPressed: () => _copyLogToClipboard(),
+                            tooltip: 'Copy log',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[700]!),
+                          ),
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              _getLogContent(),
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Close button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Icon(
+                  _isComplete && !_hasError ? Icons.check : Icons.close,
+                  color: _isComplete && !_hasError ? Colors.white : Colors.white,
+                ),
+                label: Text(
+                  'Close ${_isComplete && !_hasError ? '✓' : '✗'}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isComplete && !_hasError ? Colors.green : Colors.red,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _getLogContent() {
+    final buffer = StringBuffer();
+    buffer.writeln('Importing from File: ${widget.yamlFilePath}');
+    buffer.writeln('');
+    
+    for (final step in _progressSteps) {
+      buffer.writeln(step);
+    }
+    
+    if (_hasError) {
+      buffer.writeln('');
+      buffer.writeln('Error: $_currentStatus');
+    } else if (_isComplete) {
+      buffer.writeln('');
+      buffer.writeln('Import complete!');
+    }
+    
+    return buffer.toString();
+  }
+
+  void _copyLogToClipboard() {
+    Clipboard.setData(ClipboardData(text: _getLogContent()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Log copied to clipboard'),
+        duration: Duration(seconds: 2),
       ),
     );
   }

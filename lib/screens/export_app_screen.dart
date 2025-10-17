@@ -27,11 +27,20 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
   @override
   void initState() {
     super.initState();
-    final l10n = AppLocalizations.of(context)!;
     _nameController = TextEditingController(text: widget.app.name);
     _descriptionController = TextEditingController(text: widget.app.description);
     _authorController = TextEditingController(text: widget.app.author);
-    _licenseController = TextEditingController(text: widget.app.license.isEmpty ? l10n.private : widget.app.license);
+    _licenseController = TextEditingController(text: widget.app.license);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Set default license text if empty
+    if (widget.app.license.isEmpty && _licenseController.text.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
+      _licenseController.text = l10n.private;
+    }
   }
 
   @override
