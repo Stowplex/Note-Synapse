@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
@@ -684,6 +685,7 @@ class DatabaseService {
         LoggerService.error('Migration to version 16 failed: $e', error: e);
       }
     }
+    
   }
 
   // Migration helper method to create initial revisions for existing apps
@@ -1855,34 +1857,71 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getUserAppLibraryDependencies(int libraryId) async {
     final db = await database;
-    final results = await db.query(
-      'user_app_library_dependencies',
-      where: 'library_id = ?',
-      whereArgs: [libraryId],
-    );
     
-    // Convert Uint8List back to List<int> for consistency
-    return results.map((map) {
+    // Use raw query with chunked BLOB reading to avoid cursor window issues
+    final results = await db.rawQuery('''
+      SELECT id, original_url, local_path, library_id,
+             CASE 
+               WHEN length(bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
+      FROM user_app_library_dependencies 
+      WHERE library_id = ?
+    ''', [libraryId]);
+    
+    final List<Map<String, dynamic>> processedResults = [];
+    for (final map in results) {
       final newMap = Map<String, dynamic>.from(map);
-      if (newMap['bytes'] is Uint8List) {
-        newMap['bytes'] = (newMap['bytes'] as Uint8List).toList();
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (map['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, map['id'] as int);
+          newMap['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${map['id']}: $e', error: e);
+          newMap['bytes'] = <int>[];
+        }
+      } else {
+        newMap['bytes'] = <int>[];
       }
-      return newMap;
-    }).toList();
+      
+      processedResults.add(newMap);
+    }
+    
+    return processedResults;
   }
 
   Future<Map<String, dynamic>?> getUserAppLibraryDependencyByPath(String localPath) async {
     final db = await database;
-    final results = await db.query(
-      'user_app_library_dependencies',
-      where: 'local_path = ?',
-      whereArgs: [localPath],
-    );
+    
+    // Use raw query to avoid cursor window issues
+    final results = await db.rawQuery('''
+      SELECT id, original_url, local_path, library_id,
+             CASE 
+               WHEN length(bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
+      FROM user_app_library_dependencies 
+      WHERE local_path = ?
+    ''', [localPath]);
+    
     if (results.isNotEmpty) {
       final result = Map<String, dynamic>.from(results.first);
-      if (result['bytes'] is Uint8List) {
-        result['bytes'] = (result['bytes'] as Uint8List).toList();
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (result['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          result['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${result['id']}: $e', error: e);
+          result['bytes'] = <int>[];
+        }
+      } else {
+        result['bytes'] = <int>[];
       }
+      
       return result;
     }
     return null;
@@ -1897,18 +1936,78 @@ class DatabaseService {
   Future<Map<String, dynamic>?> getDependencyByAppAndPath(String appUuid, int revisionId, String localPath) async {
     final db = await database;
     final results = await db.rawQuery('''
-      SELECT d.* 
+      SELECT d.id, d.original_url, d.local_path, d.library_id,
+             CASE 
+               WHEN length(d.bytes) > 0 THEN 'BLOB_DATA'
+               ELSE NULL 
+             END as has_blob
       FROM user_app_library_dependencies d
       JOIN user_app_libraries l ON d.library_id = l.id
       WHERE l.app_uuid = ? AND l.revision_id = ? AND d.local_path = ?
     ''', [appUuid, revisionId, localPath]);
+    
     if (results.isNotEmpty) {
       final result = Map<String, dynamic>.from(results.first);
-      if (result['bytes'] is Uint8List) {
-        result['bytes'] = (result['bytes'] as Uint8List).toList();
+      
+      // Read BLOB data in chunks to avoid cursor window issues
+      if (result['has_blob'] != null) {
+        try {
+          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          result['bytes'] = blobData;
+        } catch (e) {
+          LoggerService.error('Failed to read BLOB data for dependency ${result['id']}: $e', error: e);
+          result['bytes'] = <int>[];
+        }
+      } else {
+        result['bytes'] = <int>[];
       }
+      
       return result;
     }
     return null;
+  }
+
+  // Helper method to read BLOB data in chunks to avoid cursor window issues
+  Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
+    const int chunkSize = 1024 * 1024; // 1MB chunks
+    final List<int> allBytes = [];
+    
+    try {
+      // Get the total size of the BLOB
+      final sizeResult = await db.rawQuery('''
+        SELECT length(bytes) as blob_size 
+        FROM user_app_library_dependencies 
+        WHERE id = ?
+      ''', [dependencyId]);
+      
+      if (sizeResult.isEmpty) {
+        return <int>[];
+      }
+      
+      final int totalSize = sizeResult.first['blob_size'] as int;
+      
+      // Read BLOB in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize) 
+            ? totalSize - offset 
+            : chunkSize;
+            
+        final chunkResult = await db.rawQuery('''
+          SELECT substr(bytes, ?, ?) as chunk
+          FROM user_app_library_dependencies 
+          WHERE id = ?
+        ''', [offset + 1, currentChunkSize, dependencyId]);
+        
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as Uint8List;
+          allBytes.addAll(chunk);
+        }
+      }
+      
+      return allBytes;
+    } catch (e) {
+      LoggerService.error('Error reading BLOB in chunks: $e', error: e);
+      return <int>[];
+    }
   }
 }
