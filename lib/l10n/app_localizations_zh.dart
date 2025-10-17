@@ -1242,7 +1242,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creatingApp => '正在创建应用...';
 
   @override
-  String get appCreatedSuccessfully => '应用创建成功！';
+  String get appCreatedSuccessfully => '应用创建成功';
 
   @override
   String get appCreationFailed => '应用创建失败';
@@ -1459,5 +1459,112 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorExportingApp(Object error) {
     return '导出应用时出错：$error';
+  }
+
+  @override
+  String get importProgress => '导入进度';
+
+  @override
+  String get importLog => '导入日志';
+
+  @override
+  String get copyLog => '复制日志';
+
+  @override
+  String get logCopiedToClipboard => '日志已复制到剪贴板';
+
+  @override
+  String importingFromFile(Object filePath) {
+    return '从文件导入：$filePath';
+  }
+
+  @override
+  String downloading(Object item) {
+    return '下载中：$item';
+  }
+
+  @override
+  String downloaded(Object item) {
+    return '已下载：$item';
+  }
+
+  @override
+  String failedToDownload(Object item, Object status) {
+    return '下载失败：$item（状态：$status）';
+  }
+
+  @override
+  String errorDownloading(Object error, Object item) {
+    return '下载 $item 时出错：$error';
+  }
+
+  @override
+  String get importComplete => '导入完成！';
+
+  @override
+  String get importCompletedSuccessfully => '导入成功完成！';
+
+  @override
+  String get readingYamlFile => '读取 YAML 文件...';
+
+  @override
+  String get validatingYamlStructure => '验证 YAML 结构...';
+
+  @override
+  String get processingAppData => '处理应用数据...';
+
+  @override
+  String get checkingForExistingApp => '检查现有应用...';
+
+  @override
+  String get creatingNewApp => '创建新应用...';
+
+  @override
+  String get downloadingLibraries => '下载库文件...';
+
+  @override
+  String get yamlFileReadSuccessfully => 'YAML 文件读取成功';
+
+  @override
+  String get yamlStructureValidated => 'YAML 结构验证通过';
+
+  @override
+  String get appDataExtracted => '应用数据已提取';
+
+  @override
+  String processingLibrary(Object libraryName) {
+    return '处理库：$libraryName';
+  }
+
+  @override
+  String downloadingLibrary(Object libraryName) {
+    return '下载库：$libraryName...';
+  }
+
+  @override
+  String downloadingDependency(Object fileName) {
+    return '下载中：$fileName...';
+  }
+
+  @override
+  String get errorYamlFilePathEmpty => '错误：YAML 文件路径为空';
+
+  @override
+  String get errorInvalidYamlFormat => '错误：无效的 YAML 格式 - 期望映射';
+
+  @override
+  String get errorMissingRequiredFields => '错误：YAML 中缺少必需字段';
+
+  @override
+  String get errorAppAlreadyExists => '错误：具有此 UUID 的应用已存在';
+
+  @override
+  String errorCreatingApp(Object error) {
+    return '创建应用时出错：$error';
+  }
+
+  @override
+  String errorImportingApp(Object error) {
+    return '导入应用时出错：$error';
   }
 }

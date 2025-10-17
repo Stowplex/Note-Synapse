@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yaml/yaml.dart';
 import 'package:http/http.dart' as http;
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
@@ -40,9 +41,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     
     if (widget.yamlFilePath.isEmpty) {
       setState(() {
-        _currentStatus = 'Error: YAML file path is empty';
+        _currentStatus = AppLocalizations.of(context)!.errorYamlFilePathEmpty;
         _hasError = true;
-        _progressSteps.add('✗ Error: YAML file path is empty');
+        _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorYamlFilePathEmpty}');
       });
       return;
     }
@@ -53,7 +54,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   Future<void> _importApp() async {
     try {
       setState(() {
-        _currentStatus = 'Reading YAML file...';
+        _currentStatus = AppLocalizations.of(context)!.readingYamlFile;
         _progress = 0.1;
       });
 
@@ -71,31 +72,31 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
           }
         });
       } else {
-        throw Exception('Invalid YAML format: expected a map');
+        throw Exception(AppLocalizations.of(context)!.errorInvalidYamlFormat);
       }
 
       setState(() {
-        _currentStatus = 'Validating YAML structure...';
+        _currentStatus = AppLocalizations.of(context)!.validatingYamlStructure;
         _progress = 0.2;
-        _progressSteps.add('✓ YAML file read successfully');
+        _progressSteps.add('✓ ${AppLocalizations.of(context)!.yamlFileReadSuccessfully}');
       });
 
       // Validate YAML structure
       _validateYamlStructure(parsedData);
 
       setState(() {
-        _currentStatus = 'Processing app data...';
+        _currentStatus = AppLocalizations.of(context)!.processingAppData;
         _progress = 0.3;
-        _progressSteps.add('✓ YAML structure validated');
+        _progressSteps.add('✓ ${AppLocalizations.of(context)!.yamlStructureValidated}');
       });
 
       // Extract app data
       final appData = _extractAppData(parsedData);
 
       setState(() {
-        _currentStatus = 'Checking for existing app...';
+        _currentStatus = AppLocalizations.of(context)!.checkingForExistingApp;
         _progress = 0.4;
-        _progressSteps.add('✓ App data extracted');
+        _progressSteps.add('✓ ${AppLocalizations.of(context)!.appDataExtracted}');
       });
 
       // Check if app with same UUID exists
@@ -118,9 +119,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         await _createNewRevision(existingApp, appData, databaseService);
       } else {
         setState(() {
-          _currentStatus = 'Creating new app...';
+          _currentStatus = AppLocalizations.of(context)!.creatingNewApp;
           _progress = 0.5;
-          _progressSteps.add('✓ Creating new app');
+          _progressSteps.add('✓ ${AppLocalizations.of(context)!.appCreatedSuccessfully}');
         });
 
         // Create new app
@@ -156,18 +157,18 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       await appProvider.loadData();
 
       setState(() {
-        _currentStatus = 'Import completed successfully!';
+        _currentStatus = AppLocalizations.of(context)!.importCompletedSuccessfully;
         _progress = 1.0;
         _isComplete = true;
-        _progressSteps.add('✓ Import completed successfully');
+        _progressSteps.add('✓ ${AppLocalizations.of(context)!.importCompletedSuccessfully}');
       });
 
     } catch (e) {
       LoggerService.error('Error importing app: $e', error: e);
       setState(() {
-        _currentStatus = 'Import failed';
+        _currentStatus = AppLocalizations.of(context)!.errorImportingApp(e.toString());
         _hasError = true;
-        _progressSteps.add('✗ Import failed: $e');
+        _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorImportingApp(e.toString())}');
       });
     }
   }
@@ -177,7 +178,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     
     for (final field in requiredFields) {
       if (!yamlData.containsKey(field)) {
-        throw Exception('Missing required field: $field');
+        throw Exception(AppLocalizations.of(context)!.errorMissingRequiredFields);
       }
     }
 
@@ -347,9 +348,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       final instructions = library['instructions']?.toString();
 
       setState(() {
-        _currentStatus = 'Downloading library: $libraryName...';
+        _currentStatus = AppLocalizations.of(context)!.downloadingLibrary(libraryName);
         _progress = 0.6 + (0.2 * (i + 1) / libraries.length);
-        _progressSteps.add('Downloading: $libraryName');
+        _progressSteps.add(AppLocalizations.of(context)!.downloading(libraryName));
       });
 
       // Create library entry
@@ -375,9 +376,10 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         final link = dependency['link']?.toString() ?? '';
 
         setState(() {
-          _currentStatus = 'Downloading: ${Uri.parse(link).pathSegments.last}...';
+          final fileName = Uri.parse(link).pathSegments.last;
+          _currentStatus = AppLocalizations.of(context)!.downloadingDependency(fileName);
           _progress = 0.6 + (0.2 * (i + 1) / libraries.length) + (0.1 * (j + 1) / dependencies.length);
-          _progressSteps.add('Downloading: ${Uri.parse(link).pathSegments.last}');
+          _progressSteps.add(AppLocalizations.of(context)!.downloading(fileName));
         });
 
         try {
@@ -394,16 +396,16 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
             );
 
             setState(() {
-              _progressSteps.add('  ✓ Downloaded: $localPath');
+              _progressSteps.add('  ✓ ${AppLocalizations.of(context)!.downloaded(localPath)}');
             });
           } else {
             setState(() {
-              _progressSteps.add('  ✗ Failed to download: $link (Status: ${response.statusCode})');
+              _progressSteps.add('  ✗ ${AppLocalizations.of(context)!.failedToDownload(link, response.statusCode.toString())}');
             });
           }
         } catch (e) {
           setState(() {
-            _progressSteps.add('  ✗ Error downloading $link: $e');
+            _progressSteps.add('  ✗ ${AppLocalizations.of(context)!.errorDownloading(link, e.toString())}');
           });
         }
       }
@@ -412,9 +414,11 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Import App'),
+        title: Text(l10n.importApp),
         automaticallyImplyLeading: false,
       ),
       body: Padding(
@@ -429,7 +433,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Import Progress',
+                      l10n.importProgress,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 12),
@@ -468,13 +472,13 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Import Log',
+                            l10n.importLog,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           IconButton(
                             icon: const Icon(Icons.copy),
                             onPressed: () => _copyLogToClipboard(),
-                            tooltip: 'Copy log',
+                            tooltip: l10n.copyLog,
                           ),
                         ],
                       ),
@@ -517,7 +521,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
                   color: _isComplete && !_hasError ? Colors.white : Colors.white,
                 ),
                 label: Text(
-                  'Close ${_isComplete && !_hasError ? '✓' : '✗'}',
+                  '${l10n.close} ${_isComplete && !_hasError ? '✓' : '✗'}',
                   style: const TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -533,8 +537,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   }
 
   String _getLogContent() {
+    final l10n = AppLocalizations.of(context)!;
     final buffer = StringBuffer();
-    buffer.writeln('Importing from File: ${widget.yamlFilePath}');
+    buffer.writeln(l10n.importingFromFile(widget.yamlFilePath));
     buffer.writeln('');
     
     for (final step in _progressSteps) {
@@ -543,21 +548,22 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     
     if (_hasError) {
       buffer.writeln('');
-      buffer.writeln('Error: $_currentStatus');
+      buffer.writeln('${l10n.error}: $_currentStatus');
     } else if (_isComplete) {
       buffer.writeln('');
-      buffer.writeln('Import complete!');
+      buffer.writeln(l10n.importComplete);
     }
     
     return buffer.toString();
   }
 
   void _copyLogToClipboard() {
+    final l10n = AppLocalizations.of(context)!;
     Clipboard.setData(ClipboardData(text: _getLogContent()));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Log copied to clipboard'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(l10n.logCopiedToClipboard),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

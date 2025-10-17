@@ -2399,7 +2399,7 @@ abstract class AppLocalizations {
   /// No description provided for @appCreatedSuccessfully.
   ///
   /// In en, this message translates to:
-  /// **'App created successfully!'**
+  /// **'App created successfully'**
   String get appCreatedSuccessfully;
 
   /// No description provided for @appCreationFailed.
@@ -2803,6 +2803,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error exporting app: {error}'**
   String errorExportingApp(Object error);
+
+  /// No description provided for @importProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Progress'**
+  String get importProgress;
+
+  /// No description provided for @importLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Log'**
+  String get importLog;
+
+  /// No description provided for @copyLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy log'**
+  String get copyLog;
+
+  /// No description provided for @logCopiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Log copied to clipboard'**
+  String get logCopiedToClipboard;
+
+  /// No description provided for @importingFromFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing from File: {filePath}'**
+  String importingFromFile(Object filePath);
+
+  /// No description provided for @downloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading: {item}'**
+  String downloading(Object item);
+
+  /// No description provided for @downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded: {item}'**
+  String downloaded(Object item);
+
+  /// No description provided for @failedToDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download: {item} (Status: {status})'**
+  String failedToDownload(Object item, Object status);
+
+  /// No description provided for @errorDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Error downloading {item}: {error}'**
+  String errorDownloading(Object error, Object item);
+
+  /// No description provided for @importComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Import complete!'**
+  String get importComplete;
+
+  /// No description provided for @importCompletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Import completed successfully!'**
+  String get importCompletedSuccessfully;
+
+  /// No description provided for @readingYamlFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading YAML file...'**
+  String get readingYamlFile;
+
+  /// No description provided for @validatingYamlStructure.
+  ///
+  /// In en, this message translates to:
+  /// **'Validating YAML structure...'**
+  String get validatingYamlStructure;
+
+  /// No description provided for @processingAppData.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing app data...'**
+  String get processingAppData;
+
+  /// No description provided for @checkingForExistingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for existing app...'**
+  String get checkingForExistingApp;
+
+  /// No description provided for @creatingNewApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating new app...'**
+  String get creatingNewApp;
+
+  /// No description provided for @downloadingLibraries.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading libraries...'**
+  String get downloadingLibraries;
+
+  /// No description provided for @yamlFileReadSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'YAML file read successfully'**
+  String get yamlFileReadSuccessfully;
+
+  /// No description provided for @yamlStructureValidated.
+  ///
+  /// In en, this message translates to:
+  /// **'YAML structure validated'**
+  String get yamlStructureValidated;
+
+  /// No description provided for @appDataExtracted.
+  ///
+  /// In en, this message translates to:
+  /// **'App data extracted'**
+  String get appDataExtracted;
+
+  /// No description provided for @processingLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing library: {libraryName}'**
+  String processingLibrary(Object libraryName);
+
+  /// No description provided for @downloadingLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading library: {libraryName}...'**
+  String downloadingLibrary(Object libraryName);
+
+  /// No description provided for @downloadingDependency.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading: {fileName}...'**
+  String downloadingDependency(Object fileName);
+
+  /// No description provided for @errorYamlFilePathEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: YAML file path is empty'**
+  String get errorYamlFilePathEmpty;
+
+  /// No description provided for @errorInvalidYamlFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Invalid YAML format - expected a map'**
+  String get errorInvalidYamlFormat;
+
+  /// No description provided for @errorMissingRequiredFields.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Missing required fields in YAML'**
+  String get errorMissingRequiredFields;
+
+  /// No description provided for @errorAppAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: App with this UUID already exists'**
+  String get errorAppAlreadyExists;
+
+  /// No description provided for @errorCreatingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error creating app: {error}'**
+  String errorCreatingApp(Object error);
+
+  /// No description provided for @errorImportingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error importing app: {error}'**
+  String errorImportingApp(Object error);
 }
 
 class _AppLocalizationsDelegate
