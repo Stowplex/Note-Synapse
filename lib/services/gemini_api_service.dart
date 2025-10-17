@@ -13,11 +13,183 @@ class GeminiApiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   static const String _model = 'gemini-2.5-flash';
 
+  // Common configuration constants
+  static const Map<String, dynamic> _defaultGenerationConfig = {
+    'temperature': 0.1,
+    'topK': 32,
+    'topP': 1,
+    'maxOutputTokens': 60000,
+  };
+
+  static const Map<String, dynamic> _creativeGenerationConfig = {
+    'temperature': 0.7,
+    'topK': 40,
+    'topP': 0.95,
+    'maxOutputTokens': 60000,
+  };
+
   // Helper method to get API key
   static Future<String?> _getApiKeyWithFallback() async {
     String? apiKey = await SecureStorageService.getApiKey();
     LoggerService.debug('GeminiApiService: Retrieved API key length: ${apiKey?.length ?? 0}');
     return apiKey;
+  }
+
+  // Common request wrapper with error handling
+  static Future<T> _withErrorHandling<T>(
+    String operation,
+    Future<T> Function() operationFunction, {
+    String? requestId,
+  }) async {
+    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    
+    try {
+      return await operationFunction();
+    } catch (e) {
+      LoggerService.error('Error in $operation', error: {
+        'error': e.toString(),
+        'requestId': actualRequestId,
+      });
+      rethrow;
+    }
+  }
+
+  // Common API key validation
+  static Future<String> _validateApiKey({String? requestId}) async {
+    final apiKey = await _getApiKeyWithFallback();
+    if (apiKey == null) {
+      LoggerService.error('API key not found', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+    return apiKey;
+  }
+
+  // Common request body builder
+  static Map<String, dynamic> _buildRequestBody(
+    String prompt,
+    List<PlatformFile>? attachedFiles, {
+    Map<String, dynamic>? generationConfig,
+    List<Map<String, String>>? safetySettings,
+  }) {
+    final today = DateTime.now();
+    final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
+    final enhancedPrompt = prompt + todayContext;
+
+    final parts = <Map<String, dynamic>>[{'text': enhancedPrompt}];
+
+    // Add file attachments if any
+    if (attachedFiles != null && attachedFiles.isNotEmpty) {
+      for (final file in attachedFiles) {
+        if (file.bytes != null) {
+          final base64Data = base64Encode(file.bytes!);
+          final extension = file.name.split('.').last;
+          final mimeType = _getMimeType(extension);
+          
+          parts.add({
+            'inline_data': {
+              'mime_type': mimeType,
+              'data': base64Data,
+            }
+          });
+        }
+      }
+    }
+
+    final requestBody = {
+      'contents': [{'parts': parts}],
+      'generationConfig': generationConfig ?? _defaultGenerationConfig,
+    };
+
+    if (safetySettings != null) {
+      requestBody['safetySettings'] = safetySettings;
+    }
+
+    return requestBody;
+  }
+
+  // Common HTTP request handler
+  static Future<String> _makeRequest(
+    String apiKey,
+    Map<String, dynamic> requestBody, {
+    String? requestId,
+  }) async {
+    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+
+    // Log the request
+    LoggerService.logAiRequest(
+      endpoint: '$_baseUrl/models/$_model:generateContent',
+      headers: {'Content-Type': 'application/json'},
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+    
+    final duration = DateTime.now().difference(startTime);
+
+    // Log the response
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: actualRequestId,
+      duration: duration,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+        final candidate = data['candidates'][0];
+        final content = candidate['content'];
+        
+        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+          final responseText = content['parts'][0]['text'];
+          LoggerService.debug('Gemini API request completed successfully', error: {
+            'responseLength': responseText.length,
+            'requestId': actualRequestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+          return responseText;
+        }
+      }
+      LoggerService.error('No content in Gemini API response', error: {
+        'responseData': data,
+        'requestId': actualRequestId,
+      });
+      throw Exception('No content in Gemini API response');
+    } else {
+      LoggerService.logAiError(
+        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: '$_baseUrl/models/$_model:generateContent',
+        requestId: actualRequestId,
+        duration: duration,
+      );
+      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  // Simplified main request method
+  static Future<String> _makeGeminiRequest(
+    String apiKey,
+    String prompt, {
+    List<PlatformFile>? attachedFiles,
+    Map<String, dynamic>? generationConfig,
+    List<Map<String, String>>? safetySettings,
+    String? requestId,
+  }) async {
+    final requestBody = _buildRequestBody(
+      prompt,
+      attachedFiles,
+      generationConfig: generationConfig,
+      safetySettings: safetySettings,
+    );
+    
+    return await _makeRequest(apiKey, requestBody, requestId: requestId);
   }
 
   // Note Q&A
@@ -27,39 +199,28 @@ class GeminiApiService {
     List<PlatformFile>? attachedFiles,
     bool useOwnKnowledge = false,
   }) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting note Q&A request', error: {
-      'question': question,
-      'contextNotesCount': contextNotes.length,
-      'attachedFilesCount': attachedFiles?.length ?? 0,
-      'requestId': requestId,
+    return await _withErrorHandling('note Q&A', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting note Q&A request', error: {
+        'question': question,
+        'contextNotesCount': contextNotes.length,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
+
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final contextText = await _buildContextFromNotes(contextNotes);
+      final prompt = _buildMultiNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
+      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
+
+      LoggerService.debug('Note Q&A context built', error: {
+        'contextLength': contextText.length,
+        'totalAttachedFiles': allAttachedFiles.length,
+        'requestId': requestId,
+      });
+
+      return await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
     });
-
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for note Q&A', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    final contextText = await _buildContextFromNotes(contextNotes);
-    final prompt = _buildMultiNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
-
-    // Convert note attachments to PlatformFile objects
-    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(contextNotes);
-    
-    // Combine with any additional attached files
-    final allAttachedFiles = <PlatformFile>[];
-    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
-    allAttachedFiles.addAll(noteAttachments);
-
-    LoggerService.debug('Note Q&A context built', error: {
-      'contextLength': contextText.length,
-      'totalAttachedFiles': allAttachedFiles.length,
-      'requestId': requestId,
-    });
-
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
-    return response;
   }
 
   // Note transformation
@@ -68,39 +229,28 @@ class GeminiApiService {
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
   }) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting note transformation request', error: {
-      'noteId': note.id,
-      'noteTitle': note.title,
-      'transformationPrompt': transformationPrompt,
-      'attachedFilesCount': attachedFiles?.length ?? 0,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('note transformation', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting note transformation request', error: {
+        'noteId': note.id,
+        'noteTitle': note.title,
+        'transformationPrompt': transformationPrompt,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for note transformation', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    final prompt = await _buildNoteTransformationPrompt(note, transformationPrompt);
-    
-    // Convert note attachments to PlatformFile objects
-    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles([note]);
-    
-    // Combine with any additional attached files
-    final allAttachedFiles = <PlatformFile>[];
-    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
-    allAttachedFiles.addAll(noteAttachments);
-    
-    LoggerService.debug('Note transformation prompt built', error: {
-      'promptLength': prompt.length,
-      'totalAttachedFiles': allAttachedFiles.length,
-      'requestId': requestId,
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final prompt = await _buildNoteTransformationPrompt(note, transformationPrompt);
+      final allAttachedFiles = await _prepareAttachedFiles([note], attachedFiles);
+      
+      LoggerService.debug('Note transformation prompt built', error: {
+        'promptLength': prompt.length,
+        'totalAttachedFiles': allAttachedFiles.length,
+        'requestId': requestId,
+      });
+      
+      return await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
     });
-    
-    final response = await _makeGeminiRequest(apiKey, prompt, attachedFiles: allAttachedFiles, requestId: requestId);
-    return response;
   }
 
   // New note creation
@@ -109,509 +259,158 @@ class GeminiApiService {
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
   }) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting new note creation request', error: {
-      'prompt': prompt,
-      'contextNotesCount': contextNotes.length,
-      'attachedFilesCount': attachedFiles?.length ?? 0,
-      'requestId': requestId,
+    return await _withErrorHandling('new note creation', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting new note creation request', error: {
+        'prompt': prompt,
+        'contextNotesCount': contextNotes.length,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
+
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final contextText = await _buildContextFromNotes(contextNotes);
+      final aiPrompt = _buildNewNoteCreationPrompt(prompt, contextText);
+      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
+
+      LoggerService.debug('New note creation prompt built', error: {
+        'promptLength': aiPrompt.length,
+        'contextLength': contextText.length,
+        'totalAttachedFiles': allAttachedFiles.length,
+        'requestId': requestId,
+      });
+
+      final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: allAttachedFiles, requestId: requestId);
+      return _parseNewNotesResponse(response);
     });
-
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for new note creation', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    final contextText = await _buildContextFromNotes(contextNotes);
-    final aiPrompt = _buildNewNoteCreationPrompt(prompt, contextText);
-
-    // Convert note attachments to PlatformFile objects
-    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(contextNotes);
-    
-    // Combine with any additional attached files
-    final allAttachedFiles = <PlatformFile>[];
-    if (attachedFiles != null) allAttachedFiles.addAll(attachedFiles);
-    allAttachedFiles.addAll(noteAttachments);
-
-    LoggerService.debug('New note creation prompt built', error: {
-      'promptLength': aiPrompt.length,
-      'contextLength': contextText.length,
-      'totalAttachedFiles': allAttachedFiles.length,
-      'requestId': requestId,
-    });
-
-    final response = await _makeGeminiRequest(apiKey, aiPrompt, attachedFiles: allAttachedFiles, requestId: requestId);
-    return _parseNewNotesResponse(response);
   }
 
   // Audio transcription
   static Future<String> transcribeAudio(String audioFilePath) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting audio transcription request', error: {
-      'audioFilePath': audioFilePath,
-      'requestId': requestId,
-    });
-
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for audio transcription', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    try {
-      final file = File(audioFilePath);
-      if (!await file.exists()) {
-        LoggerService.error('Audio file not found', error: {
-          'audioFilePath': audioFilePath,
-          'requestId': requestId,
-        });
-        throw Exception('Audio file not found');
-      }
-
-      final bytes = await file.readAsBytes();
-      final base64Data = base64Encode(bytes);
-      final fileName = audioFilePath.split('/').last;
-      final extension = fileName.split('.').last.toLowerCase();
-      final mimeType = _getAudioMimeType(extension);
-
-      LoggerService.debug('Audio file processed for transcription', error: {
-        'fileName': fileName,
-        'fileSize': bytes.length,
-        'mimeType': mimeType,
-        'requestId': requestId,
-      });
-
-      final prompt = "Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.";
-
-      final parts = <Map<String, dynamic>>[
-        {'text': prompt},
-        {
-          'inline_data': {
-            'mime_type': mimeType,
-            'data': base64Data,
-          }
-        }
-      ];
-
-      final requestBody = {
-        'contents': [
-          {
-            'parts': parts
-          }
-        ],
-        'generationConfig': {
-          'temperature': 0.1,
-          'topK': 32,
-          'topP': 1,
-          'maxOutputTokens': 60000,
-        }
-      };
-
-      final startTime = DateTime.now();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      );
-      final duration = DateTime.now().difference(startTime);
-
-      LoggerService.logAiResponse(
-        statusCode: response.statusCode,
-        headers: response.headers,
-        responseBody: response.body,
-        requestId: requestId,
-        duration: duration,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          final candidate = data['candidates'][0];
-          final content = candidate['content'];
-          
-          if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-            final transcription = content['parts'][0]['text'].trim();
-            LoggerService.debug('Audio transcription completed', error: {
-              'transcriptionLength': transcription.length,
-              'requestId': requestId,
-            });
-            return transcription;
-          }
-        }
-        LoggerService.error('No transcription content in Gemini API response', error: {
-          'responseData': data,
-          'requestId': requestId,
-        });
-        throw Exception('No transcription content in Gemini API response');
-      } else {
-        LoggerService.logAiError(
-          error: 'Failed to transcribe audio: ${response.statusCode} - ${response.body}',
-          endpoint: '$_baseUrl/models/$_model:generateContent',
-          requestId: requestId,
-          duration: duration,
-        );
-        throw Exception('Failed to transcribe audio: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      LoggerService.error('Error transcribing audio', error: {
-        'error': e.toString(),
+    return await _withErrorHandling('audio transcription', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting audio transcription request', error: {
         'audioFilePath': audioFilePath,
         'requestId': requestId,
       });
-      throw Exception('Error transcribing audio: $e');
-    }
+
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final audioData = await _processAudioFile(audioFilePath, requestId);
+      
+      final prompt = "Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.";
+      
+      final requestBody = _buildAudioRequestBody(prompt, audioData['base64Data'], audioData['mimeType']);
+      
+      final response = await _makeRequest(apiKey, requestBody, requestId: requestId);
+      
+      LoggerService.debug('Audio transcription completed', error: {
+        'transcriptionLength': response.length,
+        'requestId': requestId,
+      });
+      
+      return response.trim();
+    });
   }
 
   // Audio summarization
   static Future<String> summarizeAudio(String audioFilePath, {String? context}) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting audio summarization request', error: {
-      'audioFilePath': audioFilePath,
-      'context': context,
-      'requestId': requestId,
-    });
-
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for audio summarization', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    try {
-      final file = File(audioFilePath);
-      if (!await file.exists()) {
-        LoggerService.error('Audio file not found for summarization', error: {
-          'audioFilePath': audioFilePath,
-          'requestId': requestId,
-        });
-        throw Exception('Audio file not found');
-      }
-
-      final bytes = await file.readAsBytes();
-      final base64Data = base64Encode(bytes);
-      final fileName = audioFilePath.split('/').last;
-      final extension = fileName.split('.').last.toLowerCase();
-      final mimeType = _getAudioMimeType(extension);
-
-      LoggerService.debug('Audio file processed for summarization', error: {
-        'fileName': fileName,
-        'fileSize': bytes.length,
-        'mimeType': mimeType,
+    return await _withErrorHandling('audio summarization', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting audio summarization request', error: {
+        'audioFilePath': audioFilePath,
+        'context': context,
         'requestId': requestId,
       });
 
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final audioData = await _processAudioFile(audioFilePath, requestId);
+      
       final contextText = context != null ? "\n\nContext: $context" : "";
       final prompt = "Please listen to the following audio file and provide a concise summary of its main points and key information.$contextText";
+      
+      final requestBody = _buildAudioRequestBody(prompt, audioData['base64Data'], audioData['mimeType'], temperature: 0.3);
+      
+      final response = await _makeRequest(apiKey, requestBody, requestId: requestId);
+      
+      LoggerService.debug('Audio summarization completed', error: {
+        'summaryLength': response.length,
+        'requestId': requestId,
+      });
+      
+      return response.trim();
+    });
+  }
 
-      final parts = <Map<String, dynamic>>[
-        {'text': prompt},
-        {
-          'inline_data': {
-            'mime_type': mimeType,
-            'data': base64Data,
-          }
-        }
-      ];
+  // Helper method to prepare attached files from notes and additional files
+  static Future<List<PlatformFile>> _prepareAttachedFiles(
+    List<Note> notes,
+    List<PlatformFile>? additionalFiles,
+  ) async {
+    final allAttachedFiles = <PlatformFile>[];
+    if (additionalFiles != null) allAttachedFiles.addAll(additionalFiles);
+    
+    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(notes);
+    allAttachedFiles.addAll(noteAttachments);
+    
+    return allAttachedFiles;
+  }
 
-      final requestBody = {
-        'contents': [
-          {
-            'parts': parts
-          }
-        ],
-        'generationConfig': {
-          'temperature': 0.3,
-          'topK': 32,
-          'topP': 1,
-          'maxOutputTokens': 60000,
-        }
-      };
-
-      final startTime = DateTime.now();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      );
-      final duration = DateTime.now().difference(startTime);
-
-      LoggerService.logAiResponse(
-        statusCode: response.statusCode,
-        headers: response.headers,
-        responseBody: response.body,
-        requestId: requestId,
-        duration: duration,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          final candidate = data['candidates'][0];
-          final content = candidate['content'];
-          
-          if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-            final summary = content['parts'][0]['text'].trim();
-            LoggerService.debug('Audio summarization completed', error: {
-              'summaryLength': summary.length,
-              'requestId': requestId,
-            });
-            return summary;
-          }
-        }
-        LoggerService.error('No summary content in Gemini API response', error: {
-          'responseData': data,
-          'requestId': requestId,
-        });
-        throw Exception('No summary content in Gemini API response');
-      } else {
-        LoggerService.logAiError(
-          error: 'Failed to summarize audio: ${response.statusCode} - ${response.body}',
-          endpoint: '$_baseUrl/models/$_model:generateContent',
-          requestId: requestId,
-          duration: duration,
-        );
-        throw Exception('Failed to summarize audio: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      LoggerService.error('Error summarizing audio', error: {
-        'error': e.toString(),
+  // Helper method to process audio files
+  static Future<Map<String, dynamic>> _processAudioFile(String audioFilePath, String requestId) async {
+    final file = File(audioFilePath);
+    if (!await file.exists()) {
+      LoggerService.error('Audio file not found', error: {
         'audioFilePath': audioFilePath,
         'requestId': requestId,
       });
-      throw Exception('Error summarizing audio: $e');
+      throw Exception('Audio file not found');
     }
+
+    final bytes = await file.readAsBytes();
+    final base64Data = base64Encode(bytes);
+    final fileName = audioFilePath.split('/').last;
+    final extension = fileName.split('.').last.toLowerCase();
+    final mimeType = _getAudioMimeType(extension);
+
+    LoggerService.debug('Audio file processed', error: {
+      'fileName': fileName,
+      'fileSize': bytes.length,
+      'mimeType': mimeType,
+      'requestId': requestId,
+    });
+
+    return {
+      'base64Data': base64Data,
+      'mimeType': mimeType,
+    };
   }
 
-  static Future<String> _makeGeminiRequestWithConfig(
-    String apiKey, 
-    String prompt, {
-    List<PlatformFile>? attachedFiles,
+  // Helper method to build audio request body
+  static Map<String, dynamic> _buildAudioRequestBody(
+    String prompt,
+    String base64Data,
+    String mimeType, {
     double? temperature,
-    int? topK,
-    double? topP,
-    String? requestId,
-  }) async {
-    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    
-    // Add today's date context to the prompt
-    final today = DateTime.now();
-    final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
-    final enhancedPrompt = prompt + todayContext;
-
+  }) {
     final parts = <Map<String, dynamic>>[
-      {'text': enhancedPrompt}
-    ];
-
-    // Add file attachments if any
-    if (attachedFiles != null && attachedFiles.isNotEmpty) {
-      for (final file in attachedFiles) {
-        if (file.bytes != null) {
-          // Convert file to base64 for Gemini API
-          final base64Data = base64Encode(file.bytes!);
-          final extension = file.name.split('.').last;
-          final mimeType = _getMimeType(extension);
-          
-          parts.add({
-            'inline_data': {
-              'mime_type': mimeType,
-              'data': base64Data,
-            }
-          });
+      {'text': prompt},
+      {
+        'inline_data': {
+          'mime_type': mimeType,
+          'data': base64Data,
         }
       }
-    }
+    ];
 
-    final requestBody = {
-      'contents': [
-        {
-          'parts': parts
-        }
-      ],
+    return {
+      'contents': [{'parts': parts}],
       'generationConfig': {
         'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': 60000,
-      }
-    };
-
-    // Log the request
-    LoggerService.logAiRequest(
-      endpoint: '$_baseUrl/models/$_model:generateContent',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      requestBody: requestBody,
-      requestId: actualRequestId,
-    );
-
-    final response = await http.post(
-      Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(requestBody),
-    );
-    
-    final duration = DateTime.now().difference(startTime);
-
-    // Log the response
-    LoggerService.logAiResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      responseBody: response.body,
-      requestId: actualRequestId,
-      duration: duration,
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-        final candidate = data['candidates'][0];
-        final content = candidate['content'];
-        
-        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-          final responseText = content['parts'][0]['text'];
-          LoggerService.debug('Gemini API request completed successfully', error: {
-            'responseLength': responseText.length,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-          return responseText;
-        }
-      }
-      LoggerService.error('No content in Gemini API response', error: {
-        'responseData': data,
-        'requestId': actualRequestId,
-      });
-      throw Exception('No content in Gemini API response');
-    } else {
-      LoggerService.logAiError(
-        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
-        endpoint: '$_baseUrl/models/$_model:generateContent',
-        requestId: actualRequestId,
-        duration: duration,
-      );
-      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
-    }
-  }
-
-  static Future<String> _makeGeminiRequest(
-    String apiKey, 
-    String prompt, {
-    List<PlatformFile>? attachedFiles,
-    String? requestId,
-  }) async {
-    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    
-    // Add today's date context to the prompt
-    final today = DateTime.now();
-    final todayContext = '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${_getDayOfWeek(today)})';
-    final enhancedPrompt = prompt + todayContext;
-
-    final parts = <Map<String, dynamic>>[
-      {'text': enhancedPrompt}
-    ];
-
-    // Add file attachments if any
-    if (attachedFiles != null && attachedFiles.isNotEmpty) {
-      for (final file in attachedFiles) {
-        if (file.bytes != null) {
-          // Convert file to base64 for Gemini API
-          final base64Data = base64Encode(file.bytes!);
-          final extension = file.name.split('.').last;
-          final mimeType = _getMimeType(extension);
-          
-          parts.add({
-            'inline_data': {
-              'mime_type': mimeType,
-              'data': base64Data,
-            }
-          });
-        }
-      }
-    }
-
-    final requestBody = {
-      'contents': [
-        {
-          'parts': parts
-        }
-      ],
-      'generationConfig': {
-        'temperature': 0.1,
         'topK': 32,
         'topP': 1,
         'maxOutputTokens': 60000,
       }
     };
-
-    // Log the request
-    LoggerService.logAiRequest(
-      endpoint: '$_baseUrl/models/$_model:generateContent',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      requestBody: requestBody,
-      requestId: actualRequestId,
-    );
-
-    final response = await http.post(
-      Uri.parse('$_baseUrl/models/gemini-2.5-flash:generateContent?key=$apiKey'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(requestBody),
-    );
-    
-    final duration = DateTime.now().difference(startTime);
-
-    // Log the response
-    LoggerService.logAiResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      responseBody: response.body,
-      requestId: actualRequestId,
-      duration: duration,
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-        final candidate = data['candidates'][0];
-        final content = candidate['content'];
-        
-        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-          final responseText = content['parts'][0]['text'];
-          LoggerService.debug('Gemini API request completed successfully', error: {
-            'responseLength': responseText.length,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-          return responseText;
-        }
-      }
-      LoggerService.error('No content in Gemini API response', error: {
-        'responseData': data,
-        'requestId': actualRequestId,
-      });
-      throw Exception('No content in Gemini API response');
-    } else {
-      LoggerService.logAiError(
-        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
-        endpoint: '$_baseUrl/models/$_model:generateContent',
-        requestId: actualRequestId,
-        duration: duration,
-      );
-      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
-    }
   }
 
   static String _getDayOfWeek(DateTime date) {
@@ -1073,33 +872,18 @@ If creating multiple notes, ensure they are related and useful based on the cont
     String contentType,
     String title,
   ) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting text content extraction', error: {
-      'contentType': contentType,
-      'title': title,
-      'textLength': text.length,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('text content extraction', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting text content extraction', error: {
+        'contentType': contentType,
+        'title': title,
+        'textLength': text.length,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    
-    if (apiKey == null || apiKey.isEmpty) {
-      LoggerService.error('API key not found for content extraction', error: {'requestId': requestId});
-      LoggerService.warning('GeminiApiService: API key is null or empty');
-      return {
-        'success': false,
-        'error': 'API key not found',
-      };
-    }
-    LoggerService.debug('GeminiApiService: API key found, proceeding with request');
-
-    try {
+      final apiKey = await _validateApiKey(requestId: requestId);
       final prompt = _buildContentExtractionPrompt(text, contentType, title);
-      final response = await _makeGeminiRequest(
-        apiKey,
-        prompt,
-        requestId: requestId,
-      );
+      final response = await _makeGeminiRequest(apiKey, prompt, requestId: requestId);
 
       LoggerService.debug('Content extraction completed', error: {
         'requestId': requestId,
@@ -1110,41 +894,24 @@ If creating multiple notes, ensure they are related and useful based on the cont
         'success': true,
         'content': response,
       };
-    } catch (e) {
-      LoggerService.error('Content extraction failed', error: {
-        'requestId': requestId,
-        'error': e.toString(),
-      });
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
+    }).catchError((e) => {
+      'success': false,
+      'error': e.toString(),
+    });
   }
 
   static Future<Map<String, dynamic>> extractContentFromImage(String imagePath) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting image content extraction', error: {
-      'imagePath': imagePath,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('image content extraction', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting image content extraction', error: {
+        'imagePath': imagePath,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for image extraction', error: {'requestId': requestId});
-      return {
-        'success': false,
-        'error': 'API key not found',
-      };
-    }
-
-    try {
+      final apiKey = await _validateApiKey(requestId: requestId);
       final file = File(imagePath);
       if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'Image file not found',
-        };
+        throw Exception('Image file not found');
       }
 
       final bytes = await file.readAsBytes();
@@ -1170,41 +937,24 @@ If creating multiple notes, ensure they are related and useful based on the cont
         'success': true,
         'content': response,
       };
-    } catch (e) {
-      LoggerService.error('Image content extraction failed', error: {
-        'requestId': requestId,
-        'error': e.toString(),
-      });
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
+    }).catchError((e) => {
+      'success': false,
+      'error': e.toString(),
+    });
   }
 
   static Future<Map<String, dynamic>> extractContentFromPdf(String pdfPath) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting PDF content extraction', error: {
-      'pdfPath': pdfPath,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('PDF content extraction', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting PDF content extraction', error: {
+        'pdfPath': pdfPath,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for PDF extraction', error: {'requestId': requestId});
-      return {
-        'success': false,
-        'error': 'API key not found',
-      };
-    }
-
-    try {
+      final apiKey = await _validateApiKey(requestId: requestId);
       final file = File(pdfPath);
       if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'PDF file not found',
-        };
+        throw Exception('PDF file not found');
       }
 
       final bytes = await file.readAsBytes();
@@ -1229,16 +979,10 @@ If creating multiple notes, ensure they are related and useful based on the cont
         'success': true,
         'content': response,
       };
-    } catch (e) {
-      LoggerService.error('PDF content extraction failed', error: {
-        'requestId': requestId,
-        'error': e.toString(),
-      });
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
+    }).catchError((e) => {
+      'success': false,
+      'error': e.toString(),
+    });
   }
 
   static String _buildContentExtractionPrompt(String text, String contentType, String title) {
@@ -1338,19 +1082,14 @@ Format the response in a clear, organized manner that would be useful for note-t
 
   // AI suggestion for dedup rules
   static Future<List<DedupRule>> suggestDedupRules(List<String> tagNames) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting AI dedup rules suggestion', error: {
-      'tagNames': tagNames,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('AI dedup rules suggestion', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting AI dedup rules suggestion', error: {
+        'tagNames': tagNames,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for dedup rules suggestion', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    try {
+      final apiKey = await _validateApiKey(requestId: requestId);
       final prompt = _buildDedupRulesSuggestionPrompt(tagNames);
       final response = await _makeGeminiRequest(apiKey, prompt, requestId: requestId);
       
@@ -1360,13 +1099,7 @@ Format the response in a clear, organized manner that would be useful for note-t
       });
 
       return _parseDedupRulesResponse(response);
-    } catch (e) {
-      LoggerService.error('AI dedup rules suggestion failed', error: {
-        'requestId': requestId,
-        'error': e.toString(),
-      });
-      throw Exception('AI dedup rules suggestion failed: $e');
-    }
+    });
   }
 
   static String _buildDedupRulesSuggestionPrompt(List<String> tagNames) {
@@ -1431,211 +1164,42 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
 
   // Generate user app HTML with attachments
   static Future<String> generateAppWithAttachments(String prompt, List<PlatformFile>? attachedFiles) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting app generation request with attachments', error: {
-      'prompt': prompt,
-      'attachedFilesCount': attachedFiles?.length ?? 0,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('app generation with attachments', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting app generation request with attachments', error: {
+        'prompt': prompt,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for app generation', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    try {
-      final parts = <Map<String, dynamic>>[
-        {'text': prompt}
-      ];
-
-      // Add file attachments if any
-      if (attachedFiles != null && attachedFiles.isNotEmpty) {
-        for (final file in attachedFiles) {
-          if (file.bytes != null) {
-            // Convert file to base64 for Gemini API
-            final base64Data = base64Encode(file.bytes!);
-            final extension = file.name.split('.').last;
-            final mimeType = _getMimeType(extension);
-            
-            parts.add({
-              'inline_data': {
-                'mime_type': mimeType,
-                'data': base64Data,
-              }
-            });
-          }
-        }
-      }
-
-      final requestBody = {
-        'contents': [
-          {
-            'parts': parts
-          }
-        ],
-        'generationConfig': {
-          'temperature': 0.7,
-          'topK': 40,
-          'topP': 0.95,
-          'maxOutputTokens': 60000,
-        },
-        'safetySettings': [
-          {
-            'category': 'HARM_CATEGORY_HARASSMENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_HATE_SPEECH',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          }
-        ]
-      };
-
-      final response = await http.post(
-        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
+      final apiKey = await _validateApiKey(requestId: requestId);
+      return await _makeGeminiRequest(
+        apiKey,
+        prompt,
+        attachedFiles: attachedFiles,
+        generationConfig: _creativeGenerationConfig,
+        requestId: requestId,
       );
-
-      LoggerService.debug('App generation API response received', error: {
-        'statusCode': response.statusCode,
-        'requestId': requestId,
-      });
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final generatedText = responseData['candidates'][0]['content']['parts'][0]['text'];
-        
-        LoggerService.debug('App generation successful', error: {
-          'responseLength': generatedText.length,
-          'requestId': requestId,
-        });
-        
-        return generatedText;
-      } else {
-        LoggerService.error('App generation API error', error: {
-          'statusCode': response.statusCode,
-          'responseBody': response.body,
-          'requestId': requestId,
-        });
-        throw Exception('API request failed: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      LoggerService.error('Error in app generation', error: {
-        'error': e.toString(),
-        'requestId': requestId,
-      });
-      rethrow;
-    }
+    });
   }
 
   // Generate user app HTML
   static Future<String> generateApp(String prompt) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting app generation request', error: {
-      'prompt': prompt,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('app generation', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting app generation request', error: {
+        'prompt': prompt,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for app generation', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
-
-    try {
-      final requestBody = {
-        'contents': [
-          {
-            'parts': [
-              {
-                'text': prompt,
-              }
-            ]
-          }
-        ],
-        'generationConfig': {
-          'temperature': 0.7,
-          'topK': 40,
-          'topP': 0.95,
-          'maxOutputTokens': 60000,
-        },
-        'safetySettings': [
-          {
-            'category': 'HARM_CATEGORY_HARASSMENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_HATE_SPEECH',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          },
-          {
-            'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-          }
-        ]
-      };
-
-      final response = await http.post(
-        Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
+      final apiKey = await _validateApiKey(requestId: requestId);
+      return await _makeGeminiRequest(
+        apiKey,
+        prompt,
+        generationConfig: _creativeGenerationConfig,
+        requestId: requestId,
       );
-
-      LoggerService.debug('App generation API response received', error: {
-        'statusCode': response.statusCode,
-        'requestId': requestId,
-      });
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        final generatedText = responseData['candidates']?[0]?['content']?['parts']?[0]?['text'];
-        
-        if (generatedText != null) {
-          LoggerService.debug('App generation successful', error: {
-            'responseLength': generatedText.length,
-            'requestId': requestId,
-          });
-          return generatedText;
-        } else {
-          LoggerService.error('No generated text in app generation response', error: {
-            'responseBody': response.body,
-            'requestId': requestId,
-          });
-          throw Exception('No generated text in response');
-        }
-      } else {
-        LoggerService.error('App generation API request failed', error: {
-          'statusCode': response.statusCode,
-          'responseBody': response.body,
-          'requestId': requestId,
-        });
-        throw Exception('API request failed with status ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      LoggerService.error('Error in app generation', error: {
-        'error': e.toString(),
-        'requestId': requestId,
-      });
-      rethrow;
-    }
+    });
   }
 
   // Chat AI with configurable parameters
@@ -1646,46 +1210,32 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
     double? topP,
     List<PlatformFile>? attachedFiles,
   }) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-    LoggerService.debug('Starting chat AI request', error: {
-      'prompt': prompt,
-      'temperature': temperature,
-      'topK': topK,
-      'topP': topP,
-      'attachedFilesCount': attachedFiles?.length ?? 0,
-      'requestId': requestId,
-    });
+    return await _withErrorHandling('chat AI', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting chat AI request', error: {
+        'prompt': prompt,
+        'temperature': temperature,
+        'topK': topK,
+        'topP': topP,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
 
-    final apiKey = await _getApiKeyWithFallback();
-    if (apiKey == null) {
-      LoggerService.error('API key not found for chat AI', error: {'requestId': requestId});
-      throw Exception('API key not found');
-    }
+      final apiKey = await _validateApiKey(requestId: requestId);
+      final generationConfig = {
+        'temperature': temperature ?? 0.7,
+        'topK': topK ?? 40,
+        'topP': topP ?? 0.95,
+        'maxOutputTokens': 60000,
+      };
 
-    try {
-      // Use the existing _makeGeminiRequest method which supports attachments
-      // but we need to create a custom request body with the specific generation config
-      final response = await _makeGeminiRequestWithConfig(
+      return await _makeGeminiRequest(
         apiKey,
         prompt,
         attachedFiles: attachedFiles,
-        temperature: temperature ?? 0.7,
-        topK: topK ?? 40,
-        topP: topP ?? 0.95,
+        generationConfig: generationConfig,
         requestId: requestId,
       );
-
-      LoggerService.debug('Chat AI successful', error: {
-        'responseLength': response.length,
-        'requestId': requestId,
-      });
-      return response;
-    } catch (e) {
-      LoggerService.error('Error in chat AI', error: {
-        'error': e.toString(),
-        'requestId': requestId,
-      });
-      rethrow;
-    }
+    });
   }
 }
