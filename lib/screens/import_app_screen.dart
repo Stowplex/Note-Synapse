@@ -38,17 +38,25 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   void initState() {
     super.initState();
     LoggerService.debug('ImportAppScreen initState called with file: ${widget.yamlFilePath}');
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     
-    if (widget.yamlFilePath.isEmpty) {
-      setState(() {
-        _currentStatus = AppLocalizations.of(context)!.errorYamlFilePathEmpty;
-        _hasError = true;
-        _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorYamlFilePathEmpty}');
-      });
-      return;
+    // Only start import once when dependencies are available
+    if (_progress == 0.0 && !_hasError) {
+      if (widget.yamlFilePath.isEmpty) {
+        setState(() {
+          _currentStatus = AppLocalizations.of(context)!.errorYamlFilePathEmpty;
+          _hasError = true;
+          _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorYamlFilePathEmpty}');
+        });
+        return;
+      }
+      
+      _importApp();
     }
-    
-    _importApp();
   }
 
   Future<void> _importApp() async {
