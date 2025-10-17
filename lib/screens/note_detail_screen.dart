@@ -237,9 +237,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             title: Text(currentNote.title),
         actions: [
           if (_isEditing) ...[
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _hasChanges ? _saveChanges : null,
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              child: Chip(
+                label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
+                backgroundColor: _hasChanges 
+                    ? Colors.orange.withOpacity(0.1)
+                    : Colors.green.withOpacity(0.1),
+                labelStyle: TextStyle(
+                  color: _hasChanges ? Colors.orange : Colors.green,
+                  fontWeight: FontWeight.w500,
+                ),
+                avatar: Icon(
+                  _hasChanges ? Icons.edit : Icons.check,
+                  size: 16,
+                  color: _hasChanges ? Colors.orange : Colors.green,
+                ),
+              ),
             ),
           ] else ...[
             IconButton(
@@ -1116,25 +1130,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
   }
 
-  void _saveChanges() {
-    // Validate dates before saving
-    _validateDates();
-    
-    if (_dateValidationError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_dateValidationError!),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    
-    _autoSave();
-    setState(() {
-      _isEditing = false;
-    });
-  }
 
   void _deleteNote() {
     showDialog(

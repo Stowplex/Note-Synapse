@@ -778,6 +778,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saved => 'Saved';
 
   @override
+  String get unsaved => 'Unsaved';
+
+  @override
   String get saving => 'Saving...';
 
   @override

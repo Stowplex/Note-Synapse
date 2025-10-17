@@ -236,6 +236,7 @@
   "position": "位置",
   "autoSave": "自动保存",
   "saved": "已保存",
+  "unsaved": "未保存",
   "saving": "保存中...",
   "unsavedChanges": "未保存的更改",
   "confirmDiscardChanges": "您有未保存的更改。确定要丢弃它们吗？",

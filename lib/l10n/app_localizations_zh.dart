@@ -766,6 +766,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saved => '已保存';
 
   @override
+  String get unsaved => '未保存';
+
+  @override
   String get saving => '保存中...';
 
   @override

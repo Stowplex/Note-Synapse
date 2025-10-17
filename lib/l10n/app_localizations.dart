@@ -1508,6 +1508,12 @@ abstract class AppLocalizations {
   /// **'Saved'**
   String get saved;
 
+  /// No description provided for @unsaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved'**
+  String get unsaved;
+
   /// No description provided for @saving.
   ///
   /// In en, this message translates to:

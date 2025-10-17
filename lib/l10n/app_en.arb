@@ -236,6 +236,7 @@
   "position": "Position",
   "autoSave": "Auto-save",
   "saved": "Saved",
+  "unsaved": "Unsaved",
   "saving": "Saving...",
   "unsavedChanges": "Unsaved changes",
   "confirmDiscardChanges": "You have unsaved changes. Are you sure you want to discard them?",
