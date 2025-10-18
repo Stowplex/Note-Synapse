@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_app.dart';
@@ -1067,7 +1068,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
   
   // Check if WebView is supported on current platform
   static bool isWebViewSupported() {
-    return !Platform.isLinux;
+    return kIsWeb || !Platform.isLinux;
   }
 
   // Parse AI response and extract code
@@ -1079,8 +1080,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     
     // Remove leading and trailing whitespace
     String trimmed = response.trim();
-    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length}');
-    LoggerService.debug('parseAIResponse: Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
+    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length},Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
     
     // Look for HTML code blocks
     final htmlCodeBlockRegex = RegExp(r'```html\s*\n(.*?)\n```', dotAll: true);

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -36,17 +37,12 @@ class AudioRecordingService {
     // Check if we're on a supported platform (Android, iOS, macOS, Windows, Linux)
     _isSupported = true; // Now supporting all platforms including Linux
     
-    if (_isSupported!) {
-      try {
-        _recorder = AudioRecorder();
-        _player = AudioPlayer();
-      } catch (e) {
-        LoggerService.error('Failed to initialize audio services: $e', error: e);
-        _isSupported = false;
-        _recorder = null;
-        _player = null;
-      }
-    } else {
+    try {
+      _recorder = AudioRecorder();
+      _player = AudioPlayer();
+    } catch (e) {
+      LoggerService.error('Failed to initialize audio services: $e', error: e);
+      _isSupported = false;
       _recorder = null;
       _player = null;
     }
@@ -77,12 +73,15 @@ class AudioRecordingService {
   Stream<bool> get recordingStateStream => _recordingStateController.stream;
   Stream<bool> get playingStateStream => _playingStateController.stream;
 
+  /// Check if running on Linux (non-web)
+  bool get _isLinux => !kIsWeb && Platform.isLinux;
+
   /// Request microphone permission
   Future<bool> requestPermission() async {
     if (!isSupported) return false;
     
     // On Linux, we don't need to request permissions
-    if (Platform.isLinux) {
+    if (_isLinux) {
       return true;
     }
     
@@ -100,7 +99,7 @@ class AudioRecordingService {
     if (!isSupported) return false;
     
     // On Linux, we don't need to check permissions
-    if (Platform.isLinux) {
+    if (_isLinux) {
       return true;
     }
     
@@ -144,7 +143,7 @@ class AudioRecordingService {
       _currentRecordingPath = '${audioDir.path}/recording_$timestamp.wav';
 
       // Platform-specific recording implementation
-      if (Platform.isLinux) {
+      if (_isLinux) {
         return await _startLinuxRecording();
       } else {
         // Use the record package for other platforms
@@ -192,7 +191,7 @@ class AudioRecordingService {
         return null;
       }
 
-      if (Platform.isLinux) {
+      if (_isLinux) {
         return await _stopLinuxRecording();
       } else {
         if (_recorder == null) {
@@ -220,7 +219,7 @@ class AudioRecordingService {
       }
 
       if (_isRecording) {
-        if (Platform.isLinux) {
+        if (_isLinux) {
           await _cancelLinuxRecording();
         } else {
           if (_recorder != null) {

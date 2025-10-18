@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -43,6 +44,9 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
   final TextEditingController _newTagController = TextEditingController();
+
+  /// Check if running on Linux (non-web)
+  bool get _isLinux => !kIsWeb && Platform.isLinux;
 
   @override
   void initState() {
@@ -703,7 +707,7 @@ class _ShareScreenState extends State<ShareScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            if (Platform.isLinux) ...[
+            if (_isLinux) ...[
               Card(
                 color: Colors.orange[50],
                 child: Padding(
@@ -744,7 +748,7 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: Platform.isLinux ? null : () => _extractWebContent(false),
+                    onPressed: _isLinux ? null : () => _extractWebContent(false),
                     icon: _isExtracting 
                         ? const SizedBox(
                             width: 16,
@@ -764,7 +768,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   child: Tooltip(
                     message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: (Platform.isLinux || !_hasApiKey) ? null : () => _extractWebContent(true),
+                      onPressed: (_isLinux || !_hasApiKey) ? null : () => _extractWebContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,

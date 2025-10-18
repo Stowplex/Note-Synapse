@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -156,7 +157,7 @@ class ShareService {
   static Future<void> shareAsText(String text, BuildContext context) async {
     if (Platform.isAndroid || Platform.isIOS) {
       await _shareAsTextMobile(text, context);
-    } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+    } else if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
       await _shareAsTextDesktop(text, context);
     } else {
       // Fallback: copy to clipboard

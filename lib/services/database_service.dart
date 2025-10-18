@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+
+// Conditional imports for platform-specific code
+import 'database_service_io.dart' if (dart.library.html) 'database_service_web.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/services.dart';
 import '../models/note.dart';
@@ -20,19 +20,14 @@ class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal() {
-    // Initialize database factory for desktop platforms
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
+    // Initialize database factory using platform-specific implementation
+    initializeDatabaseFactory();
   }
 
   // For testing, allow creating new instances
   DatabaseService.createNew() {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
+    // Initialize database factory using platform-specific implementation
+    initializeDatabaseFactory();
   }
 
   Database? _database;

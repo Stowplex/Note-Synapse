@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -251,7 +252,7 @@ class _MainScreenState extends State<MainScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(Platform.isLinux 
+              content: Text((!kIsWeb && Platform.isLinux) 
                   ? l10n.failedToStartRecordingLinux
                   : l10n.failedToStartRecording),
               backgroundColor: Colors.red,
