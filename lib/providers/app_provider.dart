@@ -310,6 +310,9 @@ class AppProvider extends ChangeNotifier {
         await _databaseService.insertNote(note);
       }
       
+      // Add to local state immediately instead of reloading from database
+      _notes.addAll(newNotes);
+      notifyListeners();
       
       return newNotes;
     } catch (e) {
