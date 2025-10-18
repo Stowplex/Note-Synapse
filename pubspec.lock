@@ -97,6 +97,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.1"
+  background_downloader:
+    dependency: transitive
+    description:
+      name: background_downloader
+      sha256: a22acfa37aa06ba5cfe6eb7b1aa700c78af64770ff450c73dd3d279d7c37d4ac
+      url: "https://pub.dev"
+    source: hosted
+    version: "9.2.6"
   boolean_selector:
     dependency: transitive
     description:
@@ -382,6 +390,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.9"
+  flutter_gemma:
+    dependency: "direct main"
+    description:
+      name: flutter_gemma
+      sha256: "12146fa9bb9584d535263272759901f85ab3acdf74eb9874c050fe5e87c10576"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.11.5"
   flutter_inappwebview:
     dependency: "direct main"
     description:
@@ -733,6 +749,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.11.1"
+  large_file_handler:
+    dependency: transitive
+    description:
+      name: large_file_handler
+      sha256: c2ecaf552e8039119bbe3a094d15aecbafe833899f30b2dcfbb513eddf76b36f
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.1"
   leak_tracker:
     dependency: transitive
     description:
@@ -817,10 +841,10 @@ packages:
     dependency: transitive
     description:
       name: mime
-      sha256: "801fd0b26f14a4a58ccb09d5892c3fbdeff209594300a542492cf13fba9d247a"
+      sha256: "41a20518f0cb1256669420fdba0cd90d21561e560ac240f26ef8322e45bb7ed6"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.6"
+    version: "2.0.0"
   multi_long_press_gesture_recognizer:
     dependency: transitive
     description:
@@ -1177,18 +1201,18 @@ packages:
     dependency: "direct main"
     description:
       name: share_plus
-      sha256: "3ef39599b00059db0990ca2e30fca0a29d8b37aae924d60063f8e0184cf20900"
+      sha256: "3424e9d5c22fd7f7590254ba09465febd6f8827c8b19a44350de4ac31d92d3a6"
       url: "https://pub.dev"
     source: hosted
-    version: "7.2.2"
+    version: "12.0.0"
   share_plus_platform_interface:
     dependency: transitive
     description:
       name: share_plus_platform_interface
-      sha256: "251eb156a8b5fa9ce033747d73535bf53911071f8d3b6f4f0b578505ce0d4496"
+      sha256: "88023e53a13429bd65d8e85e11a9b484f49d4c190abbd96c7932b74d6927cc9a"
       url: "https://pub.dev"
     source: hosted
-    version: "3.4.0"
+    version: "6.1.0"
   shared_preferences:
     dependency: "direct main"
     description:

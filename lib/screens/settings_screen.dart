@@ -5,7 +5,12 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
+import '../services/model_storage_service.dart';
+import '../services/model_service.dart';
+import '../models/model_type.dart';
 import 'setup_screen.dart';
+import 'model_selection_screen.dart';
+import 'model_configuration_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -61,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const AIApiSettingsScreen()),
+                MaterialPageRoute(builder: (context) => const AIModelSettingsScreen()),
               ),
             ),
           ),
@@ -179,6 +184,318 @@ class LanguageSettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class AIModelSettingsScreen extends StatefulWidget {
+  const AIModelSettingsScreen({super.key});
+
+  @override
+  State<AIModelSettingsScreen> createState() => _AIModelSettingsScreenState();
+}
+
+class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
+  ModelType? _currentModel;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentModel();
+  }
+
+  Future<void> _loadCurrentModel() async {
+    try {
+      final currentModel = await ModelStorageService.getSelectedModel();
+      setState(() {
+        _currentModel = currentModel;
+      });
+    } catch (e) {
+      LoggerService.error('Error loading current model: $e');
+    }
+  }
+
+  Future<void> _switchModel(ModelType modelType) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await ModelService.instance.switchToModel(modelType);
+      setState(() {
+        _currentModel = modelType;
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Switched to ${modelType.displayName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _configureModel(ModelType modelType) async {
+    final isConfigured = await ModelStorageService.isModelConfigured(modelType);
+    
+    if (isConfigured) {
+      // Model is configured, just switch to it
+      await _switchModel(modelType);
+    } else {
+      // Model needs configuration
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ModelConfigurationScreen(modelType: modelType),
+          ),
+        ).then((_) {
+          // Refresh the current model after configuration
+          _loadCurrentModel();
+        });
+      }
+    }
+  }
+
+  Future<void> _resetModelConfiguration(ModelType modelType) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset ${modelType.displayName} Configuration'),
+        content: Text('Are you sure you want to reset the configuration for ${modelType.displayName}? This will clear all settings and allow you to reconfigure the model.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        await ModelService.instance.resetModelConfiguration(modelType);
+        
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${modelType.displayName} configuration reset successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Refresh the current model
+          _loadCurrentModel();
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error resetting configuration: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AI Model Settings'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Current Model',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_currentModel != null) ...[
+                          Row(
+                            children: [
+                              Icon(_getModelIcon(_currentModel!), color: Theme.of(context).primaryColor),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _currentModel!.displayName,
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _getModelDescription(_currentModel!),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ] else ...[
+                          const Text('No model selected'),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Available Models',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...ModelType.all.map((modelType) {
+                  final isCurrentModel = _currentModel == modelType;
+                  return FutureBuilder<bool>(
+                    future: ModelStorageService.isModelConfigured(modelType),
+                    builder: (context, snapshot) {
+                      final isConfigured = snapshot.data ?? false;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: Icon(_getModelIcon(modelType)),
+                          title: Text(modelType.displayName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_getModelDescription(modelType)),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    isConfigured ? Icons.check_circle : Icons.error_outline,
+                                    size: 16,
+                                    color: isConfigured ? Colors.green : Colors.orange,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isConfigured ? 'Configured' : 'Not Configured',
+                                    style: TextStyle(
+                                      color: isConfigured ? Colors.green : Colors.orange,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isCurrentModel)
+                                Icon(Icons.check_circle, color: Theme.of(context).primaryColor)
+                              else
+                                TextButton(
+                                  onPressed: () => _configureModel(modelType),
+                                  child: const Text('Configure'),
+                                ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () => _resetModelConfiguration(modelType),
+                                icon: const Icon(Icons.refresh),
+                                tooltip: 'Reset Configuration',
+                                color: Colors.orange,
+                              ),
+                            ],
+                          ),
+                          onTap: isCurrentModel ? null : () => _configureModel(modelType),
+                        ),
+                      );
+                    },
+                  );
+                }).toList(),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ModelSelectionScreen(),
+                        ),
+                      ).then((_) {
+                        _loadCurrentModel();
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add New Model'),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  IconData _getModelIcon(ModelType modelType) {
+    switch (modelType) {
+      case ModelType.gemini25Flash:
+        return Icons.psychology;
+      case ModelType.gemma3n:
+        return Icons.smart_toy;
+      case ModelType.qwen25:
+        return Icons.chat;
+      case ModelType.openaiCompatible:
+        return Icons.api;
+    }
+  }
+
+  String _getModelDescription(ModelType modelType) {
+    switch (modelType) {
+      case ModelType.gemini25Flash:
+        return 'Google\'s most advanced model with full multimodal capabilities';
+      case ModelType.gemma3n:
+        return 'Google\'s efficient model with most capabilities except document understanding';
+      case ModelType.qwen25:
+        return 'High-performance text-only model for fast text generation';
+      case ModelType.openaiCompatible:
+        return 'Compatible with OpenAI API endpoints with configurable capabilities';
+    }
   }
 }
 

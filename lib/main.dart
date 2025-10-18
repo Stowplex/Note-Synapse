@@ -10,6 +10,7 @@ import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'services/secure_storage_service.dart';
 import 'services/logger_service.dart';
+import 'services/model_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -98,6 +99,8 @@ class _AppWrapperState extends State<AppWrapper> {
     // Load theme and language preferences first
     await context.read<AppProvider>().loadThemePreference();
     await context.read<AppProvider>().loadLanguagePreference();
+    // Initialize model service
+    await ModelService.instance.initialize();
     // Then check API key and shared content
     await _checkApiKeyAndSharedContent();
   }

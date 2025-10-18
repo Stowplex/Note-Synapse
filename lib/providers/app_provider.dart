@@ -8,7 +8,7 @@ import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../services/database_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 
@@ -256,7 +256,7 @@ class AppProvider extends ChangeNotifier {
     bool useOwnKnowledge = false,
   }) async {
     try {
-      final response = await GeminiApiService.answerNoteQuestion(
+      final response = await AIService.answerNoteQuestion(
         question, 
         contextNotes,
         attachedFiles: attachedFiles,
@@ -278,7 +278,7 @@ class AppProvider extends ChangeNotifier {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
-      final response = await GeminiApiService.transformNote(
+      final response = await AIService.transformNote(
         note, 
         transformationPrompt,
         attachedFiles: attachedFiles,
@@ -299,7 +299,7 @@ class AppProvider extends ChangeNotifier {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
-      final newNotes = await GeminiApiService.createNewNotes(
+      final newNotes = await AIService.createNewNotes(
         prompt, 
         contextNotes,
         attachedFiles: attachedFiles,
