@@ -1,8 +1,6 @@
 /// Enum representing different model types
 enum ModelType {
   gemini25Flash('gemini_2_5_flash', 'Gemini 2.5 Flash'),
-  gemma3n('gemma_3n', 'Gemma 3n'),
-  qwen25('qwen_2_5', 'Qwen 2.5'),
   openaiCompatible('openai_compatible', 'OpenAI Compatible');
 
   const ModelType(this.id, this.displayName);

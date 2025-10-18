@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/model_type.dart';
+import '../models/model_config.dart';
 import '../services/model_storage_service.dart';
-import '../services/model_service.dart';
-import '../services/logger_service.dart';
+import '../services/model_selector.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelType modelType;
@@ -21,12 +21,12 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   final _apiKeyController = TextEditingController();
   final _endpointController = TextEditingController();
   final _modelNameController = TextEditingController();
+  final _maxInputTokensController = TextEditingController();
+  final _maxOutputTokensController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   
   bool _isLoading = false;
-  bool _isDownloading = false;
   String? _error;
-  double _downloadProgress = 0.0;
   
   // Capability checkboxes for OpenAI
   bool _supportsImages = false;
@@ -45,6 +45,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     _apiKeyController.dispose();
     _endpointController.dispose();
     _modelNameController.dispose();
+    _maxInputTokensController.dispose();
+    _maxOutputTokensController.dispose();
     super.dispose();
   }
 
@@ -58,6 +60,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           _apiKeyController.text = apiKey ?? '';
           _endpointController.text = config.endpoint ?? '';
           _modelNameController.text = config.modelName ?? '';
+          _maxInputTokensController.text = config.customCapabilities['maxInputTokens']?.toString() ?? '100000';
+          _maxOutputTokensController.text = config.customCapabilities['maxOutputTokens']?.toString() ?? '4000';
           _supportsImages = config.customCapabilities['supportsImages'] ?? false;
           _supportsDocuments = config.customCapabilities['supportsDocuments'] ?? false;
           _supportsAudio = config.customCapabilities['supportsAudio'] ?? false;
@@ -83,10 +87,14 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       final apiKey = _apiKeyController.text.trim();
       final endpoint = _endpointController.text.trim();
       final modelName = _modelNameController.text.trim();
+      final maxInputTokens = int.tryParse(_maxInputTokensController.text.trim()) ?? 100000;
+      final maxOutputTokens = int.tryParse(_maxOutputTokensController.text.trim()) ?? 4000;
       
       Map<String, dynamic> customCapabilities = {};
       if (widget.modelType == ModelType.openaiCompatible) {
         customCapabilities = {
+          'maxInputTokens': maxInputTokens,
+          'maxOutputTokens': maxOutputTokens,
           'supportsImages': _supportsImages,
           'supportsDocuments': _supportsDocuments,
           'supportsAudio': _supportsAudio,
@@ -94,19 +102,24 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         };
       }
 
-      await ModelService.instance.configureModel(
-        widget.modelType,
+      final config = ModelConfig(
+        type: widget.modelType,
         apiKey: apiKey.isNotEmpty ? apiKey : null,
         endpoint: endpoint.isNotEmpty ? endpoint : null,
         modelName: modelName.isNotEmpty ? modelName : null,
         customCapabilities: customCapabilities,
       );
+      
+      await ModelStorageService.saveModelConfig(config);
 
-      // Switch to the newly configured model
-      await ModelService.instance.switchToModel(widget.modelType);
+      // Only switch to the model if it's not already the current one
+      final currentModel = await ModelStorageService.getSelectedModel();
+      if (currentModel != widget.modelType) {
+        await ModelSelector.instance.switchToModel(widget.modelType);
+      }
 
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
+        Navigator.of(context).pop(true); // Return true to indicate successful configuration
       }
     } catch (e) {
       setState(() {
@@ -116,92 +129,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     }
   }
 
-  Future<void> _downloadModel() async {
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-      _error = null;
-    });
 
-    try {
-      // Save API key temporarily for download (for models that require it)
-      if (widget.modelType == ModelType.gemma3n && _apiKeyController.text.trim().isNotEmpty) {
-        final apiKey = _apiKeyController.text.trim();
-        LoggerService.debug('ModelConfigurationScreen: Saving API key for download, length: ${apiKey.length}');
-        await ModelStorageService.saveModelApiKey(widget.modelType, apiKey);
-        LoggerService.debug('ModelConfigurationScreen: API key saved successfully');
-      } else if (widget.modelType == ModelType.gemma3n) {
-        LoggerService.warning('ModelConfigurationScreen: No API key provided for Gemma model');
-      }
-      
-      // Use real download progress
-      await ModelService.instance.downloadModel(
-        widget.modelType,
-        onProgress: (progress) {
-          if (mounted) {
-            setState(() {
-              _downloadProgress = progress;
-            });
-          }
-        },
-      );
-      
-      // Switch to the newly downloaded model
-      await ModelService.instance.switchToModel(widget.modelType);
-      
-      if (mounted) {
-        setState(() {
-          _isDownloading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Model downloaded and activated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error downloading model: $e';
-        _isDownloading = false;
-      });
-      
-      // Reset configuration state so user can try again
-      try {
-        await ModelService.instance.resetModelConfiguration(widget.modelType);
-      } catch (resetError) {
-        LoggerService.error('Error resetting model configuration: $resetError');
-      }
-    }
-  }
-
-  Future<void> _resetConfiguration() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      await ModelService.instance.resetModelConfiguration(widget.modelType);
-      
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Configuration reset successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error resetting configuration: $e';
-        _isLoading = false;
-      });
-    }
-  }
 
   Future<void> _openApiKeyUrl() async {
     String url;
@@ -209,15 +137,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       case ModelType.gemini25Flash:
         url = 'https://aistudio.google.com/app/apikey';
         break;
-      case ModelType.gemma3n:
-        url = 'https://huggingface.co/settings/tokens';
-        break;
       case ModelType.openaiCompatible:
         url = 'https://platform.openai.com/api-keys';
         break;
-      case ModelType.qwen25:
-        // No API key needed for Qwen
-        return;
     }
     
     if (await canLaunchUrl(Uri.parse(url))) {
@@ -241,22 +163,16 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               _buildModelInfoCard(),
               const SizedBox(height: 24),
               
-              if (widget.modelType == ModelType.qwen25) ...[
-                _buildDownloadSection(),
-              ] else ...[
-                _buildApiKeySection(),
-                if (widget.modelType == ModelType.openaiCompatible) ...[
-                  const SizedBox(height: 24),
-                  _buildEndpointSection(),
-                  const SizedBox(height: 24),
-                  _buildModelNameSection(),
-                  const SizedBox(height: 24),
-                  _buildCapabilitiesSection(),
-                ],
-                if (widget.modelType == ModelType.gemma3n) ...[
-                  const SizedBox(height: 24),
-                  _buildDownloadSection(),
-                ],
+              _buildApiKeySection(),
+              if (widget.modelType == ModelType.openaiCompatible) ...[
+                const SizedBox(height: 24),
+                _buildEndpointSection(),
+                const SizedBox(height: 24),
+                _buildModelNameSection(),
+                const SizedBox(height: 24),
+                _buildTokenLimitsSection(),
+                const SizedBox(height: 24),
+                _buildCapabilitiesSection(),
               ],
               
               if (_error != null) ...[
@@ -436,6 +352,82 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     );
   }
 
+  Widget _buildTokenLimitsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Token Limits',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Configure the maximum input and output tokens for this model',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _maxInputTokensController,
+                    decoration: const InputDecoration(
+                      labelText: 'Max Input Tokens',
+                      hintText: '100000',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.input),
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Required';
+                      }
+                      final tokens = int.tryParse(value.trim());
+                      if (tokens == null || tokens <= 0) {
+                        return 'Must be a positive number';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _maxOutputTokensController,
+                    decoration: const InputDecoration(
+                      labelText: 'Max Output Tokens',
+                      hintText: '4000',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.output),
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Required';
+                      }
+                      final tokens = int.tryParse(value.trim());
+                      if (tokens == null || tokens <= 0) {
+                        return 'Must be a positive number';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCapabilitiesSection() {
     return Card(
       child: Padding(
@@ -503,63 +495,6 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     );
   }
 
-  Widget _buildDownloadSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Download Model',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _getDownloadDescription(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_isDownloading) ...[
-              Column(
-                children: [
-                  LinearProgressIndicator(value: _downloadProgress),
-                  const SizedBox(height: 8),
-                  Text('Downloading... ${(_downloadProgress * 100).toInt()}%'),
-                ],
-              ),
-            ] else ...[
-              Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _downloadModel,
-                      icon: const Icon(Icons.download),
-                      label: const Text('Download Model'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _resetConfiguration,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reset Configuration'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildErrorCard() {
     return Container(
@@ -604,10 +539,6 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     switch (widget.modelType) {
       case ModelType.gemini25Flash:
         return Icons.psychology;
-      case ModelType.gemma3n:
-        return Icons.smart_toy;
-      case ModelType.qwen25:
-        return Icons.chat;
       case ModelType.openaiCompatible:
         return Icons.api;
     }
@@ -617,10 +548,6 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     switch (widget.modelType) {
       case ModelType.gemini25Flash:
         return 'Google\'s most advanced model with full multimodal capabilities including document understanding.';
-      case ModelType.gemma3n:
-        return 'Google\'s efficient model with most capabilities except document understanding. Requires Hugging Face token and model download.';
-      case ModelType.qwen25:
-        return 'High-performance text-only model for fast text generation. Requires model download.';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
     }
@@ -630,23 +557,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     switch (widget.modelType) {
       case ModelType.gemini25Flash:
         return 'Get your API key from Google AI Studio';
-      case ModelType.gemma3n:
-        return 'Get your Hugging Face token from your account settings';
       case ModelType.openaiCompatible:
         return 'Get your API key from your OpenAI-compatible service provider';
-      case ModelType.qwen25:
-        return 'No API key required for local models';
     }
   }
 
-  String _getDownloadDescription() {
-    switch (widget.modelType) {
-      case ModelType.gemma3n:
-        return 'Download the Gemma 3n model from Hugging Face. This may take several minutes depending on your internet connection.';
-      case ModelType.qwen25:
-        return 'Download the Qwen 2.5 model from Hugging Face. This may take several minutes depending on your internet connection.';
-      default:
-        return 'This model does not require download.';
-    }
-  }
 }

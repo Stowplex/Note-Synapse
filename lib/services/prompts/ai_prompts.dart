@@ -1,0 +1,274 @@
+/// Centralized AI prompts for all AI services
+/// This ensures consistency across different model providers
+class AIPrompts {
+  // Common math formula guidelines used across all prompts
+  static const String mathFormulaGuidelines = '''
+IMPORTANT - Math Formula Guidelines:
+- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
+- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
+- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
+- Examples:
+  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
+  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
+- Preserve all mathematical notation, symbols, and formatting accurately
+- If explaining complex equations, break them down into logical components''';
+
+  // Common relationship guidelines for note operations
+  static const String relationshipGuidelines = '''
+- The hierarchical structure shown (indented linked notes)
+- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
+- How linked notes might provide additional context or clarification
+- The direction of relationships (→ for outgoing, ← for incoming)''';
+
+  /// Build prompt for note Q&A with context
+  static String buildNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
+    if (useOwnKnowledge) {
+      return '''
+Based on the following notes and their linked relationships, please answer the question: "$question"
+
+Context Notes (including linked notes and their relationships):
+$context
+
+Please provide a comprehensive answer using both the information in the notes and your own knowledge. Consider:
+$relationshipGuidelines
+- Your own knowledge to provide additional insights, explanations, or expanded context
+
+$mathFormulaGuidelines
+
+You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
+''';
+    } else {
+      return '''
+Based on the following notes and their linked relationships, please answer the question: "$question"
+
+Context Notes (including linked notes and their relationships):
+$context
+
+Please provide a comprehensive answer based ONLY on the information in the notes and their relationships. Consider:
+$relationshipGuidelines
+
+$mathFormulaGuidelines
+
+If the answer cannot be found in the provided context, please state that clearly and do not use your own knowledge to supplement the answer.
+''';
+    }
+  }
+
+  /// Build prompt for note transformation
+  static String buildNoteTransformationPrompt(String noteTitle, String noteContent, 
+      String transformationPrompt, {
+      List<String> attachmentPaths = const [],
+      List<String> subNotes = const [],
+      List<String> tags = const [],
+      String linkedNotesContext = '',
+    }) {
+    final buffer = StringBuffer();
+    buffer.writeln('Please transform the following note according to the instruction: "$transformationPrompt"');
+    buffer.writeln();
+    buffer.writeln('Original Note:');
+    buffer.writeln('Title: $noteTitle');
+    buffer.writeln('Content: $noteContent');
+    
+    // Add file attachment info if any
+    if (attachmentPaths.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('File Attachments:');
+      for (final attachmentPath in attachmentPaths) {
+        final fileName = attachmentPath.split('/').last;
+        buffer.writeln('- $fileName');
+      }
+    }
+    
+    // Add sub-notes if any
+    if (subNotes.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Sub-notes:');
+      for (final subNote in subNotes) {
+        buffer.writeln('- $subNote');
+      }
+    }
+    
+    // Add tags if any
+    if (tags.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Tags: ${tags.join(', ')}');
+    }
+    
+    // Add linked notes context if any
+    if (linkedNotesContext.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Linked Notes Context:');
+      buffer.writeln(linkedNotesContext);
+    }
+    
+    buffer.writeln();
+    buffer.writeln(mathFormulaGuidelines);
+    buffer.writeln();
+    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.');
+    
+    return buffer.toString();
+  }
+
+  /// Build prompt for new note creation
+  static String buildNewNoteCreationPrompt(String userPrompt, String context) {
+    return '''
+Based on the following context and prompt, please create one or more new notes.
+
+Context Notes (including linked notes and their relationships):
+$context
+
+User Prompt: "$userPrompt"
+
+IMPORTANT: 
+- When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
+- Consider the relationships between notes in the context when creating new notes. If the context shows linked notes with specific relationship types (answers, causality, related, subnote, parent, references, expands, contradicts, supports), consider how your new notes might relate to existing ones.
+- Pay attention to the hierarchical structure shown in the context (indented linked notes) to understand the note relationships.
+
+$mathFormulaGuidelines
+
+Please create the new note(s) in the following JSON format:
+{
+  "notes": [
+    {
+      "title": "Note Title",
+      "content": "Note content here",
+      "type": "note" or "task",
+      "tags": ["tag1", "tag2"],
+      "subNotes": [
+        {
+          "name": "Sub-note name",
+          "content": "Sub-note content",
+          "isCompleted": either false (default value) or true (if the sub-note is deemed completed, derived from the context)
+        }
+      ],
+      "scheduledAt": "YYYY-MM-DD" (only for tasks - when the task should start),
+      "completeBy": "YYYY-MM-DD" (only for tasks - when the task should be completed),
+      "status": "todo" (only for tasks)
+    }
+  ]
+}
+
+If creating multiple notes, ensure they are related and useful based on the context and prompt. Consider how the new notes might fit into the existing network of relationships shown in the context. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
+''';
+  }
+
+  /// Build prompt for content extraction from text
+  static String buildContentExtractionPrompt(String text, String contentType, String title) {
+    return '''
+Please analyze and extract the key content from this $contentType. 
+
+Title: $title
+
+Content:
+$text
+
+Please provide a well-structured summary that includes:
+1. Main topics and themes
+2. Key points and important information
+3. Any actionable items or insights
+4. Relevant context or background information
+
+$mathFormulaGuidelines
+
+Format the response in a clear, organized manner that would be useful for note-taking and future reference.
+''';
+  }
+
+  /// Build prompt for dedup rules suggestion
+  static String buildDedupRulesSuggestionPrompt(List<String> tagNames) {
+    return '''
+Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. 
+
+Tags: ${tagNames.join(', ')}
+
+Please suggest rules in the format "leftTag -> rightTag" where:
+- leftTag is the tag that should be replaced
+- rightTag is the tag that should replace it
+
+Rules to follow:
+1. No tag should appear as leftTag in multiple rules (each tag can only be replaced once)
+2. No tag should appear as both leftTag in one rule and rightTag in another rule (no cross-references)
+3. Do not suggest self-replacement (A -> A)
+4. It IS allowed for a tag to appear as rightTag in multiple rules (consolidating multiple tags into one)
+5. Focus on consolidating similar tags, typos, or variations
+6. Prefer shorter, more standard tag names
+7. Consider semantic similarity (e.g., "work" and "job" could be consolidated)
+
+Please respond with a JSON array of objects in this format:
+[
+  {"leftTag": "old_tag_name", "rightTag": "new_tag_name"},
+  {"leftTag": "another_old_tag", "rightTag": "another_new_tag"}
+]
+
+Only suggest rules that would genuinely improve tag organization. If no meaningful consolidations are possible, return an empty array.
+''';
+  }
+
+  /// Build prompt for audio transcription
+  static String buildAudioTranscriptionPrompt() {
+    return 'Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.';
+  }
+
+  /// Build prompt for audio summarization
+  static String buildAudioSummarizationPrompt({String? context}) {
+    final contextText = context != null ? "\n\nContext: $context" : "";
+    return 'Please listen to the following audio file and provide a concise summary of its main points and key information.$contextText';
+  }
+
+  /// Build prompt for image content extraction
+  static String buildImageContentExtractionPrompt() {
+    return 'Extract and summarize the content from this image. Provide a detailed description of what you see, including any text, objects, people, or important visual elements.';
+  }
+
+  /// Build prompt for PDF content extraction
+  static String buildPdfContentExtractionPrompt() {
+    return 'Extract and summarize the content from this PDF document. Provide a detailed summary of the main topics, key points, and important information contained in the document.';
+  }
+
+  /// Build prompt for app generation
+  static String buildAppGenerationPrompt(String name, String description, List<String> steps, String type) {
+    return '''
+Create a single-page self-contained HTML application based on the following requirements:
+
+App Name: $name
+Description: $description
+Type: $type
+Steps: ${steps.join(', ')}
+
+Requirements:
+1. The app should be a complete, self-contained HTML file
+2. Include all necessary CSS and JavaScript inline
+3. Make it responsive and user-friendly
+4. Follow modern web development best practices
+5. Include proper error handling and validation
+6. Make the interface intuitive and visually appealing
+
+Please generate the complete HTML code for this application.
+''';
+  }
+
+  /// Build prompt for app editing
+  static String buildAppEditPrompt(String name, String currentCode, String editSuggestion) {
+    return '''
+Edit the following HTML application based on the user's suggestion:
+
+Original App Name: $name
+User Suggestion: $editSuggestion
+
+Current App Code:
+$currentCode
+
+Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
+
+IMPORTANT: Your response must be formatted as follows:
+
+EXPLANATION:
+[Provide a brief explanation of what changes were made]
+
+HTML:
+[The complete updated HTML code]
+
+Make sure the updated code is complete, functional, and addresses the user's request.
+''';
+  }
+}

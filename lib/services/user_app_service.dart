@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
-import 'gemini_api_service.dart';
+import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'user_app_library_service.dart';
@@ -403,7 +403,7 @@ class UserAppService {
         }
       }
       
-      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app with AI: $e', error: e);
@@ -717,7 +717,7 @@ Here's the updated application with your requested changes:
         }
       }
       
-      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app edit with AI: $e', error: e);

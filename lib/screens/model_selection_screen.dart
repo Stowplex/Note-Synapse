@@ -296,10 +296,6 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     switch (modelType) {
       case ModelType.gemini25Flash:
         return Icons.psychology;
-      case ModelType.gemma3n:
-        return Icons.smart_toy;
-      case ModelType.qwen25:
-        return Icons.chat;
       case ModelType.openaiCompatible:
         return Icons.api;
     }
@@ -309,10 +305,6 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     switch (modelType) {
       case ModelType.gemini25Flash:
         return 'Google\'s most advanced model with full multimodal capabilities';
-      case ModelType.gemma3n:
-        return 'Google\'s efficient model with most capabilities except document understanding';
-      case ModelType.qwen25:
-        return 'High-performance text-only model for fast text generation';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
     }
@@ -328,24 +320,6 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
           supportsDocuments: true,
           supportsAudio: true,
           supportsVideo: true,
-        );
-      case ModelType.gemma3n:
-        return const ModelCapabilities(
-          maxInputTokens: 1000000,
-          maxOutputTokens: 60000,
-          supportsImages: true,
-          supportsDocuments: false,
-          supportsAudio: true,
-          supportsVideo: true,
-        );
-      case ModelType.qwen25:
-        return const ModelCapabilities(
-          maxInputTokens: 1000000,
-          maxOutputTokens: 60000,
-          supportsImages: false,
-          supportsDocuments: false,
-          supportsAudio: false,
-          supportsVideo: false,
         );
       case ModelType.openaiCompatible:
         return const ModelCapabilities(

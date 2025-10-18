@@ -6,7 +6,7 @@ import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
-import '../services/model_service.dart';
+import '../services/model_selector.dart';
 import '../models/model_type.dart';
 import 'setup_screen.dart';
 import 'model_selection_screen.dart';
@@ -221,7 +221,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     });
 
     try {
-      await ModelService.instance.switchToModel(modelType);
+      await ModelSelector.instance.switchToModel(modelType);
       setState(() {
         _currentModel = modelType;
         _isLoading = false;
@@ -264,11 +264,56 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
           MaterialPageRoute(
             builder: (context) => ModelConfigurationScreen(modelType: modelType),
           ),
-        ).then((_) {
+        ).then((result) {
           // Refresh the current model after configuration
           _loadCurrentModel();
+          if (result == true) {
+            // Show success message if configuration was successful
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${modelType.displayName} configuration updated successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         });
       }
+    }
+  }
+
+  Future<void> _handleModelAction(String action, ModelType modelType) async {
+    switch (action) {
+      case 'use':
+        await _switchModel(modelType);
+        break;
+      case 'configure':
+        await _openModelConfiguration(modelType);
+        break;
+      case 'reset':
+        await _resetModelConfiguration(modelType);
+        break;
+    }
+  }
+
+  Future<void> _openModelConfiguration(ModelType modelType) async {
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ModelConfigurationScreen(modelType: modelType),
+        ),
+      ).then((result) {
+        // Refresh the current model after configuration
+        _loadCurrentModel();
+        if (result == true) {
+          // Show success message if configuration was successful
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${modelType.displayName} configuration updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      });
     }
   }
 
@@ -298,7 +343,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       });
 
       try {
-        await ModelService.instance.resetModelConfiguration(modelType);
+        await ModelStorageService.resetModelConfiguration(modelType);
         
         if (mounted) {
           setState(() {
@@ -421,30 +466,64 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
+                                  if (isCurrentModel) ...[
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.check_circle,
+                                      size: 16,
+                                      color: Theme.of(context).primaryColor,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Current',
+                                      style: TextStyle(
+                                        color: Theme.of(context).primaryColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isCurrentModel)
-                                Icon(Icons.check_circle, color: Theme.of(context).primaryColor)
-                              else
-                                TextButton(
-                                  onPressed: () => _configureModel(modelType),
-                                  child: const Text('Configure'),
+                          trailing: PopupMenuButton<String>(
+                            onSelected: (value) => _handleModelAction(value, modelType),
+                            itemBuilder: (BuildContext context) => [
+                              if (!isCurrentModel)
+                                const PopupMenuItem<String>(
+                                  value: 'use',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.check_circle_outline),
+                                      SizedBox(width: 8),
+                                      Text('Use model'),
+                                    ],
+                                  ),
                                 ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                onPressed: () => _resetModelConfiguration(modelType),
-                                icon: const Icon(Icons.refresh),
-                                tooltip: 'Reset Configuration',
-                                color: Colors.orange,
+                              const PopupMenuItem<String>(
+                                value: 'configure',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.settings),
+                                    SizedBox(width: 8),
+                                    Text('Configure model'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'reset',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.refresh),
+                                    SizedBox(width: 8),
+                                    Text('Reset model'),
+                                  ],
+                                ),
                               ),
                             ],
+                            icon: const Icon(Icons.more_vert),
                           ),
-                          onTap: isCurrentModel ? null : () => _configureModel(modelType),
                         ),
                       );
                     },
@@ -476,10 +555,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     switch (modelType) {
       case ModelType.gemini25Flash:
         return Icons.psychology;
-      case ModelType.gemma3n:
-        return Icons.smart_toy;
-      case ModelType.qwen25:
-        return Icons.chat;
       case ModelType.openaiCompatible:
         return Icons.api;
     }
@@ -489,10 +564,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     switch (modelType) {
       case ModelType.gemini25Flash:
         return 'Google\'s most advanced model with full multimodal capabilities';
-      case ModelType.gemma3n:
-        return 'Google\'s efficient model with most capabilities except document understanding';
-      case ModelType.qwen25:
-        return 'High-performance text-only model for fast text generation';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
     }

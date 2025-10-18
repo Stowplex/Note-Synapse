@@ -14,7 +14,7 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../services/user_app_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
@@ -1348,7 +1348,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   }) async {
     try {
       // Use the new chatAI service with configurable parameters
-      return await GeminiApiService.chatAI(
+      return await AIService.chatAI(
         prompt,
         temperature: temperature,
         topK: topK,

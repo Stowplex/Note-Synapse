@@ -4,12 +4,17 @@ import 'package:file_picker/file_picker.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/dedup_rule.dart';
-import 'model_service.dart';
+import 'model_selector.dart';
+import 'prompts/ai_prompts.dart';
 import 'logger_service.dart';
 import 'database_service.dart';
 
-/// Unified AI service that uses the model service
+/// Unified AI service with centralized prompts and simplified architecture
 class AIService {
+  /// Initialize the AI service
+  static Future<void> initialize() async {
+    await ModelSelector.instance.initialize();
+  }
   /// Note Q&A
   static Future<String> answerNoteQuestion(
     String question,
@@ -27,7 +32,7 @@ class AIService {
       });
 
       final contextText = await _buildContextFromNotes(contextNotes);
-      final prompt = _buildMultiNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
+      final prompt = AIPrompts.buildNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
       final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
 
       LoggerService.debug('Note Q&A context built', error: {
@@ -36,12 +41,9 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model can handle the request with attachments
-      if (!ModelService.instance.canHandleRequest(attachedFiles: allAttachedFiles)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(attachedFiles: allAttachedFiles));
-      }
+      // Model will handle capability limitations gracefully
 
-      return await ModelService.instance.generateWithAttachments(
+      return await ModelSelector.instance.generateWithAttachments(
         prompt,
         allAttachedFiles,
         requestId: requestId,
@@ -65,7 +67,16 @@ class AIService {
         'requestId': requestId,
       });
 
-      final prompt = await _buildNoteTransformationPrompt(note, transformationPrompt);
+      final linkedNotesContext = await _buildLinkedNotesContext(note);
+      final prompt = AIPrompts.buildNoteTransformationPrompt(
+        note.title,
+        note.content,
+        transformationPrompt,
+        attachmentPaths: note.attachmentPaths,
+        subNotes: note.subNotes.map((sn) => '${sn.name}: ${sn.content}').toList(),
+        tags: note.tags,
+        linkedNotesContext: linkedNotesContext,
+      );
       final allAttachedFiles = await _prepareAttachedFiles([note], attachedFiles);
       
       LoggerService.debug('Note transformation prompt built', error: {
@@ -73,13 +84,10 @@ class AIService {
         'totalAttachedFiles': allAttachedFiles.length,
         'requestId': requestId,
       });
-
-      // Check if current model can handle the request with attachments
-      if (!ModelService.instance.canHandleRequest(attachedFiles: allAttachedFiles)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(attachedFiles: allAttachedFiles));
-      }
       
-      return await ModelService.instance.generateWithAttachments(
+      // Model will handle capability limitations gracefully
+      
+      return await ModelSelector.instance.generateWithAttachments(
         prompt,
         allAttachedFiles,
         requestId: requestId,
@@ -103,7 +111,7 @@ class AIService {
       });
 
       final contextText = await _buildContextFromNotes(contextNotes);
-      final aiPrompt = _buildNewNoteCreationPrompt(prompt, contextText);
+      final aiPrompt = AIPrompts.buildNewNoteCreationPrompt(prompt, contextText);
       final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
 
       LoggerService.debug('New note creation prompt built', error: {
@@ -113,12 +121,9 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model can handle the request with attachments
-      if (!ModelService.instance.canHandleRequest(attachedFiles: allAttachedFiles)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(attachedFiles: allAttachedFiles));
-      }
+      // Model will handle capability limitations gracefully
 
-      final response = await ModelService.instance.generateWithAttachments(
+      final response = await ModelSelector.instance.generateWithAttachments(
         aiPrompt,
         allAttachedFiles,
         requestId: requestId,
@@ -136,12 +141,10 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model supports audio transcription
-      if (!ModelService.instance.canHandleRequest(requiresAudioSupport: true)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(requiresAudioSupport: true));
-      }
+      // Model will handle capability limitations gracefully
 
-      final response = await ModelService.instance.transcribeAudio(audioFilePath, requestId: requestId);
+      final prompt = AIPrompts.buildAudioTranscriptionPrompt();
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
       
       LoggerService.debug('Audio transcription completed', error: {
         'transcriptionLength': response.length,
@@ -162,16 +165,10 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model supports audio processing
-      if (!ModelService.instance.canHandleRequest(requiresAudioSupport: true)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(requiresAudioSupport: true));
-      }
+      // Model will handle capability limitations gracefully
 
-      final response = await ModelService.instance.summarizeAudio(
-        audioFilePath,
-        context: context,
-        requestId: requestId,
-      );
+      final prompt = AIPrompts.buildAudioSummarizationPrompt(context: context);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
       
       LoggerService.debug('Audio summarization completed', error: {
         'summaryLength': response.length,
@@ -197,19 +194,18 @@ class AIService {
         'requestId': requestId,
       });
 
-      final response = await ModelService.instance.extractContentFromText(
-        text,
-        contentType,
-        title,
-        requestId: requestId,
-      );
+      final prompt = AIPrompts.buildContentExtractionPrompt(text, contentType, title);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
 
       LoggerService.debug('Content extraction completed', error: {
         'requestId': requestId,
-        'responseLength': response['content']?.length ?? 0,
+        'responseLength': response.length,
       });
 
-      return response;
+      return {
+        'success': true,
+        'content': response,
+      };
     }).catchError((e) => {
       'success': false,
       'error': e.toString(),
@@ -224,19 +220,20 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model supports image processing
-      if (!ModelService.instance.canHandleRequest(requiresImageSupport: true)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(requiresImageSupport: true));
-      }
+      // Model will handle capability limitations gracefully
 
-      final response = await ModelService.instance.extractContentFromImage(imagePath, requestId: requestId);
+      final prompt = AIPrompts.buildImageContentExtractionPrompt();
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
 
       LoggerService.debug('Image content extraction completed', error: {
         'requestId': requestId,
-        'responseLength': response['content']?.length ?? 0,
+        'responseLength': response.length,
       });
 
-      return response;
+      return {
+        'success': true,
+        'content': response,
+      };
     }).catchError((e) => {
       'success': false,
       'error': e.toString(),
@@ -251,19 +248,20 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model supports document processing
-      if (!ModelService.instance.canHandleRequest(requiresDocumentSupport: true)) {
-        throw Exception(ModelService.instance.getCapabilityErrorMessage(requiresDocumentSupport: true));
-      }
+      // Model will handle capability limitations gracefully
 
-      final response = await ModelService.instance.extractContentFromPdf(pdfPath, requestId: requestId);
+      final prompt = AIPrompts.buildPdfContentExtractionPrompt();
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
 
       LoggerService.debug('PDF content extraction completed', error: {
         'requestId': requestId,
-        'responseLength': response['content']?.length ?? 0,
+        'responseLength': response.length,
       });
 
-      return response;
+      return {
+        'success': true,
+        'content': response,
+      };
     }).catchError((e) => {
       'success': false,
       'error': e.toString(),
@@ -279,8 +277,8 @@ class AIService {
         'requestId': requestId,
       });
 
-      final prompt = _buildDedupRulesSuggestionPrompt(tagNames);
-      final response = await ModelService.instance.generateText(prompt, requestId: requestId);
+      final prompt = AIPrompts.buildDedupRulesSuggestionPrompt(tagNames);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
       
       LoggerService.debug('AI dedup rules suggestion completed', error: {
         'requestId': requestId,
@@ -300,7 +298,7 @@ class AIService {
         'requestId': requestId,
       });
 
-      return await ModelService.instance.generateApp(prompt, requestId: requestId);
+      return await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
     });
   }
 
@@ -314,16 +312,11 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model can handle the request with attachments
-      if (attachedFiles != null && attachedFiles.isNotEmpty) {
-        if (!ModelService.instance.canHandleRequest(attachedFiles: attachedFiles)) {
-          throw Exception(ModelService.instance.getCapabilityErrorMessage(attachedFiles: attachedFiles));
-        }
-      }
+      // Model will handle capability limitations gracefully
 
-      return await ModelService.instance.generateAppWithAttachments(
+      return await ModelSelector.instance.generateWithAttachments(
         prompt,
-        attachedFiles,
+        attachedFiles ?? [],
         requestId: requestId,
       );
     });
@@ -348,19 +341,14 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Check if current model can handle the request with attachments
-      if (attachedFiles != null && attachedFiles.isNotEmpty) {
-        if (!ModelService.instance.canHandleRequest(attachedFiles: attachedFiles)) {
-          throw Exception(ModelService.instance.getCapabilityErrorMessage(attachedFiles: attachedFiles));
-        }
-      }
+      // Model will handle capability limitations gracefully
 
-      return await ModelService.instance.chatAI(
+      return await ModelSelector.instance.generateWithAttachments(
         prompt,
+        attachedFiles ?? [],
         temperature: temperature,
         topK: topK,
         topP: topP,
-        attachedFiles: attachedFiles,
         requestId: requestId,
       );
     });
@@ -540,193 +528,42 @@ class AIService {
     buffer.writeln();
   }
 
-  static String _buildMultiNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
-    if (useOwnKnowledge) {
-      return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
-
-Context Notes (including linked notes and their relationships):
-$context
-
-Please provide a comprehensive answer using both the information in the notes and your own knowledge. Consider:
-- The hierarchical structure shown (indented linked notes)
-- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
-- How linked notes might provide additional context or clarification
-- The direction of relationships (→ for outgoing, ← for incoming)
-- Your own knowledge to provide additional insights, explanations, or expanded context
-
-IMPORTANT - Math Formula Guidelines:
-- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
-- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
-- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
-- Examples:
-  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
-  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
-- Preserve all mathematical notation, symbols, and formatting accurately
-- If explaining complex equations, break them down into logical components
-
-You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
-''';
-    } else {
-      return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
-
-Context Notes (including linked notes and their relationships):
-$context
-
-Please provide a comprehensive answer based ONLY on the information in the notes and their relationships. Consider:
-- The hierarchical structure shown (indented linked notes)
-- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
-- How linked notes might provide additional context or clarification
-- The direction of relationships (→ for outgoing, ← for incoming)
-
-IMPORTANT - Math Formula Guidelines:
-- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
-- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
-- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
-- Examples:
-  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
-  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
-- Preserve all mathematical notation, symbols, and formatting accurately
-- If explaining complex equations, break them down into logical components
-
-If the answer cannot be found in the provided context, please state that clearly and do not use your own knowledge to supplement the answer.
-''';
-    }
-  }
-
-  static Future<String> _buildNoteTransformationPrompt(Note note, String transformationPrompt) async {
-    final buffer = StringBuffer();
-    buffer.writeln('Please transform the following note according to the instruction: "$transformationPrompt"');
-    buffer.writeln();
-    buffer.writeln('Original Note:');
-    buffer.writeln('Title: ${note.title}');
-    buffer.writeln('Content: ${note.content}');
-    
-    // Add file attachment info if any (files will be sent as binary data separately)
-    if (note.attachmentPaths.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('File Attachments:');
-      for (final attachmentPath in note.attachmentPaths) {
-        final fileName = attachmentPath.split('/').last;
-        final file = File(attachmentPath);
-        if (file.existsSync()) {
-          final fileSize = file.lengthSync();
-          buffer.writeln('- $fileName (${_formatFileSize(fileSize)})');
-        } else {
-          buffer.writeln('- $fileName (file not found)');
-        }
-      }
-    }
-    
-    if (note.subNotes.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Sub-notes:');
-      buffer.writeln(note.subNotes.map((sn) => '- ${sn.name}: ${sn.content}').join('\n'));
-    }
-    
-    if (note.tags.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Tags: ${note.tags.join(', ')}');
-    }
-    
-    // Add linked notes context
+  static Future<String> _buildLinkedNotesContext(Note note) async {
     try {
       final databaseService = DatabaseService();
       final relationships = await databaseService.getRelationships(note.id);
       
-      if (relationships.isNotEmpty) {
-        buffer.writeln();
-        buffer.writeln('Linked Notes Context:');
-        for (final relationship in relationships) {
-          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
-          final linkedNote = await databaseService.getNote(linkedNoteId);
+      if (relationships.isEmpty) return '';
+      
+      final buffer = StringBuffer();
+      for (final relationship in relationships) {
+        final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
+        final linkedNote = await databaseService.getNote(linkedNoteId);
+        
+        if (linkedNote != null) {
+          final isOutgoing = relationship.fromNoteId == note.id;
+          final direction = isOutgoing ? '→' : '←';
+          final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
           
-          if (linkedNote != null) {
-            final isOutgoing = relationship.fromNoteId == note.id;
-            final direction = isOutgoing ? '→' : '←';
-            final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
-            
-            buffer.writeln('  ${direction} $relationshipDisplay: ${linkedNote.title}');
-            buffer.writeln('  Content: ${linkedNote.content}');
-            
-            if (linkedNote.tags.isNotEmpty) {
-              buffer.writeln('  Tags: ${linkedNote.tags.join(', ')}');
-            }
-            buffer.writeln();
+          buffer.writeln('  ${direction} $relationshipDisplay: ${linkedNote.title}');
+          buffer.writeln('  Content: ${linkedNote.content}');
+          
+          if (linkedNote.tags.isNotEmpty) {
+            buffer.writeln('  Tags: ${linkedNote.tags.join(', ')}');
           }
+          buffer.writeln();
         }
       }
+      
+      return buffer.toString();
     } catch (e) {
-      // If there's an error loading relationships, continue without them
       LoggerService.warning('Error loading linked notes for transformation: $e');
+      return '';
     }
-    
-    buffer.writeln();
-    buffer.writeln('IMPORTANT - Math Formula Guidelines:');
-    buffer.writeln('- When including mathematical formulas, equations, or expressions in the transformed content, use LaTeX format');
-    buffer.writeln(r'- Use the format: \( formula \) for inline math (without leading and ending $ symbols)');
-    buffer.writeln(r'- Use the format: \[ formula \] for display math (without leading and ending $ symbols)');
-    buffer.writeln('- Examples:');
-    buffer.writeln(r'  - Inline: \( E = mc^2 \) or \( \frac{a}{b} \)');
-    buffer.writeln(r'  - Display: \[ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \]');
-    buffer.writeln('- Preserve all mathematical notation, symbols, and formatting accurately');
-    buffer.writeln('- If transforming complex equations, break them down into logical components');
-    buffer.writeln();
-    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.');
-    
-    return buffer.toString();
   }
 
-  static String _buildNewNoteCreationPrompt(String prompt, String context) {
-    return '''
-Based on the following context and prompt, please create one or more new notes.
 
-Context Notes (including linked notes and their relationships):
-$context
 
-User Prompt: "$prompt"
-
-IMPORTANT: 
-- When creating tasks with dates, use the format YYYY-MM-DD and consider the current date context provided. For relative dates like "next Wednesday" or "tomorrow", calculate the actual date based on today's date.
-- Consider the relationships between notes in the context when creating new notes. If the context shows linked notes with specific relationship types (answers, causality, related, subnote, parent, references, expands, contradicts, supports), consider how your new notes might relate to existing ones.
-- Pay attention to the hierarchical structure shown in the context (indented linked notes) to understand the note relationships.
-
-IMPORTANT - Math Formula Guidelines:
-- When including mathematical formulas, equations, or expressions in note content, use LaTeX format
-- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
-- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
-- Examples:
-  - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
-  - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
-- Preserve all mathematical notation, symbols, and formatting accurately
-- If creating notes with complex equations, break them down into logical components
-
-Please create the new note(s) in the following JSON format:
-{
-  "notes": [
-    {
-      "title": "Note Title",
-      "content": "Note content here",
-      "type": "note" or "task",
-      "tags": ["tag1", "tag2"],
-      "subNotes": [
-        {
-          "name": "Sub-note name",
-          "content": "Sub-note content",
-          "isCompleted": either false (default value) or true (if the sub-note is deemed completed, derived from the context)
-        }
-      ],
-      "scheduledAt": "YYYY-MM-DD" (only for tasks - when the task should start),
-      "completeBy": "YYYY-MM-DD" (only for tasks - when the task should be completed),
-      "status": "todo" (only for tasks)
-    }
-  ]
-}
-
-If creating multiple notes, ensure they are related and useful based on the context and prompt. Consider how the new notes might fit into the existing network of relationships shown in the context. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
-''';
-  }
 
   static List<Note> _parseNewNotesResponse(String response) {
     try {
@@ -778,34 +615,6 @@ If creating multiple notes, ensure they are related and useful based on the cont
     }
   }
 
-  static String _buildDedupRulesSuggestionPrompt(List<String> tagNames) {
-    return '''
-Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. 
-
-Tags: ${tagNames.join(', ')}
-
-Please suggest rules in the format "leftTag -> rightTag" where:
-- leftTag is the tag that should be replaced
-- rightTag is the tag that should replace it
-
-Rules to follow:
-1. No tag should appear as leftTag in multiple rules (each tag can only be replaced once)
-2. No tag should appear as both leftTag in one rule and rightTag in another rule (no cross-references)
-3. Do not suggest self-replacement (A -> A)
-4. It IS allowed for a tag to appear as rightTag in multiple rules (consolidating multiple tags into one)
-5. Focus on consolidating similar tags, typos, or variations
-6. Prefer shorter, more standard tag names
-7. Consider semantic similarity (e.g., "work" and "job" could be consolidated)
-
-Please respond with a JSON array of objects in this format:
-[
-  {"leftTag": "old_tag_name", "rightTag": "new_tag_name"},
-  {"leftTag": "another_old_tag", "rightTag": "another_new_tag"}
-]
-
-Only suggest rules that would genuinely improve tag organization. If no meaningful consolidations are possible, return an empty array.
-''';
-  }
 
   static List<DedupRule> _parseDedupRulesResponse(String response) {
     try {

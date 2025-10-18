@@ -10,13 +10,16 @@ import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'services/secure_storage_service.dart';
 import 'services/logger_service.dart';
-import 'services/model_service.dart';
+import 'services/ai_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize secure storage
   await SecureStorageService.initialize();
+  
+  // Initialize AI service
+  await AIService.initialize();
   
   runApp(const NoteSynapseApp());
 }
@@ -99,8 +102,7 @@ class _AppWrapperState extends State<AppWrapper> {
     // Load theme and language preferences first
     await context.read<AppProvider>().loadThemePreference();
     await context.read<AppProvider>().loadLanguagePreference();
-    // Initialize model service
-    await ModelService.instance.initialize();
+    // Model service is now initialized in main()
     // Then check API key and shared content
     await _checkApiKeyAndSharedContent();
   }

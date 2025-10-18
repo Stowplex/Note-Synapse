@@ -11,7 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
 
@@ -1105,7 +1105,7 @@ class _ShareScreenState extends State<ShareScreen> {
         }
         
         // Extract content using AI
-        final result = await GeminiApiService.extractContentFromImage(filePath);
+        final result = await AIService.extractContentFromImage(filePath);
         if (result['success'] == true) {
           content = result['content'] ?? 'Image content extracted with AI';
           tags.add('ai_processed');
@@ -1172,7 +1172,7 @@ class _ShareScreenState extends State<ShareScreen> {
         }
         
         // Extract content using AI
-        final result = await GeminiApiService.extractContentFromPdf(filePath);
+        final result = await AIService.extractContentFromPdf(filePath);
         if (result['success'] == true) {
           content = result['content'] ?? 'PDF content extracted with AI';
           tags.add('ai_processed');
@@ -1685,7 +1685,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                         final markdownContent = convert(extractedContent);
                         
                         // Send to AI for better extraction
-                        final aiResult = await GeminiApiService.extractContentFromText(
+                        final aiResult = await AIService.extractContentFromText(
                           markdownContent,
                           'web_content',
                           extractedTitle ?? 'Web Content',

@@ -11,7 +11,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
@@ -1931,7 +1931,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
 
-      final transcription = await GeminiApiService.transcribeAudio(audioPath);
+      final transcription = await AIService.transcribeAudio(audioPath);
       
       // Close loading dialog
       Navigator.of(context).pop();
