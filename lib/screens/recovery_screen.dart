@@ -309,7 +309,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   Text(
                     l10n.exportAllNotesDescription,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -331,7 +331,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     const SizedBox(height: 16),
                     LinearProgressIndicator(
                       value: _exportProgress,
-                      backgroundColor: Colors.grey[300],
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -361,9 +361,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     Container(
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[300]!),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: ListView.builder(
                         padding: const EdgeInsets.all(8),
@@ -373,9 +375,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 2),
                             child: Text(
                               _exportLogs[index],
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 12,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           );

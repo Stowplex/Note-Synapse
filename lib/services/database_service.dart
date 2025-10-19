@@ -1391,7 +1391,7 @@ class DatabaseService {
   // Force database checkpoint
   Future<void> checkpoint() async {
     final db = await database;
-    await db.execute('PRAGMA wal_checkpoint(FULL);');
+    await db.rawQuery('PRAGMA wal_checkpoint(FULL);');
   }
 
 
