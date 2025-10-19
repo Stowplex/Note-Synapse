@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import '../l10n/app_localizations.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../utils/file_utils.dart';
 
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -16,26 +17,29 @@ class RecoveryScreen extends StatefulWidget {
 }
 
 class _RecoveryScreenState extends State<RecoveryScreen> {
-  bool _isExporting = false;
-  double _exportProgress = 0.0;
-  List<String> _exportLogs = [];
-  List<Map<String, dynamic>> _exports = [];
+  bool _isBackingUp = false;
+  double _backupProgress = 0.0;
+  List<String> _backupLogs = [];
+  List<Map<String, dynamic>> _backups = [];
 
   @override
   void initState() {
     super.initState();
-    _loadExports();
+    _loadBackups();
   }
 
-  Future<void> _loadExports() async {
+  Future<void> _loadBackups() async {
     try {
-      final exportsDir = await _getExportsDirectory();
-      if (await exportsDir.exists()) {
-        final files = await exportsDir.list().toList();
-        final exportFiles = files.where((file) => file.path.endsWith('.zip')).toList();
+      final tempDir = await getTemporaryDirectory();
+      if (await tempDir.exists()) {
+        final files = await tempDir.list().toList();
+        final backupFiles = files.where((file) => 
+          file.path.endsWith('.zip') && 
+          file.path.contains('backup_')
+        ).toList();
         
         setState(() {
-          _exports = exportFiles.map((file) {
+          _backups = backupFiles.map((file) {
             final stat = file.statSync();
             return {
               'name': file.path.split('/').last,
@@ -47,156 +51,173 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         });
       }
     } catch (e) {
-      LoggerService.error('Error loading exports: $e');
+      LoggerService.error('Error loading backups: $e');
     }
   }
 
-  Future<Directory> _getExportsDirectory() async {
-    final tempDir = await getTemporaryDirectory();
-    final exportsDir = Directory('${tempDir.path}/exports');
-    if (!await exportsDir.exists()) {
-      await exportsDir.create(recursive: true);
-    }
-    return exportsDir;
-  }
 
-  Future<void> _exportAllNotes() async {
+  Future<void> _backupAllNotes() async {
+    final l10n = AppLocalizations.of(context)!;
+    
     setState(() {
-      _isExporting = true;
-      _exportProgress = 0.0;
-      _exportLogs.clear();
+      _isBackingUp = true;
+      _backupProgress = 0.0;
+      _backupLogs.clear();
     });
 
     try {
-      _addLog('Starting export process...');
+      _addLog(l10n.startingBackupProcess);
       
-      // Create timestamped export directory
+      // 1. Create temp directory
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final tempDir = await getTemporaryDirectory();
-      final exportDir = Directory('${tempDir.path}/export_$timestamp');
+      final exportDir = Directory('${tempDir.path}/backup_$timestamp');
       await exportDir.create(recursive: true);
       
-      _addLog('Created export directory: ${exportDir.path}');
+      _addLog(l10n.createdTempDirectory(exportDir.path));
       _updateProgress(0.1);
 
-      // Force database checkpoint first
-      _addLog('Forcing database checkpoint...');
+      // 2. Checkpoint database
+      _addLog(l10n.forcingDatabaseCheckpoint);
       final databaseService = DatabaseService();
       await databaseService.checkpoint();
       _updateProgress(0.2);
 
-      // Copy database to export directory first
+      // 3. Copy database
       final dbPath = await databaseService.getDatabasePath();
       final dbFile = File(dbPath);
       final destDbFile = File('${exportDir.path}/note_synapse.db');
       if (await dbFile.exists()) {
         await dbFile.copy(destDbFile.path);
-        _addLog('Database copied successfully');
+        _addLog(l10n.databaseCopiedSuccessfully);
       } else {
-        throw Exception('Database file not found');
+        throw Exception(l10n.databaseFileNotFound);
       }
       _updateProgress(0.3);
 
-      // Get all attachments from the original database (read-only)
-      final attachments = await databaseService.getAllAttachments();
-      
-      _addLog('Found ${attachments.length} attachments to process');
-      _updateProgress(0.4);
-
-      // Create attachments directory
-      final attachmentsDir = Directory('${exportDir.path}/attachments');
-      await attachmentsDir.create(recursive: true);
-
-      // Internalize attachments and prepare path updates
-      int processedAttachments = 0;
-      final List<Map<String, String>> pathUpdates = [];
-      
-      for (final attachment in attachments) {
-        try {
-          final sourceFile = File(attachment['filePath']);
-          if (await sourceFile.exists()) {
-            // Convert path separators to underscores
-            final safePath = attachment['filePath'].replaceAll('/', '_').replaceAll('\\', '_');
-            final destFile = File('${attachmentsDir.path}/$safePath');
-            
-            // Copy file
-            await sourceFile.copy(destFile.path);
-            
-            // Store path update for later (don't update original database)
-            pathUpdates.add({
-              'id': attachment['id'],
-              'newPath': 'attachments/$safePath'
-            });
-            
-            processedAttachments++;
-            _addLog('Processed attachment: ${attachment['fileName']}');
-          } else {
-            _addLog('Warning: Attachment file not found: ${attachment['filePath']}');
-          }
-        } catch (e) {
-          _addLog('Error processing attachment ${attachment['fileName']}: $e');
-        }
+      // 4. Copy attachments directory to temp directory
+      final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+      final destAttachmentsDir = Directory('${exportDir.path}/attachments');
+      if (await attachmentsDir.exists()) {
+        await _copyDirectory(attachmentsDir, destAttachmentsDir);
+        _addLog(l10n.attachmentsDirectoryCopiedSuccessfully);
+      } else {
+        _addLog(l10n.noAttachmentsDirectoryFound);
+        await destAttachmentsDir.create(recursive: true);
       }
+      _updateProgress(0.5);
 
-      _addLog('Processed $processedAttachments attachments');
-      _updateProgress(0.6);
+      // 5. Open copied DB and update absolute paths to relative paths
+      _addLog(l10n.updatingAttachmentPathsInCopiedDatabase);
+      await _updateAttachmentPathsInCopiedDatabase(destDbFile.path);
+      _updateProgress(0.7);
 
-      // Update paths in the copied database only
-      if (pathUpdates.isNotEmpty) {
-        _addLog('Updating attachment paths in exported database...');
-        await _updateAttachmentPathsInCopiedDatabase(destDbFile.path, pathUpdates);
-        _addLog('Updated ${pathUpdates.length} attachment paths in exported database');
-      }
+      // 6. Close copied DB (consistency guarantee)
+      _addLog(l10n.databaseConsistencyVerified);
       _updateProgress(0.8);
 
-      // Create zip file
-      _addLog('Creating zip archive...');
+      // 7. Create zip
+      _addLog(l10n.creatingZipArchive);
       final zipFile = File('${exportDir.path}.zip');
       await _createZipArchive(exportDir, zipFile);
       _updateProgress(0.9);
 
-      // Move zip to exports directory
-      final exportsDir = await _getExportsDirectory();
-      final finalZipFile = File('${exportsDir.path}/export_$timestamp.zip');
+      // 8. Move zip to cache directory
+      final cacheDir = await getTemporaryDirectory();
+      final finalZipFile = File('${cacheDir.path}/backup_$timestamp.zip');
       await zipFile.rename(finalZipFile.path);
       
-      _addLog('Export completed: ${finalZipFile.path}');
+      _addLog(l10n.backupCompleted(finalZipFile.path));
       _updateProgress(1.0);
 
-      // Offer to save to external storage
+      // 9. Offer download zip
       await _saveToExternalStorage(finalZipFile);
       
-      // Reload exports list
-      await _loadExports();
+      // Reload backups list
+      await _loadBackups();
       
       setState(() {
-        _isExporting = false;
+        _isBackingUp = false;
       });
       
     } catch (e) {
-      _addLog('Export failed: $e');
+      _addLog(l10n.backupFailed(e.toString()));
       setState(() {
-        _isExporting = false;
+        _isBackingUp = false;
       });
     }
   }
 
-  Future<void> _updateAttachmentPathsInCopiedDatabase(String dbPath, List<Map<String, String>> pathUpdates) async {
+  Future<void> _updateAttachmentPathsInCopiedDatabase(String dbPath) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     // Open the copied database directly
     final db = await openDatabase(dbPath);
     
     try {
-      // Update each attachment path
-      for (final update in pathUpdates) {
-        await db.update(
-          'attachments',
-          {'filePath': update['newPath']},
-          where: 'id = ?',
-          whereArgs: [update['id']],
-        );
+      // Get all attachments with absolute paths
+      final attachments = await db.query(
+        'attachments',
+        where: 'isRelativePath = ?',
+        whereArgs: [0], // 0 means absolute path
+      );
+      
+      _addLog(l10n.foundAttachmentsWithAbsolutePaths(attachments.length));
+      
+      // Copy files with absolute paths to exported attachments directory
+      final attachmentsDir = Directory('${dbPath.substring(0, dbPath.lastIndexOf('/'))}/attachments');
+      
+      for (final attachment in attachments) {
+        final originalFilePath = attachment['filePath'] as String;
+        final originalFileName = attachment['fileName'] as String;
+        
+        // Check if source file exists
+        final sourceFile = File(originalFilePath);
+        if (await sourceFile.exists()) {
+          // Generate unique filename with UUID prefix
+          final uniqueFileName = FileUtils.generateUniqueFileName(originalFileName);
+          final destFile = File('${attachmentsDir.path}/$uniqueFileName');
+          
+          // Copy the file to the exported attachments directory
+          await sourceFile.copy(destFile.path);
+          
+          // Update the database to use the new relative path
+          final relativePath = 'attachments/$uniqueFileName';
+          await db.update(
+            'attachments',
+            {
+              'filePath': relativePath,
+              'isRelativePath': 1,
+            },
+            where: 'id = ?',
+            whereArgs: [attachment['id']],
+          );
+          
+          _addLog(l10n.copiedAndUpdated(originalFileName, uniqueFileName));
+        } else {
+          _addLog(l10n.warningSourceFileNotFound(originalFilePath));
+        }
       }
     } finally {
       await db.close();
+    }
+  }
+
+  Future<void> _copyDirectory(Directory source, Directory destination) async {
+    await destination.create(recursive: true);
+    
+    await for (final entity in source.list(recursive: true)) {
+      final relativePath = entity.path.substring(source.path.length + 1);
+      final destPath = '${destination.path}/$relativePath';
+      
+      if (entity is File) {
+        final destFile = File(destPath);
+        await destFile.parent.create(recursive: true);
+        await entity.copy(destFile.path);
+      } else if (entity is Directory) {
+        final destDir = Directory(destPath);
+        await destDir.create(recursive: true);
+      }
     }
   }
 
@@ -237,41 +258,45 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-  Future<void> _deleteExport(Map<String, dynamic> export) async {
+  Future<void> _deleteBackup(Map<String, dynamic> backup) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
-      final file = File(export['path']);
+      final file = File(backup['path']);
       if (await file.exists()) {
         await file.delete();
-        _addLog('Deleted export: ${export['name']}');
-        await _loadExports();
+        _addLog(l10n.deletedBackup(backup['name']));
+        await _loadBackups();
       }
     } catch (e) {
-      _addLog('Error deleting export: $e');
+      _addLog(l10n.errorDeletingBackup(e.toString()));
     }
   }
 
-  Future<void> _saveExportAgain(Map<String, dynamic> export) async {
+  Future<void> _saveBackupAgain(Map<String, dynamic> backup) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
-      final file = File(export['path']);
+      final file = File(backup['path']);
       if (await file.exists()) {
         await _saveToExternalStorage(file);
       } else {
-        _addLog('Export file not found: ${export['name']}');
+        _addLog(l10n.backupFileNotFound(backup['name']));
       }
     } catch (e) {
-      _addLog('Error saving export again: $e');
+      _addLog(l10n.errorSavingBackupAgain(e.toString()));
     }
   }
 
   void _addLog(String message) {
     setState(() {
-      _exportLogs.add('${DateTime.now().toString().substring(11, 19)}: $message');
+      _backupLogs.add('${DateTime.now().toString().substring(11, 19)}: $message');
     });
   }
 
   void _updateProgress(double progress) {
     setState(() {
-      _exportProgress = progress;
+      _backupProgress = progress;
     });
   }
 
@@ -300,14 +325,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    l10n.exportAllNotes,
+                    l10n.backupAllNotes,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    l10n.exportAllNotesDescription,
+                    l10n.backupAllNotesDescription,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -316,26 +341,26 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isExporting ? null : _exportAllNotes,
-                      icon: _isExporting 
+                      onPressed: _isBackingUp ? null : _backupAllNotes,
+                      icon: _isBackingUp 
                         ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.download),
-                      label: Text(_isExporting ? l10n.exporting : l10n.exportAllNotes),
+                      label: Text(_isBackingUp ? l10n.creatingBackup : l10n.backupAllNotes),
                     ),
                   ),
-                  if (_isExporting) ...[
+                  if (_isBackingUp) ...[
                     const SizedBox(height: 16),
                     LinearProgressIndicator(
-                      value: _exportProgress,
+                      value: _backupProgress,
                       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${(_exportProgress * 100).toInt()}%',
+                      '${(_backupProgress * 100).toInt()}%',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -343,7 +368,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ),
             ),
           ),
-          if (_exportLogs.isNotEmpty) ...[
+          if (_backupLogs.isNotEmpty) ...[
             const SizedBox(height: 16),
             Card(
               child: Padding(
@@ -352,7 +377,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      l10n.exportLogs,
+                      l10n.backupLogs,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -369,12 +394,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                       ),
                       child: ListView.builder(
                         padding: const EdgeInsets.all(8),
-                        itemCount: _exportLogs.length,
+                        itemCount: _backupLogs.length,
                         itemBuilder: (context, index) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
                             child: Text(
-                              _exportLogs[index],
+                              _backupLogs[index],
                               style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 12,
@@ -390,32 +415,32 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ),
             ),
           ],
-          if (_exports.isNotEmpty) ...[
+          if (_backups.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
-              l10n.previousExports,
+              l10n.previousBackups,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            ..._exports.map((export) => Card(
+            ..._backups.map((backup) => Card(
               child: ListTile(
                 leading: const Icon(Icons.archive),
-                title: Text(export['name'] ?? 'Export'),
+                title: Text(backup['name'] ?? l10n.backup),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(export['date'] ?? ''),
-                    Text(_formatFileSize(export['size'] ?? 0)),
+                    Text(backup['date'] ?? ''),
+                    Text(_formatFileSize(backup['size'] ?? 0)),
                   ],
                 ),
                 trailing: PopupMenuButton<String>(
                   onSelected: (value) {
                     if (value == 'save') {
-                      _saveExportAgain(export);
+                      _saveBackupAgain(backup);
                     } else if (value == 'delete') {
-                      _deleteExport(export);
+                      _deleteBackup(backup);
                     }
                   },
                   itemBuilder: (context) => [

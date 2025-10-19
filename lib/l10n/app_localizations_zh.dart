@@ -1792,4 +1792,99 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get saveAgain => '再次保存';
+
+  @override
+  String get backupAllNotes => '备份所有笔记';
+
+  @override
+  String get backupAllNotesDescription => '创建所有笔记和附件的完整备份。备份将保存为可下载的zip文件。';
+
+  @override
+  String get creatingBackup => '正在创建备份...';
+
+  @override
+  String get backupLogs => '备份日志';
+
+  @override
+  String get previousBackups => '之前的备份';
+
+  @override
+  String get backup => '备份';
+
+  @override
+  String get startingBackupProcess => '开始备份过程...';
+
+  @override
+  String createdTempDirectory(Object path) {
+    return '创建临时目录：$path';
+  }
+
+  @override
+  String get forcingDatabaseCheckpoint => '强制数据库检查点...';
+
+  @override
+  String get databaseCopiedSuccessfully => '数据库复制成功';
+
+  @override
+  String get databaseFileNotFound => '未找到数据库文件';
+
+  @override
+  String get attachmentsDirectoryCopiedSuccessfully => '附件目录复制成功';
+
+  @override
+  String get noAttachmentsDirectoryFound => '未找到附件目录，创建空目录';
+
+  @override
+  String get updatingAttachmentPathsInCopiedDatabase => '更新复制数据库中的附件路径...';
+
+  @override
+  String get databaseConsistencyVerified => '数据库一致性已验证';
+
+  @override
+  String get creatingZipArchive => '创建zip压缩包...';
+
+  @override
+  String backupCompleted(Object path) {
+    return '备份完成：$path';
+  }
+
+  @override
+  String backupFailed(Object error) {
+    return '备份失败：$error';
+  }
+
+  @override
+  String foundAttachmentsWithAbsolutePaths(Object count) {
+    return '找到$count个需要更新的绝对路径附件';
+  }
+
+  @override
+  String copiedAndUpdated(Object original, Object unique) {
+    return '已复制并更新：$original -> $unique';
+  }
+
+  @override
+  String warningSourceFileNotFound(Object path) {
+    return '警告：未找到源文件：$path';
+  }
+
+  @override
+  String deletedBackup(Object name) {
+    return '已删除备份：$name';
+  }
+
+  @override
+  String errorDeletingBackup(Object error) {
+    return '删除备份时出错：$error';
+  }
+
+  @override
+  String backupFileNotFound(Object name) {
+    return '未找到备份文件：$name';
+  }
+
+  @override
+  String errorSavingBackupAgain(Object error) {
+    return '再次保存备份时出错：$error';
+  }
 }

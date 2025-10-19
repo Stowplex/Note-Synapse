@@ -1826,4 +1826,103 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saveAgain => 'Save Again';
+
+  @override
+  String get backupAllNotes => 'Backup All Notes';
+
+  @override
+  String get backupAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.';
+
+  @override
+  String get creatingBackup => 'Creating Backup...';
+
+  @override
+  String get backupLogs => 'Backup Logs';
+
+  @override
+  String get previousBackups => 'Previous Backups';
+
+  @override
+  String get backup => 'Backup';
+
+  @override
+  String get startingBackupProcess => 'Starting backup process...';
+
+  @override
+  String createdTempDirectory(Object path) {
+    return 'Created temp directory: $path';
+  }
+
+  @override
+  String get forcingDatabaseCheckpoint => 'Forcing database checkpoint...';
+
+  @override
+  String get databaseCopiedSuccessfully => 'Database copied successfully';
+
+  @override
+  String get databaseFileNotFound => 'Database file not found';
+
+  @override
+  String get attachmentsDirectoryCopiedSuccessfully =>
+      'Attachments directory copied successfully';
+
+  @override
+  String get noAttachmentsDirectoryFound =>
+      'No attachments directory found, creating empty one';
+
+  @override
+  String get updatingAttachmentPathsInCopiedDatabase =>
+      'Updating attachment paths in copied database...';
+
+  @override
+  String get databaseConsistencyVerified => 'Database consistency verified';
+
+  @override
+  String get creatingZipArchive => 'Creating zip archive...';
+
+  @override
+  String backupCompleted(Object path) {
+    return 'Backup completed: $path';
+  }
+
+  @override
+  String backupFailed(Object error) {
+    return 'Backup failed: $error';
+  }
+
+  @override
+  String foundAttachmentsWithAbsolutePaths(Object count) {
+    return 'Found $count attachments with absolute paths to update';
+  }
+
+  @override
+  String copiedAndUpdated(Object original, Object unique) {
+    return 'Copied and updated: $original -> $unique';
+  }
+
+  @override
+  String warningSourceFileNotFound(Object path) {
+    return 'Warning: Source file not found: $path';
+  }
+
+  @override
+  String deletedBackup(Object name) {
+    return 'Deleted backup: $name';
+  }
+
+  @override
+  String errorDeletingBackup(Object error) {
+    return 'Error deleting backup: $error';
+  }
+
+  @override
+  String backupFileNotFound(Object name) {
+    return 'Backup file not found: $name';
+  }
+
+  @override
+  String errorSavingBackupAgain(Object error) {
+    return 'Error saving backup again: $error';
+  }
 }

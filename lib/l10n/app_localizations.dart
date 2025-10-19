@@ -3385,6 +3385,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save Again'**
   String get saveAgain;
+
+  /// No description provided for @backupAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup All Notes'**
+  String get backupAllNotes;
+
+  /// No description provided for @backupAllNotesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.'**
+  String get backupAllNotesDescription;
+
+  /// No description provided for @creatingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating Backup...'**
+  String get creatingBackup;
+
+  /// No description provided for @backupLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup Logs'**
+  String get backupLogs;
+
+  /// No description provided for @previousBackups.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Backups'**
+  String get previousBackups;
+
+  /// No description provided for @backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get backup;
+
+  /// No description provided for @startingBackupProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting backup process...'**
+  String get startingBackupProcess;
+
+  /// No description provided for @createdTempDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Created temp directory: {path}'**
+  String createdTempDirectory(Object path);
+
+  /// No description provided for @forcingDatabaseCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Forcing database checkpoint...'**
+  String get forcingDatabaseCheckpoint;
+
+  /// No description provided for @databaseCopiedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Database copied successfully'**
+  String get databaseCopiedSuccessfully;
+
+  /// No description provided for @databaseFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Database file not found'**
+  String get databaseFileNotFound;
+
+  /// No description provided for @attachmentsDirectoryCopiedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments directory copied successfully'**
+  String get attachmentsDirectoryCopiedSuccessfully;
+
+  /// No description provided for @noAttachmentsDirectoryFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No attachments directory found, creating empty one'**
+  String get noAttachmentsDirectoryFound;
+
+  /// No description provided for @updatingAttachmentPathsInCopiedDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating attachment paths in copied database...'**
+  String get updatingAttachmentPathsInCopiedDatabase;
+
+  /// No description provided for @databaseConsistencyVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Database consistency verified'**
+  String get databaseConsistencyVerified;
+
+  /// No description provided for @creatingZipArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating zip archive...'**
+  String get creatingZipArchive;
+
+  /// No description provided for @backupCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup completed: {path}'**
+  String backupCompleted(Object path);
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed: {error}'**
+  String backupFailed(Object error);
+
+  /// No description provided for @foundAttachmentsWithAbsolutePaths.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {count} attachments with absolute paths to update'**
+  String foundAttachmentsWithAbsolutePaths(Object count);
+
+  /// No description provided for @copiedAndUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied and updated: {original} -> {unique}'**
+  String copiedAndUpdated(Object original, Object unique);
+
+  /// No description provided for @warningSourceFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning: Source file not found: {path}'**
+  String warningSourceFileNotFound(Object path);
+
+  /// No description provided for @deletedBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted backup: {name}'**
+  String deletedBackup(Object name);
+
+  /// No description provided for @errorDeletingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting backup: {error}'**
+  String errorDeletingBackup(Object error);
+
+  /// No description provided for @backupFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup file not found: {name}'**
+  String backupFileNotFound(Object name);
+
+  /// No description provided for @errorSavingBackupAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving backup again: {error}'**
+  String errorSavingBackupAgain(Object error);
 }
 
 class _AppLocalizationsDelegate
