@@ -9,8 +9,8 @@ import '../services/model_storage_service.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
 import 'setup_screen.dart';
-import 'model_selection_screen.dart';
 import 'model_configuration_screen.dart';
+import 'recovery_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -80,6 +80,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AIDebugOverlayScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.backup),
+              title: Text(l10n.recovery),
+              subtitle: Text(l10n.recoverySubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RecoveryScreen()),
               ),
             ),
           ),
@@ -228,9 +241,10 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       });
       
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Switched to ${modelType.displayName}'),
+            content: Text(l10n.switchedToModel(modelType.displayName)),
             backgroundColor: Colors.green,
           ),
         );
@@ -241,42 +255,13 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       });
       
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error switching model: $e'),
+            content: Text(l10n.errorSwitchingModel(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    }
-  }
-
-  Future<void> _configureModel(ModelType modelType) async {
-    final isConfigured = await ModelStorageService.isModelConfigured(modelType);
-    
-    if (isConfigured) {
-      // Model is configured, just switch to it
-      await _switchModel(modelType);
-    } else {
-      // Model needs configuration
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => ModelConfigurationScreen(modelType: modelType),
-          ),
-        ).then((result) {
-          // Refresh the current model after configuration
-          _loadCurrentModel();
-          if (result == true) {
-            // Show success message if configuration was successful
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${modelType.displayName} configuration updated successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        });
       }
     }
   }
@@ -306,9 +291,10 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         _loadCurrentModel();
         if (result == true) {
           // Show success message if configuration was successful
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${modelType.displayName} configuration updated successfully'),
+              content: Text(l10n.modelConfigurationUpdatedSuccessfully(modelType.displayName)),
               backgroundColor: Colors.green,
             ),
           );
@@ -319,19 +305,20 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
   Future<void> _resetModelConfiguration(ModelType modelType) async {
     // Show confirmation dialog
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Reset ${modelType.displayName} Configuration'),
-        content: Text('Are you sure you want to reset the configuration for ${modelType.displayName}? This will clear all settings and allow you to reconfigure the model.'),
+        title: Text(l10n.resetModelConfiguration(modelType.displayName)),
+        content: Text(l10n.resetModelConfigurationConfirmation(modelType.displayName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
+            child: Text(l10n.reset),
           ),
         ],
       ),
@@ -351,7 +338,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${modelType.displayName} configuration reset successfully'),
+              content: Text(l10n.modelConfigurationResetSuccessfully(modelType.displayName)),
               backgroundColor: Colors.green,
             ),
           );
@@ -366,7 +353,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error resetting configuration: $e'),
+              content: Text(l10n.errorResettingConfiguration(e.toString())),
               backgroundColor: Colors.red,
             ),
           );
@@ -377,9 +364,11 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Model Settings'),
+        title: Text(l10n.aiModelSettings),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -393,7 +382,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Current Model',
+                          l10n.currentModel,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -414,13 +403,13 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            _getModelDescription(_currentModel!),
+                            _getModelDescription(_currentModel!, l10n),
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey[600],
                             ),
                           ),
                         ] else ...[
-                          const Text('No model selected'),
+                          Text(l10n.noModelSelected),
                         ],
                       ],
                     ),
@@ -428,7 +417,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Available Models',
+                  l10n.availableModels,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -448,7 +437,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_getModelDescription(modelType)),
+                              Text(_getModelDescription(modelType, l10n)),
                               const SizedBox(height: 4),
                               Row(
                                 children: [
@@ -459,7 +448,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    isConfigured ? 'Configured' : 'Not Configured',
+                                    isConfigured ? l10n.configured : l10n.notConfigured,
                                     style: TextStyle(
                                       color: isConfigured ? Colors.green : Colors.orange,
                                       fontSize: 12,
@@ -475,7 +464,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Current',
+                                      l10n.current,
                                       style: TextStyle(
                                         color: Theme.of(context).primaryColor,
                                         fontSize: 12,
@@ -491,33 +480,33 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                             onSelected: (value) => _handleModelAction(value, modelType),
                             itemBuilder: (BuildContext context) => [
                               if (!isCurrentModel)
-                                const PopupMenuItem<String>(
+                                PopupMenuItem<String>(
                                   value: 'use',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.check_circle_outline),
-                                      SizedBox(width: 8),
-                                      Text('Use model'),
+                                      const Icon(Icons.check_circle_outline),
+                                      const SizedBox(width: 8),
+                                      Text(l10n.useModel),
                                     ],
                                   ),
                                 ),
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'configure',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.settings),
-                                    SizedBox(width: 8),
-                                    Text('Configure model'),
+                                    const Icon(Icons.settings),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.configureModel),
                                   ],
                                 ),
                               ),
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'reset',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.refresh),
-                                    SizedBox(width: 8),
-                                    Text('Reset model'),
+                                    const Icon(Icons.refresh),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.resetModel),
                                   ],
                                 ),
                               ),
@@ -544,12 +533,12 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     }
   }
 
-  String _getModelDescription(ModelType modelType) {
+  String _getModelDescription(ModelType modelType, AppLocalizations l10n) {
     switch (modelType) {
       case ModelType.gemini:
-        return 'Google\'s most advanced model with full multimodal capabilities';
+        return l10n.geminiModelDescription;
       case ModelType.openaiCompatible:
-        return 'Compatible with OpenAI API endpoints with configurable capabilities';
+        return l10n.openaiCompatibleModelDescription;
     }
   }
 }

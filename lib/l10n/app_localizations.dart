@@ -311,7 +311,7 @@ abstract class AppLocalizations {
   /// No description provided for @pleaseEnterApiKey.
   ///
   /// In en, this message translates to:
-  /// **'Please enter your API key'**
+  /// **'Please enter an API key'**
   String get pleaseEnterApiKey;
 
   /// No description provided for @failedToSaveApiKey.
@@ -2983,6 +2983,408 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error importing app: {error}'**
   String errorImportingApp(Object error);
+
+  /// No description provided for @aiModelSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Model Settings'**
+  String get aiModelSettings;
+
+  /// No description provided for @currentModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Model'**
+  String get currentModel;
+
+  /// No description provided for @noModelSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No model selected'**
+  String get noModelSelected;
+
+  /// No description provided for @availableModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Available Models'**
+  String get availableModels;
+
+  /// No description provided for @configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get configured;
+
+  /// No description provided for @notConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Configured'**
+  String get notConfigured;
+
+  /// No description provided for @current.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get current;
+
+  /// No description provided for @useModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Use model'**
+  String get useModel;
+
+  /// No description provided for @configureModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure model'**
+  String get configureModel;
+
+  /// No description provided for @resetModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset model'**
+  String get resetModel;
+
+  /// No description provided for @switchedToModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to {modelName}'**
+  String switchedToModel(Object modelName);
+
+  /// No description provided for @errorSwitchingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Error switching model: {error}'**
+  String errorSwitchingModel(Object error);
+
+  /// No description provided for @modelConfigurationUpdatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} configuration updated successfully'**
+  String modelConfigurationUpdatedSuccessfully(Object modelName);
+
+  /// No description provided for @resetModelConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset {modelName} Configuration'**
+  String resetModelConfiguration(Object modelName);
+
+  /// No description provided for @resetModelConfigurationConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to reset the configuration for {modelName}? This will clear all settings and allow you to reconfigure the model.'**
+  String resetModelConfigurationConfirmation(Object modelName);
+
+  /// No description provided for @modelConfigurationResetSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} configuration reset successfully'**
+  String modelConfigurationResetSuccessfully(Object modelName);
+
+  /// No description provided for @errorResettingConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Error resetting configuration: {error}'**
+  String errorResettingConfiguration(Object error);
+
+  /// No description provided for @configureModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure {modelName}'**
+  String configureModelTitle(Object modelName);
+
+  /// No description provided for @loadPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Load a Preset'**
+  String get loadPreset;
+
+  /// No description provided for @selectPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a preset'**
+  String get selectPreset;
+
+  /// No description provided for @unknownPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown Preset'**
+  String get unknownPreset;
+
+  /// No description provided for @apiEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'API Endpoint'**
+  String get apiEndpoint;
+
+  /// No description provided for @apiEndpointDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the OpenAI-compatible API endpoint URL'**
+  String get apiEndpointDescription;
+
+  /// No description provided for @endpointUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint URL'**
+  String get endpointUrl;
+
+  /// No description provided for @endpointUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://api.openai.com/v1/chat/completions'**
+  String get endpointUrlHint;
+
+  /// No description provided for @pleaseEnterEndpointUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an endpoint URL'**
+  String get pleaseEnterEndpointUrl;
+
+  /// No description provided for @pleaseEnterValidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid URL'**
+  String get pleaseEnterValidUrl;
+
+  /// No description provided for @modelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Name'**
+  String get modelName;
+
+  /// No description provided for @modelNameDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)'**
+  String get modelNameDescription;
+
+  /// No description provided for @modelNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'gpt-4'**
+  String get modelNameHint;
+
+  /// No description provided for @pleaseEnterModelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a model name'**
+  String get pleaseEnterModelName;
+
+  /// No description provided for @displayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display Name'**
+  String get displayName;
+
+  /// No description provided for @displayNameDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A custom name to display in the app for this model'**
+  String get displayNameDescription;
+
+  /// No description provided for @displayNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'My Custom Model'**
+  String get displayNameHint;
+
+  /// No description provided for @tokenLimits.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Limits'**
+  String get tokenLimits;
+
+  /// No description provided for @tokenLimitsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure the maximum input and output tokens for this model'**
+  String get tokenLimitsDescription;
+
+  /// No description provided for @maxInputTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Input Tokens'**
+  String get maxInputTokens;
+
+  /// No description provided for @maxInputTokensHint.
+  ///
+  /// In en, this message translates to:
+  /// **'100000'**
+  String get maxInputTokensHint;
+
+  /// No description provided for @maxOutputTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Output Tokens'**
+  String get maxOutputTokens;
+
+  /// No description provided for @maxOutputTokensHint.
+  ///
+  /// In en, this message translates to:
+  /// **'4000'**
+  String get maxOutputTokensHint;
+
+  /// No description provided for @required.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get required;
+
+  /// No description provided for @mustBePositiveNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Must be a positive number'**
+  String get mustBePositiveNumber;
+
+  /// No description provided for @modelCapabilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Capabilities'**
+  String get modelCapabilities;
+
+  /// No description provided for @modelCapabilitiesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select which capabilities this model supports'**
+  String get modelCapabilitiesDescription;
+
+  /// No description provided for @imageProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Processing'**
+  String get imageProcessing;
+
+  /// No description provided for @imageProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can analyze and understand images'**
+  String get imageProcessingDescription;
+
+  /// No description provided for @documentUnderstanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Document Understanding'**
+  String get documentUnderstanding;
+
+  /// No description provided for @documentUnderstandingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can process PDFs and documents'**
+  String get documentUnderstandingDescription;
+
+  /// No description provided for @audioProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Processing'**
+  String get audioProcessing;
+
+  /// No description provided for @audioProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can transcribe and analyze audio'**
+  String get audioProcessingDescription;
+
+  /// No description provided for @videoProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Video Processing'**
+  String get videoProcessing;
+
+  /// No description provided for @videoProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can analyze video content'**
+  String get videoProcessingDescription;
+
+  /// No description provided for @geminiModelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Google\'s most advanced model with full multimodal capabilities'**
+  String get geminiModelDescription;
+
+  /// No description provided for @openaiCompatibleModelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible with OpenAI API endpoints with configurable capabilities'**
+  String get openaiCompatibleModelDescription;
+
+  /// No description provided for @geminiModelDescriptionDetailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Google\'s most advanced model with full multimodal capabilities including document understanding.'**
+  String get geminiModelDescriptionDetailed;
+
+  /// No description provided for @openaiCompatibleModelDescriptionDetailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.'**
+  String get openaiCompatibleModelDescriptionDetailed;
+
+  /// No description provided for @geminiApiKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Get your API key from Google AI Studio'**
+  String get geminiApiKeyDescription;
+
+  /// No description provided for @openaiCompatibleApiKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Get your API key from your OpenAI-compatible service provider'**
+  String get openaiCompatibleApiKeyDescription;
+
+  /// No description provided for @errorConfiguringModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Error configuring model: {error}'**
+  String errorConfiguringModel(Object error);
+
+  /// No description provided for @recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery'**
+  String get recovery;
+
+  /// No description provided for @recoverySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup and restore your notes'**
+  String get recoverySubtitle;
+
+  /// No description provided for @exportAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Export All Notes'**
+  String get exportAllNotes;
+
+  /// No description provided for @exportAllNotesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a complete backup of all your notes and attachments'**
+  String get exportAllNotesDescription;
+
+  /// No description provided for @exporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting...'**
+  String get exporting;
+
+  /// No description provided for @exportLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Logs'**
+  String get exportLogs;
+
+  /// No description provided for @previousExports.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Exports'**
+  String get previousExports;
+
+  /// No description provided for @saveAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Again'**
+  String get saveAgain;
 }
 
 class _AppLocalizationsDelegate

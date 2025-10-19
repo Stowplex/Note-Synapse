@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/tag.dart';
@@ -413,7 +414,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
   void _addDedupRule() {
     final newRule = DedupRule(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       leftTag: '',
       rightTag: '',
     );

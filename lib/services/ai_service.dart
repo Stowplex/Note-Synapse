@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
@@ -586,7 +586,7 @@ class AIService {
       
       for (final noteJson in notesJson) {
         final note = Note(
-          id: DateTime.now().millisecondsSinceEpoch.toString() + '_${notes.length}',
+          id: const Uuid().v4(),
           title: noteJson['title'] as String,
           content: noteJson['content'] as String,
           type: noteJson['type'] == 'task' ? NoteType.task : NoteType.note,
@@ -594,7 +594,7 @@ class AIService {
           updatedAt: DateTime.now(),
           tags: List<String>.from(noteJson['tags'] ?? []),
           subNotes: (noteJson['subNotes'] as List<dynamic>?)?.map((sn) => SubNote(
-            id: DateTime.now().millisecondsSinceEpoch.toString() + '_sub_${sn.hashCode}',
+            id: const Uuid().v4(),
             name: sn['name'] as String,
             content: sn['content'] as String,
             createdAt: DateTime.now(),
@@ -636,7 +636,7 @@ class AIService {
       
       for (final ruleJson in rulesJson) {
         final rule = DedupRule(
-          id: DateTime.now().millisecondsSinceEpoch.toString() + '_${rules.length}',
+          id: const Uuid().v4(),
           leftTag: ruleJson['leftTag'] as String,
           rightTag: ruleJson['rightTag'] as String,
         );

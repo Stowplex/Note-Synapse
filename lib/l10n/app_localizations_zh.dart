@@ -119,7 +119,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apiKeySecurityNote => '您的API密钥安全存储在您的设备上，从不共享。';
 
   @override
-  String get pleaseEnterApiKey => '请输入您的API密钥';
+  String get pleaseEnterApiKey => '请输入API密钥';
 
   @override
   String failedToSaveApiKey(Object error) {
@@ -1570,4 +1570,226 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorImportingApp(Object error) {
     return '导入应用时出错：$error';
   }
+
+  @override
+  String get aiModelSettings => 'AI模型设置';
+
+  @override
+  String get currentModel => '当前模型';
+
+  @override
+  String get noModelSelected => '未选择模型';
+
+  @override
+  String get availableModels => '可用模型';
+
+  @override
+  String get configured => '已配置';
+
+  @override
+  String get notConfigured => '未配置';
+
+  @override
+  String get current => '当前';
+
+  @override
+  String get useModel => '使用模型';
+
+  @override
+  String get configureModel => '配置模型';
+
+  @override
+  String get resetModel => '重置模型';
+
+  @override
+  String switchedToModel(Object modelName) {
+    return '已切换到$modelName';
+  }
+
+  @override
+  String errorSwitchingModel(Object error) {
+    return '切换模型时出错：$error';
+  }
+
+  @override
+  String modelConfigurationUpdatedSuccessfully(Object modelName) {
+    return '$modelName配置更新成功';
+  }
+
+  @override
+  String resetModelConfiguration(Object modelName) {
+    return '重置$modelName配置';
+  }
+
+  @override
+  String resetModelConfigurationConfirmation(Object modelName) {
+    return '您确定要重置$modelName的配置吗？这将清除所有设置并允许您重新配置模型。';
+  }
+
+  @override
+  String modelConfigurationResetSuccessfully(Object modelName) {
+    return '$modelName配置重置成功';
+  }
+
+  @override
+  String errorResettingConfiguration(Object error) {
+    return '重置配置时出错：$error';
+  }
+
+  @override
+  String configureModelTitle(Object modelName) {
+    return '配置$modelName';
+  }
+
+  @override
+  String get loadPreset => '加载预设';
+
+  @override
+  String get selectPreset => '选择预设';
+
+  @override
+  String get unknownPreset => '未知预设';
+
+  @override
+  String get apiEndpoint => 'API端点';
+
+  @override
+  String get apiEndpointDescription => '输入OpenAI兼容的API端点URL';
+
+  @override
+  String get endpointUrl => '端点URL';
+
+  @override
+  String get endpointUrlHint => 'https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get pleaseEnterEndpointUrl => '请输入端点URL';
+
+  @override
+  String get pleaseEnterValidUrl => '请输入有效的URL';
+
+  @override
+  String get modelName => '模型名称';
+
+  @override
+  String get modelNameDescription =>
+      '输入要使用的模型名称（例如：gpt-4、gpt-3.5-turbo、claude-3-sonnet）';
+
+  @override
+  String get modelNameHint => 'gpt-4';
+
+  @override
+  String get pleaseEnterModelName => '请输入模型名称';
+
+  @override
+  String get displayName => '显示名称';
+
+  @override
+  String get displayNameDescription => '在应用中为此模型显示的自定义名称';
+
+  @override
+  String get displayNameHint => '我的自定义模型';
+
+  @override
+  String get tokenLimits => '令牌限制';
+
+  @override
+  String get tokenLimitsDescription => '配置此模型的最大输入和输出令牌数';
+
+  @override
+  String get maxInputTokens => '最大输入令牌';
+
+  @override
+  String get maxInputTokensHint => '100000';
+
+  @override
+  String get maxOutputTokens => '最大输出令牌';
+
+  @override
+  String get maxOutputTokensHint => '4000';
+
+  @override
+  String get required => '必填';
+
+  @override
+  String get mustBePositiveNumber => '必须是正数';
+
+  @override
+  String get modelCapabilities => '模型功能';
+
+  @override
+  String get modelCapabilitiesDescription => '选择此模型支持的功能';
+
+  @override
+  String get imageProcessing => '图像处理';
+
+  @override
+  String get imageProcessingDescription => '可以分析和理解图像';
+
+  @override
+  String get documentUnderstanding => '文档理解';
+
+  @override
+  String get documentUnderstandingDescription => '可以处理PDF和文档';
+
+  @override
+  String get audioProcessing => '音频处理';
+
+  @override
+  String get audioProcessingDescription => '可以转录和分析音频';
+
+  @override
+  String get videoProcessing => '视频处理';
+
+  @override
+  String get videoProcessingDescription => '可以分析视频内容';
+
+  @override
+  String get geminiModelDescription => 'Google最先进的模型，具有完整的多模态功能';
+
+  @override
+  String get openaiCompatibleModelDescription => '兼容OpenAI API端点，具有可配置功能';
+
+  @override
+  String get geminiModelDescriptionDetailed =>
+      'Google最先进的模型，具有完整的多模态功能，包括文档理解。';
+
+  @override
+  String get openaiCompatibleModelDescriptionDetailed =>
+      '兼容OpenAI API端点。配置端点URL并选择支持的功能。';
+
+  @override
+  String get geminiApiKeyDescription => '从Google AI Studio获取您的API密钥';
+
+  @override
+  String get openaiCompatibleApiKeyDescription => '从您的OpenAI兼容服务提供商获取API密钥';
+
+  @override
+  String errorConfiguringModel(Object error) {
+    return '配置模型时出错：$error';
+  }
+
+  @override
+  String get recovery => '恢复';
+
+  @override
+  String get recoverySubtitle => '备份和恢复您的笔记';
+
+  @override
+  String get exportAllNotes => '导出所有笔记';
+
+  @override
+  String get exportAllNotesDescription => '创建所有笔记和附件的完整备份';
+
+  @override
+  String get exporting => '导出中...';
+
+  @override
+  String get exportLogs => '导出日志';
+
+  @override
+  String get previousExports => '之前的导出';
+
+  @override
+  String get saveAgain => '再次保存';
 }

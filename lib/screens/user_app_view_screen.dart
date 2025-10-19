@@ -1513,7 +1513,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   // Generate unique ID for notes and subnotes
   String _generateUniqueId() {
-    return '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
+    return const Uuid().v4();
   }
 
   // Parse NoteType from string

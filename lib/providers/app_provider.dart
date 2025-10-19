@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
@@ -225,7 +226,7 @@ class AppProvider extends ChangeNotifier {
         final exists = await _databaseService.relationshipExists(fromNoteId, toNoteId, relationshipType);
         if (!exists) {
           final relationship = Relationship(
-            id: DateTime.now().millisecondsSinceEpoch.toString() + '_${toNoteId}',
+            id: const Uuid().v4(),
             fromNoteId: fromNoteId,
             toNoteId: toNoteId,
             type: relationshipType,

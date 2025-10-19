@@ -10,6 +10,7 @@ import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
 import '../services/model_selector.dart';
 import '../providers/app_provider.dart';
+import '../l10n/app_localizations.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelType modelType;
@@ -250,8 +251,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         Navigator.of(context).pop(true);
       }
     } catch (e) {
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
-        _error = 'Error configuring model: $e';
+        _error = l10n.errorConfiguringModel(e.toString());
         _isLoading = false;
       });
     }
@@ -275,9 +277,11 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: Text('Configure ${widget.modelType.displayName}'),
+        title: Text(l10n.configureModelTitle(widget.modelType.displayName)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -320,6 +324,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildPresetSelector() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -327,7 +333,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Load a Preset',
+              l10n.loadPreset,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -339,13 +345,13 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               items: _presets.map((preset) {
                 return DropdownMenuItem<ModelConfig>(
                   value: preset,
-                  child: Text(preset.displayName ?? preset.modelName ?? 'Unknown Preset'),
+                  child: Text(preset.displayName ?? preset.modelName ?? l10n.unknownPreset),
                 );
               }).toList(),
               onChanged: (preset) => _applyPreset(preset),
-              decoration: const InputDecoration(
-                labelText: 'Select a preset',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.selectPreset,
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -355,6 +361,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildModelInfoCard() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -375,7 +383,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(_getModelDescription()),
+            Text(_getModelDescription(l10n)),
           ],
         ),
       ),
@@ -383,6 +391,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildApiKeySection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -390,7 +400,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'API Key',
+              l10n.apiKey,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -398,7 +408,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _getApiKeyDescription(),
+              _getApiKeyDescription(l10n),
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -408,20 +418,20 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             TextFormField(
               controller: _apiKeyController,
               decoration: InputDecoration(
-                labelText: 'API Key',
-                hintText: 'Enter your API key',
+                labelText: l10n.apiKey,
+                hintText: l10n.apiKeyHint,
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.key),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.open_in_new),
                   onPressed: _openApiKeyUrl,
-                  tooltip: 'Get API Key',
+                  tooltip: l10n.getApiKey,
                 ),
               ),
               obscureText: true,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter an API key';
+                  return l10n.pleaseEnterApiKey;
                 }
                 return null;
               },
@@ -433,6 +443,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildEndpointSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -440,7 +452,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'API Endpoint',
+              l10n.apiEndpoint,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -448,7 +460,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Enter the OpenAI-compatible API endpoint URL',
+              l10n.apiEndpointDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -457,19 +469,19 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _endpointController,
-              decoration: const InputDecoration(
-                labelText: 'Endpoint URL',
-                hintText: 'https://api.openai.com/v1/chat/completions',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.link),
+              decoration: InputDecoration(
+                labelText: l10n.endpointUrl,
+                hintText: l10n.endpointUrlHint,
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.link),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter an endpoint URL';
+                  return l10n.pleaseEnterEndpointUrl;
                 }
                 final uri = Uri.tryParse(value);
                 if (uri == null || !uri.hasAbsolutePath) {
-                  return 'Please enter a valid URL';
+                  return l10n.pleaseEnterValidUrl;
                 }
                 return null;
               },
@@ -481,6 +493,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildModelNameSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -488,7 +502,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Model Name',
+              l10n.modelName,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -496,7 +510,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)',
+              l10n.modelNameDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -505,15 +519,15 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _modelNameController,
-              decoration: const InputDecoration(
-                labelText: 'Model Name',
-                hintText: 'gpt-4',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.smart_toy),
+              decoration: InputDecoration(
+                labelText: l10n.modelName,
+                hintText: l10n.modelNameHint,
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.smart_toy),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a model name';
+                  return l10n.pleaseEnterModelName;
                 }
                 return null;
               },
@@ -525,6 +539,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildDisplayNameSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -532,7 +548,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Display Name',
+              l10n.displayName,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -540,7 +556,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'A custom name to display in the app for this model',
+              l10n.displayNameDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -549,11 +565,11 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _displayNameController,
-              decoration: const InputDecoration(
-                labelText: 'Display Name',
-                hintText: 'My Custom Model',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.badge),
+              decoration: InputDecoration(
+                labelText: l10n.displayName,
+                hintText: l10n.displayNameHint,
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.badge),
               ),
             ),
           ],
@@ -563,6 +579,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildTokenLimitsSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -570,7 +588,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Token Limits',
+              l10n.tokenLimits,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -578,7 +596,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Configure the maximum input and output tokens for this model',
+              l10n.tokenLimitsDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -590,20 +608,20 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _maxInputTokensController,
-                    decoration: const InputDecoration(
-                      labelText: 'Max Input Tokens',
-                      hintText: '100000',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.input),
+                    decoration: InputDecoration(
+                      labelText: l10n.maxInputTokens,
+                      hintText: l10n.maxInputTokensHint,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.input),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Required';
+                        return l10n.required;
                       }
                       final tokens = int.tryParse(value.trim());
                       if (tokens == null || tokens <= 0) {
-                        return 'Must be a positive number';
+                        return l10n.mustBePositiveNumber;
                       }
                       return null;
                     },
@@ -613,20 +631,20 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _maxOutputTokensController,
-                    decoration: const InputDecoration(
-                      labelText: 'Max Output Tokens',
-                      hintText: '4000',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.output),
+                    decoration: InputDecoration(
+                      labelText: l10n.maxOutputTokens,
+                      hintText: l10n.maxOutputTokensHint,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.output),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Required';
+                        return l10n.required;
                       }
                       final tokens = int.tryParse(value.trim());
                       if (tokens == null || tokens <= 0) {
-                        return 'Must be a positive number';
+                        return l10n.mustBePositiveNumber;
                       }
                       return null;
                     },
@@ -641,6 +659,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildCapabilitiesSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -648,7 +668,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Model Capabilities',
+              l10n.modelCapabilities,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -656,7 +676,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Select which capabilities this model supports',
+              l10n.modelCapabilitiesDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -664,8 +684,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 16),
             CheckboxListTile(
-              title: const Text('Image Processing'),
-              subtitle: const Text('Can analyze and understand images'),
+              title: Text(l10n.imageProcessing),
+              subtitle: Text(l10n.imageProcessingDescription),
               value: _supportsImages,
               onChanged: (value) {
                 setState(() {
@@ -674,8 +694,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               },
             ),
             CheckboxListTile(
-              title: const Text('Document Understanding'),
-              subtitle: const Text('Can process PDFs and documents'),
+              title: Text(l10n.documentUnderstanding),
+              subtitle: Text(l10n.documentUnderstandingDescription),
               value: _supportsDocuments,
               onChanged: (value) {
                 setState(() {
@@ -684,8 +704,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               },
             ),
             CheckboxListTile(
-              title: const Text('Audio Processing'),
-              subtitle: const Text('Can transcribe and analyze audio'),
+              title: Text(l10n.audioProcessing),
+              subtitle: Text(l10n.audioProcessingDescription),
               value: _supportsAudio,
               onChanged: (value) {
                 setState(() {
@@ -694,8 +714,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               },
             ),
             CheckboxListTile(
-              title: const Text('Video Processing'),
-              subtitle: const Text('Can analyze video content'),
+              title: Text(l10n.videoProcessing),
+              subtitle: Text(l10n.videoProcessingDescription),
               value: _supportsVideo,
               onChanged: (value) {
                 setState(() {
@@ -733,6 +753,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildActionButton() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return SizedBox(
       height: 50,
       child: ElevatedButton(
@@ -743,7 +765,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 width: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Text('Continue'),
+            : Text(l10n.continueButton),
       ),
     );
   }
@@ -757,21 +779,21 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     }
   }
 
-  String _getModelDescription() {
+  String _getModelDescription(AppLocalizations l10n) {
     switch (widget.modelType) {
       case ModelType.gemini:
-        return 'Google\'s most advanced model with full multimodal capabilities including document understanding.';
+        return l10n.geminiModelDescriptionDetailed;
       case ModelType.openaiCompatible:
-        return 'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
+        return l10n.openaiCompatibleModelDescriptionDetailed;
     }
   }
 
-  String _getApiKeyDescription() {
+  String _getApiKeyDescription(AppLocalizations l10n) {
     switch (widget.modelType) {
       case ModelType.gemini:
-        return 'Get your API key from Google AI Studio';
+        return l10n.geminiApiKeyDescription;
       case ModelType.openaiCompatible:
-        return 'Get your API key from your OpenAI-compatible service provider';
+        return l10n.openaiCompatibleApiKeyDescription;
     }
   }
 }

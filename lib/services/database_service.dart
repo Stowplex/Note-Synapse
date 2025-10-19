@@ -682,7 +682,9 @@ class DatabaseService {
       }
     }
     
+    
   }
+
 
   // Migration helper method to create initial revisions for existing apps
   Future<void> _migrateExistingAppsToRevisions(Database db) async {
@@ -1371,6 +1373,25 @@ class DatabaseService {
       'fileType': fileType,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  // Get all attachments from database
+  Future<List<Map<String, dynamic>>> getAllAttachments() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('attachments');
+    return maps;
+  }
+
+
+  // Get database path
+  Future<String> getDatabasePath() async {
+    return join(await getDatabasesPath(), 'note_synapse.db');
+  }
+
+  // Force database checkpoint
+  Future<void> checkpoint() async {
+    final db = await database;
+    await db.execute('PRAGMA wal_checkpoint(FULL);');
   }
 
 

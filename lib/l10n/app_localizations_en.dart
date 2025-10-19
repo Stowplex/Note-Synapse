@@ -121,7 +121,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your API key is stored securely on your device and never shared.';
 
   @override
-  String get pleaseEnterApiKey => 'Please enter your API key';
+  String get pleaseEnterApiKey => 'Please enter an API key';
 
   @override
   String failedToSaveApiKey(Object error) {
@@ -1594,4 +1594,236 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorImportingApp(Object error) {
     return 'Error importing app: $error';
   }
+
+  @override
+  String get aiModelSettings => 'AI Model Settings';
+
+  @override
+  String get currentModel => 'Current Model';
+
+  @override
+  String get noModelSelected => 'No model selected';
+
+  @override
+  String get availableModels => 'Available Models';
+
+  @override
+  String get configured => 'Configured';
+
+  @override
+  String get notConfigured => 'Not Configured';
+
+  @override
+  String get current => 'Current';
+
+  @override
+  String get useModel => 'Use model';
+
+  @override
+  String get configureModel => 'Configure model';
+
+  @override
+  String get resetModel => 'Reset model';
+
+  @override
+  String switchedToModel(Object modelName) {
+    return 'Switched to $modelName';
+  }
+
+  @override
+  String errorSwitchingModel(Object error) {
+    return 'Error switching model: $error';
+  }
+
+  @override
+  String modelConfigurationUpdatedSuccessfully(Object modelName) {
+    return '$modelName configuration updated successfully';
+  }
+
+  @override
+  String resetModelConfiguration(Object modelName) {
+    return 'Reset $modelName Configuration';
+  }
+
+  @override
+  String resetModelConfigurationConfirmation(Object modelName) {
+    return 'Are you sure you want to reset the configuration for $modelName? This will clear all settings and allow you to reconfigure the model.';
+  }
+
+  @override
+  String modelConfigurationResetSuccessfully(Object modelName) {
+    return '$modelName configuration reset successfully';
+  }
+
+  @override
+  String errorResettingConfiguration(Object error) {
+    return 'Error resetting configuration: $error';
+  }
+
+  @override
+  String configureModelTitle(Object modelName) {
+    return 'Configure $modelName';
+  }
+
+  @override
+  String get loadPreset => 'Load a Preset';
+
+  @override
+  String get selectPreset => 'Select a preset';
+
+  @override
+  String get unknownPreset => 'Unknown Preset';
+
+  @override
+  String get apiEndpoint => 'API Endpoint';
+
+  @override
+  String get apiEndpointDescription =>
+      'Enter the OpenAI-compatible API endpoint URL';
+
+  @override
+  String get endpointUrl => 'Endpoint URL';
+
+  @override
+  String get endpointUrlHint => 'https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get pleaseEnterEndpointUrl => 'Please enter an endpoint URL';
+
+  @override
+  String get pleaseEnterValidUrl => 'Please enter a valid URL';
+
+  @override
+  String get modelName => 'Model Name';
+
+  @override
+  String get modelNameDescription =>
+      'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)';
+
+  @override
+  String get modelNameHint => 'gpt-4';
+
+  @override
+  String get pleaseEnterModelName => 'Please enter a model name';
+
+  @override
+  String get displayName => 'Display Name';
+
+  @override
+  String get displayNameDescription =>
+      'A custom name to display in the app for this model';
+
+  @override
+  String get displayNameHint => 'My Custom Model';
+
+  @override
+  String get tokenLimits => 'Token Limits';
+
+  @override
+  String get tokenLimitsDescription =>
+      'Configure the maximum input and output tokens for this model';
+
+  @override
+  String get maxInputTokens => 'Max Input Tokens';
+
+  @override
+  String get maxInputTokensHint => '100000';
+
+  @override
+  String get maxOutputTokens => 'Max Output Tokens';
+
+  @override
+  String get maxOutputTokensHint => '4000';
+
+  @override
+  String get required => 'Required';
+
+  @override
+  String get mustBePositiveNumber => 'Must be a positive number';
+
+  @override
+  String get modelCapabilities => 'Model Capabilities';
+
+  @override
+  String get modelCapabilitiesDescription =>
+      'Select which capabilities this model supports';
+
+  @override
+  String get imageProcessing => 'Image Processing';
+
+  @override
+  String get imageProcessingDescription => 'Can analyze and understand images';
+
+  @override
+  String get documentUnderstanding => 'Document Understanding';
+
+  @override
+  String get documentUnderstandingDescription =>
+      'Can process PDFs and documents';
+
+  @override
+  String get audioProcessing => 'Audio Processing';
+
+  @override
+  String get audioProcessingDescription => 'Can transcribe and analyze audio';
+
+  @override
+  String get videoProcessing => 'Video Processing';
+
+  @override
+  String get videoProcessingDescription => 'Can analyze video content';
+
+  @override
+  String get geminiModelDescription =>
+      'Google\'s most advanced model with full multimodal capabilities';
+
+  @override
+  String get openaiCompatibleModelDescription =>
+      'Compatible with OpenAI API endpoints with configurable capabilities';
+
+  @override
+  String get geminiModelDescriptionDetailed =>
+      'Google\'s most advanced model with full multimodal capabilities including document understanding.';
+
+  @override
+  String get openaiCompatibleModelDescriptionDetailed =>
+      'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
+
+  @override
+  String get geminiApiKeyDescription =>
+      'Get your API key from Google AI Studio';
+
+  @override
+  String get openaiCompatibleApiKeyDescription =>
+      'Get your API key from your OpenAI-compatible service provider';
+
+  @override
+  String errorConfiguringModel(Object error) {
+    return 'Error configuring model: $error';
+  }
+
+  @override
+  String get recovery => 'Recovery';
+
+  @override
+  String get recoverySubtitle => 'Backup and restore your notes';
+
+  @override
+  String get exportAllNotes => 'Export All Notes';
+
+  @override
+  String get exportAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments';
+
+  @override
+  String get exporting => 'Exporting...';
+
+  @override
+  String get exportLogs => 'Export Logs';
+
+  @override
+  String get previousExports => 'Previous Exports';
+
+  @override
+  String get saveAgain => 'Save Again';
 }
