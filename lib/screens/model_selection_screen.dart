@@ -31,7 +31,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     } catch (e) {
       // Use default if loading fails
       setState(() {
-        _selectedModel = ModelType.gemini25Flash;
+        _selectedModel = ModelType.gemini;
       });
     }
   }
@@ -219,7 +219,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
               ),
               const SizedBox(height: 12),
               _buildCapabilitiesChips(capabilities),
-              if (modelType == ModelType.gemini25Flash) ...[
+              if (modelType == ModelType.gemini) ...[
                 const SizedBox(height: 12),
                 _buildGeminiInfo(),
               ],
@@ -294,7 +294,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   IconData _getModelIcon(ModelType modelType) {
     switch (modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return Icons.psychology;
       case ModelType.openaiCompatible:
         return Icons.api;
@@ -303,7 +303,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   String _getModelDescription(ModelType modelType) {
     switch (modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
@@ -312,7 +312,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   ModelCapabilities _getModelCapabilities(ModelType modelType) {
     switch (modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return const ModelCapabilities(
           maxInputTokens: 1000000,
           maxOutputTokens: 60000,

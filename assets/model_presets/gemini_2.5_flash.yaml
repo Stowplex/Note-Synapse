@@ -1,0 +1,12 @@
+model_type: gemini
+model_endpoint: https://generativelanguage.googleapis.com/v1beta
+model_name: gemini-2.5-flash
+model_display_name: Gemini 2.5 Flash
+model_capabilities:
+  - support_audio
+  - support_video
+  - support_document_understanding
+  - support_image
+max_input_token: 1048576
+max_output_token: 65536
+warn_premium: false

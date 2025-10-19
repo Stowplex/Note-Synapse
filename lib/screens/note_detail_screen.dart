@@ -16,6 +16,7 @@ import '../widgets/interactive_checkbox_list.dart';
 import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
@@ -1394,7 +1395,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   IconData _getFileIcon(String fileName) {
-    final extension = fileName.split('.').last.toLowerCase();
+    final extension = FileTypeUtils.getFileExtension(fileName);
     switch (extension) {
       case 'pdf':
         return Icons.picture_as_pdf;
@@ -2013,7 +2014,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Helper methods
   bool _isAudioFile(String fileName) {
-    final extension = fileName.split('.').last.toLowerCase();
+    final extension = FileTypeUtils.getFileExtension(fileName);
     return ['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'wma'].contains(extension);
   }
 

@@ -18,6 +18,7 @@ import '../services/ai_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 import 'user_app_edit_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
@@ -1646,7 +1647,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       
       // Determine content type based on file extension
       String contentType = 'text/plain';
-      final extension = path.split('.').last.toLowerCase();
+      final extension = FileTypeUtils.getFileExtension(path);
       switch (extension) {
         case 'js':
           contentType = 'application/javascript';

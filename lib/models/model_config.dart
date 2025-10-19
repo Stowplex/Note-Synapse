@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'model_type.dart';
 import 'model_capabilities.dart';
 
@@ -7,7 +8,9 @@ class ModelConfig {
   final String? apiKey;
   final String? endpoint;
   final String? modelName;
-  final Map<String, dynamic> customCapabilities;
+  final String? displayName;
+  final int? maxInputTokens;
+  final int? maxOutputTokens;
   final ModelCapabilities? customCapabilitiesObject;
   final bool isConfigured;
 
@@ -16,10 +19,20 @@ class ModelConfig {
     this.apiKey,
     this.endpoint,
     this.modelName,
-    this.customCapabilities = const {},
-    this.customCapabilitiesObject,
+    this.displayName,
+    this.maxInputTokens,
+    this.maxOutputTokens,
+    ModelCapabilities? customCapabilitiesObject,
     this.isConfigured = false,
-  });
+  }) : this.customCapabilitiesObject = customCapabilitiesObject ??
+      const ModelCapabilities(
+        maxInputTokens: 100000,
+        maxOutputTokens: 4000,
+        supportsImages: false,
+        supportsDocuments: false,
+        supportsAudio: false,
+        supportsVideo: false,
+      );
 
   /// Create a copy with updated values
   ModelConfig copyWith({
@@ -27,7 +40,9 @@ class ModelConfig {
     String? apiKey,
     String? endpoint,
     String? modelName,
-    Map<String, dynamic>? customCapabilities,
+    String? displayName,
+    int? maxInputTokens,
+    int? maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
     bool? isConfigured,
   }) {
@@ -36,8 +51,11 @@ class ModelConfig {
       apiKey: apiKey ?? this.apiKey,
       endpoint: endpoint ?? this.endpoint,
       modelName: modelName ?? this.modelName,
-      customCapabilities: customCapabilities ?? this.customCapabilities,
-      customCapabilitiesObject: customCapabilitiesObject ?? this.customCapabilitiesObject,
+      displayName: displayName ?? this.displayName,
+      maxInputTokens: maxInputTokens ?? this.maxInputTokens,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      customCapabilitiesObject:
+          customCapabilitiesObject ?? this.customCapabilitiesObject,
       isConfigured: isConfigured ?? this.isConfigured,
     );
   }
@@ -49,7 +67,9 @@ class ModelConfig {
       'apiKey': apiKey,
       'endpoint': endpoint,
       'modelName': modelName,
-      'customCapabilities': customCapabilities,
+      'displayName': displayName,
+      'maxInputTokens': maxInputTokens,
+      'maxOutputTokens': maxOutputTokens,
       'customCapabilitiesObject': customCapabilitiesObject?.toJson(),
       'isConfigured': isConfigured,
     };
@@ -58,12 +78,14 @@ class ModelConfig {
   /// Create from JSON
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
     return ModelConfig(
-      type: ModelType.fromId(json['type'] as String) ?? ModelType.gemini25Flash,
+      type: ModelType.fromId(json['type'] as String) ?? ModelType.gemini,
       apiKey: json['apiKey'] as String?,
       endpoint: json['endpoint'] as String?,
       modelName: json['modelName'] as String?,
-      customCapabilities: Map<String, dynamic>.from(json['customCapabilities'] ?? {}),
-      customCapabilitiesObject: json['customCapabilitiesObject'] != null 
+      displayName: json['displayName'] as String?,
+      maxInputTokens: json['maxInputTokens'] as int?,
+      maxOutputTokens: json['maxOutputTokens'] as int?,
+      customCapabilitiesObject: json['customCapabilitiesObject'] != null
           ? ModelCapabilities.fromJson(json['customCapabilitiesObject'])
           : null,
       isConfigured: json['isConfigured'] as bool? ?? false,
@@ -76,19 +98,31 @@ class ModelConfig {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ModelConfig &&
-          runtimeType == other.runtimeType &&
-          type == other.type &&
-          apiKey == other.apiKey &&
-          endpoint == other.endpoint &&
-          isConfigured == other.isConfigured;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+  
+    return other is ModelConfig &&
+      other.type == type &&
+      other.apiKey == apiKey &&
+      other.endpoint == endpoint &&
+      other.modelName == modelName &&
+      other.displayName == displayName &&
+      other.maxInputTokens == maxInputTokens &&
+      other.maxOutputTokens == maxOutputTokens &&
+      other.customCapabilitiesObject == customCapabilitiesObject &&
+      other.isConfigured == isConfigured;
+  }
 
   @override
-  int get hashCode =>
-      type.hashCode ^
+  int get hashCode {
+    return type.hashCode ^
       apiKey.hashCode ^
       endpoint.hashCode ^
+      modelName.hashCode ^
+      displayName.hashCode ^
+      maxInputTokens.hashCode ^
+      maxOutputTokens.hashCode ^
+      customCapabilitiesObject.hashCode ^
       isConfigured.hashCode;
+  }
 }

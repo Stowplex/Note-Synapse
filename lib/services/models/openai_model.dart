@@ -5,20 +5,18 @@ import 'ai_model.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../../models/model_type.dart';
-import '../../models/model_capabilities.dart';
+import '../../models/model_config.dart';
+import '../../utils/file_type_utils.dart';
 
 /// OpenAI compatible model implementation
 class OpenAIModel implements AIModel {
-  String? _endpoint;
-  String? _apiKey;
-  String? _modelName;
-  ModelCapabilities? _capabilities;
+  ModelConfig? _config;
 
   @override
-  String get id => ModelType.openaiCompatible.id;
+  String get id => _config?.type.id ?? ModelType.openaiCompatible.id;
 
   @override
-  String get name => ModelType.openaiCompatible.displayName;
+  String get name => _config?.displayName ?? ModelType.openaiCompatible.displayName;
 
   @override
   String get description => 'OpenAI compatible API endpoint with configurable capabilities';
@@ -26,15 +24,8 @@ class OpenAIModel implements AIModel {
   @override
   Future<bool> isReady() async {
     try {
-      final config = await ModelStorageService.getModelConfig(ModelType.openaiCompatible);
-      final apiKey = await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
-      return config.isConfigured && 
-             config.endpoint != null && 
-             config.endpoint!.isNotEmpty &&
-             config.modelName != null &&
-             config.modelName!.isNotEmpty &&
-             apiKey != null && 
-             apiKey.isNotEmpty;
+      final apiKey = _config?.apiKey ?? await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
+      return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('OpenAIModel: Error checking readiness: $e');
       return false;
@@ -42,44 +33,38 @@ class OpenAIModel implements AIModel {
   }
 
   @override
-  Future<void> initialize() async {
-    await _loadConfiguration();
-  }
+  Future<void> initialize({ModelConfig? config}) async {
+    if (config != null) {
+      _config = config;
+      LoggerService.debug('OpenAI model initialized with provided config', error: {
+        'modelName': config.modelName,
+        'displayName': config.displayName,
+        'supportsImages': config.customCapabilitiesObject?.supportsImages,
+        'supportsDocuments': config.customCapabilitiesObject?.supportsDocuments,
+        'supportsAudio': config.customCapabilitiesObject?.supportsAudio,
+        'supportsVideo': config.customCapabilitiesObject?.supportsVideo,
+      });
+    } else {
+      _config = await ModelStorageService.getModelConfig(ModelType.openaiCompatible);
+      LoggerService.debug('OpenAI model initialized with stored config', error: {
+        'modelName': _config?.modelName,
+        'displayName': _config?.displayName,
+        'supportsImages': _config?.customCapabilitiesObject?.supportsImages,
+        'supportsDocuments': _config?.customCapabilitiesObject?.supportsDocuments,
+        'supportsAudio': _config?.customCapabilitiesObject?.supportsAudio,
+        'supportsVideo': _config?.customCapabilitiesObject?.supportsVideo,
+      });
+    }
 
-  /// Load configuration from storage
-  Future<void> _loadConfiguration() async {
-    final config = await ModelStorageService.getModelConfig(ModelType.openaiCompatible);
-    _endpoint = config.endpoint;
-    _apiKey = await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
-    _modelName = config.modelName;
-    
-    // Load capabilities from config
-    _capabilities = config.customCapabilitiesObject ?? _getDefaultCapabilities();
-    
-    if (_endpoint == null || _endpoint!.isEmpty) {
+    if (_config?.endpoint == null || _config!.endpoint!.isEmpty) {
       throw Exception('OpenAI endpoint not configured');
     }
-    if (_apiKey == null || _apiKey!.isEmpty) {
+    if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       throw Exception('OpenAI API key not configured');
     }
-    if (_modelName == null || _modelName!.isEmpty) {
+    if (_config?.modelName == null || _config!.modelName!.isEmpty) {
       throw Exception('OpenAI model name not configured');
     }
-  }
-
-  /// Get default capabilities for OpenAI models
-  ModelCapabilities _getDefaultCapabilities() {
-    return const ModelCapabilities(
-      maxInputTokens: 100000,
-      maxOutputTokens: 4000,
-      supportsImages: false,
-      supportsDocuments: false,
-      supportsAudio: false,
-      supportsVideo: false,
-      supportedImageFormats: [],
-      supportedDocumentFormats: [],
-      supportedAudioFormats: [],
-    );
   }
 
   @override
@@ -93,145 +78,31 @@ class OpenAIModel implements AIModel {
     String? requestId,
   }) async {
     return await _withErrorHandling('generation with attachments', () async {
-      await _ensureInitialized();
-      
-      // Check if we can handle the request
-      if (!canHandleRequest(attachedFiles: attachedFiles)) {
-        final errorMessage = getCapabilityErrorMessage(attachedFiles: attachedFiles);
-        LoggerService.warning('OpenAI model: $errorMessage');
-        
-        // Gracefully fail by informing the AI about the limitation
-        final limitationNote = _buildLimitationNote(attachedFiles);
-        final enhancedPrompt = prompt + limitationNote;
-        
-        final requestBody = {
-          'model': _modelName!,
-          'messages': [
-            {'role': 'user', 'content': enhancedPrompt}
-          ],
-          'temperature': temperature ?? 0.7,
-          'max_tokens': maxOutputTokens ?? 8192,
-        };
+      await initialize(config: _config);
 
-        return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
-      }
-      
       // Add date context like Gemini model
       final todayContext = AIModel.getTodayContext();
-      final enhancedPrompt = prompt + todayContext;
       
+      // Build limitation note for unsupported files
+      final limitationNote = _buildLimitationNote(attachedFiles);
+      final enhancedPrompt = prompt + todayContext + limitationNote;
+
       final requestBody = {
-        'model': _modelName!,
+        'model': _config!.modelName!,
         'messages': [
           {'role': 'user', 'content': enhancedPrompt}
         ],
         'temperature': temperature ?? 0.7,
-        'max_tokens': maxOutputTokens ?? 8192,
+        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
       return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
     });
   }
 
-  @override
-  bool canHandleRequest({
-    List<PlatformFile>? attachedFiles,
-    bool requiresImageSupport = false,
-    bool requiresDocumentSupport = false,
-    bool requiresAudioSupport = false,
-    bool requiresVideoSupport = false,
-  }) {
-    // Ensure capabilities are loaded
-    if (_capabilities == null) {
-      return false;
-    }
-
-    // Check file attachments
-    if (attachedFiles != null && attachedFiles.isNotEmpty) {
-      for (final file in attachedFiles) {
-        final extension = file.name.split('.').last.toLowerCase();
-        if (!_capabilities!.supportsFileType(extension)) {
-          return false;
-        }
-      }
-    }
-
-    // Check specific capability requirements
-    if (requiresImageSupport && !_capabilities!.supportsImages) {
-      return false;
-    }
-    if (requiresDocumentSupport && !_capabilities!.supportsDocuments) {
-      return false;
-    }
-    if (requiresAudioSupport && !_capabilities!.supportsAudio) {
-      return false;
-    }
-    if (requiresVideoSupport && !_capabilities!.supportsVideo) {
-      return false;
-    }
-
-    return true;
-  }
-
-  @override
-  String getCapabilityErrorMessage({
-    List<PlatformFile>? attachedFiles,
-    bool requiresImageSupport = false,
-    bool requiresDocumentSupport = false,
-    bool requiresAudioSupport = false,
-    bool requiresVideoSupport = false,
-  }) {
-    if (_capabilities == null) {
-      return 'Model capabilities not loaded. Please check your configuration.';
-    }
-
-    final modelName = _modelName ?? 'this OpenAI model';
-    final unsupportedFeatures = <String>[];
-    final unsupportedFiles = <String>[];
-
-    // Check file attachments
-    if (attachedFiles != null && attachedFiles.isNotEmpty) {
-      for (final file in attachedFiles) {
-        final extension = file.name.split('.').last.toLowerCase();
-        if (!_capabilities!.supportsFileType(extension)) {
-          unsupportedFiles.add('.$extension');
-        }
-      }
-    }
-
-    // Check specific capability requirements
-    if (requiresImageSupport && !_capabilities!.supportsImages) {
-      unsupportedFeatures.add('image processing');
-    }
-    if (requiresDocumentSupport && !_capabilities!.supportsDocuments) {
-      unsupportedFeatures.add('document processing');
-    }
-    if (requiresAudioSupport && !_capabilities!.supportsAudio) {
-      unsupportedFeatures.add('audio processing');
-    }
-    if (requiresVideoSupport && !_capabilities!.supportsVideo) {
-      unsupportedFeatures.add('video processing');
-    }
-
-    // Build error message
-    final errorParts = <String>[];
-    
-    if (unsupportedFiles.isNotEmpty) {
-      errorParts.add('${modelName} does not support file types: ${unsupportedFiles.join(', ')}');
-    }
-    
-    if (unsupportedFeatures.isNotEmpty) {
-      errorParts.add('${modelName} does not support ${unsupportedFeatures.join(', ')}');
-    }
-
-    if (errorParts.isEmpty) {
-      return 'Unknown capability error';
-    }
-
-    return errorParts.join('. ') + '. Please configure a different model or update the model capabilities.';
-  }
 
   // Private helper methods
+
 
   /// Build a limitation note to inform the AI about unsupported features
   String _buildLimitationNote(List<PlatformFile> attachedFiles) {
@@ -239,40 +110,84 @@ class OpenAIModel implements AIModel {
       return '';
     }
 
+    final capabilities = _config?.customCapabilitiesObject;
+    if (capabilities == null) {
+      LoggerService.debug('OpenAI model: No capabilities configured');
+      return '';
+    }
+
+    LoggerService.debug('OpenAI model capabilities', error: {
+      'supportsImages': capabilities.supportsImages,
+      'supportsDocuments': capabilities.supportsDocuments,
+      'supportsAudio': capabilities.supportsAudio,
+      'supportsVideo': capabilities.supportsVideo,
+      'supportedImageFormats': capabilities.supportedImageFormats,
+      'supportedDocumentFormats': capabilities.supportedDocumentFormats,
+      'supportedAudioFormats': capabilities.supportedAudioFormats,
+      'modelName': _config?.modelName,
+      'displayName': _config?.displayName,
+    });
+
     final unsupportedFiles = <String>[];
     final supportedFiles = <String>[];
+    final unsupportedByType = <String, List<String>>{};
 
     for (final file in attachedFiles) {
-      final extension = file.name.split('.').last.toLowerCase();
-      if (_capabilities?.supportsFileType(extension) == true) {
-        supportedFiles.add(file.name);
-      } else {
-        unsupportedFiles.add(file.name);
+      final fileName = file.name;
+      final extension = FileTypeUtils.getFileExtension(fileName);
+      final category = FileTypeUtils.getFileCategory(extension);
+      
+      LoggerService.debug('Processing file', error: {
+        'fileName': fileName,
+        'extension': extension,
+        'category': category,
+      });
+      
+      // Check if the model supports this type of content AND the specific file format
+      bool isSupported = false;
+      if (category == 'image' && capabilities.supportsImages && capabilities.supportedImageFormats.contains(extension)) {
+        isSupported = true;
+      } else if (category == 'document' && capabilities.supportsDocuments && capabilities.supportedDocumentFormats.contains(extension)) {
+        isSupported = true;
+      } else if (category == 'audio' && capabilities.supportsAudio && capabilities.supportedAudioFormats.contains(extension)) {
+        isSupported = true;
+      } else if (category == 'video' && capabilities.supportsVideo) {
+        isSupported = true;
       }
+      
+      if (isSupported) {
+        supportedFiles.add(fileName);
+        LoggerService.debug('File supported', error: {'fileName': fileName});
+      } else {
+        unsupportedFiles.add(fileName);
+        unsupportedByType.putIfAbsent(category, () => []).add(fileName);
+        LoggerService.debug('File unsupported', error: {'fileName': fileName, 'category': category});
+      }
+    }
+
+    // Only add limitation notice if there are unsupported files
+    if (unsupportedFiles.isEmpty) {
+      LoggerService.debug('No unsupported files, no limitation notice needed');
+      return '';
     }
 
     final buffer = StringBuffer();
     buffer.writeln('\n\n--- MODEL LIMITATION NOTICE ---');
     buffer.writeln('Note: This model has limited file processing capabilities.');
-    
-    if (unsupportedFiles.isNotEmpty) {
-      buffer.writeln('The following files cannot be processed: ${unsupportedFiles.join(', ')}');
-      buffer.writeln('Please work with the text content only and mention that these files were not accessible.');
-    }
-    
+
+    // List unsupported files by category
+    unsupportedByType.forEach((category, files) {
+      buffer.writeln('The following $category files cannot be processed with respect to model limitation: ${files.join(', ')}');
+    });
+
     if (supportedFiles.isNotEmpty) {
       buffer.writeln('The following files are available for processing: ${supportedFiles.join(', ')}');
     }
-    
+
     buffer.writeln('Please provide your response based on the available information.');
     buffer.writeln('--- END NOTICE ---');
-    
-    return buffer.toString();
-  }
 
-  Future<void> _ensureInitialized() async {
-    // Always reload configuration to get latest settings
-    await _loadConfiguration();
+    return buffer.toString();
   }
 
   Future<T> _withErrorHandling<T>(
@@ -281,7 +196,7 @@ class OpenAIModel implements AIModel {
     String? requestId,
   }) async {
     final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    
+
     try {
       return await operationFunction();
     } catch (e) {
@@ -297,24 +212,24 @@ class OpenAIModel implements AIModel {
     final startTime = DateTime.now();
 
     LoggerService.logAiRequest(
-      endpoint: _endpoint!,
+      endpoint: _config!.endpoint!,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
+        'Authorization': 'Bearer ${_config!.apiKey}',
       },
       requestBody: requestBody,
       requestId: requestId,
     );
 
     final response = await http.post(
-      Uri.parse(_endpoint!),
+      Uri.parse(_config!.endpoint!),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
+        'Authorization': 'Bearer ${_config!.apiKey}',
       },
       body: jsonEncode(requestBody),
     );
-    
+
     final duration = DateTime.now().difference(startTime);
 
     LoggerService.logAiResponse(
@@ -330,7 +245,7 @@ class OpenAIModel implements AIModel {
       if (data['choices'] != null && data['choices'].isNotEmpty) {
         final choice = data['choices'][0];
         final content = choice['message']['content'];
-        
+
         if (content != null) {
           LoggerService.debug('OpenAI API request completed successfully', error: {
             'responseLength': content.length,
@@ -348,12 +263,11 @@ class OpenAIModel implements AIModel {
     } else {
       LoggerService.logAiError(
         error: 'Failed to process request: ${response.statusCode} - ${response.body}',
-        endpoint: _endpoint!,
+        endpoint: _config!.endpoint!,
         requestId: requestId,
         duration: duration,
       );
       throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
     }
   }
-
 }

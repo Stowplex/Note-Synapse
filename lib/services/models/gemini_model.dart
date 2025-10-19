@@ -5,34 +5,27 @@ import 'ai_model.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../../models/model_type.dart';
+import '../../models/model_config.dart';
+import '../../utils/file_type_utils.dart';
 
-/// Gemini 2.5 Flash model implementation
+/// Gemini model implementation
 class GeminiModel implements AIModel {
-  static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
-  static const String _model = 'gemini-2.5-flash';
-
-  // Common configuration constants
-  static const Map<String, dynamic> _defaultGenerationConfig = {
-    'temperature': 0.1,
-    'topK': 32,
-    'topP': 1,
-    'maxOutputTokens': 60000,
-  };
-
+  ModelConfig? _config;
 
   @override
-  String get id => ModelType.gemini25Flash.id;
+  String get id => _config?.type.id ?? ModelType.gemini.id;
 
   @override
-  String get name => ModelType.gemini25Flash.displayName;
+  String get name => _config?.displayName ?? ModelType.gemini.displayName;
 
   @override
-  String get description => 'Google\'s Gemini 2.5 Flash model with full multimodal capabilities';
+  String get description =>
+      'Google\'s Gemini model with full multimodal capabilities';
 
   @override
   Future<bool> isReady() async {
     try {
-      final apiKey = await ModelStorageService.getModelApiKey(ModelType.gemini25Flash);
+      final apiKey = _config?.apiKey ?? await ModelStorageService.getModelApiKey(ModelType.gemini);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('GeminiModel: Error checking readiness: $e');
@@ -41,10 +34,14 @@ class GeminiModel implements AIModel {
   }
 
   @override
-  Future<void> initialize() async {
-    // Check if API key is available
-    final apiKey = await ModelStorageService.getModelApiKey(ModelType.gemini25Flash);
-    if (apiKey == null || apiKey.isEmpty) {
+  Future<void> initialize({ModelConfig? config}) async {
+    if (config != null) {
+      _config = config;
+    } else {
+      _config = await ModelStorageService.getModelConfig(ModelType.gemini);
+    }
+
+    if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       throw Exception('Gemini API key not configured');
     }
   }
@@ -60,52 +57,36 @@ class GeminiModel implements AIModel {
     String? requestId,
   }) async {
     return await _withErrorHandling('generation with attachments', () async {
-      final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final apiKey = await _validateApiKey(requestId: actualRequestId);
-      
+
       final generationConfig = {
         'temperature': temperature ?? 0.1,
         'topK': topK ?? 32,
         'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? 60000,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
-      return await _makeGeminiRequest(apiKey, prompt, attachedFiles: attachedFiles, generationConfig: generationConfig, requestId: actualRequestId);
+      return await _makeGeminiRequest(apiKey, prompt,
+          attachedFiles: attachedFiles,
+          generationConfig: generationConfig,
+          requestId: actualRequestId);
     });
   }
 
-  @override
-  bool canHandleRequest({
-    List<PlatformFile>? attachedFiles,
-    bool requiresImageSupport = false,
-    bool requiresDocumentSupport = false,
-    bool requiresAudioSupport = false,
-    bool requiresVideoSupport = false,
-  }) {
-    // Gemini supports all these capabilities
-    return true;
-  }
-
-  @override
-  String getCapabilityErrorMessage({
-    List<PlatformFile>? attachedFiles,
-    bool requiresImageSupport = false,
-    bool requiresDocumentSupport = false,
-    bool requiresAudioSupport = false,
-    bool requiresVideoSupport = false,
-  }) {
-    return 'This request is not supported by the current model configuration';
-  }
 
   // Private helper methods
+
 
   Future<T> _withErrorHandling<T>(
     String operation,
     Future<T> Function() operationFunction, {
     String? requestId,
   }) async {
-    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
     try {
       return await operationFunction();
     } catch (e) {
@@ -118,7 +99,7 @@ class GeminiModel implements AIModel {
   }
 
   Future<String> _validateApiKey({String? requestId}) async {
-    final apiKey = await ModelStorageService.getModelApiKey(ModelType.gemini25Flash);
+    final apiKey = _config?.apiKey;
     if (apiKey == null) {
       LoggerService.error('API key not found', error: {'requestId': requestId});
       throw Exception('API key not found');
@@ -142,9 +123,9 @@ class GeminiModel implements AIModel {
       for (final file in attachedFiles) {
         if (file.bytes != null) {
           final base64Data = base64Encode(file.bytes!);
-          final extension = file.name.split('.').last;
-          final mimeType = _getMimeType(extension);
-          
+          final extension = FileTypeUtils.getFileExtension(file.name);
+          final mimeType = FileTypeUtils.getMimeType(extension);
+
           parts.add({
             'inline_data': {
               'mime_type': mimeType,
@@ -156,8 +137,16 @@ class GeminiModel implements AIModel {
     }
 
     final requestBody = {
-      'contents': [{'parts': parts}],
-      'generationConfig': generationConfig ?? _defaultGenerationConfig,
+      'contents': [
+        {'parts': parts}
+      ],
+      'generationConfig': generationConfig ??
+          {
+            'temperature': 0.1,
+            'topK': 32,
+            'topP': 1,
+            'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
+          },
     };
 
     if (safetySettings != null) {
@@ -172,22 +161,26 @@ class GeminiModel implements AIModel {
     Map<String, dynamic> requestBody, {
     String? requestId,
   }) async {
-    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
 
+    final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final modelName = _config?.modelName ?? 'gemini-2.5-flash';
+
     LoggerService.logAiRequest(
-      endpoint: '$_baseUrl/models/$_model:generateContent',
+      endpoint: '$endpoint/models/$modelName:generateContent',
       headers: {'Content-Type': 'application/json'},
       requestBody: requestBody,
       requestId: actualRequestId,
     );
 
     final response = await http.post(
-      Uri.parse('$_baseUrl/models/$_model:generateContent?key=$apiKey'),
+      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(requestBody),
     );
-    
+
     final duration = DateTime.now().difference(startTime);
 
     LoggerService.logAiResponse(
@@ -203,8 +196,10 @@ class GeminiModel implements AIModel {
       if (data['candidates'] != null && data['candidates'].isNotEmpty) {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
-        
-        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+
+        if (content != null &&
+            content['parts'] != null &&
+            content['parts'].isNotEmpty) {
           final responseText = content['parts'][0]['text'];
           LoggerService.debug('Gemini API request completed successfully', error: {
             'responseLength': responseText.length,
@@ -221,12 +216,14 @@ class GeminiModel implements AIModel {
       throw Exception('No content in Gemini API response');
     } else {
       LoggerService.logAiError(
-        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
-        endpoint: '$_baseUrl/models/$_model:generateContent',
+        error:
+            'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: '$endpoint/models/$modelName:generateContent',
         requestId: actualRequestId,
         duration: duration,
       );
-      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to process request: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -244,48 +241,8 @@ class GeminiModel implements AIModel {
       generationConfig: generationConfig,
       safetySettings: safetySettings,
     );
-    
+
     return await _makeRequest(apiKey, requestBody, requestId: requestId);
   }
 
-
-  String _getMimeType(String? extension) {
-    if (extension == null) return 'application/octet-stream';
-    
-    switch (extension.toLowerCase()) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'bmp':
-        return 'image/bmp';
-      case 'webp':
-        return 'image/webp';
-      case 'pdf':
-        return 'application/pdf';
-      case 'txt':
-        return 'text/plain';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'mp4':
-        return 'video/mp4';
-      case 'avi':
-        return 'video/x-msvideo';
-      case 'mov':
-        return 'video/quicktime';
-      case 'mp3':
-        return 'audio/mpeg';
-      case 'wav':
-        return 'audio/wav';
-      case 'aac':
-        return 'audio/aac';
-      default:
-        return 'application/octet-stream';
-    }
-  }
 }

@@ -529,23 +529,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                     },
                   );
                 }).toList(),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const ModelSelectionScreen(),
-                        ),
-                      ).then((_) {
-                        _loadCurrentModel();
-                      });
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add New Model'),
-                  ),
-                ),
+
               ],
             ),
     );
@@ -553,7 +537,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
   IconData _getModelIcon(ModelType modelType) {
     switch (modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return Icons.psychology;
       case ModelType.openaiCompatible:
         return Icons.api;
@@ -562,7 +546,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
   String _getModelDescription(ModelType modelType) {
     switch (modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';

@@ -150,6 +150,7 @@ flutter:
     - assets/scripts/bootstrap.min.css
     - assets/scripts/highlight.min.js
     - assets/scripts/highlight.min.css
+    - assets/model_presets/
 
   # Internationalization
   generate: true

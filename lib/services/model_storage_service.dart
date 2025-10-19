@@ -22,7 +22,7 @@ class ModelStorageService {
   );
 
   /// Get the currently selected model type
-  static Future<ModelType> getSelectedModel() async {
+  static Future<ModelType?> getSelectedModel() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final modelId = prefs.getString(_selectedModelKey);
@@ -35,12 +35,10 @@ class ModelStorageService {
         }
       }
       
-      // Default to Gemini 2.5 Flash
-      LoggerService.debug('ModelStorageService: Using default model: Gemini 2.5 Flash');
-      return ModelType.gemini25Flash;
+      return null;
     } catch (e) {
       LoggerService.error('ModelStorageService: Error getting selected model: $e');
-      return ModelType.gemini25Flash;
+      return null;
     }
   }
 
@@ -56,7 +54,7 @@ class ModelStorageService {
   }
 
   /// Get configuration for a specific model
-  static Future<ModelConfig> getModelConfig(ModelType modelType) async {
+  static Future<ModelConfig?> getModelConfig(ModelType modelType) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final configsJson = prefs.getString(_modelConfigsKey);
@@ -74,12 +72,10 @@ class ModelStorageService {
         }
       }
       
-      // Return default config
-      LoggerService.debug('ModelStorageService: Using default config for ${modelType.displayName}');
-      return ModelConfig(type: modelType);
+      return null;
     } catch (e) {
       LoggerService.error('ModelStorageService: Error getting model config: $e');
-      return ModelConfig(type: modelType);
+      return null;
     }
   }
 
@@ -144,7 +140,7 @@ class ModelStorageService {
   static Future<bool> isModelConfigured(ModelType modelType) async {
     try {
       final config = await getModelConfig(modelType);
-      return config.isConfigured;
+      return config?.isConfigured ?? false;
     } catch (e) {
       LoggerService.error('ModelStorageService: Error checking if model is configured: $e');
       return false;

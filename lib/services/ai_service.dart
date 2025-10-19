@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/dedup_rule.dart';
@@ -12,9 +14,10 @@ import 'database_service.dart';
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
   /// Initialize the AI service
-  static Future<void> initialize() async {
-    await ModelSelector.instance.initialize();
+  static Future<void> initialize(AppProvider appProvider) async {
+    await ModelSelector.instance.initialize(appProvider);
   }
+
   /// Note Q&A
   static Future<String> answerNoteQuestion(
     String question,

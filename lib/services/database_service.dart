@@ -15,6 +15,7 @@ import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'logger_service.dart';
+import '../utils/file_type_utils.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -1360,7 +1361,7 @@ class DatabaseService {
   Future<void> _insertAttachment(String noteId, String filePath) async {
     final db = await database;
     final fileName = filePath.split('/').last;
-    final fileType = fileName.split('.').last.toLowerCase();
+    final fileType = FileTypeUtils.getFileExtension(fileName);
     
     await db.insert('attachments', {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),

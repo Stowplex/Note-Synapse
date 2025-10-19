@@ -1,9 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:yaml/yaml.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
+import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
 import '../services/model_selector.dart';
+import '../providers/app_provider.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelType modelType;
@@ -14,30 +20,36 @@ class ModelConfigurationScreen extends StatefulWidget {
   });
 
   @override
-  State<ModelConfigurationScreen> createState() => _ModelConfigurationScreenState();
+  State<ModelConfigurationScreen> createState() =>
+      _ModelConfigurationScreenState();
 }
 
 class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   final _apiKeyController = TextEditingController();
   final _endpointController = TextEditingController();
   final _modelNameController = TextEditingController();
+  final _displayNameController = TextEditingController();
   final _maxInputTokensController = TextEditingController();
   final _maxOutputTokensController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  
+
   bool _isLoading = false;
   String? _error;
-  
-  // Capability checkboxes for OpenAI
+
   bool _supportsImages = false;
   bool _supportsDocuments = false;
   bool _supportsAudio = false;
   bool _supportsVideo = false;
 
+  List<ModelConfig> _presets = [];
+  ModelConfig? _selectedPreset;
+  Map<String, bool> _premiumWarnings = {};
+
   @override
   void initState() {
     super.initState();
     _loadExistingConfiguration();
+    _loadPresets();
   }
 
   @override
@@ -45,27 +57,137 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     _apiKeyController.dispose();
     _endpointController.dispose();
     _modelNameController.dispose();
+    _displayNameController.dispose();
     _maxInputTokensController.dispose();
     _maxOutputTokensController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPresets() async {
+    try {
+      final manifestContent = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
+
+      final presetFiles = manifestMap.keys
+          .where((String key) => key.startsWith('assets/model_presets/'))
+          .toList();
+
+      List<ModelConfig> presets = [];
+      Map<String, bool> premiumWarnings = {};
+      for (final file in presetFiles) {
+        final yamlString = await rootBundle.loadString(file);
+        final doc = loadYaml(yamlString);
+        
+        final modelTypeString = doc['model_type'] as String?;
+        if (modelTypeString != null && modelTypeString == widget.modelType.id) {
+          final displayName = doc['model_display_name'] as String?;
+          if (displayName != null) {
+            premiumWarnings[displayName] = doc['warn_premium'] as bool? ?? false;
+          }
+
+          final capabilities = ModelCapabilities(
+            maxInputTokens: doc['max_input_token'] ?? 100000,
+            maxOutputTokens: doc['max_output_token'] ?? 4000,
+            supportsImages: doc['model_capabilities']?.contains('support_image') ?? false,
+            supportsDocuments: doc['model_capabilities']?.contains('support_document_understanding') ?? false,
+            supportsAudio: doc['model_capabilities']?.contains('support_audio') ?? false,
+            supportsVideo: doc['model_capabilities']?.contains('support_video') ?? false,
+          );
+
+          final preset = ModelConfig(
+            type: ModelType.fromId(modelTypeString) ?? widget.modelType,
+            endpoint: doc['model_endpoint'],
+            modelName: doc['model_name'],
+            displayName: displayName,
+            maxInputTokens: doc['max_input_token'],
+            maxOutputTokens: doc['max_output_token'],
+            customCapabilitiesObject: capabilities,
+          );
+          presets.add(preset);
+        }
+      }
+
+      if (widget.modelType == ModelType.gemini) {
+        presets.add(
+          ModelConfig(
+            type: ModelType.gemini,
+            displayName: 'Custom',
+            endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+          ),
+        );
+      }
+
+      if (widget.modelType == ModelType.openaiCompatible) {
+        presets.add(
+          ModelConfig(
+            type: ModelType.openaiCompatible,
+            displayName: 'Custom',
+          ),
+        );
+      }
+
+      setState(() {
+        _presets = presets;
+        _premiumWarnings = premiumWarnings;
+      });
+    } catch (e) {
+      // Handle error loading presets
+    }
+  }
+
+  void _applyPreset(ModelConfig? preset) {
+    if (preset == null) return;
+
+    if (_premiumWarnings[preset.displayName] == true) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Premium Model'),
+          content: const Text('This model may incur costs. Please ensure you have set up billing with the provider.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    setState(() {
+      _selectedPreset = preset;
+      _endpointController.text = preset.endpoint ?? '';
+      _modelNameController.text = preset.modelName ?? '';
+      _displayNameController.text = preset.displayName ?? '';
+      _maxInputTokensController.text = preset.maxInputTokens?.toString() ?? '';
+      _maxOutputTokensController.text = preset.maxOutputTokens?.toString() ?? '';
+      _supportsImages = preset.customCapabilitiesObject?.supportsImages ?? false;
+      _supportsDocuments = preset.customCapabilitiesObject?.supportsDocuments ?? false;
+      _supportsAudio = preset.customCapabilitiesObject?.supportsAudio ?? false;
+      _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
+    });
   }
 
   Future<void> _loadExistingConfiguration() async {
     try {
       final config = await ModelStorageService.getModelConfig(widget.modelType);
       final apiKey = await ModelStorageService.getModelApiKey(widget.modelType);
-      
+
       if (mounted) {
         setState(() {
           _apiKeyController.text = apiKey ?? '';
-          _endpointController.text = config.endpoint ?? '';
-          _modelNameController.text = config.modelName ?? '';
-          _maxInputTokensController.text = config.customCapabilities['maxInputTokens']?.toString() ?? '100000';
-          _maxOutputTokensController.text = config.customCapabilities['maxOutputTokens']?.toString() ?? '4000';
-          _supportsImages = config.customCapabilities['supportsImages'] ?? false;
-          _supportsDocuments = config.customCapabilities['supportsDocuments'] ?? false;
-          _supportsAudio = config.customCapabilities['supportsAudio'] ?? false;
-          _supportsVideo = config.customCapabilities['supportsVideo'] ?? false;
+          if (config != null) {
+            _endpointController.text = config.endpoint ?? '';
+            _modelNameController.text = config.modelName ?? '';
+            _displayNameController.text = config.displayName ?? '';
+            _maxInputTokensController.text = config.maxInputTokens?.toString() ?? '100000';
+            _maxOutputTokensController.text = config.maxOutputTokens?.toString() ?? '4000';
+            _supportsImages = config.customCapabilitiesObject?.supportsImages ?? false;
+            _supportsDocuments =
+                config.customCapabilitiesObject?.supportsDocuments ?? false;
+            _supportsAudio = config.customCapabilitiesObject?.supportsAudio ?? false;
+            _supportsVideo = config.customCapabilitiesObject?.supportsVideo ?? false;
+          }
         });
       }
     } catch (e) {
@@ -87,39 +209,45 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       final apiKey = _apiKeyController.text.trim();
       final endpoint = _endpointController.text.trim();
       final modelName = _modelNameController.text.trim();
-      final maxInputTokens = int.tryParse(_maxInputTokensController.text.trim()) ?? 100000;
-      final maxOutputTokens = int.tryParse(_maxOutputTokensController.text.trim()) ?? 4000;
-      
-      Map<String, dynamic> customCapabilities = {};
-      if (widget.modelType == ModelType.openaiCompatible) {
-        customCapabilities = {
-          'maxInputTokens': maxInputTokens,
-          'maxOutputTokens': maxOutputTokens,
-          'supportsImages': _supportsImages,
-          'supportsDocuments': _supportsDocuments,
-          'supportsAudio': _supportsAudio,
-          'supportsVideo': _supportsVideo,
-        };
-      }
+      final displayName = _displayNameController.text.trim();
+      final maxInputTokens =
+          int.tryParse(_maxInputTokensController.text.trim());
+      final maxOutputTokens =
+          int.tryParse(_maxOutputTokensController.text.trim());
+
+      final capabilities = ModelCapabilities(
+        maxInputTokens: maxInputTokens ?? 100000,
+        maxOutputTokens: maxOutputTokens ?? 4000,
+        supportsImages: _supportsImages,
+        supportsDocuments: _supportsDocuments,
+        supportsAudio: _supportsAudio,
+        supportsVideo: _supportsVideo,
+      );
 
       final config = ModelConfig(
         type: widget.modelType,
         apiKey: apiKey.isNotEmpty ? apiKey : null,
         endpoint: endpoint.isNotEmpty ? endpoint : null,
         modelName: modelName.isNotEmpty ? modelName : null,
-        customCapabilities: customCapabilities,
+        displayName: displayName.isNotEmpty ? displayName : null,
+        maxInputTokens: maxInputTokens,
+        maxOutputTokens: maxOutputTokens,
+        customCapabilitiesObject: capabilities,
+        isConfigured: true,
       );
-      
+
       await ModelStorageService.saveModelConfig(config);
 
-      // Only switch to the model if it's not already the current one
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      appProvider.updateModelConfig(config);
+
       final currentModel = await ModelStorageService.getSelectedModel();
       if (currentModel != widget.modelType) {
         await ModelSelector.instance.switchToModel(widget.modelType);
       }
 
       if (mounted) {
-        Navigator.of(context).pop(true); // Return true to indicate successful configuration
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       setState(() {
@@ -129,19 +257,17 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     }
   }
 
-
-
   Future<void> _openApiKeyUrl() async {
     String url;
     switch (widget.modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         url = 'https://aistudio.google.com/app/apikey';
         break;
       case ModelType.openaiCompatible:
         url = 'https://platform.openai.com/api-keys';
         break;
     }
-    
+
     if (await canLaunchUrl(Uri.parse(url))) {
       await launchUrl(Uri.parse(url));
     }
@@ -162,28 +288,67 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             children: [
               _buildModelInfoCard(),
               const SizedBox(height: 24),
-              
+              _buildPresetSelector(),
+              const SizedBox(height: 24),
               _buildApiKeySection(),
-              if (widget.modelType == ModelType.openaiCompatible) ...[
-                const SizedBox(height: 24),
+              const SizedBox(height: 24),
+              if (widget.modelType == ModelType.openaiCompatible || widget.modelType == ModelType.gemini) ...[
                 _buildEndpointSection(),
                 const SizedBox(height: 24),
                 _buildModelNameSection(),
                 const SizedBox(height: 24),
+                _buildDisplayNameSection(),
+                const SizedBox(height: 24),
                 _buildTokenLimitsSection(),
                 const SizedBox(height: 24),
-                _buildCapabilitiesSection(),
               ],
-              
+              if (widget.modelType == ModelType.openaiCompatible) ...[
+                _buildCapabilitiesSection(),
+                const SizedBox(height: 24),
+              ],
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 _buildErrorCard(),
               ],
-              
               const SizedBox(height: 24),
               _buildActionButton(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPresetSelector() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Load a Preset',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<ModelConfig>(
+              value: _selectedPreset,
+              items: _presets.map((preset) {
+                return DropdownMenuItem<ModelConfig>(
+                  value: preset,
+                  child: Text(preset.displayName ?? preset.modelName ?? 'Unknown Preset'),
+                );
+              }).toList(),
+              onChanged: (preset) => _applyPreset(preset),
+              decoration: const InputDecoration(
+                labelText: 'Select a preset',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -202,9 +367,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 const SizedBox(width: 12),
                 Text(
                   widget.modelType.displayName,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -225,16 +391,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           children: [
             Text(
               'API Key',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               _getApiKeyDescription(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -273,16 +441,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           children: [
             Text(
               'API Endpoint',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Enter the OpenAI-compatible API endpoint URL',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -319,16 +489,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           children: [
             Text(
               'Model Name',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -352,6 +524,44 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     );
   }
 
+  Widget _buildDisplayNameSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Display Name',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'A custom name to display in the app for this model',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _displayNameController,
+              decoration: const InputDecoration(
+                labelText: 'Display Name',
+                hintText: 'My Custom Model',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.badge),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTokenLimitsSection() {
     return Card(
       child: Padding(
@@ -361,16 +571,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           children: [
             Text(
               'Token Limits',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Configure the maximum input and output tokens for this model',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             Row(
@@ -437,16 +649,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           children: [
             Text(
               'Model Capabilities',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Select which capabilities this model supports',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             CheckboxListTile(
@@ -495,7 +709,6 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     );
   }
 
-
   Widget _buildErrorCard() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -537,7 +750,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   IconData _getModelIcon() {
     switch (widget.modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return Icons.psychology;
       case ModelType.openaiCompatible:
         return Icons.api;
@@ -546,7 +759,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   String _getModelDescription() {
     switch (widget.modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return 'Google\'s most advanced model with full multimodal capabilities including document understanding.';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
@@ -555,11 +768,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   String _getApiKeyDescription() {
     switch (widget.modelType) {
-      case ModelType.gemini25Flash:
+      case ModelType.gemini:
         return 'Get your API key from Google AI Studio';
       case ModelType.openaiCompatible:
         return 'Get your API key from your OpenAI-compatible service provider';
     }
   }
-
 }
