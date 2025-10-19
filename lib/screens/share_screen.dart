@@ -14,6 +14,7 @@ import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
+import '../utils/file_utils.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -1184,6 +1185,11 @@ class _ShareScreenState extends State<ShareScreen> {
         content = 'PDF shared from ${fileName ?? 'unknown source'}';
       }
 
+      // Read file bytes and save to private storage
+      final file = File(filePath);
+      final bytes = await file.readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_pdf');
+
       final note = Note(
         id: const Uuid().v4(),
         title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
@@ -1191,7 +1197,7 @@ class _ShareScreenState extends State<ShareScreen> {
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
+        attachmentPaths: [relativePath],
         tags: tags,
       );
 
@@ -1443,6 +1449,10 @@ extension ShareServiceExtension on ShareService {
         };
       }
 
+      // Read file bytes and save to private storage
+      final bytes = await file.readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_image');
+
       final note = Note(
         id: const Uuid().v4(),
         title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
@@ -1450,7 +1460,7 @@ extension ShareServiceExtension on ShareService {
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
+        attachmentPaths: [relativePath],
         tags: ['shared', 'image'],
       );
 
@@ -1459,7 +1469,7 @@ extension ShareServiceExtension on ShareService {
         'note': note.toJson(),
         'contentType': 'image',
         'preview': 'Image: ${fileName ?? 'unknown'}',
-        'filePath': filePath,
+        'filePath': relativePath,
       };
     } catch (e) {
       return {
@@ -1479,6 +1489,10 @@ extension ShareServiceExtension on ShareService {
         };
       }
 
+      // Read file bytes and save to private storage
+      final bytes = await file.readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_pdf');
+
       final note = Note(
         id: const Uuid().v4(),
         title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
@@ -1486,7 +1500,7 @@ extension ShareServiceExtension on ShareService {
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
+        attachmentPaths: [relativePath],
         tags: ['shared', 'pdf'],
       );
 
@@ -1495,7 +1509,7 @@ extension ShareServiceExtension on ShareService {
         'note': note.toJson(),
         'contentType': 'pdf',
         'preview': 'PDF: ${fileName ?? 'unknown'}',
-        'filePath': filePath,
+        'filePath': relativePath,
       };
     } catch (e) {
       return {

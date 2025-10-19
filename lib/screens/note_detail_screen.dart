@@ -1491,6 +1491,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
+        withData: true, // Load file data into memory
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -1502,10 +1503,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Get existing attachment paths
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
         
-        // Add new attachment paths
+        // Process and add new attachment paths
         for (final file in result.files) {
-          if (file.path != null) {
-            updatedAttachmentPaths.add(file.path!);
+          try {
+            // Read file bytes and save to private storage
+            final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+            final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, file.name);
+            updatedAttachmentPaths.add(relativePath);
+          } catch (e) {
+            LoggerService.error('Error processing file ${file.name}: $e', error: e);
+            // Continue with other files even if one fails
           }
         }
 
@@ -1544,6 +1551,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
 
       if (image != null) {
+        // Read file bytes and save to private storage
+        final file = File(image.path);
+        final bytes = await file.readAsBytes();
+        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, image.name);
+        
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
@@ -1552,8 +1564,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Get existing attachment paths
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
         
-        // Add the new photo path
-        updatedAttachmentPaths.add(image.path);
+        // Add the new photo path (relative path)
+        updatedAttachmentPaths.add(relativePath);
 
         // Update the note
         final updatedNote = currentNote.copyWith(
@@ -1819,6 +1831,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
+        // Read file bytes and save to private storage
+        final file = File(audioPath);
+        final bytes = await file.readAsBytes();
+        final fileName = audioPath.split('/').last;
+        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
+        
         // Add the recorded audio as an attachment
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
@@ -1826,7 +1844,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
 
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
-        updatedAttachmentPaths.add(audioPath);
+        updatedAttachmentPaths.add(relativePath);
 
         final updatedNote = currentNote.copyWith(
           attachmentPaths: updatedAttachmentPaths,

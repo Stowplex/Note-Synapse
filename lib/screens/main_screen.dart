@@ -18,6 +18,7 @@ import 'note_detail_screen.dart';
 import 'share_screen.dart';
 import 'settings_screen.dart';
 import '../services/logger_service.dart';
+import '../utils/file_utils.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -279,6 +280,12 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
+        // Read file bytes and save to private storage
+        final file = File(audioPath);
+        final bytes = await file.readAsBytes();
+        final fileName = audioPath.split('/').last;
+        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
+        
         // Create a note with the audio attachment
         final audioNote = Note(
           id: const Uuid().v4(),
@@ -287,7 +294,7 @@ class _MainScreenState extends State<MainScreen> {
           type: NoteType.note,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          attachmentPaths: [audioPath],
+          attachmentPaths: [relativePath],
         );
 
         // Capture the AppProvider reference before the context might become invalid
@@ -395,16 +402,17 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _createImageNote(XFile image, BuildContext context, AppProvider appProvider) async {
     try {
-      // Get the file path
-      final String imagePath = image.path;
-      
-      // Verify the file exists
-      final file = File(imagePath);
+      // Read the image file
+      final file = File(image.path);
       final fileExists = await file.exists();
       
       if (!fileExists) {
-        throw Exception('Image file does not exist at path: $imagePath');
+        throw Exception('Image file does not exist at path: ${image.path}');
       }
+      
+      // Read file bytes and save to private storage
+      final bytes = await file.readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, image.name);
       
       // Create a note with the image attachment
       final imageNote = Note(
@@ -414,7 +422,7 @@ class _MainScreenState extends State<MainScreen> {
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [imagePath],
+        attachmentPaths: [relativePath],
       );
 
       // Use the captured AppProvider reference instead of context.read
@@ -594,6 +602,10 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _createFileNote(PlatformFile file, BuildContext context, AppProvider appProvider) async {
     try {
+      // Read file bytes and save to private storage
+      final bytes = await File(file.path!).readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, file.name);
+      
       // Create a note with the file attachment
       final fileNote = Note(
         id: const Uuid().v4(),
@@ -602,7 +614,7 @@ class _MainScreenState extends State<MainScreen> {
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [file.path!],
+        attachmentPaths: [relativePath],
       );
 
       await appProvider.addNote(fileNote);
@@ -632,17 +644,17 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _createFileNoteFromBytes(PlatformFile file, BuildContext context, AppProvider appProvider) async {
     try {
-      // For now, we'll create a note with the file information
-      // In a real implementation, you might want to save the bytes to a temporary file
-      // or handle them differently based on your needs
+      // Save file bytes to private storage
+      final relativePath = await FileUtils.saveFileToPrivateStorage(file.bytes!, file.name);
+      
       final fileNote = Note(
         id: const Uuid().v4(),
         title: 'File Note - ${file.name}',
-        content: 'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}\nNote: File data loaded in memory',
+        content: 'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        attachmentPaths: [], // We don't have a file path, so we'll leave this empty for now
+        attachmentPaths: [relativePath],
       );
 
       await appProvider.addNote(fileNote);

@@ -122,15 +122,24 @@ class MainActivity : FlutterActivity() {
         return try {
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
             if (inputStream != null) {
-                val fileName = getFileName(uri) ?: "$prefix.${getFileExtension(uri)}"
-                val file = File(filesDir, fileName)
+                val originalFileName = getFileName(uri) ?: "$prefix.${getFileExtension(uri)}"
+                val uniqueFileName = generateUniqueFileName(originalFileName)
+                
+                // Create attachments directory if it doesn't exist
+                val attachmentsDir = File(filesDir, "attachments")
+                if (!attachmentsDir.exists()) {
+                    attachmentsDir.mkdirs()
+                }
+                
+                val file = File(attachmentsDir, uniqueFileName)
                 val outputStream = FileOutputStream(file)
                 
                 inputStream.copyTo(outputStream)
                 inputStream.close()
                 outputStream.close()
                 
-                file.absolutePath
+                // Return relative path from app's documents directory
+                "attachments/$uniqueFileName"
             } else {
                 null
             }
@@ -167,6 +176,21 @@ class MainActivity : FlutterActivity() {
             "text/plain" -> "txt"
             else -> "bin"
         }
+    }
+
+    private fun generateUniqueFileName(originalFileName: String): String {
+        val uuid = java.util.UUID.randomUUID().toString()
+        val fileExtension = if (originalFileName.contains(".")) {
+            ".${originalFileName.substring(originalFileName.lastIndexOf(".") + 1)}"
+        } else {
+            ""
+        }
+        val baseFileName = if (originalFileName.contains(".")) {
+            originalFileName.substring(0, originalFileName.lastIndexOf("."))
+        } else {
+            originalFileName
+        }
+        return "${baseFileName}_${uuid}${fileExtension}"
     }
 
     private fun storeSharedData(data: Map<String, Any>) {

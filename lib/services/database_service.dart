@@ -16,6 +16,7 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
+import '../utils/file_utils.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -43,7 +44,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 16,
+      version: 17,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -111,6 +112,7 @@ class DatabaseService {
         filePath TEXT NOT NULL,
         fileName TEXT NOT NULL,
         fileType TEXT NOT NULL,
+        isRelativePath INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
@@ -682,6 +684,18 @@ class DatabaseService {
       }
     }
     
+    if (oldVersion < 17) {
+      // Migration from version 16 to 17: Add isRelativePath column to attachments table
+      try {
+        // Add isRelativePath column to attachments table
+        await db.execute('ALTER TABLE attachments ADD COLUMN isRelativePath INTEGER NOT NULL DEFAULT 0');
+        
+        LoggerService.info('Migration to version 17 completed: Added isRelativePath column to attachments table');
+      } catch (e) {
+        LoggerService.error('Migration to version 17 failed: $e', error: e);
+      }
+    }
+    
     
   }
 
@@ -809,7 +823,9 @@ class DatabaseService {
 
     // Insert attachments
     for (final attachmentPath in note.attachmentPaths) {
-      await _insertAttachment(note.id, attachmentPath);
+      // Check if path is relative (starts with 'attachments/')
+      final isRelativePath = attachmentPath.startsWith('attachments/');
+      await _insertAttachment(note.id, attachmentPath, isRelativePath: isRelativePath);
     }
 
     return note.id;
@@ -965,7 +981,9 @@ class DatabaseService {
     // Update attachments
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
-      await _insertAttachment(note.id, attachmentPath);
+      // Check if path is relative (starts with 'attachments/')
+      final isRelativePath = attachmentPath.startsWith('attachments/');
+      await _insertAttachment(note.id, attachmentPath, isRelativePath: isRelativePath);
     }
   }
 
@@ -1297,7 +1315,22 @@ class DatabaseService {
       whereArgs: [noteId],
     );
 
-    return maps.map((map) => map['filePath'] as String).toList();
+    final List<String> attachmentPaths = [];
+    for (final map in maps) {
+      final filePath = map['filePath'] as String;
+      final isRelativePath = (map['isRelativePath'] as int) == 1;
+      
+      if (isRelativePath) {
+        // Convert relative path to full path for backward compatibility
+        final fullPath = await FileUtils.getFullFilePath(filePath, true);
+        attachmentPaths.add(fullPath);
+      } else {
+        // Legacy absolute path
+        attachmentPaths.add(filePath);
+      }
+    }
+
+    return attachmentPaths;
   }
 
   // Verify if an attachment path belongs to any note
@@ -1360,7 +1393,7 @@ class DatabaseService {
     });
   }
 
-  Future<void> _insertAttachment(String noteId, String filePath) async {
+  Future<void> _insertAttachment(String noteId, String filePath, {bool isRelativePath = false}) async {
     final db = await database;
     final fileName = filePath.split('/').last;
     final fileType = FileTypeUtils.getFileExtension(fileName);
@@ -1371,6 +1404,7 @@ class DatabaseService {
       'filePath': filePath,
       'fileName': fileName,
       'fileType': fileType,
+      'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     });
   }
