@@ -635,5 +635,8 @@
   "undoBackupCompleted": "Backup undone successfully!",
   "errorUndoingBackup": "Error undoing backup: {error}",
   "backupRestored": "Backup restored successfully!",
-  "errorRestoringBackup": "Error restoring backup: {error}"
+  "errorRestoringBackup": "Error restoring backup: {error}",
+  "cloneApp": "Clone App",
+  "appClonedSuccessfully": "App cloned successfully!",
+  "errorCloningApp": "Error cloning app: {error}"
 }

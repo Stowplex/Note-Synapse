@@ -1228,4 +1228,86 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     }
   }
 
+  // Clone a user app
+  static Future<UserApp> cloneUserApp(UserApp originalApp) async {
+    try {
+      LoggerService.info('Cloning user app: ${originalApp.name}');
+      
+      // Get the selected revision from the original app
+      AppRevision? selectedRevision;
+      if (originalApp.selectedRevisionId != null) {
+        selectedRevision = await getAppRevision(originalApp.selectedRevisionId!);
+      }
+      
+      if (selectedRevision == null) {
+        throw Exception('No selected revision found for app: ${originalApp.id}');
+      }
+      
+      // Create new app with new UUID and ID
+      final newApp = UserApp(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        uuid: const Uuid().v4(),
+        name: '${originalApp.name} (Copy)',
+        description: originalApp.description,
+        steps: List<String>.from(originalApp.steps),
+        htmlContent: '', // Will be set from revision
+        type: originalApp.type,
+        author: originalApp.author,
+        license: originalApp.license,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        libraries: originalApp.libraries != null ? List<UserAppLibraryInfo>.from(originalApp.libraries!) : null,
+      );
+      
+      // Save the new app
+      await saveUserApp(newApp);
+      
+      // Create a new revision with the selected revision's content
+      final newRevision = AppRevision(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + '_rev',
+        appId: newApp.id,
+        revisionNumber: 1,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: 'Cloned from ${originalApp.name}',
+        aiResponse: 'This app was cloned from the selected revision of "${originalApp.name}".',
+        appCode: selectedRevision.appCode,
+        attachmentPaths: List<String>.from(selectedRevision.attachmentPaths),
+      );
+      
+      // Save the new revision
+      final databaseService = DatabaseService();
+      await databaseService.insertAppRevision(newRevision);
+      
+      // Update the app with the selected revision
+      final updatedApp = newApp.copyWith(selectedRevisionId: newRevision.id);
+      await databaseService.updateUserApp(updatedApp);
+      
+      // Copy libraries if they exist
+      if (originalApp.libraries != null && originalApp.libraries!.isNotEmpty) {
+        try {
+          LoggerService.info('Copying libraries for cloned app: ${newApp.name}');
+          final libraryService = UserAppLibraryService();
+          
+          // Copy libraries from the original app's selected revision
+          await libraryService.copyLibrariesToRevision(
+            appUuid: newApp.uuid,
+            fromRevisionId: selectedRevision.revisionNumber,
+            toRevisionId: 1, // New app starts with revision 1
+          );
+          
+          LoggerService.info('Successfully copied libraries for cloned app');
+        } catch (e) {
+          LoggerService.warning('Failed to copy libraries for cloned app: $e');
+          // Don't rethrow - the clone should still succeed
+        }
+      }
+      
+      LoggerService.info('Successfully cloned user app: ${originalApp.name} -> ${newApp.name}');
+      return updatedApp;
+    } catch (e) {
+      LoggerService.error('Error cloning user app: $e', error: e);
+      rethrow;
+    }
+  }
+
 }

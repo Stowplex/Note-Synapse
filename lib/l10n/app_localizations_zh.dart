@@ -2022,4 +2022,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorRestoringBackup(Object error) {
     return 'Error restoring backup: $error';
   }
+
+  @override
+  String get cloneApp => 'Clone App';
+
+  @override
+  String get appClonedSuccessfully => 'App cloned successfully!';
+
+  @override
+  String errorCloningApp(Object error) {
+    return 'Error cloning app: $error';
+  }
 }

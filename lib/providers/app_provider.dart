@@ -862,6 +862,18 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshUserApps() async {
+    try {
+      _userApps = await UserAppService.getAllUserApps();
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> updateUserApp(UserApp app) async {
     try {
       await UserAppService.updateUserApp(app);

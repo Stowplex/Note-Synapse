@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../services/logger_service.dart';
+import '../services/user_app_service.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
@@ -311,6 +312,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                     ),
                   ),
                   PopupMenuItem<String>(
+                    value: 'clone',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.copy),
+                        const SizedBox(width: 8),
+                        Text(l10n.cloneApp),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
                     value: 'export',
                     child: Row(
                       children: [
@@ -470,10 +481,66 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
+  Future<void> _cloneApp(BuildContext context, UserApp app, AppProvider appProvider) async {
+    final l10n = AppLocalizations.of(context)!;
+    
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      // Clone the app
+      await UserAppService.cloneUserApp(app);
+      
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Refresh the app list
+      await appProvider.refreshUserApps();
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.appClonedSuccessfully),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorCloningApp(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      
+      LoggerService.error('Error cloning app: $e', error: e);
+    }
+  }
+
   void _handleMenuAction(BuildContext context, String action, UserApp app, AppProvider appProvider) {
     switch (action) {
       case 'edit':
         _navigateToEditApp(context, app);
+        break;
+      case 'clone':
+        _cloneApp(context, app, appProvider);
         break;
       case 'export':
         _navigateToExportApp(context, app);

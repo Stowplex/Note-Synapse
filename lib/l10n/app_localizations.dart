@@ -3781,6 +3781,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error restoring backup: {error}'**
   String errorRestoringBackup(Object error);
+
+  /// No description provided for @cloneApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone App'**
+  String get cloneApp;
+
+  /// No description provided for @appClonedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'App cloned successfully!'**
+  String get appClonedSuccessfully;
+
+  /// No description provided for @errorCloningApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error cloning app: {error}'**
+  String errorCloningApp(Object error);
 }
 
 class _AppLocalizationsDelegate
