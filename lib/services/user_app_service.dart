@@ -1288,14 +1288,44 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
           LoggerService.info('Copying libraries for cloned app: ${newApp.name}');
           final libraryService = UserAppLibraryService();
           
-          // Copy libraries from the original app's selected revision
-          await libraryService.copyLibrariesToRevision(
-            appUuid: newApp.uuid,
-            fromRevisionId: selectedRevision.revisionNumber,
-            toRevisionId: 1, // New app starts with revision 1
+          // Get libraries from the original app's selected revision
+          final sourceLibraries = await libraryService.getLibraries(
+            originalApp.uuid, 
+            selectedRevision.revisionNumber
           );
           
-          LoggerService.info('Successfully copied libraries for cloned app');
+          LoggerService.debug('Found ${sourceLibraries.length} libraries in source revision ${selectedRevision.revisionNumber}');
+          
+          if (sourceLibraries.isNotEmpty) {
+            // Copy each library to the new app
+            for (final library in sourceLibraries) {
+              LoggerService.debug('Copying library: ${library.name} (ID: ${library.id})');
+              
+              // Get all dependencies for this library
+              final dependencies = await libraryService.getDependencies(library.id);
+              LoggerService.debug('Found ${dependencies.length} dependencies for library ${library.name}');
+              
+              // Convert UserAppLibraryDependency to LibraryDependency
+              final libraryDependencies = dependencies.map((dep) => LibraryDependency(
+                originalUrl: dep.originalUrl,
+                localPath: dep.localPath,
+                bytes: dep.bytes,
+              )).toList();
+              
+              // Create the library in the new app
+              await libraryService.addLibrary(
+                appUuid: newApp.uuid,
+                revisionId: 1, // New app starts with revision 1
+                name: library.name,
+                usageInstructions: library.usageInstructions,
+                dependencies: libraryDependencies,
+              );
+            }
+            
+            LoggerService.info('Successfully copied ${sourceLibraries.length} libraries for cloned app');
+          } else {
+            LoggerService.warning('No libraries found in source revision ${selectedRevision.revisionNumber} for app ${originalApp.uuid}');
+          }
         } catch (e) {
           LoggerService.warning('Failed to copy libraries for cloned app: $e');
           // Don't rethrow - the clone should still succeed

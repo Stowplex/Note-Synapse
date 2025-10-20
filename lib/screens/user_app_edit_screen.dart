@@ -341,7 +341,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       
     } catch (e) {
       // Log the error but don't fail the entire edit operation
-      print('Error processing library changes: $e');
+      // TODO: Use proper logging service instead of print
+      // print('Error processing library changes: $e');
     }
   }
 
@@ -515,69 +516,45 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
   // Library management methods
   void _addLibrary() {
-    showDialog(
-      context: context,
-      builder: (context) => _LibraryEditDialog(
-        onSave: (name, usageInstructions) {
-          final newLibrary = UserAppLibrary(
-            id: -1, // Temporary ID for new libraries
-            appUuid: widget.app.uuid,
-            revisionId: _currentRevision?.revisionNumber ?? 0,
-            name: name,
-            usageInstructions: usageInstructions,
-          );
-          setState(() {
-            _modifiedLibraries.add(newLibrary);
-          });
-        },
-      ),
-    );
+    setState(() {
+      _modifiedLibraries.add(UserAppLibrary(
+        id: -1, // Temporary ID for new libraries
+        appUuid: widget.app.uuid,
+        revisionId: _currentRevision?.revisionNumber ?? 0,
+        name: '',
+        usageInstructions: '',
+      ));
+    });
   }
 
-  void _editLibrary(UserAppLibrary library) {
-    showDialog(
-      context: context,
-      builder: (context) => _LibraryEditDialog(
-        initialName: library.name,
-        initialUsageInstructions: library.usageInstructions,
-        onSave: (name, usageInstructions) {
-          setState(() {
-            final index = _modifiedLibraries.indexWhere((l) => l.id == library.id);
-            if (index != -1) {
-              _modifiedLibraries[index] = library.copyWith(
-                name: name,
-                usageInstructions: usageInstructions,
-              );
-            }
-          });
-        },
-      ),
-    );
+  void _removeLibrary(int index) {
+    setState(() {
+      _modifiedLibraries.removeAt(index);
+    });
   }
 
-  void _deleteLibrary(UserAppLibrary library) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Library'),
-        content: Text('Are you sure you want to delete "${library.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _modifiedLibraries.removeWhere((l) => l.id == library.id);
-              });
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  void _updateLibraryName(int index, String name) {
+    setState(() {
+      _modifiedLibraries[index] = UserAppLibrary(
+        id: _modifiedLibraries[index].id,
+        appUuid: _modifiedLibraries[index].appUuid,
+        revisionId: _modifiedLibraries[index].revisionId,
+        name: name,
+        usageInstructions: _modifiedLibraries[index].usageInstructions,
+      );
+    });
+  }
+
+  void _updateLibraryUsage(int index, String usage) {
+    setState(() {
+      _modifiedLibraries[index] = UserAppLibrary(
+        id: _modifiedLibraries[index].id,
+        appUuid: _modifiedLibraries[index].appUuid,
+        revisionId: _modifiedLibraries[index].revisionId,
+        name: _modifiedLibraries[index].name,
+        usageInstructions: usage.isEmpty ? null : usage,
+      );
+    });
   }
 
   @override
@@ -762,7 +739,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8.0),
                                   border: Border.all(
-                                    color: Colors.grey.withOpacity(0.3),
+                                    color: Colors.grey.withValues(alpha: 0.3),
                                     width: 1,
                                   ),
                                 ),
@@ -826,100 +803,97 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   }
 
   Widget _buildAdvancedTab(AppLocalizations l10n) {
-    return Column(
-      children: [
-        // Libraries header
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Libraries',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              ElevatedButton.icon(
-                onPressed: _addLibrary,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Library'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Add Library Button
+          OutlinedButton.icon(
+            onPressed: _addLibrary,
+            icon: const Icon(Icons.add),
+            label: Text(l10n.addLibrary),
+          ),
+          const SizedBox(height: 16),
+          
+          // Libraries List
+          if (_isLoadingLibraries)
+            const Center(child: CircularProgressIndicator())
+          else
+            ...List.generate(_modifiedLibraries.length, (index) {
+              return _buildLibraryCard(index, l10n);
+            }),
+          
+          if (_modifiedLibraries.isEmpty && !_isLoadingLibraries) ...[
+            const SizedBox(height: 32),
+            Center(
+              child: Text(
+                'No libraries added yet. Click "Add Library" to get started.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.grey[600],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryCard(int index, AppLocalizations l10n) {
+    final library = _modifiedLibraries[index];
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Library Header
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Library ${index + 1}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removeLibrary(index),
+                  icon: const Icon(Icons.delete),
+                  tooltip: l10n.removeLibrary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Name
+            TextFormField(
+              initialValue: library.name,
+              decoration: InputDecoration(
+                labelText: l10n.libraryName,
+                hintText: l10n.libraryNameHint,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (value) => _updateLibraryName(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Usage
+            TextFormField(
+              initialValue: library.usageInstructions ?? '',
+              decoration: InputDecoration(
+                labelText: l10n.libraryUsage,
+                hintText: l10n.libraryUsageHint,
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              onChanged: (value) => _updateLibraryUsage(index, value),
+            ),
+          ],
         ),
-        
-        // Libraries list
-        Expanded(
-          child: _isLoadingLibraries
-              ? const Center(child: CircularProgressIndicator())
-              : _modifiedLibraries.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.library_books_outlined,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No libraries found',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Add libraries to enhance your app functionality',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      itemCount: _modifiedLibraries.length,
-                      itemBuilder: (context, index) {
-                        final library = _modifiedLibraries[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8.0),
-                          child: ListTile(
-                            leading: const Icon(Icons.library_books),
-                            title: Text(library.name),
-                            subtitle: library.usageInstructions != null
-                                ? Text(
-                                    library.usageInstructions!,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                : null,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  onPressed: () => _editLibrary(library),
-                                  icon: const Icon(Icons.edit),
-                                  tooltip: 'Edit Library',
-                                ),
-                                IconButton(
-                                  onPressed: () => _deleteLibrary(library),
-                                  icon: const Icon(Icons.delete),
-                                  tooltip: 'Delete Library',
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1011,94 +985,3 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   }
 }
 
-class _LibraryEditDialog extends StatefulWidget {
-  final String? initialName;
-  final String? initialUsageInstructions;
-  final Function(String name, String? usageInstructions) onSave;
-
-  const _LibraryEditDialog({
-    this.initialName,
-    this.initialUsageInstructions,
-    required this.onSave,
-  });
-
-  @override
-  State<_LibraryEditDialog> createState() => _LibraryEditDialogState();
-}
-
-class _LibraryEditDialogState extends State<_LibraryEditDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _usageController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController.text = widget.initialName ?? '';
-    _usageController.text = widget.initialUsageInstructions ?? '';
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _usageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.initialName == null ? 'Add Library' : 'Edit Library'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Library Name',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a library name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _usageController,
-              decoration: const InputDecoration(
-                labelText: 'Usage Instructions (Optional)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              widget.onSave(
-                _nameController.text.trim(),
-                _usageController.text.trim().isEmpty 
-                    ? null 
-                    : _usageController.text.trim(),
-              );
-              Navigator.pop(context);
-            }
-          },
-          child: Text(widget.initialName == null ? 'Add' : 'Save'),
-        ),
-      ],
-    );
-  }
-}
