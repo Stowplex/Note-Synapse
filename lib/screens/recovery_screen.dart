@@ -914,16 +914,35 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final backupAttachments = await backupDb.query('attachments');
     
     for (final attachment in backupAttachments) {
+      final filePath = attachment['filePath'] as String;
+      final isRelativePath = (attachment['isRelativePath'] as int) == 1;
+      
+      // Convert file path if needed
+      String finalFilePath = filePath;
+      if (isRelativePath) {
+        // Path is already relative, keep as is
+        finalFilePath = filePath;
+      } else {
+        // Convert absolute path to relative path
+        final fileName = filePath.split('/').last;
+        finalFilePath = 'attachments/$fileName';
+      }
+      
       // Check if attachment exists in staging (unique on noteId, filePath)
       final existingAttachments = await stagingDb.query(
         'attachments',
         where: 'noteId = ? AND filePath = ?',
-        whereArgs: [attachment['noteId'], attachment['filePath']],
+        whereArgs: [attachment['noteId'], finalFilePath],
       );
       
       if (existingAttachments.isEmpty) {
+        // Create new attachment record with proper path
+        final newAttachment = Map<String, dynamic>.from(attachment);
+        newAttachment['filePath'] = finalFilePath;
+        newAttachment['isRelativePath'] = 1; // Always store as relative path
+        
         // Insert attachment if it doesn't exist
-        await stagingDb.insert('attachments', attachment);
+        await stagingDb.insert('attachments', newAttachment);
       }
     }
   }

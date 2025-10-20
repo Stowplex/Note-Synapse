@@ -1430,22 +1430,55 @@ class DatabaseService {
   // Verify if an attachment path belongs to any note
   Future<bool> verifyAttachmentPath(String attachmentPath) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'attachments',
-      where: 'filePath = ?',
-      whereArgs: [attachmentPath],
-    );
+    
+    // Check if the path is absolute (starts with /) or relative
+    final isAbsolutePath = attachmentPath.startsWith('/');
+    
+    if (isAbsolutePath) {
+      // Convert absolute path to relative path for database lookup
+      final fileName = attachmentPath.split('/').last;
+      final relativePath = 'attachments/$fileName';
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'attachments',
+        where: 'filePath = ?',
+        whereArgs: [relativePath],
+      );
+      
+      return maps.isNotEmpty;
+    } else {
+      // Path is already relative, search directly
+      final List<Map<String, dynamic>> maps = await db.query(
+        'attachments',
+        where: 'filePath = ?',
+        whereArgs: [attachmentPath],
+      );
 
-    return maps.isNotEmpty;
+      return maps.isNotEmpty;
+    }
   }
 
   // Get the note ID for a given attachment path
   Future<String?> getNoteIdForAttachment(String attachmentPath) async {
     final db = await database;
+    
+    // Check if the path is absolute (starts with /) or relative
+    final isAbsolutePath = attachmentPath.startsWith('/');
+    
+    String searchPath;
+    if (isAbsolutePath) {
+      // Convert absolute path to relative path for database lookup
+      final fileName = attachmentPath.split('/').last;
+      searchPath = 'attachments/$fileName';
+    } else {
+      // Path is already relative, use as is
+      searchPath = attachmentPath;
+    }
+    
     final List<Map<String, dynamic>> maps = await db.query(
       'attachments',
       where: 'filePath = ?',
-      whereArgs: [attachmentPath],
+      whereArgs: [searchPath],
     );
 
     return maps.isNotEmpty ? maps.first['noteId'] as String? : null;

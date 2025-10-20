@@ -97,11 +97,14 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.updateNote(note);
       
-      // Update the local state immediately instead of reloading from database
-      final noteIndex = _notes.indexWhere((n) => n.id == note.id);
-      if (noteIndex != -1) {
-        _notes[noteIndex] = note;
-        notifyListeners();
+      // Reload the note from database to get properly converted attachment paths
+      final updatedNote = await _databaseService.getNote(note.id);
+      if (updatedNote != null) {
+        final noteIndex = _notes.indexWhere((n) => n.id == note.id);
+        if (noteIndex != -1) {
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        }
       }
       
       _error = null; // Clear any previous errors

@@ -1296,6 +1296,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Widget _buildAttachmentCard(String attachmentPath, Note currentNote) {
     final l10n = AppLocalizations.of(context)!;
     final fileName = attachmentPath.split('/').last;
+    
+    // The attachmentPath should already be an absolute path when loaded from the database
+    // If it's not, there's an issue with the database service
     final file = File(attachmentPath);
     final fileExists = file.existsSync();
     final isAudioFile = _isAudioFile(fileName);
