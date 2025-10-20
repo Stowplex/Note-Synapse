@@ -12,8 +12,6 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
-import '../services/secure_storage_service.dart';
-import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -34,7 +32,6 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _isLoading = true;
   bool _isCreating = false;
   bool _isExtracting = false;
-  bool _hasApiKey = false;
   String _action = 'create'; // 'create' or 'append'
   Note? _selectedNote;
   String _searchQuery = '';
@@ -53,78 +50,13 @@ class _ShareScreenState extends State<ShareScreen> {
   void initState() {
     super.initState();
     _processSharedData();
-    _initializeAndCheckApiKey();
     // Load notes when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
     });
   }
 
-  Future<void> _initializeAndCheckApiKey() async {
-    // Ensure storage is properly initialized before checking
-    await _ensureStorageInitialized();
-    await _checkApiKeyStatus();
-  }
 
-  Future<void> _ensureStorageInitialized() async {
-    try {
-      // Initialize secure storage
-      await SecureStorageService.initialize();
-      LoggerService.debug('ShareScreen: Storage initialized successfully');
-    } catch (e) {
-      LoggerService.error('ShareScreen: Storage initialization failed: $e', error: e);
-      // Add a delay and try again
-      await Future.delayed(const Duration(milliseconds: 500));
-      try {
-        await SecureStorageService.initialize();
-        LoggerService.debug('ShareScreen: Storage initialized on retry');
-      } catch (e2) {
-        LoggerService.error('ShareScreen: Storage initialization failed on retry: $e2', error: e2);
-      }
-    }
-  }
-
-  Future<void> _checkApiKeyStatus() async {
-    try {
-      LoggerService.debug('ShareScreen: Checking API key status...');
-      
-      // Add a small delay to ensure storage is properly initialized
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      bool hasApiKey = await SecureStorageService.hasApiKey();
-      LoggerService.debug('ShareScreen: API key available: $hasApiKey');
-      
-      
-      if (hasApiKey) {
-        final apiKey = await SecureStorageService.getApiKey();
-        LoggerService.debug('ShareScreen: API key length: ${apiKey?.length ?? 0}');
-        
-        // If we got a key, verify it's not empty
-        if (apiKey == null || apiKey.isEmpty) {
-          LoggerService.warning('ShareScreen: API key is empty, treating as unavailable');
-          if (mounted) {
-            setState(() {
-              _hasApiKey = false;
-            });
-          }
-          return;
-        }
-      }
-      
-      if (mounted) {
-        setState(() {
-          _hasApiKey = hasApiKey;
-        });
-      }
-    } catch (e) {
-      LoggerService.error('ShareScreen: Error checking API key: $e', error: e);
-      if (mounted) {
-        setState(() {
-          _hasApiKey = false;
-        });
-      }
-    }
-  }
 
   @override
   void dispose() {
@@ -767,9 +699,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: (_isLinux || !_hasApiKey) ? null : () => _extractWebContent(true),
+                      onPressed: _isLinux ? null : () => _extractWebContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -886,28 +818,6 @@ class _ShareScreenState extends State<ShareScreen> {
     return completer.future;
   }
 
-  void _showApiKeyRequiredDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('API Key Required'),
-        content: const Text('To use AI extraction, you need to configure your Gemini API key in the app settings first.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushNamed('/settings');
-            },
-            child: const Text('Go to Settings'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildImageExtractionWidget() {
     final fileName = widget.sharedData['fileName'] as String?;
@@ -962,9 +872,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: !_hasApiKey ? null : () => _extractImageContent(true),
+                      onPressed: () => _extractImageContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -1047,9 +957,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: !_hasApiKey ? null : () => _extractPdfContent(true),
+                      onPressed: () => _extractPdfContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -1095,15 +1005,7 @@ class _ShareScreenState extends State<ShareScreen> {
       List<String> tags = ['shared', 'image'];
       
       if (useAI) {
-        // Check if API key is available before attempting AI extraction
-        final hasApiKey = await SecureStorageService.hasApiKey();
-        if (!hasApiKey) {
-          setState(() {
-            _isExtracting = false;
-          });
-          _showApiKeyRequiredDialog();
-          return;
-        }
+        // Let AI service handle API key validation
         
         // Extract content using AI
         final result = await AIService.extractContentFromImage(filePath);
@@ -1179,15 +1081,7 @@ class _ShareScreenState extends State<ShareScreen> {
       final relativePath = note.attachmentPaths.first;
       
       if (useAI) {
-        // Check if API key is available before attempting AI extraction
-        final hasApiKey = await SecureStorageService.hasApiKey();
-        if (!hasApiKey) {
-          setState(() {
-            _isExtracting = false;
-          });
-          _showApiKeyRequiredDialog();
-          return;
-        }
+        // Let AI service handle API key validation
         
         // Extract content using AI - use the saved file path
         final absolutePath = await FileUtils.getFullFilePath(relativePath, true);
@@ -1518,15 +1412,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                           _status = 'Checking API key...';
                         });
                         
-                        // Check if API key is available before attempting AI extraction
-                        final hasApiKey = await SecureStorageService.hasApiKey();
-                        if (!hasApiKey) {
-                          widget.onComplete({
-                            'success': false,
-                            'error': 'API key not configured. Please configure your Gemini API key in settings first.',
-                          });
-                          return;
-                        }
+                        // Let AI service handle API key validation
                         
                         setState(() {
                           _status = 'Processing with AI...';
