@@ -3535,6 +3535,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error saving backup again: {error}'**
   String errorSavingBackupAgain(Object error);
+
+  /// No description provided for @importBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Backup'**
+  String get importBackup;
+
+  /// No description provided for @importBackupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore your notes from a backup file'**
+  String get importBackupDescription;
+
+  /// No description provided for @importingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing Backup...'**
+  String get importingBackup;
+
+  /// No description provided for @importLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Logs'**
+  String get importLogs;
+
+  /// No description provided for @selectBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Backup File'**
+  String get selectBackupFile;
+
+  /// No description provided for @selectBackupFileDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a backup zip file to restore from'**
+  String get selectBackupFileDescription;
+
+  /// No description provided for @importFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailed(Object error);
+
+  /// No description provided for @invalidBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid backup file format'**
+  String get invalidBackupFile;
+
+  /// No description provided for @backupVersionTooNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup is from a newer version of the app. Please update the app first.'**
+  String get backupVersionTooNew;
+
+  /// No description provided for @checkpointingDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpointing current database...'**
+  String get checkpointingDatabase;
+
+  /// No description provided for @copyingDatabaseToStaging.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying database to staging directory...'**
+  String get copyingDatabaseToStaging;
+
+  /// No description provided for @extractingBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting backup file...'**
+  String get extractingBackupFile;
+
+  /// No description provided for @validatingBackupDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Validating backup database version...'**
+  String get validatingBackupDatabase;
+
+  /// No description provided for @migratingBackupDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Migrating backup database to current version...'**
+  String get migratingBackupDatabase;
+
+  /// No description provided for @mergingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging notes...'**
+  String get mergingNotes;
+
+  /// No description provided for @mergingSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging sub-notes...'**
+  String get mergingSubNotes;
+
+  /// No description provided for @mergingTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging tags...'**
+  String get mergingTags;
+
+  /// No description provided for @mergingRelationships.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging relationships...'**
+  String get mergingRelationships;
+
+  /// No description provided for @mergingFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging filters...'**
+  String get mergingFilters;
+
+  /// No description provided for @mergingUserApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging user apps...'**
+  String get mergingUserApps;
+
+  /// No description provided for @copyingAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying attachments...'**
+  String get copyingAttachments;
+
+  /// No description provided for @swappingDatabases.
+  ///
+  /// In en, this message translates to:
+  /// **'Swapping databases...'**
+  String get swappingDatabases;
+
+  /// No description provided for @reloadingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Reloading data...'**
+  String get reloadingData;
+
+  /// No description provided for @undoBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo Backup'**
+  String get undoBackup;
+
+  /// No description provided for @undoBackupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the original database'**
+  String get undoBackupDescription;
+
+  /// No description provided for @undoBackupConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.'**
+  String get undoBackupConfirmation;
+
+  /// No description provided for @undoBackupCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup undone successfully!'**
+  String get undoBackupCompleted;
+
+  /// No description provided for @errorUndoingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error undoing backup: {error}'**
+  String errorUndoingBackup(Object error);
+
+  /// No description provided for @backupRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup restored successfully!'**
+  String get backupRestored;
+
+  /// No description provided for @errorRestoringBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error restoring backup: {error}'**
+  String errorRestoringBackup(Object error);
 }
 
 class _AppLocalizationsDelegate

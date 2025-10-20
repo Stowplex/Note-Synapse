@@ -60,6 +60,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         }
       } else {
         // Navigate to configuration screen
+        setState(() {
+          _isLoading = false;
+        });
         if (mounted) {
           Navigator.of(context).push(
             MaterialPageRoute(

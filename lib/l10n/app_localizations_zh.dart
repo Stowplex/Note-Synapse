@@ -1887,4 +1887,106 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorSavingBackupAgain(Object error) {
     return '再次保存备份时出错：$error';
   }
+
+  @override
+  String get importBackup => 'Import Backup';
+
+  @override
+  String get importBackupDescription => 'Restore your notes from a backup file';
+
+  @override
+  String get importingBackup => 'Importing Backup...';
+
+  @override
+  String get importLogs => 'Import Logs';
+
+  @override
+  String get selectBackupFile => 'Select Backup File';
+
+  @override
+  String get selectBackupFileDescription =>
+      'Choose a backup zip file to restore from';
+
+  @override
+  String importFailed(Object error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get invalidBackupFile => 'Invalid backup file format';
+
+  @override
+  String get backupVersionTooNew =>
+      'Backup is from a newer version of the app. Please update the app first.';
+
+  @override
+  String get checkpointingDatabase => 'Checkpointing current database...';
+
+  @override
+  String get copyingDatabaseToStaging =>
+      'Copying database to staging directory...';
+
+  @override
+  String get extractingBackupFile => 'Extracting backup file...';
+
+  @override
+  String get validatingBackupDatabase =>
+      'Validating backup database version...';
+
+  @override
+  String get migratingBackupDatabase =>
+      'Migrating backup database to current version...';
+
+  @override
+  String get mergingNotes => 'Merging notes...';
+
+  @override
+  String get mergingSubNotes => 'Merging sub-notes...';
+
+  @override
+  String get mergingTags => 'Merging tags...';
+
+  @override
+  String get mergingRelationships => 'Merging relationships...';
+
+  @override
+  String get mergingFilters => 'Merging filters...';
+
+  @override
+  String get mergingUserApps => 'Merging user apps...';
+
+  @override
+  String get copyingAttachments => 'Copying attachments...';
+
+  @override
+  String get swappingDatabases => 'Swapping databases...';
+
+  @override
+  String get reloadingData => 'Reloading data...';
+
+  @override
+  String get undoBackup => 'Undo Backup';
+
+  @override
+  String get undoBackupDescription => 'Restore the original database';
+
+  @override
+  String get undoBackupConfirmation =>
+      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+
+  @override
+  String get undoBackupCompleted => 'Backup undone successfully!';
+
+  @override
+  String errorUndoingBackup(Object error) {
+    return 'Error undoing backup: $error';
+  }
+
+  @override
+  String get backupRestored => 'Backup restored successfully!';
+
+  @override
+  String errorRestoringBackup(Object error) {
+    return 'Error restoring backup: $error';
+  }
 }
