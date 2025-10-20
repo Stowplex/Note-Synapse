@@ -26,19 +26,20 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   double _backupProgress = 0.0;
   List<String> _backupLogs = [];
   List<Map<String, dynamic>> _backups = [];
+  List<Map<String, dynamic>> _availableRecoveries = [];
   
   // Import functionality
   bool _isImporting = false;
   double _importProgress = 0.0;
   List<String> _importLogs = [];
   String? _originalDbBackupPath;
-  bool _hasUndoAvailable = false;
 
   @override
   void initState() {
     super.initState();
     _loadBackups();
-  }
+    _loadAvailableRecoveries();
+}
 
   Future<void> _loadBackups() async {
     try {
@@ -66,6 +67,47 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       LoggerService.error('Error loading backups: $e');
     }
   }
+
+  Future<void> _loadAvailableRecoveries() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final List<Map<String, dynamic>> recoveries = [];
+      
+      // Look for original backup files (the actual undo targets)
+      final files = await tempDir.list().toList();
+      final backupFiles = files.where((file) => 
+        file.path.endsWith('.db') && 
+        file.path.contains('original_db_backup_')
+      ).toList();
+      
+      for (final backupFile in backupFiles) {
+        final stat = await backupFile.stat();
+        final fileName = backupFile.path.split('/').last;
+        // Extract timestamp from filename (original_db_backup_1234567890.db)
+        final timestampStr = fileName.replaceAll('original_db_backup_', '').replaceAll('.db', '');
+        final timestamp = int.tryParse(timestampStr) ?? 0;
+        final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        
+        recoveries.add({
+          'name': 'Database Backup',
+          'date': date.toString().substring(0, 19),
+          'path': backupFile.path,
+          'size': stat.size,
+          'type': 'backup',
+          'timestamp': timestamp,
+        });
+      }
+      
+      setState(() {
+        _availableRecoveries = recoveries;
+        // Sort by timestamp (newest first)
+        _availableRecoveries.sort((a, b) => (b['timestamp'] as int).compareTo(a['timestamp'] as int));
+      });
+    } catch (e) {
+      LoggerService.error('Error loading available recoveries: $e');
+    }
+  }
+
 
 
   Future<void> _backupAllNotes() async {
@@ -507,6 +549,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         await _copyDirectory(attachmentsDir, appAttachmentsDir);
       }
       
+      _addImportLog('Merging attachments...');
+      
+      // Step 11: Merge attachments table
+      await _mergeAttachments(stagingDb, migratedBackupDb);
+      
       await migratedBackupDb.close();
       await stagingDb.close();
       
@@ -527,8 +574,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       
       setState(() {
         _isImporting = false;
-        _hasUndoAvailable = true;
       });
+      
+      // Reload available recoveries after successful import
+      await _loadAvailableRecoveries();
       
       _addImportLog(l10n.importCompletedSuccessfully);
       
@@ -861,24 +910,43 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-  Future<void> _undoBackup() async {
-    final l10n = AppLocalizations.of(context)!;
+  Future<void> _mergeAttachments(Database stagingDb, Database backupDb) async {
+    final backupAttachments = await backupDb.query('attachments');
     
-    if (_originalDbBackupPath == null || !await File(_originalDbBackupPath!).exists()) {
+    for (final attachment in backupAttachments) {
+      // Check if attachment exists in staging (unique on noteId, filePath)
+      final existingAttachments = await stagingDb.query(
+        'attachments',
+        where: 'noteId = ? AND filePath = ?',
+        whereArgs: [attachment['noteId'], attachment['filePath']],
+      );
+      
+      if (existingAttachments.isEmpty) {
+        // Insert attachment if it doesn't exist
+        await stagingDb.insert('attachments', attachment);
+      }
+    }
+  }
+
+  Future<void> _recoverFromBackup(Map<String, dynamic> backup) async {
+    final l10n = AppLocalizations.of(context)!;
+    final backupPath = backup['path'] as String;
+    
+    if (!await File(backupPath).exists()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(l10n.errorUndoingBackup('Unknown error')),
+          content: Text(l10n.errorUndoingBackup('Backup file not found')),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.undoBackup),
-        content: Text(l10n.undoBackupConfirmation),
+        title: Text('Recover from Backup'),
+        content: Text('Are you sure you want to recover from ${backup['name'] ?? 'backup'}? This will replace your current data.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -891,41 +959,141 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         ],
       ),
     );
-    
+
     if (confirmed == true) {
-      try {
-        final databaseService = DatabaseService();
-        final currentDbPath = await databaseService.getDatabasePath();
-        
-        // Copy original DB back
-        await File(_originalDbBackupPath!).copy(currentDbPath);
-        
-        // Reload data
-        if (mounted) {
-          final appProvider = Provider.of<AppProvider>(context, listen: false);
-          await appProvider.loadData();
-        }
-        
-        setState(() {
-          _hasUndoAvailable = false;
-        });
-        
+      await _performRecovery(backupPath);
+    }
+  }
+
+  Future<void> _performRecovery(String originalBackupPath) async {
+    
+    setState(() {
+      _isImporting = true;
+      _importProgress = 0.0;
+      _importLogs.clear();
+    });
+
+    try {
+      _addImportLog('Starting database undo...');
+      _updateImportProgress(0.2);
+      
+      // Get current database path
+      final databaseService = DatabaseService();
+      final currentDbPath = await databaseService.getDatabasePath();
+      
+      _addImportLog('Closing current database...');
+      _updateImportProgress(0.4);
+      
+      // Close the current database
+      await databaseService.close();
+      
+      _addImportLog('Restoring from original backup...');
+      _updateImportProgress(0.6);
+      
+      // Copy original backup to current database location
+      final originalBackupFile = File(originalBackupPath);
+      if (!await originalBackupFile.exists()) {
+        throw Exception('Original backup file not found: $originalBackupPath');
+      }
+      
+      await originalBackupFile.copy(currentDbPath);
+      _addImportLog('Database restored from original backup');
+      
+      _addImportLog('Reloading application data...');
+      _updateImportProgress(0.8);
+      
+      // Reload app data
+      if (mounted) {
+        final appProvider = Provider.of<AppProvider>(context, listen: false);
+        await appProvider.loadData();
+      }
+      
+      setState(() {
+        _isImporting = false;
+      });
+      
+      // Reload available recoveries after successful recovery
+      await _loadAvailableRecoveries();
+      
+      _addImportLog('Undo completed successfully');
+      _updateImportProgress(1.0);
+      
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.undoBackupCompleted),
+            content: Text('Database undo completed successfully'),
             backgroundColor: Colors.green,
           ),
         );
-      } catch (e) {
+      }
+    } catch (e) {
+      setState(() {
+        _isImporting = false;
+      });
+      
+      _addImportLog('Undo failed: $e');
+      
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${l10n.errorUndoingBackup}: $e'),
+            content: Text('Error during undo: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
+
+  Future<void> _deleteRecovery(Map<String, dynamic> recovery) async {
+    final l10n = AppLocalizations.of(context)!;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Recovery'),
+        content: Text('Are you sure you want to delete ${recovery['name'] ?? 'backup'}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final file = File(recovery['path'] as String);
+        if (await file.exists()) {
+          await file.delete();
+          await _loadAvailableRecoveries(); // Reload the list
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Recovery deleted successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting recovery: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1044,45 +1212,60 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             ),
           ),
           
-          // Undo backup section
-          if (_hasUndoAvailable) ...[
+          // Available undo options section
+          if (_availableRecoveries.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+            Text(
+              'Available Undo Options',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ..._availableRecoveries.map((recovery) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.undo),
+                title: Text('Database Backup'),
+                subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      l10n.undoBackup,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Text('Created: ${recovery['date'] ?? ''}'),
+                    Text(_formatFileSize(recovery['size'] ?? 0)),
+                  ],
+                ),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'recover') {
+                      _recoverFromBackup(recovery);
+                    } else if (value == 'delete') {
+                      _deleteRecovery(recovery);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'recover',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.undo),
+                          const SizedBox(width: 8),
+                          Text('Undo Import'),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.undoBackupDescription,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _undoBackup,
-                        icon: const Icon(Icons.undo),
-                        label: Text(l10n.undoBackup),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                          foregroundColor: Theme.of(context).colorScheme.onError,
-                        ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete),
+                          const SizedBox(width: 8),
+                          Text(l10n.delete),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+            )).toList(),
           ],
           if (_backupLogs.isNotEmpty) ...[
             const SizedBox(height: 16),
