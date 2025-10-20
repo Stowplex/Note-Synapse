@@ -311,7 +311,7 @@ abstract class AppLocalizations {
   /// No description provided for @pleaseEnterApiKey.
   ///
   /// In en, this message translates to:
-  /// **'Please enter your API key'**
+  /// **'Please enter an API key'**
   String get pleaseEnterApiKey;
 
   /// No description provided for @failedToSaveApiKey.
@@ -1507,6 +1507,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved'**
   String get saved;
+
+  /// No description provided for @unsaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved'**
+  String get unsaved;
 
   /// No description provided for @saving.
   ///
@@ -2977,6 +2983,738 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error importing app: {error}'**
   String errorImportingApp(Object error);
+
+  /// No description provided for @aiModelSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Model Settings'**
+  String get aiModelSettings;
+
+  /// No description provided for @currentModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Model'**
+  String get currentModel;
+
+  /// No description provided for @noModelSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No model selected'**
+  String get noModelSelected;
+
+  /// No description provided for @availableModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Available Models'**
+  String get availableModels;
+
+  /// No description provided for @configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get configured;
+
+  /// No description provided for @notConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Configured'**
+  String get notConfigured;
+
+  /// No description provided for @current.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get current;
+
+  /// No description provided for @useModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Use model'**
+  String get useModel;
+
+  /// No description provided for @configureModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure model'**
+  String get configureModel;
+
+  /// No description provided for @resetModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset model'**
+  String get resetModel;
+
+  /// No description provided for @switchedToModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to {modelName}'**
+  String switchedToModel(Object modelName);
+
+  /// No description provided for @errorSwitchingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Error switching model: {error}'**
+  String errorSwitchingModel(Object error);
+
+  /// No description provided for @modelConfigurationUpdatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} configuration updated successfully'**
+  String modelConfigurationUpdatedSuccessfully(Object modelName);
+
+  /// No description provided for @resetModelConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset {modelName} Configuration'**
+  String resetModelConfiguration(Object modelName);
+
+  /// No description provided for @resetModelConfigurationConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to reset the configuration for {modelName}? This will clear all settings and allow you to reconfigure the model.'**
+  String resetModelConfigurationConfirmation(Object modelName);
+
+  /// No description provided for @modelConfigurationResetSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} configuration reset successfully'**
+  String modelConfigurationResetSuccessfully(Object modelName);
+
+  /// No description provided for @errorResettingConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Error resetting configuration: {error}'**
+  String errorResettingConfiguration(Object error);
+
+  /// No description provided for @configureModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure {modelName}'**
+  String configureModelTitle(Object modelName);
+
+  /// No description provided for @loadPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Load a Preset'**
+  String get loadPreset;
+
+  /// No description provided for @selectPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a preset'**
+  String get selectPreset;
+
+  /// No description provided for @unknownPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown Preset'**
+  String get unknownPreset;
+
+  /// No description provided for @apiEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'API Endpoint'**
+  String get apiEndpoint;
+
+  /// No description provided for @apiEndpointDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the OpenAI-compatible API endpoint URL'**
+  String get apiEndpointDescription;
+
+  /// No description provided for @endpointUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint URL'**
+  String get endpointUrl;
+
+  /// No description provided for @endpointUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://api.openai.com/v1/chat/completions'**
+  String get endpointUrlHint;
+
+  /// No description provided for @pleaseEnterEndpointUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an endpoint URL'**
+  String get pleaseEnterEndpointUrl;
+
+  /// No description provided for @pleaseEnterValidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid URL'**
+  String get pleaseEnterValidUrl;
+
+  /// No description provided for @modelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Name'**
+  String get modelName;
+
+  /// No description provided for @modelNameDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)'**
+  String get modelNameDescription;
+
+  /// No description provided for @modelNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'gpt-4'**
+  String get modelNameHint;
+
+  /// No description provided for @pleaseEnterModelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a model name'**
+  String get pleaseEnterModelName;
+
+  /// No description provided for @displayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display Name'**
+  String get displayName;
+
+  /// No description provided for @displayNameDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A custom name to display in the app for this model'**
+  String get displayNameDescription;
+
+  /// No description provided for @displayNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'My Custom Model'**
+  String get displayNameHint;
+
+  /// No description provided for @tokenLimits.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Limits'**
+  String get tokenLimits;
+
+  /// No description provided for @tokenLimitsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure the maximum input and output tokens for this model'**
+  String get tokenLimitsDescription;
+
+  /// No description provided for @maxInputTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Input Tokens'**
+  String get maxInputTokens;
+
+  /// No description provided for @maxInputTokensHint.
+  ///
+  /// In en, this message translates to:
+  /// **'100000'**
+  String get maxInputTokensHint;
+
+  /// No description provided for @maxOutputTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Output Tokens'**
+  String get maxOutputTokens;
+
+  /// No description provided for @maxOutputTokensHint.
+  ///
+  /// In en, this message translates to:
+  /// **'4000'**
+  String get maxOutputTokensHint;
+
+  /// No description provided for @required.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get required;
+
+  /// No description provided for @mustBePositiveNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Must be a positive number'**
+  String get mustBePositiveNumber;
+
+  /// No description provided for @modelCapabilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Capabilities'**
+  String get modelCapabilities;
+
+  /// No description provided for @modelCapabilitiesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select which capabilities this model supports'**
+  String get modelCapabilitiesDescription;
+
+  /// No description provided for @imageProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Processing'**
+  String get imageProcessing;
+
+  /// No description provided for @imageProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can analyze and understand images'**
+  String get imageProcessingDescription;
+
+  /// No description provided for @documentUnderstanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Document Understanding'**
+  String get documentUnderstanding;
+
+  /// No description provided for @documentUnderstandingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can process PDFs and documents'**
+  String get documentUnderstandingDescription;
+
+  /// No description provided for @audioProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Processing'**
+  String get audioProcessing;
+
+  /// No description provided for @audioProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can transcribe and analyze audio'**
+  String get audioProcessingDescription;
+
+  /// No description provided for @videoProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Video Processing'**
+  String get videoProcessing;
+
+  /// No description provided for @videoProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Can analyze video content'**
+  String get videoProcessingDescription;
+
+  /// No description provided for @geminiModelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Google\'s most advanced model with full multimodal capabilities'**
+  String get geminiModelDescription;
+
+  /// No description provided for @openaiCompatibleModelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible with OpenAI API endpoints with configurable capabilities'**
+  String get openaiCompatibleModelDescription;
+
+  /// No description provided for @geminiModelDescriptionDetailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Google\'s most advanced model with full multimodal capabilities including document understanding.'**
+  String get geminiModelDescriptionDetailed;
+
+  /// No description provided for @openaiCompatibleModelDescriptionDetailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.'**
+  String get openaiCompatibleModelDescriptionDetailed;
+
+  /// No description provided for @geminiApiKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Get your API key from Google AI Studio'**
+  String get geminiApiKeyDescription;
+
+  /// No description provided for @openaiCompatibleApiKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Get your API key from your OpenAI-compatible service provider'**
+  String get openaiCompatibleApiKeyDescription;
+
+  /// No description provided for @errorConfiguringModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Error configuring model: {error}'**
+  String errorConfiguringModel(Object error);
+
+  /// No description provided for @recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery'**
+  String get recovery;
+
+  /// No description provided for @recoverySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup and restore your notes'**
+  String get recoverySubtitle;
+
+  /// No description provided for @exportAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Export All Notes'**
+  String get exportAllNotes;
+
+  /// No description provided for @exportAllNotesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a complete backup of all your notes and attachments'**
+  String get exportAllNotesDescription;
+
+  /// No description provided for @exporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting...'**
+  String get exporting;
+
+  /// No description provided for @exportLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Logs'**
+  String get exportLogs;
+
+  /// No description provided for @previousExports.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Exports'**
+  String get previousExports;
+
+  /// No description provided for @saveAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Again'**
+  String get saveAgain;
+
+  /// No description provided for @backupAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup All Notes'**
+  String get backupAllNotes;
+
+  /// No description provided for @backupAllNotesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.'**
+  String get backupAllNotesDescription;
+
+  /// No description provided for @creatingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating Backup...'**
+  String get creatingBackup;
+
+  /// No description provided for @backupLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup Logs'**
+  String get backupLogs;
+
+  /// No description provided for @previousBackups.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Backups'**
+  String get previousBackups;
+
+  /// No description provided for @backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get backup;
+
+  /// No description provided for @startingBackupProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting backup process...'**
+  String get startingBackupProcess;
+
+  /// No description provided for @createdTempDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Created temp directory: {path}'**
+  String createdTempDirectory(Object path);
+
+  /// No description provided for @forcingDatabaseCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Forcing database checkpoint...'**
+  String get forcingDatabaseCheckpoint;
+
+  /// No description provided for @databaseCopiedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Database copied successfully'**
+  String get databaseCopiedSuccessfully;
+
+  /// No description provided for @databaseFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Database file not found'**
+  String get databaseFileNotFound;
+
+  /// No description provided for @attachmentsDirectoryCopiedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments directory copied successfully'**
+  String get attachmentsDirectoryCopiedSuccessfully;
+
+  /// No description provided for @noAttachmentsDirectoryFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No attachments directory found, creating empty one'**
+  String get noAttachmentsDirectoryFound;
+
+  /// No description provided for @updatingAttachmentPathsInCopiedDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating attachment paths in copied database...'**
+  String get updatingAttachmentPathsInCopiedDatabase;
+
+  /// No description provided for @databaseConsistencyVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Database consistency verified'**
+  String get databaseConsistencyVerified;
+
+  /// No description provided for @creatingZipArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating zip archive...'**
+  String get creatingZipArchive;
+
+  /// No description provided for @backupCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup completed: {path}'**
+  String backupCompleted(Object path);
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed: {error}'**
+  String backupFailed(Object error);
+
+  /// No description provided for @foundAttachmentsWithAbsolutePaths.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {count} attachments with absolute paths to update'**
+  String foundAttachmentsWithAbsolutePaths(Object count);
+
+  /// No description provided for @copiedAndUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied and updated: {original} -> {unique}'**
+  String copiedAndUpdated(Object original, Object unique);
+
+  /// No description provided for @warningSourceFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning: Source file not found: {path}'**
+  String warningSourceFileNotFound(Object path);
+
+  /// No description provided for @deletedBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted backup: {name}'**
+  String deletedBackup(Object name);
+
+  /// No description provided for @errorDeletingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting backup: {error}'**
+  String errorDeletingBackup(Object error);
+
+  /// No description provided for @backupFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup file not found: {name}'**
+  String backupFileNotFound(Object name);
+
+  /// No description provided for @errorSavingBackupAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving backup again: {error}'**
+  String errorSavingBackupAgain(Object error);
+
+  /// No description provided for @importBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Backup'**
+  String get importBackup;
+
+  /// No description provided for @importBackupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore your notes from a backup file'**
+  String get importBackupDescription;
+
+  /// No description provided for @importingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing Backup...'**
+  String get importingBackup;
+
+  /// No description provided for @importLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Logs'**
+  String get importLogs;
+
+  /// No description provided for @selectBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Backup File'**
+  String get selectBackupFile;
+
+  /// No description provided for @selectBackupFileDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a backup zip file to restore from'**
+  String get selectBackupFileDescription;
+
+  /// No description provided for @importFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailed(Object error);
+
+  /// No description provided for @invalidBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid backup file format'**
+  String get invalidBackupFile;
+
+  /// No description provided for @backupVersionTooNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup is from a newer version of the app. Please update the app first.'**
+  String get backupVersionTooNew;
+
+  /// No description provided for @checkpointingDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpointing current database...'**
+  String get checkpointingDatabase;
+
+  /// No description provided for @copyingDatabaseToStaging.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying database to staging directory...'**
+  String get copyingDatabaseToStaging;
+
+  /// No description provided for @extractingBackupFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting backup file...'**
+  String get extractingBackupFile;
+
+  /// No description provided for @validatingBackupDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Validating backup database version...'**
+  String get validatingBackupDatabase;
+
+  /// No description provided for @migratingBackupDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Migrating backup database to current version...'**
+  String get migratingBackupDatabase;
+
+  /// No description provided for @mergingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging notes...'**
+  String get mergingNotes;
+
+  /// No description provided for @mergingSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging sub-notes...'**
+  String get mergingSubNotes;
+
+  /// No description provided for @mergingTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging tags...'**
+  String get mergingTags;
+
+  /// No description provided for @mergingRelationships.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging relationships...'**
+  String get mergingRelationships;
+
+  /// No description provided for @mergingFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging filters...'**
+  String get mergingFilters;
+
+  /// No description provided for @mergingUserApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging user apps...'**
+  String get mergingUserApps;
+
+  /// No description provided for @copyingAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying attachments...'**
+  String get copyingAttachments;
+
+  /// No description provided for @swappingDatabases.
+  ///
+  /// In en, this message translates to:
+  /// **'Swapping databases...'**
+  String get swappingDatabases;
+
+  /// No description provided for @reloadingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Reloading data...'**
+  String get reloadingData;
+
+  /// No description provided for @undoBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo Backup'**
+  String get undoBackup;
+
+  /// No description provided for @undoBackupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the original database'**
+  String get undoBackupDescription;
+
+  /// No description provided for @undoBackupConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.'**
+  String get undoBackupConfirmation;
+
+  /// No description provided for @undoBackupCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup undone successfully!'**
+  String get undoBackupCompleted;
+
+  /// No description provided for @errorUndoingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error undoing backup: {error}'**
+  String errorUndoingBackup(Object error);
+
+  /// No description provided for @backupRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup restored successfully!'**
+  String get backupRestored;
+
+  /// No description provided for @errorRestoringBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Error restoring backup: {error}'**
+  String errorRestoringBackup(Object error);
 }
 
 class _AppLocalizationsDelegate

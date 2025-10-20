@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/secure_storage_service.dart';
+import 'model_selection_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -97,85 +98,37 @@ class _SetupScreenState extends State<SetupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        l10n.setupRequired,
+                        'Setup Required',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        l10n.setupRequiredDescription,
+                        'Choose your AI model and configure it to get started with Note Synapse.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _openGoogleAIStudio,
-                              icon: const Icon(Icons.open_in_new),
-                              label: Text(l10n.getApiKey),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _apiKeyController,
-                decoration: InputDecoration(
-                  labelText: l10n.geminiApiKey,
-                  hintText: l10n.apiKeyHint,
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.key),
-                ),
-                obscureText: true,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _saveApiKey(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error, color: Colors.red[600]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(color: Colors.red[600]),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveApiKey,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(l10n.continueButton),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ModelSelectionScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Choose AI Model'),
                 ),
               ),
               const Spacer(),
               Text(
-                l10n.apiKeySecurityNote,
+                'Your API keys are stored securely and never shared.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey[600],
                 ),

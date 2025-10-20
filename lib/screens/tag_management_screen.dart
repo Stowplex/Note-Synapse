@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/tag.dart';
 import '../models/dedup_rule.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -413,7 +414,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
   void _addDedupRule() {
     final newRule = DedupRule(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       leftTag: '',
       rightTag: '',
     );
@@ -575,7 +576,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
     try {
       final tagNames = _tagsWithUsage.map((t) => t.tag.name).toList();
-      final suggestions = await GeminiApiService.suggestDedupRules(tagNames);
+      final suggestions = await AIService.suggestDedupRules(tagNames);
       
       if (mounted) {
         setState(() {

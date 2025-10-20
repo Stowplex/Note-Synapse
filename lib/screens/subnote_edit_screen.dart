@@ -103,10 +103,23 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
       appBar: AppBar(
         title: Text(widget.isNewSubNote ? l10n.addNewSubNote : l10n.editSubNote),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _hasChanges ? _saveChanges : null,
-            tooltip: l10n.saveChanges,
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            child: Chip(
+              label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
+              backgroundColor: _hasChanges 
+                  ? Colors.orange.withOpacity(0.1)
+                  : Colors.green.withOpacity(0.1),
+              labelStyle: TextStyle(
+                color: _hasChanges ? Colors.orange : Colors.green,
+                fontWeight: FontWeight.w500,
+              ),
+              avatar: Icon(
+                _hasChanges ? Icons.edit : Icons.check,
+                size: 16,
+                color: _hasChanges ? Colors.orange : Colors.green,
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.close),
@@ -169,25 +182,6 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   }
 
 
-  void _saveChanges() {
-    if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a name for the sub-note'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Cancel any pending auto-save
-    _autoSaveTimer?.cancel();
-    
-    // Force save immediately
-    _autoSave();
-    
-    Navigator.pop(context);
-  }
 
   void _cancelEditing() {
     // Cancel any pending auto-save

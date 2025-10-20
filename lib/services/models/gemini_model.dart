@@ -1,0 +1,248 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
+import 'ai_model.dart';
+import '../model_storage_service.dart';
+import '../logger_service.dart';
+import '../../models/model_type.dart';
+import '../../models/model_config.dart';
+import '../../utils/file_type_utils.dart';
+
+/// Gemini model implementation
+class GeminiModel implements AIModel {
+  ModelConfig? _config;
+
+  @override
+  String get id => _config?.type.id ?? ModelType.gemini.id;
+
+  @override
+  String get name => _config?.displayName ?? ModelType.gemini.displayName;
+
+  @override
+  String get description =>
+      'Google\'s Gemini model with full multimodal capabilities';
+
+  @override
+  Future<bool> isReady() async {
+    try {
+      final apiKey = _config?.apiKey ?? await ModelStorageService.getModelApiKey(ModelType.gemini);
+      return apiKey != null && apiKey.isNotEmpty;
+    } catch (e) {
+      LoggerService.error('GeminiModel: Error checking readiness: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<void> initialize({ModelConfig? config}) async {
+    if (config != null) {
+      _config = config;
+    } else {
+      _config = await ModelStorageService.getModelConfig(ModelType.gemini);
+    }
+
+    if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
+      throw Exception('Gemini API key not configured');
+    }
+  }
+
+  @override
+  Future<String> generateWithAttachments(
+    String prompt,
+    List<PlatformFile> attachedFiles, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with attachments', () async {
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final apiKey = await _validateApiKey(requestId: actualRequestId);
+
+      final generationConfig = {
+        'temperature': temperature ?? 0.1,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+      };
+
+      return await _makeGeminiRequest(apiKey, prompt,
+          attachedFiles: attachedFiles,
+          generationConfig: generationConfig,
+          requestId: actualRequestId);
+    });
+  }
+
+
+  // Private helper methods
+
+
+  Future<T> _withErrorHandling<T>(
+    String operation,
+    Future<T> Function() operationFunction, {
+    String? requestId,
+  }) async {
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+    try {
+      return await operationFunction();
+    } catch (e) {
+      LoggerService.error('Error in $operation', error: {
+        'error': e.toString(),
+        'requestId': actualRequestId,
+      });
+      rethrow;
+    }
+  }
+
+  Future<String> _validateApiKey({String? requestId}) async {
+    final apiKey = _config?.apiKey;
+    if (apiKey == null) {
+      LoggerService.error('API key not found', error: {'requestId': requestId});
+      throw Exception('API key not found');
+    }
+    return apiKey;
+  }
+
+  Map<String, dynamic> _buildRequestBody(
+    String prompt,
+    List<PlatformFile> attachedFiles, {
+    Map<String, dynamic>? generationConfig,
+    List<Map<String, String>>? safetySettings,
+  }) {
+    final todayContext = AIModel.getTodayContext();
+    final enhancedPrompt = prompt + todayContext;
+
+    final parts = <Map<String, dynamic>>[{'text': enhancedPrompt}];
+
+    // Add file attachments if any
+    if (attachedFiles.isNotEmpty) {
+      for (final file in attachedFiles) {
+        if (file.bytes != null) {
+          final base64Data = base64Encode(file.bytes!);
+          final extension = FileTypeUtils.getFileExtension(file.name);
+          final mimeType = FileTypeUtils.getMimeType(extension);
+
+          parts.add({
+            'inline_data': {
+              'mime_type': mimeType,
+              'data': base64Data,
+            }
+          });
+        }
+      }
+    }
+
+    final requestBody = {
+      'contents': [
+        {'parts': parts}
+      ],
+      'generationConfig': generationConfig ??
+          {
+            'temperature': 0.1,
+            'topK': 32,
+            'topP': 1,
+            'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
+          },
+    };
+
+    if (safetySettings != null) {
+      requestBody['safetySettings'] = safetySettings;
+    }
+
+    return requestBody;
+  }
+
+  Future<String> _makeRequest(
+    String apiKey,
+    Map<String, dynamic> requestBody, {
+    String? requestId,
+  }) async {
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+
+    final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final modelName = _config?.modelName ?? 'gemini-2.5-flash';
+
+    LoggerService.logAiRequest(
+      endpoint: '$endpoint/models/$modelName:generateContent',
+      headers: {'Content-Type': 'application/json'},
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
+
+    final response = await http.post(
+      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+
+    final duration = DateTime.now().difference(startTime);
+
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: actualRequestId,
+      duration: duration,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+        final candidate = data['candidates'][0];
+        final content = candidate['content'];
+
+        if (content != null &&
+            content['parts'] != null &&
+            content['parts'].isNotEmpty) {
+          final responseText = content['parts'][0]['text'];
+          LoggerService.debug('Gemini API request completed successfully', error: {
+            'responseLength': responseText.length,
+            'requestId': actualRequestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+          return responseText;
+        }
+      }
+      LoggerService.error('No content in Gemini API response', error: {
+        'responseData': data,
+        'requestId': actualRequestId,
+      });
+      throw Exception('No content in Gemini API response');
+    } else {
+      LoggerService.logAiError(
+        error:
+            'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: '$endpoint/models/$modelName:generateContent',
+        requestId: actualRequestId,
+        duration: duration,
+      );
+      throw Exception(
+          'Failed to process request: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  Future<String> _makeGeminiRequest(
+    String apiKey,
+    String prompt, {
+    List<PlatformFile> attachedFiles = const [],
+    Map<String, dynamic>? generationConfig,
+    List<Map<String, String>>? safetySettings,
+    String? requestId,
+  }) async {
+    final requestBody = _buildRequestBody(
+      prompt,
+      attachedFiles,
+      generationConfig: generationConfig,
+      safetySettings: safetySettings,
+    );
+
+    return await _makeRequest(apiKey, requestBody, requestId: requestId);
+  }
+
+}

@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
@@ -14,10 +13,11 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../services/user_app_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 import 'user_app_edit_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
@@ -1348,7 +1348,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   }) async {
     try {
       // Use the new chatAI service with configurable parameters
-      return await GeminiApiService.chatAI(
+      return await AIService.chatAI(
         prompt,
         temperature: temperature,
         topK: topK,
@@ -1403,13 +1403,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   // Save notes from JavaScript API
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
-    final databaseService = DatabaseService();
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
     int savedCount = 0;
     
     for (final noteData in notesData) {
       try {
         final note = await _createNoteFromJavaScriptData(noteData);
-        await databaseService.insertNote(note);
+        await appProvider.addNote(note);
         savedCount++;
         LoggerService.debug('[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}');
       } catch (e) {
@@ -1512,7 +1512,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   // Generate unique ID for notes and subnotes
   String _generateUniqueId() {
-    return '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
+    return const Uuid().v4();
   }
 
   // Parse NoteType from string
@@ -1566,7 +1566,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     throw Exception('Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}');
   }
 
-  // Save base64 attachment to cache directory and database
+  // Save base64 attachment to private storage and database
   Future<String> _saveBase64Attachment(String base64Data, String fileName) async {
     try {
       // Extract base64 data (remove data:image/jpeg;base64, prefix if present)
@@ -1578,28 +1578,12 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       // Decode base64 data
       final bytes = base64Decode(base64String);
 
-      // Generate UUID to prevent file overwrites
-      const uuid = Uuid();
-      final uniqueId = uuid.v4();
-      
-      // Extract file extension
-      final fileExtension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-      final baseFileName = fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
-      
-      // Create unique filename with UUID prefix
-      final uniqueFileName = '${baseFileName}_$uniqueId$fileExtension';
+      // Save to private storage and get relative path
+      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
 
-      // Get cache directory
-      final cacheDir = await getTemporaryDirectory();
-      final filePath = '${cacheDir.path}/$uniqueFileName';
-
-      // Write file to cache directory
-      final file = File(filePath);
-      await file.writeAsBytes(bytes);
-
-      LoggerService.debug('[Synapse.saveNotes] Saved base64 attachment: $fileName -> $uniqueFileName (${bytes.length} bytes) to $filePath');
+      LoggerService.debug('[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $relativePath');
       
-      return filePath;
+      return relativePath;
     } catch (e) {
       LoggerService.error('[Synapse.saveNotes] Error saving base64 attachment: $e', error: e);
       rethrow;
@@ -1646,7 +1630,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       
       // Determine content type based on file extension
       String contentType = 'text/plain';
-      final extension = path.split('.').last.toLowerCase();
+      final extension = FileTypeUtils.getFileExtension(path);
       switch (extension) {
         case 'js':
           contentType = 'application/javascript';

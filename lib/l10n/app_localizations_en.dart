@@ -121,7 +121,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your API key is stored securely on your device and never shared.';
 
   @override
-  String get pleaseEnterApiKey => 'Please enter your API key';
+  String get pleaseEnterApiKey => 'Please enter an API key';
 
   @override
   String failedToSaveApiKey(Object error) {
@@ -776,6 +776,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saved => 'Saved';
+
+  @override
+  String get unsaved => 'Unsaved';
 
   @override
   String get saving => 'Saving...';
@@ -1590,5 +1593,438 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String errorImportingApp(Object error) {
     return 'Error importing app: $error';
+  }
+
+  @override
+  String get aiModelSettings => 'AI Model Settings';
+
+  @override
+  String get currentModel => 'Current Model';
+
+  @override
+  String get noModelSelected => 'No model selected';
+
+  @override
+  String get availableModels => 'Available Models';
+
+  @override
+  String get configured => 'Configured';
+
+  @override
+  String get notConfigured => 'Not Configured';
+
+  @override
+  String get current => 'Current';
+
+  @override
+  String get useModel => 'Use model';
+
+  @override
+  String get configureModel => 'Configure model';
+
+  @override
+  String get resetModel => 'Reset model';
+
+  @override
+  String switchedToModel(Object modelName) {
+    return 'Switched to $modelName';
+  }
+
+  @override
+  String errorSwitchingModel(Object error) {
+    return 'Error switching model: $error';
+  }
+
+  @override
+  String modelConfigurationUpdatedSuccessfully(Object modelName) {
+    return '$modelName configuration updated successfully';
+  }
+
+  @override
+  String resetModelConfiguration(Object modelName) {
+    return 'Reset $modelName Configuration';
+  }
+
+  @override
+  String resetModelConfigurationConfirmation(Object modelName) {
+    return 'Are you sure you want to reset the configuration for $modelName? This will clear all settings and allow you to reconfigure the model.';
+  }
+
+  @override
+  String modelConfigurationResetSuccessfully(Object modelName) {
+    return '$modelName configuration reset successfully';
+  }
+
+  @override
+  String errorResettingConfiguration(Object error) {
+    return 'Error resetting configuration: $error';
+  }
+
+  @override
+  String configureModelTitle(Object modelName) {
+    return 'Configure $modelName';
+  }
+
+  @override
+  String get loadPreset => 'Load a Preset';
+
+  @override
+  String get selectPreset => 'Select a preset';
+
+  @override
+  String get unknownPreset => 'Unknown Preset';
+
+  @override
+  String get apiEndpoint => 'API Endpoint';
+
+  @override
+  String get apiEndpointDescription =>
+      'Enter the OpenAI-compatible API endpoint URL';
+
+  @override
+  String get endpointUrl => 'Endpoint URL';
+
+  @override
+  String get endpointUrlHint => 'https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get pleaseEnterEndpointUrl => 'Please enter an endpoint URL';
+
+  @override
+  String get pleaseEnterValidUrl => 'Please enter a valid URL';
+
+  @override
+  String get modelName => 'Model Name';
+
+  @override
+  String get modelNameDescription =>
+      'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)';
+
+  @override
+  String get modelNameHint => 'gpt-4';
+
+  @override
+  String get pleaseEnterModelName => 'Please enter a model name';
+
+  @override
+  String get displayName => 'Display Name';
+
+  @override
+  String get displayNameDescription =>
+      'A custom name to display in the app for this model';
+
+  @override
+  String get displayNameHint => 'My Custom Model';
+
+  @override
+  String get tokenLimits => 'Token Limits';
+
+  @override
+  String get tokenLimitsDescription =>
+      'Configure the maximum input and output tokens for this model';
+
+  @override
+  String get maxInputTokens => 'Max Input Tokens';
+
+  @override
+  String get maxInputTokensHint => '100000';
+
+  @override
+  String get maxOutputTokens => 'Max Output Tokens';
+
+  @override
+  String get maxOutputTokensHint => '4000';
+
+  @override
+  String get required => 'Required';
+
+  @override
+  String get mustBePositiveNumber => 'Must be a positive number';
+
+  @override
+  String get modelCapabilities => 'Model Capabilities';
+
+  @override
+  String get modelCapabilitiesDescription =>
+      'Select which capabilities this model supports';
+
+  @override
+  String get imageProcessing => 'Image Processing';
+
+  @override
+  String get imageProcessingDescription => 'Can analyze and understand images';
+
+  @override
+  String get documentUnderstanding => 'Document Understanding';
+
+  @override
+  String get documentUnderstandingDescription =>
+      'Can process PDFs and documents';
+
+  @override
+  String get audioProcessing => 'Audio Processing';
+
+  @override
+  String get audioProcessingDescription => 'Can transcribe and analyze audio';
+
+  @override
+  String get videoProcessing => 'Video Processing';
+
+  @override
+  String get videoProcessingDescription => 'Can analyze video content';
+
+  @override
+  String get geminiModelDescription =>
+      'Google\'s most advanced model with full multimodal capabilities';
+
+  @override
+  String get openaiCompatibleModelDescription =>
+      'Compatible with OpenAI API endpoints with configurable capabilities';
+
+  @override
+  String get geminiModelDescriptionDetailed =>
+      'Google\'s most advanced model with full multimodal capabilities including document understanding.';
+
+  @override
+  String get openaiCompatibleModelDescriptionDetailed =>
+      'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
+
+  @override
+  String get geminiApiKeyDescription =>
+      'Get your API key from Google AI Studio';
+
+  @override
+  String get openaiCompatibleApiKeyDescription =>
+      'Get your API key from your OpenAI-compatible service provider';
+
+  @override
+  String errorConfiguringModel(Object error) {
+    return 'Error configuring model: $error';
+  }
+
+  @override
+  String get recovery => 'Recovery';
+
+  @override
+  String get recoverySubtitle => 'Backup and restore your notes';
+
+  @override
+  String get exportAllNotes => 'Export All Notes';
+
+  @override
+  String get exportAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments';
+
+  @override
+  String get exporting => 'Exporting...';
+
+  @override
+  String get exportLogs => 'Export Logs';
+
+  @override
+  String get previousExports => 'Previous Exports';
+
+  @override
+  String get saveAgain => 'Save Again';
+
+  @override
+  String get backupAllNotes => 'Backup All Notes';
+
+  @override
+  String get backupAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.';
+
+  @override
+  String get creatingBackup => 'Creating Backup...';
+
+  @override
+  String get backupLogs => 'Backup Logs';
+
+  @override
+  String get previousBackups => 'Previous Backups';
+
+  @override
+  String get backup => 'Backup';
+
+  @override
+  String get startingBackupProcess => 'Starting backup process...';
+
+  @override
+  String createdTempDirectory(Object path) {
+    return 'Created temp directory: $path';
+  }
+
+  @override
+  String get forcingDatabaseCheckpoint => 'Forcing database checkpoint...';
+
+  @override
+  String get databaseCopiedSuccessfully => 'Database copied successfully';
+
+  @override
+  String get databaseFileNotFound => 'Database file not found';
+
+  @override
+  String get attachmentsDirectoryCopiedSuccessfully =>
+      'Attachments directory copied successfully';
+
+  @override
+  String get noAttachmentsDirectoryFound =>
+      'No attachments directory found, creating empty one';
+
+  @override
+  String get updatingAttachmentPathsInCopiedDatabase =>
+      'Updating attachment paths in copied database...';
+
+  @override
+  String get databaseConsistencyVerified => 'Database consistency verified';
+
+  @override
+  String get creatingZipArchive => 'Creating zip archive...';
+
+  @override
+  String backupCompleted(Object path) {
+    return 'Backup completed: $path';
+  }
+
+  @override
+  String backupFailed(Object error) {
+    return 'Backup failed: $error';
+  }
+
+  @override
+  String foundAttachmentsWithAbsolutePaths(Object count) {
+    return 'Found $count attachments with absolute paths to update';
+  }
+
+  @override
+  String copiedAndUpdated(Object original, Object unique) {
+    return 'Copied and updated: $original -> $unique';
+  }
+
+  @override
+  String warningSourceFileNotFound(Object path) {
+    return 'Warning: Source file not found: $path';
+  }
+
+  @override
+  String deletedBackup(Object name) {
+    return 'Deleted backup: $name';
+  }
+
+  @override
+  String errorDeletingBackup(Object error) {
+    return 'Error deleting backup: $error';
+  }
+
+  @override
+  String backupFileNotFound(Object name) {
+    return 'Backup file not found: $name';
+  }
+
+  @override
+  String errorSavingBackupAgain(Object error) {
+    return 'Error saving backup again: $error';
+  }
+
+  @override
+  String get importBackup => 'Import Backup';
+
+  @override
+  String get importBackupDescription => 'Restore your notes from a backup file';
+
+  @override
+  String get importingBackup => 'Importing Backup...';
+
+  @override
+  String get importLogs => 'Import Logs';
+
+  @override
+  String get selectBackupFile => 'Select Backup File';
+
+  @override
+  String get selectBackupFileDescription =>
+      'Choose a backup zip file to restore from';
+
+  @override
+  String importFailed(Object error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get invalidBackupFile => 'Invalid backup file format';
+
+  @override
+  String get backupVersionTooNew =>
+      'Backup is from a newer version of the app. Please update the app first.';
+
+  @override
+  String get checkpointingDatabase => 'Checkpointing current database...';
+
+  @override
+  String get copyingDatabaseToStaging =>
+      'Copying database to staging directory...';
+
+  @override
+  String get extractingBackupFile => 'Extracting backup file...';
+
+  @override
+  String get validatingBackupDatabase =>
+      'Validating backup database version...';
+
+  @override
+  String get migratingBackupDatabase =>
+      'Migrating backup database to current version...';
+
+  @override
+  String get mergingNotes => 'Merging notes...';
+
+  @override
+  String get mergingSubNotes => 'Merging sub-notes...';
+
+  @override
+  String get mergingTags => 'Merging tags...';
+
+  @override
+  String get mergingRelationships => 'Merging relationships...';
+
+  @override
+  String get mergingFilters => 'Merging filters...';
+
+  @override
+  String get mergingUserApps => 'Merging user apps...';
+
+  @override
+  String get copyingAttachments => 'Copying attachments...';
+
+  @override
+  String get swappingDatabases => 'Swapping databases...';
+
+  @override
+  String get reloadingData => 'Reloading data...';
+
+  @override
+  String get undoBackup => 'Undo Backup';
+
+  @override
+  String get undoBackupDescription => 'Restore the original database';
+
+  @override
+  String get undoBackupConfirmation =>
+      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+
+  @override
+  String get undoBackupCompleted => 'Backup undone successfully!';
+
+  @override
+  String errorUndoingBackup(Object error) {
+    return 'Error undoing backup: $error';
+  }
+
+  @override
+  String get backupRestored => 'Backup restored successfully!';
+
+  @override
+  String errorRestoringBackup(Object error) {
+    return 'Error restoring backup: $error';
   }
 }

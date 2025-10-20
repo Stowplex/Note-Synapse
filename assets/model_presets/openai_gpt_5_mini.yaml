@@ -1,0 +1,12 @@
+model_type: openai_compatible
+model_endpoint: https://api.openai.com/v1/chat/completions
+model_name: gpt-5-mini
+model_display_name: GPT-5 Mini
+model_capabilities:
+  - support_audio
+  - support_video
+  - support_document_understanding
+  - support_image
+max_input_token: 131072
+max_output_token: 8192
+warn_premium: false

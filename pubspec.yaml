@@ -40,6 +40,7 @@ dependencies:
   # Database
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0
+  sqflite_common_ffi_web: ^0.4.0
   path: ^1.8.3
   
   # HTTP requests
@@ -74,7 +75,7 @@ dependencies:
   url_launcher: ^6.2.1
   
   # Sharing
-  share_plus: ^7.2.1
+  share_plus: ^12.0.0
   
   # UUID generation
   uuid: ^4.2.1
@@ -84,6 +85,9 @@ dependencies:
   file_saver: ^0.2.7
   path_provider: ^2.1.1
   open_file: ^3.3.2
+  
+  # Archive handling
+  archive: ^3.4.10
   
   # File text extraction
   # Note: For PDF text extraction, consider adding pdf_text or similar package
@@ -111,6 +115,7 @@ dependencies:
   
   # Debug overlay
   flutter_debug_overlay: ^0.1.0
+  
 
 dev_dependencies:
   flutter_test:
@@ -148,6 +153,7 @@ flutter:
     - assets/scripts/bootstrap.min.css
     - assets/scripts/highlight.min.js
     - assets/scripts/highlight.min.css
+    - assets/model_presets/
 
   # Internationalization
   generate: true

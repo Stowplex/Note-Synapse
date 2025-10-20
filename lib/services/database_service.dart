@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+
+// Conditional imports for platform-specific code
+import 'database_service_io.dart' if (dart.library.html) 'database_service_web.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/services.dart';
 import '../models/note.dart';
@@ -15,47 +15,30 @@ import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'logger_service.dart';
+import '../utils/file_type_utils.dart';
+import '../utils/file_utils.dart';
+
+// Migration step configuration
+class MigrationStep {
+  final String description;
+  final Future<void> Function(Database db, {required bool isBackupMigration}) execute;
+
+  const MigrationStep({
+    required this.description,
+    required this.execute,
+  });
+}
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal() {
-    // Initialize database factory for desktop platforms
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
+    // Initialize database factory using platform-specific implementation
+    initializeDatabaseFactory();
   }
 
-  // For testing, allow creating new instances
-  DatabaseService.createNew() {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
-  }
-
-  Database? _database;
-
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
-  }
-
-  Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'note_synapse.db');
-    return await openDatabase(
-      path,
-      version: 16,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
-  }
-
-  Future<void> _onCreate(Database db, int version) async {
-    // Notes table
-    await db.execute('''
+  // Table schema constants - single source of truth for all table definitions
+  static const String _createNotesTable = '''
       CREATE TABLE notes(
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -70,10 +53,9 @@ class DatabaseService {
         pinned INTEGER NOT NULL DEFAULT 0,
         isArchived INTEGER NOT NULL DEFAULT 0
       )
-    ''');
+  ''';
 
-    // SubNotes table
-    await db.execute('''
+  static const String _createSubNotesTable = '''
       CREATE TABLE subnotes(
         id TEXT PRIMARY KEY,
         noteId TEXT NOT NULL,
@@ -83,10 +65,9 @@ class DatabaseService {
         isCompleted INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // Tags table
-    await db.execute('''
+  static const String _createTagsTable = '''
       CREATE TABLE tags(
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
@@ -94,10 +75,9 @@ class DatabaseService {
         createdAt INTEGER NOT NULL,
         usageCount INTEGER NOT NULL DEFAULT 0
       )
-    ''');
+  ''';
 
-    // Note-Tag relationships table
-    await db.execute('''
+  static const String _createNoteTagsTable = '''
       CREATE TABLE note_tags(
         noteId TEXT NOT NULL,
         tagId TEXT NOT NULL,
@@ -105,23 +85,22 @@ class DatabaseService {
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // Attachments table
-    await db.execute('''
+  static const String _createAttachmentsTable = '''
       CREATE TABLE attachments(
         id TEXT PRIMARY KEY,
         noteId TEXT NOT NULL,
         filePath TEXT NOT NULL,
         fileName TEXT NOT NULL,
         fileType TEXT NOT NULL,
+        isRelativePath INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // Relationships table
-    await db.execute('''
+  static const String _createRelationshipsTable = '''
       CREATE TABLE relationships(
         id TEXT PRIMARY KEY,
         fromNoteId TEXT NOT NULL,
@@ -131,11 +110,9 @@ class DatabaseService {
         FOREIGN KEY (fromNoteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (toNoteId) REFERENCES notes (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-
-    // Filters table
-    await db.execute('''
+  static const String _createFiltersTable = '''
       CREATE TABLE filters(
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -145,10 +122,9 @@ class DatabaseService {
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
-    ''');
+  ''';
 
-    // User Apps table
-    await db.execute('''
+  static const String _createUserAppsTable = '''
       CREATE TABLE user_apps(
         id TEXT PRIMARY KEY,
         uuid TEXT NOT NULL,
@@ -159,13 +135,14 @@ class DatabaseService {
         appState TEXT,
         type TEXT NOT NULL DEFAULT 'normal',
         selectedRevisionId TEXT,
+      author TEXT DEFAULT "",
+      license TEXT DEFAULT "",
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
-    ''');
+  ''';
 
-    // App Revisions table
-    await db.execute('''
+  static const String _createAppRevisionsTable = '''
       CREATE TABLE app_revisions(
         id TEXT PRIMARY KEY,
         appId TEXT NOT NULL,
@@ -177,10 +154,9 @@ class DatabaseService {
         attachmentPaths TEXT,
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // User App Libraries table
-    await db.execute('''
+  static const String _createUserAppLibrariesTable = '''
       CREATE TABLE user_app_libraries(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         app_uuid TEXT NOT NULL,
@@ -189,10 +165,9 @@ class DatabaseService {
         usage_instructions TEXT,
         FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // User App Library Dependencies table
-    await db.execute('''
+  static const String _createUserAppLibraryDependenciesTable = '''
       CREATE TABLE user_app_library_dependencies(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         original_url TEXT,
@@ -201,9 +176,248 @@ class DatabaseService {
         library_id INTEGER NOT NULL,
         FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
       )
-    ''');
+  ''';
 
-    // Create indexes for better performance
+  // Index creation constants
+  static const List<String> _createIndexes = [
+    'CREATE INDEX idx_notes_type ON notes(type)',
+    'CREATE INDEX idx_notes_createdAt ON notes(createdAt)',
+    'CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)',
+    'CREATE INDEX idx_notes_completeBy ON notes(completeBy)',
+    'CREATE INDEX idx_notes_pinned ON notes(pinned)',
+    'CREATE INDEX idx_notes_isArchived ON notes(isArchived)',
+    'CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)',
+    'CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)',
+    'CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
+    'CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
+    'CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
+    'CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
+  ];
+
+  // For testing, allow creating new instances
+  DatabaseService.createNew() {
+    // Initialize database factory using platform-specific implementation
+    initializeDatabaseFactory();
+  }
+
+  Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    String path = join(await getDatabasesPath(), 'note_synapse.db');
+    return await openDatabase(
+      path,
+      version: 17,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    // Create all tables using schema constants
+    await db.execute(_createNotesTable);
+    await db.execute(_createSubNotesTable);
+    await db.execute(_createTagsTable);
+    await db.execute(_createNoteTagsTable);
+    await db.execute(_createAttachmentsTable);
+    await db.execute(_createRelationshipsTable);
+    await db.execute(_createFiltersTable);
+    await db.execute(_createUserAppsTable);
+    await db.execute(_createAppRevisionsTable);
+    await db.execute(_createUserAppLibrariesTable);
+    await db.execute(_createUserAppLibraryDependenciesTable);
+
+    // Create all indexes
+    for (final indexSql in _createIndexes) {
+      await db.execute(indexSql);
+    }
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await _executeMigrations(db, oldVersion, newVersion, isBackupMigration: false);
+  }
+
+  // Migration configuration structure
+  static const Map<int, MigrationStep> _migrationSteps = {
+    2: MigrationStep(
+      description: 'Remove dueDate column and add scheduledAt, completeBy columns',
+      execute: _migrateToVersion2,
+    ),
+    3: MigrationStep(
+      description: 'Add pinned column',
+      execute: _migrateToVersion3,
+    ),
+    4: MigrationStep(
+      description: 'Add isArchived column',
+      execute: _migrateToVersion4,
+    ),
+    5: MigrationStep(
+      description: 'Ensure isArchived column exists',
+      execute: _migrateToVersion5,
+    ),
+    6: MigrationStep(
+      description: 'Add filters table',
+      execute: _migrateToVersion6,
+    ),
+    7: MigrationStep(
+      description: 'Add user_apps table',
+      execute: _migrateToVersion7,
+    ),
+    8: MigrationStep(
+      description: 'Add type column to user_apps table',
+      execute: _migrateToVersion8,
+    ),
+    9: MigrationStep(
+      description: 'Add selectedRevisionId column and app_revisions table',
+      execute: _migrateToVersion9,
+    ),
+    10: MigrationStep(
+      description: 'Add attachmentPaths column to user_apps table',
+      execute: _migrateToVersion10,
+    ),
+    11: MigrationStep(
+      description: 'Move attachmentPaths from user_apps to app_revisions',
+      execute: _migrateToVersion11,
+    ),
+    12: MigrationStep(
+      description: 'Remove AI interactions table',
+      execute: _migrateToVersion12,
+    ),
+    13: MigrationStep(
+      description: 'Fix string timestamps in filters table',
+      execute: _migrateToVersion13,
+    ),
+    14: MigrationStep(
+      description: 'Add UUID column to user_apps table',
+      execute: _migrateToVersion14,
+    ),
+    15: MigrationStep(
+      description: 'Add user app libraries and dependencies tables',
+      execute: _migrateToVersion15,
+    ),
+    16: MigrationStep(
+      description: 'Add author and license fields to user_apps table',
+      execute: _migrateToVersion16,
+    ),
+    17: MigrationStep(
+      description: 'Add isRelativePath column to attachments table',
+      execute: _migrateToVersion17,
+    ),
+  };
+
+  // Main migration execution method
+  Future<void> _executeMigrations(Database db, int oldVersion, int newVersion, {required bool isBackupMigration}) async {
+    for (int version = oldVersion + 1; version <= newVersion; version++) {
+      final migrationStep = _migrationSteps[version];
+      if (migrationStep == null) {
+        LoggerService.warning('No migration step defined for version $version');
+        continue;
+      }
+
+      try {
+        LoggerService.info('Executing migration to version $version: ${migrationStep.description}');
+        await migrationStep.execute(db, isBackupMigration: isBackupMigration);
+        LoggerService.info('Successfully migrated to version $version');
+      } catch (e) {
+        LoggerService.error('Migration to version $version failed: $e', error: e);
+        
+        // Apply granular error handling based on the specific migration
+        await _handleMigrationError(db, version, e, isBackupMigration: isBackupMigration);
+        break; // Stop migration on error
+      }
+    }
+  }
+
+  // Handle migration errors with granular table recreation
+  Future<void> _handleMigrationError(Database db, int version, dynamic error, {required bool isBackupMigration}) async {
+    switch (version) {
+      case 2:
+        // Notes table migration failed - recreate notes and related tables
+        LoggerService.error('Recreating notes table and related tables due to migration failure');
+        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 3:
+      case 4:
+      case 5:
+        // Notes table column additions failed - recreate notes table
+        LoggerService.error('Recreating notes table due to column addition failure');
+        await _recreateNotesTable(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 6:
+        // Filters table creation failed - recreate filters table
+        LoggerService.error('Recreating filters table due to creation failure');
+        await _recreateFiltersTable(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 7:
+      case 8:
+        // User apps table operations failed - recreate user_apps table
+        LoggerService.error('Recreating user_apps table due to operation failure');
+        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 9:
+        // App revisions table creation failed - recreate app_revisions table
+        LoggerService.error('Recreating app_revisions table due to creation failure');
+        await _recreateAppRevisionsTable(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 10:
+      case 11:
+      case 14:
+        // User apps table modifications failed - recreate user_apps table
+        LoggerService.error('Recreating user_apps table due to modification failure');
+        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 15:
+        // Library tables creation failed - recreate library tables
+        LoggerService.error('Recreating library tables due to creation failure');
+        await _recreateLibraryTables(db, isBackupMigration: isBackupMigration);
+        break;
+        
+      case 12:
+      case 13:
+      case 16:
+      case 17:
+        // These are safe operations - log warning but don't recreate anything
+        LoggerService.warning('Migration $version failed but is considered safe - continuing');
+        break;
+        
+      default:
+        // Unknown migration - fall back to full database recreation
+        LoggerService.error('Unknown migration $version failed - recreating entire database');
+        if (isBackupMigration) {
+          await _recreateBackupDatabase(db, version);
+        } else {
+          await _recreateMainDatabase(db, version);
+        }
+    }
+  }
+
+  // Granular table recreation methods
+  Future<void> _recreateNotesTables(Database db, {required bool isBackupMigration}) async {
+    // Drop notes and related tables
+    await db.execute('DROP TABLE IF EXISTS relationships');
+    await db.execute('DROP TABLE IF EXISTS attachments');
+    await db.execute('DROP TABLE IF EXISTS note_tags');
+    await db.execute('DROP TABLE IF EXISTS subnotes');
+    await db.execute('DROP TABLE IF EXISTS notes');
+    
+    // Recreate tables using schema constants
+    await db.execute(_createNotesTable);
+    await db.execute(_createSubNotesTable);
+    await db.execute(_createAttachmentsTable);
+    await db.execute(_createRelationshipsTable);
+    
+    // Recreate relevant indexes
     await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
     await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
     await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
@@ -212,15 +426,72 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
     await db.execute('CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)');
     await db.execute('CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)');
+  }
+
+  Future<void> _recreateNotesTable(Database db, {required bool isBackupMigration}) async {
+    // Drop and recreate only the notes table
+    await db.execute('DROP TABLE IF EXISTS notes');
+    await db.execute(_createNotesTable);
+    
+    // Recreate indexes
+    await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
+    await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
+    await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
+    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
+    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
+    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
+  }
+
+  Future<void> _recreateFiltersTable(Database db, {required bool isBackupMigration}) async {
+    await db.execute('DROP TABLE IF EXISTS filters');
+    await db.execute(_createFiltersTable);
+  }
+
+  Future<void> _recreateUserAppsTable(Database db, {required bool isBackupMigration}) async {
+    await db.execute('DROP TABLE IF EXISTS user_apps');
+    await db.execute(_createUserAppsTable);
+  }
+
+  Future<void> _recreateAppRevisionsTable(Database db, {required bool isBackupMigration}) async {
+    await db.execute('DROP TABLE IF EXISTS app_revisions');
+    await db.execute(_createAppRevisionsTable);
+  }
+
+  Future<void> _recreateLibraryTables(Database db, {required bool isBackupMigration}) async {
+    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
+    
+    await db.execute(_createUserAppLibrariesTable);
+    await db.execute(_createUserAppLibraryDependenciesTable);
+    
+    // Create indexes
     await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
     await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
     await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
     await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // Migration from version 1 to 2: Remove dueDate column and add scheduledAt, completeBy columns
+  // Recreate main database tables
+  Future<void> _recreateMainDatabase(Database db, int newVersion) async {
+    // Drop all tables
+    await db.execute('DROP TABLE IF EXISTS relationships');
+    await db.execute('DROP TABLE IF EXISTS attachments');
+    await db.execute('DROP TABLE IF EXISTS note_tags');
+    await db.execute('DROP TABLE IF EXISTS subnotes');
+    await db.execute('DROP TABLE IF EXISTS notes');
+    await db.execute('DROP TABLE IF EXISTS tags');
+    await db.execute('DROP TABLE IF EXISTS filters');
+    await db.execute('DROP TABLE IF EXISTS user_apps');
+    await db.execute('DROP TABLE IF EXISTS app_revisions');
+    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
+    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    
+    // Recreate all tables using schema constants
+    await _onCreate(db, newVersion);
+  }
+
+  // Individual migration methods
+  static Future<void> _migrateToVersion2(Database db, {required bool isBackupMigration}) async {
       try {
         // Check if dueDate column exists
         final columns = await db.rawQuery("PRAGMA table_info(notes)");
@@ -261,56 +532,32 @@ class DatabaseService {
           await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
         }
       } catch (e) {
-        // If migration fails, drop and recreate the database
-        LoggerService.error('Migration failed, recreating database: $e', error: e);
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await _onCreate(db, newVersion);
-      }
+      LoggerService.error('Migration to version 2 failed: $e', error: e);
+      rethrow; // Let the error handling system deal with it
     }
-    
-    if (oldVersion < 3) {
-      // Migration from version 2 to 3: Add pinned column
+  }
+
+  static Future<void> _migrateToVersion3(Database db, {required bool isBackupMigration}) async {
       try {
         await db.execute('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
         await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
       } catch (e) {
         LoggerService.error('Migration to version 3 failed: $e', error: e);
-        // If migration fails, drop and recreate the database
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await _onCreate(db, newVersion);
-      }
+      rethrow;
     }
-    
-    if (oldVersion < 4) {
-      // Migration from version 3 to 4: Add isArchived column
+  }
+
+  static Future<void> _migrateToVersion4(Database db, {required bool isBackupMigration}) async {
       try {
         await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
         await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
       } catch (e) {
         LoggerService.error('Migration to version 4 failed: $e', error: e);
-        // If migration fails, drop and recreate the database
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await _onCreate(db, newVersion);
-      }
+      rethrow;
     }
-    
-    if (oldVersion < 5) {
-      // Migration from version 4 to 5: Ensure isArchived column exists
+  }
+
+  static Future<void> _migrateToVersion5(Database db, {required bool isBackupMigration}) async {
       try {
         // Check if isArchived column exists
         final columns = await db.rawQuery("PRAGMA table_info(notes)");
@@ -322,181 +569,92 @@ class DatabaseService {
         }
       } catch (e) {
         LoggerService.error('Migration to version 5 failed: $e', error: e);
-        // If migration fails, drop and recreate the database
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await _onCreate(db, newVersion);
-      }
+      rethrow;
     }
-    
-    if (oldVersion < 6) {
-      // Migration from version 5 to 6: Add filters table
-      try {
+  }
+
+  static Future<void> _migrateToVersion6(Database db, {required bool isBackupMigration}) async {
+    try {
+      await db.execute(_createFiltersTable);
+    } catch (e) {
+      LoggerService.error('Migration to version 6 failed: $e', error: e);
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion7(Database db, {required bool isBackupMigration}) async {
+    try {
+      // Check if user_apps table already exists
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'");
+      if (tables.isEmpty) {
+        // Create user_apps table without uuid, author, license columns (will be added in later migrations)
         await db.execute('''
-          CREATE TABLE filters(
+          CREATE TABLE user_apps(
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            includeText TEXT,
-            includeTags TEXT NOT NULL,
-            includeArchived INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL,
+            steps TEXT NOT NULL,
+            htmlContent TEXT NOT NULL,
+            appState TEXT,
             createdAt INTEGER NOT NULL,
             updatedAt INTEGER NOT NULL
           )
         ''');
-      } catch (e) {
-        LoggerService.error('Migration to version 6 failed: $e', error: e);
-        // If migration fails, drop and recreate the database
-        await db.execute('DROP TABLE IF EXISTS notes');
-        await db.execute('DROP TABLE IF EXISTS subnotes');
-        await db.execute('DROP TABLE IF EXISTS tags');
-        await db.execute('DROP TABLE IF EXISTS note_tags');
-        await db.execute('DROP TABLE IF EXISTS attachments');
-        await db.execute('DROP TABLE IF EXISTS relationships');
-        await db.execute('DROP TABLE IF EXISTS filters');
-        await _onCreate(db, newVersion);
       }
+    } catch (e) {
+      LoggerService.error('Migration to version 7 failed: $e', error: e);
+      rethrow;
     }
-    
-    if (oldVersion < 7) {
-      // Migration from version 6 to 7: Add user_apps table
-      try {
-        // Check if user_apps table already exists
-        final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'");
-        if (tables.isEmpty) {
-          await db.execute('''
-            CREATE TABLE user_apps(
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              description TEXT NOT NULL,
-              steps TEXT NOT NULL,
-              htmlContent TEXT NOT NULL,
-              appState TEXT,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL
-            )
-          ''');
-        }
-      } catch (e) {
-        LoggerService.error('Migration to version 7 failed: $e', error: e);
-        // Only drop and recreate if the table creation actually failed
-        try {
-          await db.execute('DROP TABLE IF EXISTS user_apps');
-          await db.execute('''
-            CREATE TABLE user_apps(
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              description TEXT NOT NULL,
-              steps TEXT NOT NULL,
-              htmlContent TEXT NOT NULL,
-              appState TEXT,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL
-            )
-          ''');
-        } catch (e2) {
-          LoggerService.error('Failed to create user_apps table: $e2', error: e2);
-          // Only as last resort, recreate entire database
-          await db.execute('DROP TABLE IF EXISTS notes');
-          await db.execute('DROP TABLE IF EXISTS subnotes');
-          await db.execute('DROP TABLE IF EXISTS tags');
-          await db.execute('DROP TABLE IF EXISTS note_tags');
-          await db.execute('DROP TABLE IF EXISTS attachments');
-          await db.execute('DROP TABLE IF EXISTS relationships');
-          await db.execute('DROP TABLE IF EXISTS filters');
-          await db.execute('DROP TABLE IF EXISTS user_apps');
-          await _onCreate(db, newVersion);
-        }
-      }
-    }
-    
-    if (oldVersion < 8) {
-      // Migration from version 7 to 8: Add type column to user_apps table
-      try {
+  }
+
+  static Future<void> _migrateToVersion8(Database db, {required bool isBackupMigration}) async {
         // Check if type column exists in user_apps table
         final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
         final columnNames = columns.map((col) => col['name'] as String).toList();
         
         if (!columnNames.contains('type')) {
           await db.execute('ALTER TABLE user_apps ADD COLUMN type TEXT NOT NULL DEFAULT "normal"');
-        }
-      } catch (e) {
-        LoggerService.error('Migration to version 8 failed: $e', error: e);
-        // If migration fails, recreate the user_apps table
-        try {
-          await db.execute('DROP TABLE IF EXISTS user_apps');
-          await db.execute('''
-            CREATE TABLE user_apps(
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              description TEXT NOT NULL,
-              steps TEXT NOT NULL,
-              htmlContent TEXT NOT NULL,
-              appState TEXT,
-              type TEXT NOT NULL DEFAULT 'normal',
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL
-            )
-          ''');
-        } catch (e2) {
-          LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
-        }
-      }
+    }
+  }
+
+  static Future<void> _migrateToVersion9(Database db, {required bool isBackupMigration}) async {
+    // Add selectedRevisionId column to user_apps table
+    final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
+    final columnNames = columns.map((col) => col['name'] as String).toList();
+    
+    if (!columnNames.contains('selectedRevisionId')) {
+      await db.execute('ALTER TABLE user_apps ADD COLUMN selectedRevisionId TEXT');
     }
     
-    if (oldVersion < 9) {
-      // Migration from version 8 to 9: Add selectedRevisionId column and app_revisions table
-      try {
-        // Add selectedRevisionId column to user_apps table
-        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('selectedRevisionId')) {
-          await db.execute('ALTER TABLE user_apps ADD COLUMN selectedRevisionId TEXT');
-        }
-        
-        // Create app_revisions table
-        await db.execute('''
-          CREATE TABLE app_revisions(
-            id TEXT PRIMARY KEY,
-            appId TEXT NOT NULL,
-            revisionNumber INTEGER NOT NULL,
-            revisionTimestamp INTEGER NOT NULL,
-            userPrompt TEXT NOT NULL,
-            aiResponse TEXT NOT NULL,
-            appCode TEXT NOT NULL,
-            FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
-          )
-        ''');
-        
-        // Migrate existing apps to have initial revisions
-        await _migrateExistingAppsToRevisions(db);
-      } catch (e) {
-        LoggerService.error('Migration to version 9 failed: $e', error: e);
-      }
-    }
+    // Create app_revisions table (without attachmentPaths column - will be added in later migration)
+    await db.execute('''
+      CREATE TABLE app_revisions(
+        id TEXT PRIMARY KEY,
+        appId TEXT NOT NULL,
+        revisionNumber INTEGER NOT NULL,
+        revisionTimestamp INTEGER NOT NULL,
+        userPrompt TEXT NOT NULL,
+        aiResponse TEXT NOT NULL,
+        appCode TEXT NOT NULL,
+        FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
+      )
+    ''');
     
-    if (oldVersion < 10) {
-      // Migration from version 9 to 10: Add attachmentPaths column to user_apps table
-      try {
+    // Migrate existing apps to have initial revisions
+    await DatabaseService._migrateExistingAppsToRevisions(db);
+  }
+    
+  static Future<void> _migrateToVersion10(Database db, {required bool isBackupMigration}) async {
         // Check if attachmentPaths column exists in user_apps table
         final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
         final columnNames = columns.map((col) => col['name'] as String).toList();
         
         if (!columnNames.contains('attachmentPaths')) {
           await db.execute('ALTER TABLE user_apps ADD COLUMN attachmentPaths TEXT');
-        }
-      } catch (e) {
-        LoggerService.error('Migration to version 10 failed: $e', error: e);
       }
     }
     
-    if (oldVersion < 11) {
-      // Migration from version 10 to 11: Move attachmentPaths from user_apps to app_revisions
-      try {
+  static Future<void> _migrateToVersion11(Database db, {required bool isBackupMigration}) async {
         // Add attachmentPaths column to app_revisions table
         final columns = await db.rawQuery("PRAGMA table_info(app_revisions)");
         final columnNames = columns.map((col) => col['name'] as String).toList();
@@ -534,15 +692,10 @@ class DatabaseService {
           
           await db.execute('DROP TABLE user_apps');
           await db.execute('ALTER TABLE user_apps_new RENAME TO user_apps');
-        }
-      } catch (e) {
-        LoggerService.error('Migration to version 11 failed: $e', error: e);
       }
     }
     
-    if (oldVersion < 12) {
-      // Migration from version 11 to 12: Remove AI interactions table
-      try {
+  static Future<void> _migrateToVersion12(Database db, {required bool isBackupMigration}) async {
         // Check if ai_interactions table exists and drop it
         final tables = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_interactions'"
@@ -551,16 +704,10 @@ class DatabaseService {
         if (tables.isNotEmpty) {
           await db.execute('DROP TABLE IF EXISTS ai_interactions');
           LoggerService.info('Dropped ai_interactions table');
-        }
-      } catch (e) {
-        // Ignore any errors - table might already be dropped
-        LoggerService.warning('Migration to version 12: $e', error: e);
       }
     }
     
-    if (oldVersion < 13) {
-      // Migration from version 12 to 13: Fix string timestamps in filters table
-      try {
+  static Future<void> _migrateToVersion13(Database db, {required bool isBackupMigration}) async {
         // Check if filters table exists
         final tables = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name='filters'"
@@ -588,15 +735,10 @@ class DatabaseService {
             
             LoggerService.info('Fixed ${corruptedRecords.length} filter records with corrupted timestamps');
           }
-        }
-      } catch (e) {
-        LoggerService.warning('Migration to version 13: $e', error: e);
       }
     }
     
-    if (oldVersion < 14) {
-      // Migration from version 13 to 14: Add UUID column to user_apps table
-      try {
+  static Future<void> _migrateToVersion14(Database db, {required bool isBackupMigration}) async {
         // Check if uuid column exists in user_apps table
         final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
         final columnNames = columns.map((col) => col['name'] as String).toList();
@@ -606,90 +748,54 @@ class DatabaseService {
           await db.execute('ALTER TABLE user_apps ADD COLUMN uuid TEXT');
           
           // Generate UUIDs for existing records that have null uuid
-          await _migrateUserAppsWithUuid(db);
+      if (isBackupMigration) {
+        // Simplified UUID generation for backup migration
+        final apps = await db.query('user_apps', where: 'uuid IS NULL');
+        for (final app in apps) {
+          final uuid = DateTime.now().millisecondsSinceEpoch.toString();
+          await db.update('user_apps', {'uuid': uuid}, where: 'id = ?', whereArgs: [app['id']]);
         }
-      } catch (e) {
-        LoggerService.error('Migration to version 14 failed: $e', error: e);
-        // If migration fails, recreate the user_apps table
-        try {
-          await db.execute('DROP TABLE IF EXISTS user_apps');
-          await db.execute('''
-            CREATE TABLE user_apps(
-              id TEXT PRIMARY KEY,
-              uuid TEXT NOT NULL,
-              name TEXT NOT NULL,
-              description TEXT NOT NULL,
-              steps TEXT NOT NULL,
-              htmlContent TEXT NOT NULL,
-              appState TEXT,
-              type TEXT NOT NULL DEFAULT 'normal',
-              selectedRevisionId TEXT,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL
-            )
-          ''');
-        } catch (e2) {
-          LoggerService.error('Failed to recreate user_apps table: $e2', error: e2);
-        }
+      } else {
+        // Use proper UUID generation for main migration
+        await DatabaseService._migrateUserAppsWithUuid(db);
       }
     }
-    
-    if (oldVersion < 15) {
-      // Migration from version 14 to 15: Add user app libraries and dependencies tables
-      try {
-        // Create User App Libraries table
-        await db.execute('''
-          CREATE TABLE user_app_libraries(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            app_uuid TEXT NOT NULL,
-            revision_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            usage_instructions TEXT,
-            FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
-          )
-        ''');
+  }
 
-        // Create User App Library Dependencies table
-        await db.execute('''
-          CREATE TABLE user_app_library_dependencies(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            original_url TEXT,
-            local_path TEXT NOT NULL,
-            bytes BLOB NOT NULL,
-            library_id INTEGER NOT NULL,
-            FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
-          )
-        ''');
-        
-        // Create indexes for better performance
-        await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
-        await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
-        await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
-        await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
-        
-        LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
-      } catch (e) {
-        LoggerService.error('Migration to version 15 failed: $e', error: e);
-      }
-    }
+  static Future<void> _migrateToVersion15(Database db, {required bool isBackupMigration}) async {
+    // Create User App Libraries table
+    await db.execute(_createUserAppLibrariesTable);
+
+    // Create User App Library Dependencies table
+    await db.execute(_createUserAppLibraryDependenciesTable);
     
-    if (oldVersion < 16) {
-      // Migration from version 15 to 16: Add author and license fields to user_apps table
-      try {
+    // Create indexes for better performance
+    await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
+    await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
+    await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
+    
+    LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
+  }
+    
+  static Future<void> _migrateToVersion16(Database db, {required bool isBackupMigration}) async {
         // Add author and license columns to user_apps table
         await db.execute('ALTER TABLE user_apps ADD COLUMN author TEXT DEFAULT ""');
         await db.execute('ALTER TABLE user_apps ADD COLUMN license TEXT DEFAULT ""');
         
         LoggerService.info('Migration to version 16 completed: Added author and license fields to user_apps table');
-      } catch (e) {
-        LoggerService.error('Migration to version 16 failed: $e', error: e);
-      }
     }
     
+  static Future<void> _migrateToVersion17(Database db, {required bool isBackupMigration}) async {
+        // Add isRelativePath column to attachments table
+        await db.execute('ALTER TABLE attachments ADD COLUMN isRelativePath INTEGER NOT NULL DEFAULT 0');
+        
+        LoggerService.info('Migration to version 17 completed: Added isRelativePath column to attachments table');
   }
 
+
   // Migration helper method to create initial revisions for existing apps
-  Future<void> _migrateExistingAppsToRevisions(Database db) async {
+  static Future<void> _migrateExistingAppsToRevisions(Database db) async {
     try {
       LoggerService.info('Starting migration of existing apps to revisions...');
       
@@ -750,7 +856,7 @@ class DatabaseService {
   }
 
   // Migration helper method to add UUIDs to existing user apps
-  Future<void> _migrateUserAppsWithUuid(Database db) async {
+  static Future<void> _migrateUserAppsWithUuid(Database db) async {
     try {
       LoggerService.info('Starting migration of user apps with UUID...');
       
@@ -811,7 +917,9 @@ class DatabaseService {
 
     // Insert attachments
     for (final attachmentPath in note.attachmentPaths) {
-      await _insertAttachment(note.id, attachmentPath);
+      // Check if path is relative (starts with 'attachments/')
+      final isRelativePath = attachmentPath.startsWith('attachments/');
+      await _insertAttachment(note.id, attachmentPath, isRelativePath: isRelativePath);
     }
 
     return note.id;
@@ -967,7 +1075,9 @@ class DatabaseService {
     // Update attachments
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
-      await _insertAttachment(note.id, attachmentPath);
+      // Check if path is relative (starts with 'attachments/')
+      final isRelativePath = attachmentPath.startsWith('attachments/');
+      await _insertAttachment(note.id, attachmentPath, isRelativePath: isRelativePath);
     }
   }
 
@@ -1299,28 +1409,76 @@ class DatabaseService {
       whereArgs: [noteId],
     );
 
-    return maps.map((map) => map['filePath'] as String).toList();
+    final List<String> attachmentPaths = [];
+    for (final map in maps) {
+      final filePath = map['filePath'] as String;
+      final isRelativePath = (map['isRelativePath'] as int) == 1;
+      
+      if (isRelativePath) {
+        // Convert relative path to full path for backward compatibility
+        final fullPath = await FileUtils.getFullFilePath(filePath, true);
+        attachmentPaths.add(fullPath);
+      } else {
+        // Legacy absolute path
+        attachmentPaths.add(filePath);
+      }
+    }
+
+    return attachmentPaths;
   }
 
   // Verify if an attachment path belongs to any note
   Future<bool> verifyAttachmentPath(String attachmentPath) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'attachments',
-      where: 'filePath = ?',
-      whereArgs: [attachmentPath],
-    );
+    
+    // Check if the path is absolute (starts with /) or relative
+    final isAbsolutePath = attachmentPath.startsWith('/');
+    
+    if (isAbsolutePath) {
+      // Convert absolute path to relative path for database lookup
+      final fileName = attachmentPath.split('/').last;
+      final relativePath = 'attachments/$fileName';
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'attachments',
+        where: 'filePath = ?',
+        whereArgs: [relativePath],
+      );
+      
+      return maps.isNotEmpty;
+    } else {
+      // Path is already relative, search directly
+      final List<Map<String, dynamic>> maps = await db.query(
+        'attachments',
+        where: 'filePath = ?',
+        whereArgs: [attachmentPath],
+      );
 
-    return maps.isNotEmpty;
+      return maps.isNotEmpty;
+    }
   }
 
   // Get the note ID for a given attachment path
   Future<String?> getNoteIdForAttachment(String attachmentPath) async {
     final db = await database;
+    
+    // Check if the path is absolute (starts with /) or relative
+    final isAbsolutePath = attachmentPath.startsWith('/');
+    
+    String searchPath;
+    if (isAbsolutePath) {
+      // Convert absolute path to relative path for database lookup
+      final fileName = attachmentPath.split('/').last;
+      searchPath = 'attachments/$fileName';
+    } else {
+      // Path is already relative, use as is
+      searchPath = attachmentPath;
+    }
+    
     final List<Map<String, dynamic>> maps = await db.query(
       'attachments',
       where: 'filePath = ?',
-      whereArgs: [attachmentPath],
+      whereArgs: [searchPath],
     );
 
     return maps.isNotEmpty ? maps.first['noteId'] as String? : null;
@@ -1362,10 +1520,10 @@ class DatabaseService {
     });
   }
 
-  Future<void> _insertAttachment(String noteId, String filePath) async {
+  Future<void> _insertAttachment(String noteId, String filePath, {bool isRelativePath = false}) async {
     final db = await database;
     final fileName = filePath.split('/').last;
-    final fileType = fileName.split('.').last.toLowerCase();
+    final fileType = FileTypeUtils.getFileExtension(fileName);
     
     await db.insert('attachments', {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1373,8 +1531,56 @@ class DatabaseService {
       'filePath': filePath,
       'fileName': fileName,
       'fileType': fileType,
+      'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  // Get all attachments from database
+  Future<List<Map<String, dynamic>>> getAllAttachments() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('attachments');
+    return maps;
+  }
+
+
+  // Get database path
+  Future<String> getDatabasePath() async {
+    return join(await getDatabasesPath(), 'note_synapse.db');
+  }
+
+  // Force database checkpoint
+  Future<void> checkpoint() async {
+    final db = await database;
+    await db.rawQuery('PRAGMA wal_checkpoint(FULL);');
+  }
+
+  // Migrate a backup database to current version
+  Future<void> migrateBackupDatabase(Database db, int oldVersion, int newVersion) async {
+    LoggerService.info('Migrating backup database from version $oldVersion to $newVersion');
+    await _executeMigrations(db, oldVersion, newVersion, isBackupMigration: true);
+  }
+
+  Future<void> _createBackupDatabaseTables(Database db, int version) async {
+    // Create all tables using schema constants (same as main database)
+    await _onCreate(db, version);
+  }
+
+  Future<void> _recreateBackupDatabase(Database db, int newVersion) async {
+    // Drop all tables and recreate using schema constants
+    await db.execute('DROP TABLE IF EXISTS relationships');
+    await db.execute('DROP TABLE IF EXISTS attachments');
+    await db.execute('DROP TABLE IF EXISTS note_tags');
+    await db.execute('DROP TABLE IF EXISTS subnotes');
+    await db.execute('DROP TABLE IF EXISTS notes');
+    await db.execute('DROP TABLE IF EXISTS tags');
+    await db.execute('DROP TABLE IF EXISTS filters');
+    await db.execute('DROP TABLE IF EXISTS user_apps');
+    await db.execute('DROP TABLE IF EXISTS app_revisions');
+    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
+    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    
+    await _createBackupDatabaseTables(db, newVersion);
   }
 
 

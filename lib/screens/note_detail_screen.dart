@@ -11,11 +11,12 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import '../widgets/share_dialog.dart';
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
@@ -237,9 +238,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             title: Text(currentNote.title),
         actions: [
           if (_isEditing) ...[
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _hasChanges ? _saveChanges : null,
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              child: Chip(
+                label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
+                backgroundColor: _hasChanges 
+                    ? Colors.orange.withOpacity(0.1)
+                    : Colors.green.withOpacity(0.1),
+                labelStyle: TextStyle(
+                  color: _hasChanges ? Colors.orange : Colors.green,
+                  fontWeight: FontWeight.w500,
+                ),
+                avatar: Icon(
+                  _hasChanges ? Icons.edit : Icons.check,
+                  size: 16,
+                  color: _hasChanges ? Colors.orange : Colors.green,
+                ),
+              ),
             ),
           ] else ...[
             IconButton(
@@ -1116,25 +1131,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
   }
 
-  void _saveChanges() {
-    // Validate dates before saving
-    _validateDates();
-    
-    if (_dateValidationError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_dateValidationError!),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    
-    _autoSave();
-    setState(() {
-      _isEditing = false;
-    });
-  }
 
   void _deleteNote() {
     showDialog(
@@ -1300,6 +1296,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Widget _buildAttachmentCard(String attachmentPath, Note currentNote) {
     final l10n = AppLocalizations.of(context)!;
     final fileName = attachmentPath.split('/').last;
+    
+    // The attachmentPath should already be an absolute path when loaded from the database
+    // If it's not, there's an issue with the database service
     final file = File(attachmentPath);
     final fileExists = file.existsSync();
     final isAudioFile = _isAudioFile(fileName);
@@ -1399,7 +1398,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   IconData _getFileIcon(String fileName) {
-    final extension = fileName.split('.').last.toLowerCase();
+    final extension = FileTypeUtils.getFileExtension(fileName);
     switch (extension) {
       case 'pdf':
         return Icons.picture_as_pdf;
@@ -1495,6 +1494,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
+        withData: true, // Load file data into memory
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -1506,10 +1506,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Get existing attachment paths
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
         
-        // Add new attachment paths
+        // Process and add new attachment paths
         for (final file in result.files) {
-          if (file.path != null) {
-            updatedAttachmentPaths.add(file.path!);
+          try {
+            // Read file bytes and save to private storage
+            final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+            final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, file.name);
+            updatedAttachmentPaths.add(relativePath);
+          } catch (e) {
+            LoggerService.error('Error processing file ${file.name}: $e', error: e);
+            // Continue with other files even if one fails
           }
         }
 
@@ -1548,6 +1554,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
 
       if (image != null) {
+        // Read file bytes and save to private storage
+        final file = File(image.path);
+        final bytes = await file.readAsBytes();
+        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, image.name);
+        
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
@@ -1556,8 +1567,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Get existing attachment paths
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
         
-        // Add the new photo path
-        updatedAttachmentPaths.add(image.path);
+        // Add the new photo path (relative path)
+        updatedAttachmentPaths.add(relativePath);
 
         // Update the note
         final updatedNote = currentNote.copyWith(
@@ -1823,6 +1834,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
+        // Read file bytes and save to private storage
+        final file = File(audioPath);
+        final bytes = await file.readAsBytes();
+        final fileName = audioPath.split('/').last;
+        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
+        
         // Add the recorded audio as an attachment
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
@@ -1830,7 +1847,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
 
         final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
-        updatedAttachmentPaths.add(audioPath);
+        updatedAttachmentPaths.add(relativePath);
 
         final updatedNote = currentNote.copyWith(
           attachmentPaths: updatedAttachmentPaths,
@@ -1936,7 +1953,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
 
-      final transcription = await GeminiApiService.transcribeAudio(audioPath);
+      final transcription = await AIService.transcribeAudio(audioPath);
       
       // Close loading dialog
       Navigator.of(context).pop();
@@ -2018,7 +2035,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Helper methods
   bool _isAudioFile(String fileName) {
-    final extension = fileName.split('.').last.toLowerCase();
+    final extension = FileTypeUtils.getFileExtension(fileName);
     return ['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'wma'].contains(extension);
   }
 

@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/model_config.dart';
 import '../services/database_service.dart';
-import '../services/gemini_api_service.dart';
+import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
+import '../services/model_storage_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
-  
+
   List<Note> _notes = [];
   List<Tag> _tags = [];
   List<Filter> _filters = [];
@@ -24,6 +27,7 @@ class AppProvider extends ChangeNotifier {
   String? _error;
   bool _isDarkMode = false;
   Locale _locale = const Locale('en', '');
+  ModelConfig? _modelConfig;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -34,6 +38,7 @@ class AppProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
   Locale get locale => _locale;
+  ModelConfig? get modelConfig => _modelConfig;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -41,16 +46,21 @@ class AppProvider extends ChangeNotifier {
       LoggerService.info('Starting loadData');
       _notes = await _databaseService.getAllNotes();
       LoggerService.debug('Successfully loaded ${_notes.length} notes');
-      
+
       _tags = await _databaseService.getAllTags();
       LoggerService.debug('Successfully loaded ${_tags.length} tags');
-      
+
       _filters = await _databaseService.getAllFilters();
       LoggerService.debug('Successfully loaded ${_filters.length} filters');
-      
+
       _userApps = await UserAppService.getAllUserApps();
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
-      
+
+      final selectedModel = await ModelStorageService.getSelectedModel();
+      if (selectedModel != null) {
+        _modelConfig = await ModelStorageService.getModelConfig(selectedModel);
+      }
+
       _error = null;
       LoggerService.info('loadData completed successfully');
       notifyListeners(); // Notify listeners that data has been updated
@@ -62,14 +72,22 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  void updateModelConfig(ModelConfig newConfig) {
+    _modelConfig = newConfig;
+    notifyListeners();
+  }
+
   Future<void> addNote(Note note) async {
     try {
       await _databaseService.insertNote(note);
-      
-      // Add to local state immediately instead of reloading from database
-      _notes.add(note);
-      notifyListeners();
-      
+
+      // Reload the note from database to get properly converted attachment paths
+      final addedNote = await _databaseService.getNote(note.id);
+      if (addedNote != null) {
+        _notes.add(addedNote);
+        notifyListeners();
+      }
+
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
@@ -82,11 +100,14 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.updateNote(note);
       
-      // Update the local state immediately instead of reloading from database
-      final noteIndex = _notes.indexWhere((n) => n.id == note.id);
-      if (noteIndex != -1) {
-        _notes[noteIndex] = note;
-        notifyListeners();
+      // Reload the note from database to get properly converted attachment paths
+      final updatedNote = await _databaseService.getNote(note.id);
+      if (updatedNote != null) {
+        final noteIndex = _notes.indexWhere((n) => n.id == note.id);
+        if (noteIndex != -1) {
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        }
       }
       
       _error = null; // Clear any previous errors
@@ -211,7 +232,7 @@ class AppProvider extends ChangeNotifier {
         final exists = await _databaseService.relationshipExists(fromNoteId, toNoteId, relationshipType);
         if (!exists) {
           final relationship = Relationship(
-            id: DateTime.now().millisecondsSinceEpoch.toString() + '_${toNoteId}',
+            id: const Uuid().v4(),
             fromNoteId: fromNoteId,
             toNoteId: toNoteId,
             type: relationshipType,
@@ -256,7 +277,7 @@ class AppProvider extends ChangeNotifier {
     bool useOwnKnowledge = false,
   }) async {
     try {
-      final response = await GeminiApiService.answerNoteQuestion(
+      final response = await AIService.answerNoteQuestion(
         question, 
         contextNotes,
         attachedFiles: attachedFiles,
@@ -278,7 +299,7 @@ class AppProvider extends ChangeNotifier {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
-      final response = await GeminiApiService.transformNote(
+      final response = await AIService.transformNote(
         note, 
         transformationPrompt,
         attachedFiles: attachedFiles,
@@ -299,19 +320,27 @@ class AppProvider extends ChangeNotifier {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
-      final newNotes = await GeminiApiService.createNewNotes(
+      final newNotes = await AIService.createNewNotes(
         prompt, 
         contextNotes,
         attachedFiles: attachedFiles,
       );
       
-      // Save all new notes
+      // Save all new notes and reload them from database
+      final List<Note> addedNotes = [];
       for (final note in newNotes) {
         await _databaseService.insertNote(note);
+        final addedNote = await _databaseService.getNote(note.id);
+        if (addedNote != null) {
+          addedNotes.add(addedNote);
+        }
       }
       
+      // Add to local state with properly converted paths
+      _notes.addAll(addedNotes);
+      notifyListeners();
       
-      return newNotes;
+      return addedNotes;
     } catch (e) {
       _error = e.toString();
       notifyListeners();

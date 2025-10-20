@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -10,9 +11,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
-import '../services/gemini_api_service.dart';
-import '../services/secure_storage_service.dart';
-import '../services/logger_service.dart';
+import '../services/ai_service.dart';
+import '../utils/file_utils.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -32,7 +32,6 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _isLoading = true;
   bool _isCreating = false;
   bool _isExtracting = false;
-  bool _hasApiKey = false;
   String _action = 'create'; // 'create' or 'append'
   Note? _selectedNote;
   String _searchQuery = '';
@@ -44,82 +43,20 @@ class _ShareScreenState extends State<ShareScreen> {
   final Set<String> _selectedTags = <String>{};
   final TextEditingController _newTagController = TextEditingController();
 
+  /// Check if running on Linux (non-web)
+  bool get _isLinux => !kIsWeb && Platform.isLinux;
+
   @override
   void initState() {
     super.initState();
     _processSharedData();
-    _initializeAndCheckApiKey();
     // Load notes when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
     });
   }
 
-  Future<void> _initializeAndCheckApiKey() async {
-    // Ensure storage is properly initialized before checking
-    await _ensureStorageInitialized();
-    await _checkApiKeyStatus();
-  }
 
-  Future<void> _ensureStorageInitialized() async {
-    try {
-      // Initialize secure storage
-      await SecureStorageService.initialize();
-      LoggerService.debug('ShareScreen: Storage initialized successfully');
-    } catch (e) {
-      LoggerService.error('ShareScreen: Storage initialization failed: $e', error: e);
-      // Add a delay and try again
-      await Future.delayed(const Duration(milliseconds: 500));
-      try {
-        await SecureStorageService.initialize();
-        LoggerService.debug('ShareScreen: Storage initialized on retry');
-      } catch (e2) {
-        LoggerService.error('ShareScreen: Storage initialization failed on retry: $e2', error: e2);
-      }
-    }
-  }
-
-  Future<void> _checkApiKeyStatus() async {
-    try {
-      LoggerService.debug('ShareScreen: Checking API key status...');
-      
-      // Add a small delay to ensure storage is properly initialized
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      bool hasApiKey = await SecureStorageService.hasApiKey();
-      LoggerService.debug('ShareScreen: API key available: $hasApiKey');
-      
-      
-      if (hasApiKey) {
-        final apiKey = await SecureStorageService.getApiKey();
-        LoggerService.debug('ShareScreen: API key length: ${apiKey?.length ?? 0}');
-        
-        // If we got a key, verify it's not empty
-        if (apiKey == null || apiKey.isEmpty) {
-          LoggerService.warning('ShareScreen: API key is empty, treating as unavailable');
-          if (mounted) {
-            setState(() {
-              _hasApiKey = false;
-            });
-          }
-          return;
-        }
-      }
-      
-      if (mounted) {
-        setState(() {
-          _hasApiKey = hasApiKey;
-        });
-      }
-    } catch (e) {
-      LoggerService.error('ShareScreen: Error checking API key: $e', error: e);
-      if (mounted) {
-        setState(() {
-          _hasApiKey = false;
-        });
-      }
-    }
-  }
 
   @override
   void dispose() {
@@ -137,7 +74,7 @@ class _ShareScreenState extends State<ShareScreen> {
         _error = null;
       });
 
-      final result = await ShareServiceExtension.processSharedContent(widget.sharedData);
+      final result = await ShareService.processSharedContent(widget.sharedData);
       
       if (result['success'] == true) {
         setState(() {
@@ -147,7 +84,7 @@ class _ShareScreenState extends State<ShareScreen> {
         });
         
         if (result['note'] != null) {
-          final note = Note.fromJson(result['note']);
+          final note = result['note'] as Note;
           setState(() {
             _preparedNote = note;
           });
@@ -703,7 +640,7 @@ class _ShareScreenState extends State<ShareScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            if (Platform.isLinux) ...[
+            if (_isLinux) ...[
               Card(
                 color: Colors.orange[50],
                 child: Padding(
@@ -744,7 +681,7 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: Platform.isLinux ? null : () => _extractWebContent(false),
+                    onPressed: _isLinux ? null : () => _extractWebContent(false),
                     icon: _isExtracting 
                         ? const SizedBox(
                             width: 16,
@@ -762,9 +699,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: (Platform.isLinux || !_hasApiKey) ? null : () => _extractWebContent(true),
+                      onPressed: _isLinux ? null : () => _extractWebContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -839,7 +776,7 @@ class _ShareScreenState extends State<ShareScreen> {
       final result = await _showWebExtractionDialog(_detectedUrl!, useAI);
       
       if (result['success'] == true) {
-        final note = Note.fromJson(result['note']);
+        final note = result['note'] as Note;
         setState(() {
           _preparedNote = note;
           _isExtracting = false;
@@ -881,28 +818,6 @@ class _ShareScreenState extends State<ShareScreen> {
     return completer.future;
   }
 
-  void _showApiKeyRequiredDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('API Key Required'),
-        content: const Text('To use AI extraction, you need to configure your Gemini API key in the app settings first.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushNamed('/settings');
-            },
-            child: const Text('Go to Settings'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildImageExtractionWidget() {
     final fileName = widget.sharedData['fileName'] as String?;
@@ -957,9 +872,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: !_hasApiKey ? null : () => _extractImageContent(true),
+                      onPressed: () => _extractImageContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -1042,9 +957,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: !_hasApiKey ? 'API key required. Configure in settings first.' : 'Extract content using AI for better results',
+                    message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
-                      onPressed: !_hasApiKey ? null : () => _extractPdfContent(true),
+                      onPressed: () => _extractPdfContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
                               width: 16,
@@ -1090,18 +1005,10 @@ class _ShareScreenState extends State<ShareScreen> {
       List<String> tags = ['shared', 'image'];
       
       if (useAI) {
-        // Check if API key is available before attempting AI extraction
-        final hasApiKey = await SecureStorageService.hasApiKey();
-        if (!hasApiKey) {
-          setState(() {
-            _isExtracting = false;
-          });
-          _showApiKeyRequiredDialog();
-          return;
-        }
+        // Let AI service handle API key validation
         
         // Extract content using AI
-        final result = await GeminiApiService.extractContentFromImage(filePath);
+        final result = await AIService.extractContentFromImage(filePath);
         if (result['success'] == true) {
           content = result['content'] ?? 'Image content extracted with AI';
           tags.add('ai_processed');
@@ -1141,6 +1048,7 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+
   Future<void> _extractPdfContent(bool useAI) async {
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
@@ -1153,43 +1061,45 @@ class _ShareScreenState extends State<ShareScreen> {
     });
 
     try {
-      String content;
-      List<String> tags = ['shared', 'pdf'];
-      
-      if (useAI) {
-        // Check if API key is available before attempting AI extraction
-        final hasApiKey = await SecureStorageService.hasApiKey();
-        if (!hasApiKey) {
-          setState(() {
-            _isExtracting = false;
-          });
-          _showApiKeyRequiredDialog();
-          return;
-        }
-        
-        // Extract content using AI
-        final result = await GeminiApiService.extractContentFromPdf(filePath);
-        if (result['success'] == true) {
-          content = result['content'] ?? 'PDF content extracted with AI';
-          tags.add('ai_processed');
-        } else {
-          content = 'PDF shared from ${fileName ?? 'unknown source'}';
-        }
-      } else {
-        // Basic PDF note
-        content = 'PDF shared from ${fileName ?? 'unknown source'}';
+      // Use ShareService to process the PDF content
+      final result = await ShareService.processSharedContent({
+        'action': 'SEND',
+        'type': 'application/pdf',
+        'filePath': filePath,
+        'fileName': fileName,
+      });
+
+      if (result['success'] != true) {
+        setState(() {
+          _isExtracting = false;
+          _error = result['error'] ?? 'Could not process PDF file';
+        });
+        return;
       }
 
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
-        content: content,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
-        tags: tags,
-      );
+      Note note = result['note'] as Note;
+      final relativePath = note.attachmentPaths.first;
+      
+      if (useAI) {
+        // Let AI service handle API key validation
+        
+        // Extract content using AI - use the saved file path
+        final absolutePath = await FileUtils.getFullFilePath(relativePath, true);
+        final aiResult = await AIService.extractContentFromPdf(absolutePath);
+        if (aiResult['success'] == true) {
+          // Update the note with AI-extracted content
+          note = Note(
+            id: note.id,
+            title: note.title,
+            content: aiResult['content'] ?? note.content,
+            type: note.type,
+            createdAt: note.createdAt,
+            updatedAt: DateTime.now(),
+            attachmentPaths: note.attachmentPaths,
+            tags: [...note.tags, 'ai_processed'],
+          );
+        }
+      }
 
       setState(() {
         _preparedNote = note;
@@ -1340,167 +1250,6 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 }
 
-// Extension to add processSharedContent method to ShareService
-extension ShareServiceExtension on ShareService {
-  static Future<Map<String, dynamic>> processSharedContent(Map<String, dynamic> sharedData) async {
-    try {
-      final String? action = sharedData['action'];
-      final String? type = sharedData['type'];
-      final String? text = sharedData['text'];
-      final String? filePath = sharedData['filePath'];
-      final String? fileName = sharedData['fileName'];
-
-      if (action == 'SEND' || action == 'SEND_MULTIPLE') {
-        if (type == 'text/plain' && text != null) {
-          return await _processTextContent(text);
-        } else if (type?.startsWith('image/') == true && filePath != null) {
-          return await _processImageContent(filePath, fileName);
-        } else if (type == 'application/pdf' && filePath != null) {
-          return await _processPdfContent(filePath, fileName);
-        }
-      }
-
-      return {
-        'success': false,
-        'error': 'Unsupported content type: $type',
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing shared content: $e',
-      };
-    }
-  }
-
-  static Future<Map<String, dynamic>> _processTextContent(String text) async {
-    try {
-      // Check if the text is a URL
-      final url = _extractUrl(text);
-      if (url != null) {
-        return {
-          'success': true,
-          'note': null, // Will be created after web extraction
-          'contentType': 'url',
-          'url': url,
-          'preview': 'URL detected: $url',
-        };
-      }
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared Text - ${DateTime.now().toString().substring(0, 16)}',
-        content: text,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        tags: ['shared', 'text'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'text',
-        'preview': text.length > 100 ? '${text.substring(0, 100)}...' : text,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing text content: $e',
-      };
-    }
-  }
-
-  static String? _extractUrl(String text) {
-    final trimmedText = text.trim();
-    final uriPattern = RegExp(r'^https?://[^\s]+$');
-    
-    if (uriPattern.hasMatch(trimmedText)) {
-      try {
-        final uri = Uri.parse(trimmedText);
-        if (uri.scheme == 'http' || uri.scheme == 'https') {
-          return trimmedText;
-        }
-      } catch (e) {
-        // Invalid URI
-      }
-    }
-    
-    return null;
-  }
-
-
-  static Future<Map<String, dynamic>> _processImageContent(String filePath, String? fileName) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'Image file not found: $filePath',
-        };
-      }
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
-        content: 'Image shared from ${fileName ?? 'unknown source'}',
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
-        tags: ['shared', 'image'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'image',
-        'preview': 'Image: ${fileName ?? 'unknown'}',
-        'filePath': filePath,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing image content: $e',
-      };
-    }
-  }
-
-  static Future<Map<String, dynamic>> _processPdfContent(String filePath, String? fileName) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'PDF file not found: $filePath',
-        };
-      }
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
-        content: 'PDF shared from ${fileName ?? 'unknown source'}',
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
-        tags: ['shared', 'pdf'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'pdf',
-        'preview': 'PDF: ${fileName ?? 'unknown'}',
-        'filePath': filePath,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing PDF content: $e',
-      };
-    }
-  }
-}
 
 class _WebExtractionDialog extends StatefulWidget {
   final String url;
@@ -1663,15 +1412,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                           _status = 'Checking API key...';
                         });
                         
-                        // Check if API key is available before attempting AI extraction
-                        final hasApiKey = await SecureStorageService.hasApiKey();
-                        if (!hasApiKey) {
-                          widget.onComplete({
-                            'success': false,
-                            'error': 'API key not configured. Please configure your Gemini API key in settings first.',
-                          });
-                          return;
-                        }
+                        // Let AI service handle API key validation
                         
                         setState(() {
                           _status = 'Processing with AI...';
@@ -1681,7 +1422,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                         final markdownContent = convert(extractedContent);
                         
                         // Send to AI for better extraction
-                        final aiResult = await GeminiApiService.extractContentFromText(
+                        final aiResult = await AIService.extractContentFromText(
                           markdownContent,
                           'web_content',
                           extractedTitle ?? 'Web Content',
@@ -1714,7 +1455,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
 
                       widget.onComplete({
                         'success': true,
-                        'note': note.toJson(),
+                        'note': note,
                         'contentType': 'web',
                         'preview': (extractedTitle?.isNotEmpty == true) 
                             ? extractedTitle! 

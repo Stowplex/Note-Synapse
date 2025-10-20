@@ -60,6 +60,13 @@ class MainActivity : FlutterActivity() {
                     sharedData["action"] = "SEND"
                     sharedData["type"] = "text/plain"
                     sharedData["text"] = sharedText
+                    
+                    // Check if the shared text is a URL
+                    val url = extractUrl(sharedText)
+                    if (url != null) {
+                        sharedData["contentType"] = "url"
+                        sharedData["url"] = url
+                    }
                 }
             }
             type?.startsWith("image/") == true -> {
@@ -122,14 +129,23 @@ class MainActivity : FlutterActivity() {
         return try {
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
             if (inputStream != null) {
-                val fileName = getFileName(uri) ?: "$prefix.${getFileExtension(uri)}"
-                val file = File(filesDir, fileName)
+                val originalFileName = getFileName(uri) ?: "$prefix.${getFileExtension(uri)}"
+                val uniqueFileName = generateUniqueFileName(originalFileName)
+                
+                // Create attachments directory if it doesn't exist
+                val attachmentsDir = File(filesDir, "attachments")
+                if (!attachmentsDir.exists()) {
+                    attachmentsDir.mkdirs()
+                }
+                
+                val file = File(attachmentsDir, uniqueFileName)
                 val outputStream = FileOutputStream(file)
                 
                 inputStream.copyTo(outputStream)
                 inputStream.close()
                 outputStream.close()
                 
+                // Return absolute path to the copied file
                 file.absolutePath
             } else {
                 null
@@ -169,6 +185,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun generateUniqueFileName(originalFileName: String): String {
+        val uuid = java.util.UUID.randomUUID().toString()
+        val fileExtension = if (originalFileName.contains(".")) {
+            ".${originalFileName.substring(originalFileName.lastIndexOf(".") + 1)}"
+        } else {
+            ""
+        }
+        val baseFileName = if (originalFileName.contains(".")) {
+            originalFileName.substring(0, originalFileName.lastIndexOf("."))
+        } else {
+            originalFileName
+        }
+        return "${baseFileName}_${uuid}${fileExtension}"
+    }
+
     private fun storeSharedData(data: Map<String, Any>) {
         // Store in shared preferences or a simple way to pass to Flutter
         // For now, we'll use a static variable (in production, use SharedPreferences)
@@ -179,6 +210,24 @@ class MainActivity : FlutterActivity() {
         val data = SharedDataHolder.sharedData
         SharedDataHolder.sharedData = null // Clear after retrieval
         return data
+    }
+
+    private fun extractUrl(text: String): String? {
+        val trimmedText = text.trim()
+        val uriPattern = Regex("^https?://[^\\s]+\$")
+        
+        if (uriPattern.matches(trimmedText)) {
+            try {
+                val uri = Uri.parse(trimmedText)
+                if (uri.scheme == "http" || uri.scheme == "https") {
+                    return trimmedText
+                }
+            } catch (e: Exception) {
+                // Invalid URI
+            }
+        }
+        
+        return null
     }
 
     companion object {

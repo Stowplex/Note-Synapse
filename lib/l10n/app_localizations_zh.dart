@@ -119,7 +119,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apiKeySecurityNote => '您的API密钥安全存储在您的设备上，从不共享。';
 
   @override
-  String get pleaseEnterApiKey => '请输入您的API密钥';
+  String get pleaseEnterApiKey => '请输入API密钥';
 
   @override
   String failedToSaveApiKey(Object error) {
@@ -764,6 +764,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get saved => '已保存';
+
+  @override
+  String get unsaved => '未保存';
 
   @override
   String get saving => '保存中...';
@@ -1566,5 +1569,424 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorImportingApp(Object error) {
     return '导入应用时出错：$error';
+  }
+
+  @override
+  String get aiModelSettings => 'AI模型设置';
+
+  @override
+  String get currentModel => '当前模型';
+
+  @override
+  String get noModelSelected => '未选择模型';
+
+  @override
+  String get availableModels => '可用模型';
+
+  @override
+  String get configured => '已配置';
+
+  @override
+  String get notConfigured => '未配置';
+
+  @override
+  String get current => '当前';
+
+  @override
+  String get useModel => '使用模型';
+
+  @override
+  String get configureModel => '配置模型';
+
+  @override
+  String get resetModel => '重置模型';
+
+  @override
+  String switchedToModel(Object modelName) {
+    return '已切换到$modelName';
+  }
+
+  @override
+  String errorSwitchingModel(Object error) {
+    return '切换模型时出错：$error';
+  }
+
+  @override
+  String modelConfigurationUpdatedSuccessfully(Object modelName) {
+    return '$modelName配置更新成功';
+  }
+
+  @override
+  String resetModelConfiguration(Object modelName) {
+    return '重置$modelName配置';
+  }
+
+  @override
+  String resetModelConfigurationConfirmation(Object modelName) {
+    return '您确定要重置$modelName的配置吗？这将清除所有设置并允许您重新配置模型。';
+  }
+
+  @override
+  String modelConfigurationResetSuccessfully(Object modelName) {
+    return '$modelName配置重置成功';
+  }
+
+  @override
+  String errorResettingConfiguration(Object error) {
+    return '重置配置时出错：$error';
+  }
+
+  @override
+  String configureModelTitle(Object modelName) {
+    return '配置$modelName';
+  }
+
+  @override
+  String get loadPreset => '加载预设';
+
+  @override
+  String get selectPreset => '选择预设';
+
+  @override
+  String get unknownPreset => '未知预设';
+
+  @override
+  String get apiEndpoint => 'API端点';
+
+  @override
+  String get apiEndpointDescription => '输入OpenAI兼容的API端点URL';
+
+  @override
+  String get endpointUrl => '端点URL';
+
+  @override
+  String get endpointUrlHint => 'https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get pleaseEnterEndpointUrl => '请输入端点URL';
+
+  @override
+  String get pleaseEnterValidUrl => '请输入有效的URL';
+
+  @override
+  String get modelName => '模型名称';
+
+  @override
+  String get modelNameDescription =>
+      '输入要使用的模型名称（例如：gpt-4、gpt-3.5-turbo、claude-3-sonnet）';
+
+  @override
+  String get modelNameHint => 'gpt-4';
+
+  @override
+  String get pleaseEnterModelName => '请输入模型名称';
+
+  @override
+  String get displayName => '显示名称';
+
+  @override
+  String get displayNameDescription => '在应用中为此模型显示的自定义名称';
+
+  @override
+  String get displayNameHint => '我的自定义模型';
+
+  @override
+  String get tokenLimits => '令牌限制';
+
+  @override
+  String get tokenLimitsDescription => '配置此模型的最大输入和输出令牌数';
+
+  @override
+  String get maxInputTokens => '最大输入令牌';
+
+  @override
+  String get maxInputTokensHint => '100000';
+
+  @override
+  String get maxOutputTokens => '最大输出令牌';
+
+  @override
+  String get maxOutputTokensHint => '4000';
+
+  @override
+  String get required => '必填';
+
+  @override
+  String get mustBePositiveNumber => '必须是正数';
+
+  @override
+  String get modelCapabilities => '模型功能';
+
+  @override
+  String get modelCapabilitiesDescription => '选择此模型支持的功能';
+
+  @override
+  String get imageProcessing => '图像处理';
+
+  @override
+  String get imageProcessingDescription => '可以分析和理解图像';
+
+  @override
+  String get documentUnderstanding => '文档理解';
+
+  @override
+  String get documentUnderstandingDescription => '可以处理PDF和文档';
+
+  @override
+  String get audioProcessing => '音频处理';
+
+  @override
+  String get audioProcessingDescription => '可以转录和分析音频';
+
+  @override
+  String get videoProcessing => '视频处理';
+
+  @override
+  String get videoProcessingDescription => '可以分析视频内容';
+
+  @override
+  String get geminiModelDescription => 'Google最先进的模型，具有完整的多模态功能';
+
+  @override
+  String get openaiCompatibleModelDescription => '兼容OpenAI API端点，具有可配置功能';
+
+  @override
+  String get geminiModelDescriptionDetailed =>
+      'Google最先进的模型，具有完整的多模态功能，包括文档理解。';
+
+  @override
+  String get openaiCompatibleModelDescriptionDetailed =>
+      '兼容OpenAI API端点。配置端点URL并选择支持的功能。';
+
+  @override
+  String get geminiApiKeyDescription => '从Google AI Studio获取您的API密钥';
+
+  @override
+  String get openaiCompatibleApiKeyDescription => '从您的OpenAI兼容服务提供商获取API密钥';
+
+  @override
+  String errorConfiguringModel(Object error) {
+    return '配置模型时出错：$error';
+  }
+
+  @override
+  String get recovery => '恢复';
+
+  @override
+  String get recoverySubtitle => '备份和恢复您的笔记';
+
+  @override
+  String get exportAllNotes => '导出所有笔记';
+
+  @override
+  String get exportAllNotesDescription => '创建所有笔记和附件的完整备份';
+
+  @override
+  String get exporting => '导出中...';
+
+  @override
+  String get exportLogs => '导出日志';
+
+  @override
+  String get previousExports => '之前的导出';
+
+  @override
+  String get saveAgain => '再次保存';
+
+  @override
+  String get backupAllNotes => '备份所有笔记';
+
+  @override
+  String get backupAllNotesDescription => '创建所有笔记和附件的完整备份。备份将保存为可下载的zip文件。';
+
+  @override
+  String get creatingBackup => '正在创建备份...';
+
+  @override
+  String get backupLogs => '备份日志';
+
+  @override
+  String get previousBackups => '之前的备份';
+
+  @override
+  String get backup => '备份';
+
+  @override
+  String get startingBackupProcess => '开始备份过程...';
+
+  @override
+  String createdTempDirectory(Object path) {
+    return '创建临时目录：$path';
+  }
+
+  @override
+  String get forcingDatabaseCheckpoint => '强制数据库检查点...';
+
+  @override
+  String get databaseCopiedSuccessfully => '数据库复制成功';
+
+  @override
+  String get databaseFileNotFound => '未找到数据库文件';
+
+  @override
+  String get attachmentsDirectoryCopiedSuccessfully => '附件目录复制成功';
+
+  @override
+  String get noAttachmentsDirectoryFound => '未找到附件目录，创建空目录';
+
+  @override
+  String get updatingAttachmentPathsInCopiedDatabase => '更新复制数据库中的附件路径...';
+
+  @override
+  String get databaseConsistencyVerified => '数据库一致性已验证';
+
+  @override
+  String get creatingZipArchive => '创建zip压缩包...';
+
+  @override
+  String backupCompleted(Object path) {
+    return '备份完成：$path';
+  }
+
+  @override
+  String backupFailed(Object error) {
+    return '备份失败：$error';
+  }
+
+  @override
+  String foundAttachmentsWithAbsolutePaths(Object count) {
+    return '找到$count个需要更新的绝对路径附件';
+  }
+
+  @override
+  String copiedAndUpdated(Object original, Object unique) {
+    return '已复制并更新：$original -> $unique';
+  }
+
+  @override
+  String warningSourceFileNotFound(Object path) {
+    return '警告：未找到源文件：$path';
+  }
+
+  @override
+  String deletedBackup(Object name) {
+    return '已删除备份：$name';
+  }
+
+  @override
+  String errorDeletingBackup(Object error) {
+    return '删除备份时出错：$error';
+  }
+
+  @override
+  String backupFileNotFound(Object name) {
+    return '未找到备份文件：$name';
+  }
+
+  @override
+  String errorSavingBackupAgain(Object error) {
+    return '再次保存备份时出错：$error';
+  }
+
+  @override
+  String get importBackup => 'Import Backup';
+
+  @override
+  String get importBackupDescription => 'Restore your notes from a backup file';
+
+  @override
+  String get importingBackup => 'Importing Backup...';
+
+  @override
+  String get importLogs => 'Import Logs';
+
+  @override
+  String get selectBackupFile => 'Select Backup File';
+
+  @override
+  String get selectBackupFileDescription =>
+      'Choose a backup zip file to restore from';
+
+  @override
+  String importFailed(Object error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get invalidBackupFile => 'Invalid backup file format';
+
+  @override
+  String get backupVersionTooNew =>
+      'Backup is from a newer version of the app. Please update the app first.';
+
+  @override
+  String get checkpointingDatabase => 'Checkpointing current database...';
+
+  @override
+  String get copyingDatabaseToStaging =>
+      'Copying database to staging directory...';
+
+  @override
+  String get extractingBackupFile => 'Extracting backup file...';
+
+  @override
+  String get validatingBackupDatabase =>
+      'Validating backup database version...';
+
+  @override
+  String get migratingBackupDatabase =>
+      'Migrating backup database to current version...';
+
+  @override
+  String get mergingNotes => 'Merging notes...';
+
+  @override
+  String get mergingSubNotes => 'Merging sub-notes...';
+
+  @override
+  String get mergingTags => 'Merging tags...';
+
+  @override
+  String get mergingRelationships => 'Merging relationships...';
+
+  @override
+  String get mergingFilters => 'Merging filters...';
+
+  @override
+  String get mergingUserApps => 'Merging user apps...';
+
+  @override
+  String get copyingAttachments => 'Copying attachments...';
+
+  @override
+  String get swappingDatabases => 'Swapping databases...';
+
+  @override
+  String get reloadingData => 'Reloading data...';
+
+  @override
+  String get undoBackup => 'Undo Backup';
+
+  @override
+  String get undoBackupDescription => 'Restore the original database';
+
+  @override
+  String get undoBackupConfirmation =>
+      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+
+  @override
+  String get undoBackupCompleted => 'Backup undone successfully!';
+
+  @override
+  String errorUndoingBackup(Object error) {
+    return 'Error undoing backup: $error';
+  }
+
+  @override
+  String get backupRestored => 'Backup restored successfully!';
+
+  @override
+  String errorRestoringBackup(Object error) {
+    return 'Error restoring backup: $error';
   }
 }

@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
-import 'gemini_api_service.dart';
+import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'user_app_library_service.dart';
@@ -402,7 +403,7 @@ class UserAppService {
         }
       }
       
-      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app with AI: $e', error: e);
@@ -716,7 +717,7 @@ Here's the updated application with your requested changes:
         }
       }
       
-      final response = await GeminiApiService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app edit with AI: $e', error: e);
@@ -1067,7 +1068,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
   
   // Check if WebView is supported on current platform
   static bool isWebViewSupported() {
-    return !Platform.isLinux;
+    return kIsWeb || !Platform.isLinux;
   }
 
   // Parse AI response and extract code
@@ -1079,8 +1080,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     
     // Remove leading and trailing whitespace
     String trimmed = response.trim();
-    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length}');
-    LoggerService.debug('parseAIResponse: Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
+    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length},Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
     
     // Look for HTML code blocks
     final htmlCodeBlockRegex = RegExp(r'```html\s*\n(.*?)\n```', dotAll: true);

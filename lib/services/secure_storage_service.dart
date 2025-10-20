@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'logger_service.dart';
 
 class SecureStorageService {
@@ -28,11 +29,14 @@ class SecureStorageService {
 
   static const String _apiKeyKey = 'gemini_api_key';
 
+  /// Check if running on Linux (non-web)
+  static bool get _isLinux => !kIsWeb && Platform.isLinux;
+
   static Future<void> saveApiKey(String apiKey) async {
     LoggerService.debug('SecureStorageService: Saving API key, length: ${apiKey.length}');
     
     try {
-      if (Platform.isLinux) {
+      if (_isLinux) {
         // Use shared_preferences as fallback for Linux only
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_apiKeyKey, apiKey);
@@ -50,7 +54,7 @@ class SecureStorageService {
       
     } catch (e) {
       LoggerService.error('SecureStorageService: Secure storage failed: $e', error: e);
-      if (Platform.isLinux) {
+      if (_isLinux) {
         // Only fallback to SharedPreferences on Linux
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_apiKeyKey, apiKey);
@@ -66,7 +70,7 @@ class SecureStorageService {
   static Future<String?> getApiKey() async {
     try {
       LoggerService.debug('SecureStorageService: Getting API key...');
-      if (Platform.isLinux) {
+      if (_isLinux) {
         // Use shared_preferences as fallback for Linux
         LoggerService.debug('SecureStorageService: Using SharedPreferences for Linux');
         final prefs = await SharedPreferences.getInstance();
@@ -100,7 +104,7 @@ class SecureStorageService {
       }
     } catch (e) {
       LoggerService.error('SecureStorageService: Error in getApiKey: $e', error: e);
-      if (Platform.isLinux) {
+      if (_isLinux) {
         // Only fallback to SharedPreferences on Linux
         try {
           final prefs = await SharedPreferences.getInstance();
@@ -121,7 +125,7 @@ class SecureStorageService {
 
   static Future<void> deleteApiKey() async {
     try {
-      if (Platform.isLinux) {
+      if (_isLinux) {
         // Use shared_preferences as fallback for Linux
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_apiKeyKey);
