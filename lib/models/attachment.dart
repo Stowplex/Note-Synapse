@@ -120,3 +120,4 @@ class Attachment {
     return id.hashCode ^ noteId.hashCode ^ filePath.hashCode;
   }
 }
+

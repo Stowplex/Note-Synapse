@@ -1426,6 +1426,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearLogs => 'Clear logs';
 
   @override
+  String get basic => 'Basic';
+
+  @override
+  String get advanced => 'Advanced';
+
+  @override
+  String get addLibrary => 'Add Library';
+
+  @override
+  String get libraryName => 'Library Name';
+
+  @override
+  String get libraryNameHint => 'Enter library name';
+
+  @override
+  String get libraryUsage => 'Usage';
+
+  @override
+  String get libraryUsageHint => 'Describe how to use this library';
+
+  @override
+  String get libraryLink => 'Library Link';
+
+  @override
+  String get libraryLinkHint => 'Enter JavaScript library URL';
+
+  @override
+  String get removeLibrary => 'Remove Library';
+
+  @override
+  String get removeLink => 'Remove Link';
+
+  @override
   String get noAiLogsAvailable => 'No AI logs available';
 
   @override

@@ -7,6 +7,30 @@ enum UserAppType {
   noteAction,
 }
 
+class UserAppLibraryInfo {
+  final String name;
+  final String? usage;
+  final List<String> links;
+
+  const UserAppLibraryInfo({
+    required this.name,
+    this.usage,
+    required this.links,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'usage': usage,
+    'links': links,
+  };
+
+  factory UserAppLibraryInfo.fromJson(Map<String, dynamic> json) => UserAppLibraryInfo(
+    name: json['name'] as String,
+    usage: json['usage'] as String?,
+    links: (json['links'] as List<dynamic>).cast<String>(),
+  );
+}
+
 @JsonSerializable()
 class UserApp {
   final String id;
@@ -22,6 +46,7 @@ class UserApp {
   final String license;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<UserAppLibraryInfo>? libraries;
 
   const UserApp({
     required this.id,
@@ -37,6 +62,7 @@ class UserApp {
     this.license = '',
     required this.createdAt,
     required this.updatedAt,
+    this.libraries,
   });
 
   factory UserApp.fromJson(Map<String, dynamic> json) => _$UserAppFromJson(json);
@@ -56,6 +82,7 @@ class UserApp {
     String? license,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<UserAppLibraryInfo>? libraries,
   }) {
     return UserApp(
       id: id ?? this.id,
@@ -71,6 +98,7 @@ class UserApp {
       license: license ?? this.license,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      libraries: libraries ?? this.libraries,
     );
   }
 

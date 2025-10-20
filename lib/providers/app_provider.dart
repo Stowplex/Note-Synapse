@@ -931,6 +931,7 @@ class AppProvider extends ChangeNotifier {
     required List<String> steps,
     UserAppType type = UserAppType.normal,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Construct user prompt from the provided information
@@ -943,6 +944,7 @@ class AppProvider extends ChangeNotifier {
         type: type,
         userPrompt: userPrompt,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       _userApps.add(app);
       notifyListeners();

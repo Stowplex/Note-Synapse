@@ -14,7 +14,7 @@ class UserAppCreationScreen extends StatefulWidget {
   State<UserAppCreationScreen> createState() => _UserAppCreationScreenState();
 }
 
-class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
+class _UserAppCreationScreenState extends State<UserAppCreationScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -22,10 +22,18 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
   bool _isCreating = false;
   bool _isNoteActionApp = false;
   List<String> _attachmentPaths = [];
+  
+  // Tab management
+  late TabController _tabController;
+  
+  // Library management
+  List<UserAppLibraryInfo> _libraries = [];
 
   @override
   void initState() {
     super.initState();
+    // Initialize tab controller
+    _tabController = TabController(length: 2, vsync: this);
     // Add one initial step
     _addStep();
   }
@@ -37,6 +45,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
     for (final controller in _stepControllers) {
       controller.dispose();
     }
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -60,6 +69,80 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
         .map((controller) => controller.text.trim())
         .where((step) => step.isNotEmpty)
         .toList();
+  }
+
+  void _addLibrary() {
+    setState(() {
+      _libraries.add(UserAppLibraryInfo(
+        name: '',
+        usage: '',
+        links: [''],
+      ));
+    });
+  }
+
+  void _removeLibrary(int index) {
+    setState(() {
+      _libraries.removeAt(index);
+    });
+  }
+
+  void _updateLibraryName(int index, String name) {
+    setState(() {
+      _libraries[index] = UserAppLibraryInfo(
+        name: name,
+        usage: _libraries[index].usage,
+        links: _libraries[index].links,
+      );
+    });
+  }
+
+  void _updateLibraryUsage(int index, String usage) {
+    setState(() {
+      _libraries[index] = UserAppLibraryInfo(
+        name: _libraries[index].name,
+        usage: usage,
+        links: _libraries[index].links,
+      );
+    });
+  }
+
+  void _addLibraryLink(int libraryIndex) {
+    setState(() {
+      final currentLinks = List<String>.from(_libraries[libraryIndex].links);
+      currentLinks.add('');
+      _libraries[libraryIndex] = UserAppLibraryInfo(
+        name: _libraries[libraryIndex].name,
+        usage: _libraries[libraryIndex].usage,
+        links: currentLinks,
+      );
+    });
+  }
+
+  void _removeLibraryLink(int libraryIndex, int linkIndex) {
+    setState(() {
+      final currentLinks = List<String>.from(_libraries[libraryIndex].links);
+      if (currentLinks.length > 1) {
+        currentLinks.removeAt(linkIndex);
+        _libraries[libraryIndex] = UserAppLibraryInfo(
+          name: _libraries[libraryIndex].name,
+          usage: _libraries[libraryIndex].usage,
+          links: currentLinks,
+        );
+      }
+    });
+  }
+
+  void _updateLibraryLink(int libraryIndex, int linkIndex, String link) {
+    setState(() {
+      final currentLinks = List<String>.from(_libraries[libraryIndex].links);
+      currentLinks[linkIndex] = link;
+      _libraries[libraryIndex] = UserAppLibraryInfo(
+        name: _libraries[libraryIndex].name,
+        usage: _libraries[libraryIndex].usage,
+        links: currentLinks,
+      );
+    });
   }
 
   Future<void> _pickImage() async {
@@ -181,6 +264,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
         steps: steps,
         type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        libraries: _libraries.isNotEmpty ? _libraries : null,
       );
       
       if (mounted) {
@@ -222,14 +306,33 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.createNewApp),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: l10n.basic),
+            Tab(text: l10n.advanced),
+          ],
+        ),
       ),
       body: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildBasicTab(l10n),
+            _buildAdvancedTab(l10n),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBasicTab(AppLocalizations l10n) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
               // App Name
               TextFormField(
                 controller: _nameController,
@@ -430,8 +533,141 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> {
                       )
                     : Text(l10n.createApp),
               ),
-            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedTab(AppLocalizations l10n) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Add Library Button
+          OutlinedButton.icon(
+            onPressed: _addLibrary,
+            icon: const Icon(Icons.add),
+            label: Text(l10n.addLibrary),
           ),
+          const SizedBox(height: 16),
+          
+          // Libraries List
+          ...List.generate(_libraries.length, (index) {
+            return _buildLibraryCard(index, l10n);
+          }),
+          
+          if (_libraries.isEmpty) ...[
+            const SizedBox(height: 32),
+            Center(
+              child: Text(
+                'No libraries added yet. Click "Add Library" to get started.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryCard(int index, AppLocalizations l10n) {
+    final library = _libraries[index];
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Library Header
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Library ${index + 1}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removeLibrary(index),
+                  icon: const Icon(Icons.delete),
+                  tooltip: l10n.removeLibrary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Name
+            TextFormField(
+              initialValue: library.name,
+              decoration: InputDecoration(
+                labelText: l10n.libraryName,
+                hintText: l10n.libraryNameHint,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (value) => _updateLibraryName(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Usage
+            TextFormField(
+              initialValue: library.usage,
+              decoration: InputDecoration(
+                labelText: l10n.libraryUsage,
+                hintText: l10n.libraryUsageHint,
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              onChanged: (value) => _updateLibraryUsage(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Links
+            Text(
+              l10n.libraryLink,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            
+            ...List.generate(library.links.length, (linkIndex) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: library.links[linkIndex],
+                        decoration: InputDecoration(
+                          hintText: l10n.libraryLinkHint,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (value) => _updateLibraryLink(index, linkIndex, value),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: library.links.length > 1
+                          ? () => _removeLibraryLink(index, linkIndex)
+                          : null,
+                      icon: const Icon(Icons.remove_circle),
+                      tooltip: l10n.removeLink,
+                    ),
+                  ],
+                ),
+              );
+            }),
+            
+            // Add Link Button
+            OutlinedButton.icon(
+              onPressed: () => _addLibraryLink(index),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.addLink),
+            ),
+          ],
         ),
       ),
     );

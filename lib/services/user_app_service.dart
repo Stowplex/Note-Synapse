@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'ai_service.dart';
@@ -171,10 +172,11 @@ class UserAppService {
     UserAppType type = UserAppType.normal,
     String? userPrompt,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate the app using AI
-      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths);
+      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths, libraries: libraries);
       
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
@@ -196,6 +198,7 @@ class UserAppService {
         type: type,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        libraries: libraries,
       );
       
       await saveUserApp(app);
@@ -225,6 +228,12 @@ class UserAppService {
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
       await databaseService.updateUserApp(updatedApp);
       LoggerService.debug('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
+      
+      // Download and store libraries if provided
+      if (libraries != null && libraries.isNotEmpty) {
+        await _downloadAndStoreLibraries(updatedApp, revision, libraries);
+      }
+      
       return updatedApp;
     } catch (e) {
       LoggerService.error('Error creating user app: $e', error: e);
@@ -380,9 +389,9 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths}) async {
+  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths, List<UserAppLibraryInfo>? libraries}) async {
     try {
-      final prompt = _buildAppGenerationPrompt(name, description, steps, type);
+      final prompt = _buildAppGenerationPrompt(name, description, steps, type, libraries: libraries);
       
       // Convert attachment paths to PlatformFile objects for the AI service
       List<PlatformFile>? attachedFiles;
@@ -726,14 +735,24 @@ Here's the updated application with your requested changes:
   }
   
   // Build the app generation prompt
-  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type) {
-    return '''
+  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type, {List<UserAppLibraryInfo>? libraries}) {
+    final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+  - User-provided libraries:
+${libraries.map((lib) => '''
+    - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
+      Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
+''').join('')}
+''' : '';
+    
+    final basePrompt = '''
 Create a single-page self-contained HTML application based on the following requirements:
 
 App Name: $name
 Description: $description
 Steps: 
 - ${steps.join('\n - ')}
+
+$librariesSection
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
@@ -1005,6 +1024,8 @@ Here's the complete HTML application:
 </html>
 ```
 ''';
+    
+    return basePrompt + librariesSection;
   }
 
   // Get Note Action App specific instructions
@@ -1113,6 +1134,98 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     
     LoggerService.debug('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
     return result;
+  }
+
+  // Download and store libraries for a user app
+  static Future<void> _downloadAndStoreLibraries(UserApp app, AppRevision revision, List<UserAppLibraryInfo> libraries) async {
+    try {
+      LoggerService.info('Downloading ${libraries.length} libraries for app ${app.name}');
+      
+      final libraryService = UserAppLibraryService();
+      
+      // Get revision number from revision ID
+      final revisionNumber = revision.revisionNumber;
+      
+      for (final libraryInfo in libraries) {
+        if (libraryInfo.name.trim().isEmpty || libraryInfo.links.isEmpty) {
+          LoggerService.warning('Skipping library with empty name or no links: ${libraryInfo.name}');
+          continue;
+        }
+        
+        LoggerService.info('Processing library: ${libraryInfo.name}');
+        
+        // Download each library link
+        final dependencies = <LibraryDependency>[];
+        
+        for (final link in libraryInfo.links) {
+          if (link.trim().isEmpty) continue;
+          
+          try {
+            LoggerService.debug('Downloading library file: $link');
+            
+            final response = await http.get(Uri.parse(link));
+            if (response.statusCode == 200) {
+              // Process the URL to get the local path
+              final localPath = _processLibraryUrl(link);
+              
+              dependencies.add(LibraryDependency(
+                originalUrl: link,
+                localPath: localPath,
+                bytes: response.bodyBytes,
+              ));
+              
+              LoggerService.debug('Downloaded: $link -> $localPath (${response.bodyBytes.length} bytes)');
+            } else {
+              LoggerService.warning('Failed to download $link: HTTP ${response.statusCode}');
+            }
+          } catch (e) {
+            LoggerService.error('Error downloading $link: $e');
+          }
+        }
+        
+        if (dependencies.isNotEmpty) {
+          // Add the library to the database
+          await libraryService.addLibrary(
+            appUuid: app.uuid,
+            revisionId: revisionNumber,
+            name: libraryInfo.name,
+            usageInstructions: libraryInfo.usage,
+            dependencies: dependencies,
+          );
+          
+          LoggerService.info('Successfully added library: ${libraryInfo.name} with ${dependencies.length} dependencies');
+        } else {
+          LoggerService.warning('No dependencies downloaded for library: ${libraryInfo.name}');
+        }
+      }
+      
+      LoggerService.info('Completed downloading libraries for app ${app.name}');
+    } catch (e) {
+      LoggerService.error('Error downloading libraries: $e', error: e);
+      // Don't rethrow - library download failure shouldn't prevent app creation
+    }
+  }
+
+  // Process library URL to extract local path
+  static String _processLibraryUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      
+      // Remove the scheme and host, keep the path
+      // Example: https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js -> /npm/mermaid@11/dist/mermaid.min.js
+      var path = uri.path;
+      
+      // Ensure path starts with /
+      if (!path.startsWith('/')) {
+        path = '/$path';
+      }
+      
+      return path;
+    } catch (e) {
+      LoggerService.error('Error processing library URL $url: $e');
+      // Fallback to using the full URL as path
+      return Uri.parse(url).path;
+    }
   }
 
 }
