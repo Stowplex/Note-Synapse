@@ -81,9 +81,12 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.insertNote(note);
 
-      // Add to local state immediately instead of reloading from database
-      _notes.add(note);
-      notifyListeners();
+      // Reload the note from database to get properly converted attachment paths
+      final addedNote = await _databaseService.getNote(note.id);
+      if (addedNote != null) {
+        _notes.add(addedNote);
+        notifyListeners();
+      }
 
       _error = null; // Clear any previous errors
     } catch (e) {
@@ -323,16 +326,21 @@ class AppProvider extends ChangeNotifier {
         attachedFiles: attachedFiles,
       );
       
-      // Save all new notes
+      // Save all new notes and reload them from database
+      final List<Note> addedNotes = [];
       for (final note in newNotes) {
         await _databaseService.insertNote(note);
+        final addedNote = await _databaseService.getNote(note.id);
+        if (addedNote != null) {
+          addedNotes.add(addedNote);
+        }
       }
       
-      // Add to local state immediately instead of reloading from database
-      _notes.addAll(newNotes);
+      // Add to local state with properly converted paths
+      _notes.addAll(addedNotes);
       notifyListeners();
       
-      return newNotes;
+      return addedNotes;
     } catch (e) {
       _error = e.toString();
       notifyListeners();

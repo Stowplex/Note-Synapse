@@ -142,7 +142,7 @@ class _ShareScreenState extends State<ShareScreen> {
         _error = null;
       });
 
-      final result = await ShareServiceExtension.processSharedContent(widget.sharedData);
+      final result = await ShareService.processSharedContent(widget.sharedData);
       
       if (result['success'] == true) {
         setState(() {
@@ -152,7 +152,7 @@ class _ShareScreenState extends State<ShareScreen> {
         });
         
         if (result['note'] != null) {
-          final note = Note.fromJson(result['note']);
+          final note = result['note'] as Note;
           setState(() {
             _preparedNote = note;
           });
@@ -844,7 +844,7 @@ class _ShareScreenState extends State<ShareScreen> {
       final result = await _showWebExtractionDialog(_detectedUrl!, useAI);
       
       if (result['success'] == true) {
-        final note = Note.fromJson(result['note']);
+        final note = result['note'] as Note;
         setState(() {
           _preparedNote = note;
           _isExtracting = false;
@@ -1146,6 +1146,7 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+
   Future<void> _extractPdfContent(bool useAI) async {
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
@@ -1158,8 +1159,24 @@ class _ShareScreenState extends State<ShareScreen> {
     });
 
     try {
-      String content;
-      List<String> tags = ['shared', 'pdf'];
+      // Use ShareService to process the PDF content
+      final result = await ShareService.processSharedContent({
+        'action': 'SEND',
+        'type': 'application/pdf',
+        'filePath': filePath,
+        'fileName': fileName,
+      });
+
+      if (result['success'] != true) {
+        setState(() {
+          _isExtracting = false;
+          _error = result['error'] ?? 'Could not process PDF file';
+        });
+        return;
+      }
+
+      Note note = result['note'] as Note;
+      final relativePath = note.attachmentPaths.first;
       
       if (useAI) {
         // Check if API key is available before attempting AI extraction
@@ -1172,34 +1189,23 @@ class _ShareScreenState extends State<ShareScreen> {
           return;
         }
         
-        // Extract content using AI
-        final result = await AIService.extractContentFromPdf(filePath);
-        if (result['success'] == true) {
-          content = result['content'] ?? 'PDF content extracted with AI';
-          tags.add('ai_processed');
-        } else {
-          content = 'PDF shared from ${fileName ?? 'unknown source'}';
+        // Extract content using AI - use the saved file path
+        final absolutePath = await FileUtils.getFullFilePath(relativePath, true);
+        final aiResult = await AIService.extractContentFromPdf(absolutePath);
+        if (aiResult['success'] == true) {
+          // Update the note with AI-extracted content
+          note = Note(
+            id: note.id,
+            title: note.title,
+            content: aiResult['content'] ?? note.content,
+            type: note.type,
+            createdAt: note.createdAt,
+            updatedAt: DateTime.now(),
+            attachmentPaths: note.attachmentPaths,
+            tags: [...note.tags, 'ai_processed'],
+          );
         }
-      } else {
-        // Basic PDF note
-        content = 'PDF shared from ${fileName ?? 'unknown source'}';
       }
-
-      // Read file bytes and save to private storage
-      final file = File(filePath);
-      final bytes = await file.readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_pdf');
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
-        content: content,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [relativePath],
-        tags: tags,
-      );
 
       setState(() {
         _preparedNote = note;
@@ -1350,175 +1356,6 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 }
 
-// Extension to add processSharedContent method to ShareService
-extension ShareServiceExtension on ShareService {
-  static Future<Map<String, dynamic>> processSharedContent(Map<String, dynamic> sharedData) async {
-    try {
-      final String? action = sharedData['action'];
-      final String? type = sharedData['type'];
-      final String? text = sharedData['text'];
-      final String? filePath = sharedData['filePath'];
-      final String? fileName = sharedData['fileName'];
-
-      if (action == 'SEND' || action == 'SEND_MULTIPLE') {
-        if (type == 'text/plain' && text != null) {
-          return await _processTextContent(text);
-        } else if (type?.startsWith('image/') == true && filePath != null) {
-          return await _processImageContent(filePath, fileName);
-        } else if (type == 'application/pdf' && filePath != null) {
-          return await _processPdfContent(filePath, fileName);
-        }
-      }
-
-      return {
-        'success': false,
-        'error': 'Unsupported content type: $type',
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing shared content: $e',
-      };
-    }
-  }
-
-  static Future<Map<String, dynamic>> _processTextContent(String text) async {
-    try {
-      // Check if the text is a URL
-      final url = _extractUrl(text);
-      if (url != null) {
-        return {
-          'success': true,
-          'note': null, // Will be created after web extraction
-          'contentType': 'url',
-          'url': url,
-          'preview': 'URL detected: $url',
-        };
-      }
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared Text - ${DateTime.now().toString().substring(0, 16)}',
-        content: text,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        tags: ['shared', 'text'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'text',
-        'preview': text.length > 100 ? '${text.substring(0, 100)}...' : text,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing text content: $e',
-      };
-    }
-  }
-
-  static String? _extractUrl(String text) {
-    final trimmedText = text.trim();
-    final uriPattern = RegExp(r'^https?://[^\s]+$');
-    
-    if (uriPattern.hasMatch(trimmedText)) {
-      try {
-        final uri = Uri.parse(trimmedText);
-        if (uri.scheme == 'http' || uri.scheme == 'https') {
-          return trimmedText;
-        }
-      } catch (e) {
-        // Invalid URI
-      }
-    }
-    
-    return null;
-  }
-
-
-  static Future<Map<String, dynamic>> _processImageContent(String filePath, String? fileName) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'Image file not found: $filePath',
-        };
-      }
-
-      // Read file bytes and save to private storage
-      final bytes = await file.readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_image');
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
-        content: 'Image shared from ${fileName ?? 'unknown source'}',
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [relativePath],
-        tags: ['shared', 'image'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'image',
-        'preview': 'Image: ${fileName ?? 'unknown'}',
-        'filePath': relativePath,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing image content: $e',
-      };
-    }
-  }
-
-  static Future<Map<String, dynamic>> _processPdfContent(String filePath, String? fileName) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return {
-          'success': false,
-          'error': 'PDF file not found: $filePath',
-        };
-      }
-
-      // Read file bytes and save to private storage
-      final bytes = await file.readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName ?? 'shared_pdf');
-
-      final note = Note(
-        id: const Uuid().v4(),
-        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
-        content: 'PDF shared from ${fileName ?? 'unknown source'}',
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [relativePath],
-        tags: ['shared', 'pdf'],
-      );
-
-      return {
-        'success': true,
-        'note': note.toJson(),
-        'contentType': 'pdf',
-        'preview': 'PDF: ${fileName ?? 'unknown'}',
-        'filePath': relativePath,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing PDF content: $e',
-      };
-    }
-  }
-}
 
 class _WebExtractionDialog extends StatefulWidget {
   final String url;

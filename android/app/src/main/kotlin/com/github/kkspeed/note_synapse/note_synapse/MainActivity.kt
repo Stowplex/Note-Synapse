@@ -138,8 +138,8 @@ class MainActivity : FlutterActivity() {
                 inputStream.close()
                 outputStream.close()
                 
-                // Return relative path from app's documents directory
-                "attachments/$uniqueFileName"
+                // Return absolute path to the copied file
+                file.absolutePath
             } else {
                 null
             }

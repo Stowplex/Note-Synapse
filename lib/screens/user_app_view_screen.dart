@@ -1403,13 +1403,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
 
   // Save notes from JavaScript API
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
-    final databaseService = DatabaseService();
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
     int savedCount = 0;
     
     for (final noteData in notesData) {
       try {
         final note = await _createNoteFromJavaScriptData(noteData);
-        await databaseService.insertNote(note);
+        await appProvider.addNote(note);
         savedCount++;
         LoggerService.debug('[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}');
       } catch (e) {

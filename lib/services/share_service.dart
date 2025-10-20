@@ -5,9 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/file_utils.dart';
+import '../services/logger_service.dart';
 
 class ShareService {
   
@@ -245,5 +249,158 @@ class ShareService {
   /// Helper method to format DateTime
   static String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Process shared content from platform channels
+  static Future<Map<String, dynamic>> processSharedContent(Map<String, dynamic> sharedData) async {
+    try {
+      final String? action = sharedData['action'];
+      final String? type = sharedData['type'];
+      final String? text = sharedData['text'];
+      final String? filePath = sharedData['filePath'];
+      final String? fileName = sharedData['fileName'];
+
+      if (action == 'SEND' || action == 'SEND_MULTIPLE') {
+        if (type == 'text/plain' && text != null) {
+          return await _processTextContent(text);
+        } else if (type?.startsWith('image/') == true && filePath != null) {
+          return await _processImageContent(filePath, fileName);
+        } else if (type == 'application/pdf' && filePath != null) {
+          return await _processPdfContent(filePath, fileName);
+        }
+      }
+
+      return {
+        'success': false,
+        'error': 'Unsupported content type: $type',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error processing shared content: $e',
+      };
+    }
+  }
+
+  /// Process text content
+  static Future<Map<String, dynamic>> _processTextContent(String text) async {
+    try {
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared Text - ${DateTime.now().toString().substring(0, 16)}',
+        content: text,
+        type: NoteType.note,
+        tags: ['shared', 'text'],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      return {
+        'success': true,
+        'note': note,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error processing text content: $e',
+      };
+    }
+  }
+
+  /// Check if file already exists in persistent storage and get relative path
+  static Future<String?> _getOrCopyToPersistentStorage(String absolutePath, String fileName) async {
+    try {
+      // Check if file already exists in persistent storage
+      final appDir = await getApplicationDocumentsDirectory();
+      final persistentPath = '${appDir.path}/attachments/$fileName';
+      final persistentFile = File(persistentPath);
+      
+      if (await persistentFile.exists()) {
+        // File already exists, return relative path
+        return 'attachments/$fileName';
+      }
+      
+      // File doesn't exist, copy from Android temp location to persistent storage
+      final sourceFile = File(absolutePath);
+      if (await sourceFile.exists()) {
+        final bytes = await sourceFile.readAsBytes();
+        return await FileUtils.saveFileToPrivateStorage(bytes, fileName);
+      }
+      
+      return null;
+    } catch (e) {
+      LoggerService.error('Error handling file: $e', error: e);
+      return null;
+    }
+  }
+
+  /// Process image content
+  static Future<Map<String, dynamic>> _processImageContent(String filePath, String? fileName) async {
+    try {
+      // Check if file already exists in persistent storage or copy it
+      final relativePath = await _getOrCopyToPersistentStorage(filePath, fileName ?? 'shared_image');
+      if (relativePath == null) {
+        return {
+          'success': false,
+          'error': 'Could not process image file: $filePath',
+        };
+      }
+
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
+        content: 'Image shared from ${fileName ?? 'unknown source'}',
+        type: NoteType.note,
+        tags: ['shared', 'image'],
+        attachmentPaths: [relativePath],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      return {
+        'success': true,
+        'note': note,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error processing image content: $e',
+      };
+    }
+  }
+
+  /// Process PDF content
+  static Future<Map<String, dynamic>> _processPdfContent(String filePath, String? fileName) async {
+    try {
+      // Check if file already exists in persistent storage or copy it
+      final relativePath = await _getOrCopyToPersistentStorage(filePath, fileName ?? 'shared_pdf');
+      if (relativePath == null) {
+        return {
+          'success': false,
+          'error': 'Could not process PDF file: $filePath',
+        };
+      }
+
+      final note = Note(
+        id: const Uuid().v4(),
+        title: 'Shared PDF - ${DateTime.now().toString().substring(0, 16)}',
+        content: 'PDF shared from ${fileName ?? 'unknown source'}',
+        type: NoteType.note,
+        tags: ['shared', 'pdf'],
+        attachmentPaths: [relativePath],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      return {
+        'success': true,
+        'note': note,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error processing PDF content: $e',
+      };
+    }
   }
 }
