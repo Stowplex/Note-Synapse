@@ -60,6 +60,13 @@ class MainActivity : FlutterActivity() {
                     sharedData["action"] = "SEND"
                     sharedData["type"] = "text/plain"
                     sharedData["text"] = sharedText
+                    
+                    // Check if the shared text is a URL
+                    val url = extractUrl(sharedText)
+                    if (url != null) {
+                        sharedData["contentType"] = "url"
+                        sharedData["url"] = url
+                    }
                 }
             }
             type?.startsWith("image/") == true -> {
@@ -203,6 +210,24 @@ class MainActivity : FlutterActivity() {
         val data = SharedDataHolder.sharedData
         SharedDataHolder.sharedData = null // Clear after retrieval
         return data
+    }
+
+    private fun extractUrl(text: String): String? {
+        val trimmedText = text.trim()
+        val uriPattern = Regex("^https?://[^\\s]+\$")
+        
+        if (uriPattern.matches(trimmedText)) {
+            try {
+                val uri = Uri.parse(trimmedText)
+                if (uri.scheme == "http" || uri.scheme == "https") {
+                    return trimmedText
+                }
+            } catch (e: Exception) {
+                // Invalid URI
+            }
+        }
+        
+        return null
     }
 
     companion object {

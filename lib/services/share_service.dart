@@ -259,13 +259,28 @@ class ShareService {
       final String? text = sharedData['text'];
       final String? filePath = sharedData['filePath'];
       final String? fileName = sharedData['fileName'];
+      final String? contentType = sharedData['contentType'];
+      final String? url = sharedData['url'];
 
       if (action == 'SEND' || action == 'SEND_MULTIPLE') {
-        if (type == 'text/plain' && text != null) {
+        // Handle URL content type (from clipboard detection)
+        if (contentType == 'url' && url != null) {
+          return {
+            'success': true,
+            'contentType': 'url',
+            'url': url,
+          };
+        }
+        // Handle regular text content
+        else if (type == 'text/plain' && text != null) {
           return await _processTextContent(text);
-        } else if (type?.startsWith('image/') == true && filePath != null) {
+        } 
+        // Handle image content
+        else if (type?.startsWith('image/') == true && filePath != null) {
           return await _processImageContent(filePath, fileName);
-        } else if (type == 'application/pdf' && filePath != null) {
+        } 
+        // Handle PDF content
+        else if (type == 'application/pdf' && filePath != null) {
           return await _processPdfContent(filePath, fileName);
         }
       }
@@ -285,6 +300,16 @@ class ShareService {
   /// Process text content
   static Future<Map<String, dynamic>> _processTextContent(String text) async {
     try {
+      // Check if the text is a URL (fallback detection)
+      final url = _extractUrl(text);
+      if (url != null) {
+        return {
+          'success': true,
+          'contentType': 'url',
+          'url': url,
+        };
+      }
+
       final note = Note(
         id: const Uuid().v4(),
         title: 'Shared Text - ${DateTime.now().toString().substring(0, 16)}',
@@ -305,6 +330,25 @@ class ShareService {
         'error': 'Error processing text content: $e',
       };
     }
+  }
+
+  /// Extract URL from text (same logic as main screen)
+  static String? _extractUrl(String text) {
+    final trimmedText = text.trim();
+    final uriPattern = RegExp(r'^https?://[^\s]+$');
+    
+    if (uriPattern.hasMatch(trimmedText)) {
+      try {
+        final uri = Uri.parse(trimmedText);
+        if (uri.scheme == 'http' || uri.scheme == 'https') {
+          return trimmedText;
+        }
+      } catch (e) {
+        // Invalid URI
+      }
+    }
+    
+    return null;
   }
 
   /// Check if file already exists in persistent storage and get relative path

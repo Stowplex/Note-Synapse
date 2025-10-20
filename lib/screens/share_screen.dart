@@ -1569,7 +1569,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
 
                       widget.onComplete({
                         'success': true,
-                        'note': note.toJson(),
+                        'note': note,
                         'contentType': 'web',
                         'preview': (extractedTitle?.isNotEmpty == true) 
                             ? extractedTitle! 
