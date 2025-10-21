@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
 import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
@@ -37,10 +36,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   
   // Tab management
   late TabController _tabController;
-  int _selectedTabIndex = 0;
   
   // Library management
-  List<UserAppLibrary> _currentLibraries = [];
   List<UserAppLibrary> _modifiedLibraries = [];
   Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
   bool _isLoadingLibraries = false;
@@ -49,11 +46,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        _selectedTabIndex = _tabController.index;
-      });
-    });
     _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
     _loadCurrentLibraries();
@@ -152,7 +144,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       }
       
       setState(() {
-        _currentLibraries = libraries;
         _modifiedLibraries = List.from(libraries);
         _libraryLinks = libraryLinks;
         _isLoadingLibraries = false;
@@ -196,17 +187,33 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
       );
       
+      // Convert libraries to UserAppLibraryInfo format for AI prompt
+      List<UserAppLibraryInfo>? librariesForAI;
+      if (_modifiedLibraries.isNotEmpty) {
+        librariesForAI = _modifiedLibraries.map((library) {
+          final links = _libraryLinks[library.id] ?? [];
+          final validLinks = links.where((link) => link.trim().isNotEmpty).toList();
+          
+          return UserAppLibraryInfo(
+            name: library.name,
+            usage: library.usageInstructions,
+            links: validLinks,
+          );
+        }).where((lib) => lib.name.trim().isNotEmpty).toList();
+        
+        // If no valid libraries, set to null
+        if (librariesForAI.isEmpty) {
+          librariesForAI = null;
+        }
+      }
+      
       // Create the new revision using the existing editUserApp method
-      final newRevision = await appProvider.editUserApp(
+      await appProvider.editUserApp(
         originalApp: currentApp,
         editSuggestion: _editSuggestionController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        libraries: librariesForAI,
       );
-      
-      // Handle library changes if we're in Advanced mode and libraries were modified
-      if (_selectedTabIndex == 1 && _hasLibraryChanges()) {
-        await _processLibraryChanges(newRevision);
-      }
       
       if (mounted) {
         Navigator.pop(context, true); // Return true to indicate successful edit
@@ -254,166 +261,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     }
   }
 
-  bool _hasLibraryChanges() {
-    if (_currentLibraries.length != _modifiedLibraries.length) return true;
-    
-    for (int i = 0; i < _currentLibraries.length; i++) {
-      final current = _currentLibraries[i];
-      final modified = _modifiedLibraries[i];
-      
-      if (current.name != modified.name || 
-          current.usageInstructions != modified.usageInstructions) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
 
-  Future<void> _processLibraryChanges(AppRevision newRevision) async {
-    try {
-      final libraryService = UserAppLibraryService();
-      final newRevisionNumber = newRevision.revisionNumber;
-      
-      // Process all modified libraries
-      for (final library in _modifiedLibraries) {
-        final links = _libraryLinks[library.id] ?? [];
-        final validLinks = links.where((link) => link.trim().isNotEmpty).toList();
-        
-        if (library.id == -1) {
-          // This is a new library - download from URLs
-          if (validLinks.isNotEmpty) {
-            // Convert links to UserAppLibraryInfo format for downloading
-            final libraryInfo = UserAppLibraryInfo(
-              name: library.name,
-              usage: library.usageInstructions,
-              links: validLinks,
-            );
-            
-            // Use the existing download logic from UserAppService
-            await _downloadAndStoreLibraries(
-              widget.app.copyWith(uuid: widget.app.uuid),
-              newRevision,
-              [libraryInfo],
-            );
-          } else {
-            // Create library without dependencies
-            await libraryService.addLibrary(
-              appUuid: widget.app.uuid,
-              revisionId: newRevisionNumber,
-              name: library.name,
-              usageInstructions: library.usageInstructions,
-              dependencies: [],
-            );
-          }
-        } else {
-          // This is an existing library - copy dependencies and update
-          final sourceLibrary = _currentLibraries.firstWhere(
-            (s) => s.id == library.id,
-            orElse: () => library,
-          );
-          
-          if (validLinks.isNotEmpty) {
-            // Download new links
-            final libraryInfo = UserAppLibraryInfo(
-              name: library.name,
-              usage: library.usageInstructions,
-              links: validLinks,
-            );
-            
-            await _downloadAndStoreLibraries(
-              widget.app.copyWith(uuid: widget.app.uuid),
-              newRevision,
-              [libraryInfo],
-            );
-          } else {
-            // Copy existing dependencies
-            final dependencies = await libraryService.getDependencies(sourceLibrary.id);
-            
-            await libraryService.addLibrary(
-              appUuid: widget.app.uuid,
-              revisionId: newRevisionNumber,
-              name: library.name,
-              usageInstructions: library.usageInstructions,
-              dependencies: dependencies.map((d) => LibraryDependency(
-                originalUrl: d.originalUrl,
-                localPath: d.localPath,
-                bytes: d.bytes,
-              )).toList(),
-            );
-          }
-        }
-      }
-      
-    } catch (e) {
-      // Log the error but don't fail the entire edit operation
-      // TODO: Use proper logging service instead of print
-      // print('Error processing library changes: $e');
-    }
-  }
-
-  // Helper method to download and store libraries (copied from UserAppService)
-  Future<void> _downloadAndStoreLibraries(UserApp app, AppRevision revision, List<UserAppLibraryInfo> libraries) async {
-    try {
-      final libraryService = UserAppLibraryService();
-      final revisionNumber = revision.revisionNumber;
-      
-      for (final libraryInfo in libraries) {
-        if (libraryInfo.name.trim().isEmpty || libraryInfo.links.isEmpty) {
-          continue;
-        }
-        
-        // Download each library link
-        final dependencies = <LibraryDependency>[];
-        
-        for (final link in libraryInfo.links) {
-          if (link.trim().isEmpty) continue;
-          
-          try {
-            final response = await http.get(Uri.parse(link));
-            if (response.statusCode == 200) {
-              // Process the URL to get the local path
-              final localPath = _processLibraryUrl(link);
-              
-              dependencies.add(LibraryDependency(
-                originalUrl: link,
-                localPath: localPath,
-                bytes: response.bodyBytes,
-              ));
-            }
-          } catch (e) {
-            // Continue with other links if one fails
-          }
-        }
-        
-        if (dependencies.isNotEmpty) {
-          await libraryService.addLibrary(
-            appUuid: app.uuid,
-            revisionId: revisionNumber,
-            name: libraryInfo.name,
-            usageInstructions: libraryInfo.usage,
-            dependencies: dependencies,
-          );
-        }
-      }
-    } catch (e) {
-      // Don't rethrow - library download failure shouldn't prevent app creation
-    }
-  }
-
-  // Process library URL to extract local path (copied from UserAppService)
-  String _processLibraryUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      var path = uri.path;
-      if (!path.startsWith('/')) {
-        path = '/$path';
-      }
-      return path;
-    } catch (e) {
-      return Uri.parse(url).path;
-    }
-  }
 
   Future<void> _saveCodeDirectly() async {
     if (_codeController.text.trim().isEmpty) {

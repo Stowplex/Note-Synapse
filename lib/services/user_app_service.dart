@@ -312,6 +312,7 @@ class UserAppService {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate new app based on original and edit suggestion
@@ -323,6 +324,7 @@ class UserAppService {
         editSuggestion,
         originalApp.type,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       
       // Parse the AI response to extract code and explanation
@@ -348,6 +350,11 @@ class UserAppService {
       
       // Save the revision
       await databaseService.insertAppRevision(revision);
+      
+      // Download and store libraries if provided
+      if (libraries != null && libraries.isNotEmpty) {
+        await _downloadAndStoreLibraries(originalApp, revision, libraries);
+      }
       
       // Copy dependencies from the current revision to the new revision
       if (originalApp.selectedRevisionId != null) {
@@ -429,14 +436,25 @@ class UserAppService {
     String editSuggestion,
     UserAppType type, {
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
+      final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+  - User-provided libraries:
+${libraries.map((lib) => '''
+    - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
+      Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
+''').join('')}
+''' : '';
+
       final prompt = '''
 Edit the following HTML application based on the user's suggestion:
 
 Original App Name: $name
 Description: $description
 Steps: ${steps.join(', ')}
+
+$librariesSection
 
 Original HTML:
 $originalHtml

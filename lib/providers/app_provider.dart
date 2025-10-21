@@ -974,12 +974,14 @@ class AppProvider extends ChangeNotifier {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       final revision = await UserAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       
       // Update the app in our local list
