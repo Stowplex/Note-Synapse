@@ -552,9 +552,17 @@ IMPORTANT - REQUIREMENTS:
          * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
          * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
-         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
-       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+         * attachments: array of mixed attachment types (strings or objects):
+           - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - Base64 data: object with:
+             * type: 'base64' (required)
+             * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
+             * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
+     Param format: a string path to an attachment file (must exist in database)
+     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -652,12 +660,19 @@ IMPORTANT - REQUIREMENTS:
    // Basic usage - no parameters
    const result1 = await Synapse.chatAI('Explain quantum computing');
    
-   // With correct parameter types
+   // With correct parameter types and mixed attachments
    const result2 = await Synapse.chatAI('Analyze this data', {
      temperature: 0.7,    // number (double) 0.0-1.0
      topK: 40,           // integer 1-100
      topP: 0.9,          // number (double) 0.0-1.0
-     attachments: ['/path/to/file.pdf']  // array of strings
+     attachments: [      // mixed array of strings and objects
+       '/path/to/file.pdf',  // file path
+       {                     // base64 data object
+         type: 'base64',
+         mimeType: 'image/png',
+         data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
+       }
+     ]
    });
    
    // WRONG - will cause parameter validation errors:
@@ -666,6 +681,31 @@ IMPORTANT - REQUIREMENTS:
    //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
    //   temperature: "0.7" // WRONG: temperature must be number, not string
    // });
+   ```
+
+   CORRECT readAttachment Usage Examples:
+   ```javascript
+   // Read an attachment and get base64 data
+   const result1 = await Synapse.readAttachment('/path/to/image.jpg');
+   if (result1.success) {
+     console.log('MIME type:', result1.mimeType);
+     console.log('Base64 data:', result1.data);
+     // Use the data with chatAI or saveNotes
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Read attachment and use with chatAI
+   const attachmentResult = await Synapse.readAttachment('/path/to/document.pdf');
+   if (attachmentResult.success) {
+     const chatResult = await Synapse.chatAI('Analyze this document', {
+       attachments: [{
+         type: 'base64',
+         mimeType: attachmentResult.mimeType,
+         data: attachmentResult.data
+       }]
+     });
+   }
    ```
 
 5. Libraries you can utilize:
@@ -791,9 +831,17 @@ IMPORTANT - REQUIREMENTS:
          * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
          * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
-         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
-       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+         * attachments: array of mixed attachment types (strings or objects):
+           - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - Base64 data: object with:
+             * type: 'base64' (required)
+             * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
+             * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
+     Param format: a string path to an attachment file (must exist in database)
+     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -891,12 +939,19 @@ IMPORTANT - REQUIREMENTS:
    // Basic usage - no parameters
    const result1 = await Synapse.chatAI('Explain quantum computing');
    
-   // With correct parameter types
+   // With correct parameter types and mixed attachments
    const result2 = await Synapse.chatAI('Analyze this data', {
      temperature: 0.7,    // number (double) 0.0-1.0
      topK: 40,           // integer 1-100
      topP: 0.9,          // number (double) 0.0-1.0
-     attachments: ['/path/to/file.pdf']  // array of strings
+     attachments: [      // mixed array of strings and objects
+       '/path/to/file.pdf',  // file path
+       {                     // base64 data object
+         type: 'base64',
+         mimeType: 'image/png',
+         data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
+       }
+     ]
    });
    
    // WRONG - will cause parameter validation errors:
@@ -905,6 +960,31 @@ IMPORTANT - REQUIREMENTS:
    //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
    //   temperature: "0.7" // WRONG: temperature must be number, not string
    // });
+   ```
+
+   CORRECT readAttachment Usage Examples:
+   ```javascript
+   // Read an attachment and get base64 data
+   const result1 = await Synapse.readAttachment('/path/to/image.jpg');
+   if (result1.success) {
+     console.log('MIME type:', result1.mimeType);
+     console.log('Base64 data:', result1.data);
+     // Use the data with chatAI or saveNotes
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Read attachment and use with chatAI
+   const attachmentResult = await Synapse.readAttachment('/path/to/document.pdf');
+   if (attachmentResult.success) {
+     const chatResult = await Synapse.chatAI('Analyze this document', {
+       attachments: [{
+         type: 'base64',
+         mimeType: attachmentResult.mimeType,
+         data: attachmentResult.data
+       }]
+     });
+   }
    ```
 
 5. Libraries you can utilize:

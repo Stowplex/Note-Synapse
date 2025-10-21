@@ -801,7 +801,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
            * @param {number} [options.temperature] - Temperature (0.0 to 1.0), controls randomness
            * @param {number} [options.topK] - Top-K (1 to 100), number of tokens to consider
            * @param {number} [options.topP] - Top-P (0.0 to 1.0), nucleus sampling parameter
-           * @param {string[]} [options.attachments] - Array of attachment file paths
+           * @param {(string|Object)[]} [options.attachments] - Array of attachment file paths or base64 data objects
            * @returns {Promise<{success: boolean, response?: string, error?: string}>}
            * 
            * @example
@@ -809,12 +809,25 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
            * const result = await Synapse.chatAI('Hello, world!');
            * 
            * @example
-           * // With parameters
+           * // With parameters and file path attachments
            * const result = await Synapse.chatAI('Explain quantum computing', {
            *   temperature: 0.7,
            *   topK: 40,
            *   topP: 0.9,
            *   attachments: ['/path/to/image.jpg']
+           * });
+           * 
+           * @example
+           * // With mixed attachment types
+           * const result = await Synapse.chatAI('Analyze these images', {
+           *   attachments: [
+           *     '/path/to/image1.jpg',  // File path
+           *     {                      // Base64 data object
+           *       type: 'base64',
+           *       mimeType: 'image/png',
+           *       data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
+           *     }
+           *   ]
            * });
            */
           chatAI: async (prompt, options = {}) => {
@@ -848,15 +861,62 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               validatedOptions.topP = topP;
             }
             
-            // Validate attachments (array of strings)
+            // Validate attachments (array of strings or base64 objects)
             if (options.attachments !== undefined) {
               if (!Array.isArray(options.attachments)) {
                 throw new Error('Parameter validation failed: attachments must be an array, got ' + typeof options.attachments);
               }
+              
+              // Validate each attachment element
+              for (let i = 0; i < options.attachments.length; i++) {
+                const attachment = options.attachments[i];
+                if (typeof attachment === 'string') {
+                  // File path - validate it's a non-empty string
+                  if (attachment.trim() === '') {
+                    throw new Error('Parameter validation failed: attachment at index ' + i + ' is an empty string');
+                  }
+                } else if (typeof attachment === 'object' && attachment !== null) {
+                  // Base64 object - validate required properties
+                  if (attachment.type !== 'base64') {
+                    throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid type property, expected \'base64\', got \'' + attachment.type + '\'');
+                  }
+                  if (typeof attachment.mimeType !== 'string' || attachment.mimeType.trim() === '') {
+                    throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid mimeType property, must be a non-empty string');
+                  }
+                  if (typeof attachment.data !== 'string' || attachment.data.trim() === '') {
+                    throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid data property, must be a non-empty string');
+                  }
+                } else {
+                  throw new Error('Parameter validation failed: attachment at index ' + i + ' must be a string (file path) or object (base64 data), got ' + typeof attachment);
+                }
+              }
+              
               validatedOptions.attachments = options.attachments;
             }
             
             const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, validatedOptions);
+            return result;
+          },
+          
+          /**
+           * Read an attachment file and return its base64 encoded data
+           * @param {string} attachmentPath - Path to the attachment file
+           * @returns {Promise<{success: boolean, data?: string, mimeType?: string, error?: string}>}
+           * 
+           * @example
+           * // Read an attachment
+           * const result = await Synapse.readAttachment('/path/to/image.jpg');
+           * if (result.success) {
+           *   console.log('MIME type:', result.mimeType);
+           *   console.log('Base64 data:', result.data);
+           * }
+           */
+          readAttachment: async (attachmentPath) => {
+            if (typeof attachmentPath !== 'string' || attachmentPath.trim() === '') {
+              throw new Error('Parameter validation failed: attachmentPath must be a non-empty string');
+            }
+            
+            const result = await window.flutter_inappwebview.callHandler('readAttachment', attachmentPath);
             return result;
           },
           
@@ -1071,7 +1131,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           // Process and verify attachments
           List<PlatformFile>? attachedFiles;
           if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
-            attachedFiles = await _processAttachments(attachmentPaths.cast<String>());
+            attachedFiles = await _processMixedAttachments(attachmentPaths);
           }
           
           // Use the new chatAI service with configurable parameters and attachments
@@ -1120,6 +1180,33 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           return {'success': true};
         } catch (e) {
           LoggerService.error('[UserApp.CLIPBOARD] Error copying to clipboard: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    // Add readAttachment handler
+    controller.addJavaScriptHandler(
+      handlerName: 'readAttachment',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final attachmentPath = args[0] as String;
+          LoggerService.debug('[Synapse.readAttachment] Called with path: $attachmentPath');
+          
+          final result = await _readAttachmentFromPath(attachmentPath);
+          final duration = DateTime.now().difference(startTime);
+          
+          if (result != null) {
+            LoggerService.debug('[Synapse.readAttachment] Success - Read ${result['data']?.length ?? 0} characters in ${duration.inMilliseconds}ms');
+            return {'success': true, 'data': result['data'], 'mimeType': result['mimeType']};
+          } else {
+            LoggerService.warning('[Synapse.readAttachment] Attachment not found in database: $attachmentPath');
+            return {'success': false, 'error': 'Attachment not found in database'};
+          }
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error('[Synapse.readAttachment] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1360,45 +1447,193 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     }
   }
 
-  // Process and verify attachment paths
-  Future<List<PlatformFile>> _processAttachments(List<String> attachmentPaths) async {
+
+  // Process mixed attachments (file paths and base64 data objects)
+  Future<List<PlatformFile>> _processMixedAttachments(List<dynamic> attachments) async {
     final List<PlatformFile> validAttachments = [];
     final databaseService = DatabaseService();
     
-    for (final attachmentPath in attachmentPaths) {
+    for (int i = 0; i < attachments.length; i++) {
+      final attachment = attachments[i];
+      
       try {
-        // Verify that the attachment belongs to a note
-        final isValid = await databaseService.verifyAttachmentPath(attachmentPath);
-        if (!isValid) {
-          LoggerService.warning('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
-          continue;
-        }
-        
-        // Read the file and create PlatformFile
-        final file = File(attachmentPath);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          final fileName = attachmentPath.split('/').last;
+        if (attachment is String) {
+          // File path attachment
+          final attachmentPath = attachment;
           
-          final platformFile = PlatformFile(
-            name: fileName,
-            path: attachmentPath,
-            size: bytes.length,
-            bytes: bytes,
-          );
+          // Verify that the attachment belongs to a note
+          final isValid = await databaseService.verifyAttachmentPath(attachmentPath);
+          if (!isValid) {
+            LoggerService.warning('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
+            continue;
+          }
           
-          validAttachments.add(platformFile);
-          LoggerService.debug('[Synapse.chatAI] Added attachment: $fileName (${bytes.length} bytes)');
+          // Read the file and create PlatformFile
+          final file = File(attachmentPath);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final fileName = attachmentPath.split('/').last;
+            
+            final platformFile = PlatformFile(
+              name: fileName,
+              path: attachmentPath,
+              size: bytes.length,
+              bytes: bytes,
+            );
+            
+            validAttachments.add(platformFile);
+            LoggerService.debug('[Synapse.chatAI] Added file attachment: $fileName (${bytes.length} bytes)');
+          } else {
+            LoggerService.warning('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
+          }
+        } else if (attachment is Map<String, dynamic>) {
+          // Base64 data object
+          final type = attachment['type'] as String?;
+          final mimeType = attachment['mimeType'] as String?;
+          final data = attachment['data'] as String?;
+          
+          if (type == 'base64' && mimeType != null && data != null) {
+            // Extract base64 data (remove data:image/jpeg;base64, prefix if present)
+            String base64String = data;
+            if (base64String.contains(',')) {
+              base64String = base64String.split(',').last;
+            }
+            
+            try {
+              final bytes = base64Decode(base64String);
+              
+              // Generate a filename based on MIME type
+              final extension = _getExtensionFromMimeType(mimeType);
+              final fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
+              
+              final platformFile = PlatformFile(
+                name: fileName,
+                path: '', // No file path for base64 data
+                size: bytes.length,
+                bytes: bytes,
+              );
+              
+              validAttachments.add(platformFile);
+              LoggerService.debug('[Synapse.chatAI] Added base64 attachment: $fileName (${bytes.length} bytes, $mimeType)');
+            } catch (e) {
+              LoggerService.error('[Synapse.chatAI] Error decoding base64 data at index $i: $e', error: e);
+              continue;
+            }
+          } else {
+            LoggerService.warning('[Synapse.chatAI] Warning: Invalid base64 attachment object at index $i: missing type, mimeType, or data');
+          }
         } else {
-          LoggerService.warning('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
+          LoggerService.warning('[Synapse.chatAI] Warning: Invalid attachment type at index $i: expected string or object, got ${attachment.runtimeType}');
         }
       } catch (e) {
-        LoggerService.error('[Synapse.chatAI] Error processing attachment $attachmentPath: $e', error: e);
+        LoggerService.error('[Synapse.chatAI] Error processing attachment at index $i: $e', error: e);
         // Continue with other attachments even if one fails
       }
     }
     
     return validAttachments;
+  }
+
+  // Read attachment from path and return base64 data with MIME type
+  Future<Map<String, dynamic>?> _readAttachmentFromPath(String attachmentPath) async {
+    try {
+      final databaseService = DatabaseService();
+      
+      // Verify that the attachment belongs to a note
+      final isValid = await databaseService.verifyAttachmentPath(attachmentPath);
+      if (!isValid) {
+        LoggerService.warning('[Synapse.readAttachment] Attachment path not found in database: $attachmentPath');
+        return null;
+      }
+      
+      // Read the file
+      final file = File(attachmentPath);
+      if (!await file.exists()) {
+        LoggerService.warning('[Synapse.readAttachment] Attachment file not found: $attachmentPath');
+        return null;
+      }
+      
+      final bytes = await file.readAsBytes();
+      final fileName = attachmentPath.split('/').last;
+      final mimeType = _getMimeTypeFromExtension(FileTypeUtils.getFileExtension(fileName));
+      
+      // Encode to base64
+      final base64Data = base64Encode(bytes);
+      
+      return {
+        'data': base64Data,
+        'mimeType': mimeType,
+      };
+    } catch (e) {
+      LoggerService.error('[Synapse.readAttachment] Error reading attachment $attachmentPath: $e', error: e);
+      return null;
+    }
+  }
+
+  // Get file extension from MIME type
+  String _getExtensionFromMimeType(String mimeType) {
+    switch (mimeType.toLowerCase()) {
+      case 'image/jpeg':
+      case 'image/jpg':
+        return 'jpg';
+      case 'image/png':
+        return 'png';
+      case 'image/gif':
+        return 'gif';
+      case 'image/svg+xml':
+        return 'svg';
+      case 'image/webp':
+        return 'webp';
+      case 'text/plain':
+        return 'txt';
+      case 'text/html':
+        return 'html';
+      case 'text/css':
+        return 'css';
+      case 'application/javascript':
+        return 'js';
+      case 'application/json':
+        return 'json';
+      case 'application/pdf':
+        return 'pdf';
+      case 'application/zip':
+        return 'zip';
+      default:
+        return 'bin';
+    }
+  }
+
+  // Get MIME type from file extension
+  String _getMimeTypeFromExtension(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'svg':
+        return 'image/svg+xml';
+      case 'webp':
+        return 'image/webp';
+      case 'txt':
+        return 'text/plain';
+      case 'html':
+        return 'text/html';
+      case 'css':
+        return 'text/css';
+      case 'js':
+        return 'application/javascript';
+      case 'json':
+        return 'application/json';
+      case 'pdf':
+        return 'application/pdf';
+      case 'zip':
+        return 'application/zip';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   // Save notes from JavaScript API
