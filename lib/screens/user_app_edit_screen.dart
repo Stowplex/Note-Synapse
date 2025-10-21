@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
@@ -41,6 +42,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   // Library management
   List<UserAppLibrary> _currentLibraries = [];
   List<UserAppLibrary> _modifiedLibraries = [];
+  Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
   bool _isLoadingLibraries = false;
 
   @override
@@ -139,9 +141,20 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _currentRevision!.revisionNumber,
       );
       
+      // Load dependencies (links) for each library
+      final Map<int, List<String>> libraryLinks = {};
+      for (final library in libraries) {
+        final dependencies = await libraryService.getDependencies(library.id);
+        libraryLinks[library.id] = dependencies
+            .map((dep) => dep.originalUrl ?? '')
+            .where((url) => url.isNotEmpty)
+            .toList();
+      }
+      
       setState(() {
         _currentLibraries = libraries;
         _modifiedLibraries = List.from(libraries);
+        _libraryLinks = libraryLinks;
         _isLoadingLibraries = false;
       });
     } catch (e) {
@@ -262,87 +275,143 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       final libraryService = UserAppLibraryService();
       final newRevisionNumber = newRevision.revisionNumber;
       
-      // Get the current libraries from the source revision
-      final sourceLibraries = _currentLibraries;
-      final targetLibraries = _modifiedLibraries;
-      
-      // Find libraries to add (new libraries or libraries not in source)
-      final librariesToAdd = targetLibraries.where((target) => 
-        !sourceLibraries.any((source) => source.name == target.name)
-      ).toList();
-      
-      // Find libraries to remove (libraries in source but not in target)
-      // Note: We don't actually delete libraries from the source revision
-      // as they might be needed for other revisions. The removal only affects
-      // the new revision.
-      // final librariesToRemove = sourceLibraries.where((source) => 
-      //   !targetLibraries.any((target) => target.name == source.name)
-      // ).toList();
-      
-      // Find libraries to update (libraries that exist in both but have different properties)
-      final librariesToUpdate = targetLibraries.where((target) {
-        final source = sourceLibraries.firstWhere(
-          (s) => s.name == target.name,
-          orElse: () => UserAppLibrary(id: -1, appUuid: '', revisionId: 0, name: ''),
-        );
-        return source.id != -1 && 
-               (source.usageInstructions != target.usageInstructions);
-      }).toList();
-      
-      // Process additions
-      for (final library in librariesToAdd) {
-        if (library.id == -1) {
-          // This is a new library - we need to download it
-          // For now, we'll just create the library entry without dependencies
-          // In a real implementation, you'd need to provide URLs or files for the library
-          await libraryService.addLibrary(
-            appUuid: widget.app.uuid,
-            revisionId: newRevisionNumber,
-            name: library.name,
-            usageInstructions: library.usageInstructions,
-            dependencies: [], // Empty dependencies for now
-          );
-        } else {
-          // This is an existing library being copied
-          final sourceLibrary = sourceLibraries.firstWhere((s) => s.name == library.name);
-          final dependencies = await libraryService.getDependencies(sourceLibrary.id);
-          
-          await libraryService.addLibrary(
-            appUuid: widget.app.uuid,
-            revisionId: newRevisionNumber,
-            name: library.name,
-            usageInstructions: library.usageInstructions,
-            dependencies: dependencies.map((d) => LibraryDependency(
-              originalUrl: d.originalUrl,
-              localPath: d.localPath,
-              bytes: d.bytes,
-            )).toList(),
-          );
-        }
-      }
-      
-      // Process updates
-      for (final library in librariesToUpdate) {
-        final sourceLibrary = sourceLibraries.firstWhere((s) => s.name == library.name);
-        final dependencies = await libraryService.getDependencies(sourceLibrary.id);
+      // Process all modified libraries
+      for (final library in _modifiedLibraries) {
+        final links = _libraryLinks[library.id] ?? [];
+        final validLinks = links.where((link) => link.trim().isNotEmpty).toList();
         
-        await libraryService.addLibrary(
-          appUuid: widget.app.uuid,
-          revisionId: newRevisionNumber,
-          name: library.name,
-          usageInstructions: library.usageInstructions,
-          dependencies: dependencies.map((d) => LibraryDependency(
-            originalUrl: d.originalUrl,
-            localPath: d.localPath,
-            bytes: d.bytes,
-          )).toList(),
-        );
+        if (library.id == -1) {
+          // This is a new library - download from URLs
+          if (validLinks.isNotEmpty) {
+            // Convert links to UserAppLibraryInfo format for downloading
+            final libraryInfo = UserAppLibraryInfo(
+              name: library.name,
+              usage: library.usageInstructions,
+              links: validLinks,
+            );
+            
+            // Use the existing download logic from UserAppService
+            await _downloadAndStoreLibraries(
+              widget.app.copyWith(uuid: widget.app.uuid),
+              newRevision,
+              [libraryInfo],
+            );
+          } else {
+            // Create library without dependencies
+            await libraryService.addLibrary(
+              appUuid: widget.app.uuid,
+              revisionId: newRevisionNumber,
+              name: library.name,
+              usageInstructions: library.usageInstructions,
+              dependencies: [],
+            );
+          }
+        } else {
+          // This is an existing library - copy dependencies and update
+          final sourceLibrary = _currentLibraries.firstWhere(
+            (s) => s.id == library.id,
+            orElse: () => library,
+          );
+          
+          if (validLinks.isNotEmpty) {
+            // Download new links
+            final libraryInfo = UserAppLibraryInfo(
+              name: library.name,
+              usage: library.usageInstructions,
+              links: validLinks,
+            );
+            
+            await _downloadAndStoreLibraries(
+              widget.app.copyWith(uuid: widget.app.uuid),
+              newRevision,
+              [libraryInfo],
+            );
+          } else {
+            // Copy existing dependencies
+            final dependencies = await libraryService.getDependencies(sourceLibrary.id);
+            
+            await libraryService.addLibrary(
+              appUuid: widget.app.uuid,
+              revisionId: newRevisionNumber,
+              name: library.name,
+              usageInstructions: library.usageInstructions,
+              dependencies: dependencies.map((d) => LibraryDependency(
+                originalUrl: d.originalUrl,
+                localPath: d.localPath,
+                bytes: d.bytes,
+              )).toList(),
+            );
+          }
+        }
       }
       
     } catch (e) {
       // Log the error but don't fail the entire edit operation
       // TODO: Use proper logging service instead of print
       // print('Error processing library changes: $e');
+    }
+  }
+
+  // Helper method to download and store libraries (copied from UserAppService)
+  Future<void> _downloadAndStoreLibraries(UserApp app, AppRevision revision, List<UserAppLibraryInfo> libraries) async {
+    try {
+      final libraryService = UserAppLibraryService();
+      final revisionNumber = revision.revisionNumber;
+      
+      for (final libraryInfo in libraries) {
+        if (libraryInfo.name.trim().isEmpty || libraryInfo.links.isEmpty) {
+          continue;
+        }
+        
+        // Download each library link
+        final dependencies = <LibraryDependency>[];
+        
+        for (final link in libraryInfo.links) {
+          if (link.trim().isEmpty) continue;
+          
+          try {
+            final response = await http.get(Uri.parse(link));
+            if (response.statusCode == 200) {
+              // Process the URL to get the local path
+              final localPath = _processLibraryUrl(link);
+              
+              dependencies.add(LibraryDependency(
+                originalUrl: link,
+                localPath: localPath,
+                bytes: response.bodyBytes,
+              ));
+            }
+          } catch (e) {
+            // Continue with other links if one fails
+          }
+        }
+        
+        if (dependencies.isNotEmpty) {
+          await libraryService.addLibrary(
+            appUuid: app.uuid,
+            revisionId: revisionNumber,
+            name: libraryInfo.name,
+            usageInstructions: libraryInfo.usage,
+            dependencies: dependencies,
+          );
+        }
+      }
+    } catch (e) {
+      // Don't rethrow - library download failure shouldn't prevent app creation
+    }
+  }
+
+  // Process library URL to extract local path (copied from UserAppService)
+  String _processLibraryUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      var path = uri.path;
+      if (!path.startsWith('/')) {
+        path = '/$path';
+      }
+      return path;
+    } catch (e) {
+      return Uri.parse(url).path;
     }
   }
 
@@ -517,18 +586,22 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   // Library management methods
   void _addLibrary() {
     setState(() {
-      _modifiedLibraries.add(UserAppLibrary(
+      final newLibrary = UserAppLibrary(
         id: -1, // Temporary ID for new libraries
         appUuid: widget.app.uuid,
         revisionId: _currentRevision?.revisionNumber ?? 0,
         name: '',
         usageInstructions: '',
-      ));
+      );
+      _modifiedLibraries.add(newLibrary);
+      _libraryLinks[newLibrary.id] = [''];
     });
   }
 
   void _removeLibrary(int index) {
     setState(() {
+      final library = _modifiedLibraries[index];
+      _libraryLinks.remove(library.id);
       _modifiedLibraries.removeAt(index);
     });
   }
@@ -554,6 +627,35 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         name: _modifiedLibraries[index].name,
         usageInstructions: usage.isEmpty ? null : usage,
       );
+    });
+  }
+
+  void _addLibraryLink(int libraryIndex) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      currentLinks.add('');
+      _libraryLinks[library.id] = currentLinks;
+    });
+  }
+
+  void _removeLibraryLink(int libraryIndex, int linkIndex) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      if (currentLinks.length > 1) {
+        currentLinks.removeAt(linkIndex);
+        _libraryLinks[library.id] = currentLinks;
+      }
+    });
+  }
+
+  void _updateLibraryLink(int libraryIndex, int linkIndex, String link) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      currentLinks[linkIndex] = link;
+      _libraryLinks[library.id] = currentLinks;
     });
   }
 
@@ -842,6 +944,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
   Widget _buildLibraryCard(int index, AppLocalizations l10n) {
     final library = _modifiedLibraries[index];
+    final links = _libraryLinks[library.id] ?? [];
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
@@ -890,6 +993,49 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               ),
               maxLines: 3,
               onChanged: (value) => _updateLibraryUsage(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Links
+            Text(
+              l10n.libraryLink,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            
+            ...List.generate(links.length, (linkIndex) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: links[linkIndex],
+                        decoration: InputDecoration(
+                          hintText: l10n.libraryLinkHint,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (value) => _updateLibraryLink(index, linkIndex, value),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: links.length > 1
+                          ? () => _removeLibraryLink(index, linkIndex)
+                          : null,
+                      icon: const Icon(Icons.remove_circle),
+                      tooltip: l10n.removeLink,
+                    ),
+                  ],
+                ),
+              );
+            }),
+            
+            // Add Link Button
+            OutlinedButton.icon(
+              onPressed: () => _addLibraryLink(index),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.addLink),
             ),
           ],
         ),
