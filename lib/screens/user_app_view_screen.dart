@@ -878,7 +878,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                 } else if (typeof attachment === 'object' && attachment !== null) {
                   // Base64 object - validate required properties
                   if (attachment.type !== 'base64') {
-                    throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid type property, expected \'base64\', got \'' + attachment.type + '\'');
+                    throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid type property, expected \\'base64\\', got \\'' + attachment.type + '\\'');
                   }
                   if (typeof attachment.mimeType !== 'string' || attachment.mimeType.trim() === '') {
                     throw new Error('Parameter validation failed: attachment at index ' + i + ' has invalid mimeType property, must be a non-empty string');
@@ -1868,6 +1868,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       final extension = FileTypeUtils.getFileExtension(path);
       switch (extension) {
         case 'js':
+          contentType = 'application/javascript';
+          break;
+        case 'mjs':
           contentType = 'application/javascript';
           break;
         case 'css':
