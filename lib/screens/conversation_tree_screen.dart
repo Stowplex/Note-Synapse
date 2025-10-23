@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
-import 'dart:convert';
 import '../models/conversation.dart';
+import '../models/note.dart';
 import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/ai_service.dart';
 import 'conversation_chat_screen.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
@@ -51,12 +52,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       if (_tree == null) {
         if (mounted) {
           try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No conversations found. Start a new conversation to see the tree.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No conversations found. Start a new conversation to see the tree.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
           } catch (contextError) {
             LoggerService.warning('Could not show info SnackBar: $contextError');
           }
@@ -66,16 +67,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error loading conversation tree: $e', error: e);
       if (mounted) {
         try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error loading tree: ${e.toString()}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: _loadTree,
-              ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading tree: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _loadTree,
             ),
-          );
+          ),
+        );
         } catch (contextError) {
           LoggerService.warning('Could not show error SnackBar: $contextError');
         }
@@ -95,12 +96,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       if (_tree == null) {
         if (mounted) {
           try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No conversations found. Start a new conversation to see the tree.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No conversations found. Start a new conversation to see the tree.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
           } catch (contextError) {
             LoggerService.warning('Could not show info SnackBar: $contextError');
           }
@@ -108,12 +109,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       } else {
         if (mounted) {
           try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Tree refreshed successfully'),
-                duration: Duration(seconds: 2),
-              ),
-            );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tree refreshed successfully'),
+              duration: Duration(seconds: 2),
+            ),
+          );
           } catch (contextError) {
             LoggerService.warning('Could not show success SnackBar: $contextError');
           }
@@ -123,16 +124,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error refreshing conversation tree: $e', error: e);
       if (mounted) {
         try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error refreshing tree: ${e.toString()}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: _refreshTree,
-              ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing tree: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _refreshTree,
             ),
-          );
+          ),
+        );
         } catch (contextError) {
           LoggerService.warning('Could not show error SnackBar: $contextError');
         }
@@ -205,7 +206,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -221,7 +222,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               Navigator.of(context).pop();
               try {
                 // Delete the conversation that contains this interaction
-                await _conversationService.deleteConversation(node.conversationId);
+              await _conversationService.deleteConversation(node.conversationId);
                 // Refresh the tree to reflect the deletion
                 _tree = await _conversationService.refreshConversationTree();
                 if (mounted) {
@@ -327,31 +328,31 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
     try {
       // Create conversation directly with auto-generated title
-      final newConversation = await _conversationService.createConversationFromSelectedNodes(
-        selectedNodeIds: _selectedNodes,
+        final newConversation = await _conversationService.createConversationFromSelectedNodes(
+          selectedNodeIds: _selectedNodes,
         title: 'Conversation from ${_selectedNodes.length} selected nodes',
-      );
+        );
 
       // Clear selected nodes and exit multi-select mode
-      setState(() {
-        _selectedNodes.clear();
+        setState(() {
+          _selectedNodes.clear();
         _isMultiSelectMode = false;
-      });
+        });
 
       // Navigate directly to the new conversation
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ConversationChatScreen(
-            conversationId: newConversation.id,
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ConversationChatScreen(
+              conversationId: newConversation.id,
+            ),
           ),
-        ),
-      );
-    } catch (e) {
+        );
+      } catch (e) {
       if (mounted) {
         try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error creating conversation: $e')),
-          );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating conversation: $e')),
+        );
         } catch (contextError) {
           LoggerService.warning('Could not show error SnackBar: $contextError');
         }
@@ -368,19 +369,84 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     });
   }
 
-  Future<void> _saveTreeAsJson() async {
-    if (_tree == null) return;
-    
-    try {
-      final jsonString = jsonEncode(_tree!.toJson());
-      // Here you would typically save to a file or database
-      LoggerService.info('Tree saved as JSON: $jsonString');
-      
+  void _showSaveOptionsDialog() {
+    if (_selectedNodes.isEmpty) {
       if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Tree saved successfully'),
+              content: Text('Please select nodes first'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show info SnackBar: $contextError');
+        }
+      }
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save Selected Nodes'),
+        content: Text('You have selected ${_selectedNodes.length} node(s). How would you like to save them?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _saveSelectedNodesAsNote();
+            },
+            child: const Text('Save to Note'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _aiSummarizeAndSaveAsNote();
+            },
+            child: const Text('AI Summarize and Save to Note'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveSelectedNodesAsNote() async {
+    if (_tree == null || _selectedNodes.isEmpty) return;
+
+    try {
+      // Collect content from selected nodes
+      final content = <String>[];
+      for (final nodeId in _selectedNodes) {
+        final node = _tree!.nodes[nodeId];
+        if (node != null) {
+          content.add('${node.summary}\n');
+        }
+      }
+
+      // Create note
+      final note = Note(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: 'Conversation Tree Selection - ${DateTime.now().toString().substring(0, 19)}',
+        content: content.join('\n'),
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        tags: ['conversation-tree'],
+      );
+
+      // Save to database
+      await _databaseService.insertNote(note);
+
+      if (mounted) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Note created successfully'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -389,12 +455,115 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         }
       }
     } catch (e) {
-      LoggerService.error('Error saving tree: $e', error: e);
+      LoggerService.error('Error creating note: $e', error: e);
       if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error saving tree: ${e.toString()}'),
+              content: Text('Error creating note: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
+      }
+    }
+  }
+
+  Future<void> _aiSummarizeAndSaveAsNote() async {
+    if (_tree == null || _selectedNodes.isEmpty) return;
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('AI is summarizing the selected nodes...'),
+            ],
+          ),
+        ),
+      );
+
+      // Collect content from selected nodes
+      final content = <String>[];
+      for (final nodeId in _selectedNodes) {
+        final node = _tree!.nodes[nodeId];
+        if (node != null) {
+          content.add('${node.summary}\n');
+        }
+      }
+
+      final rawContent = content.join('\n');
+
+      // Use AI to summarize
+      final summarizedContent = await AIService.createNewNotes(
+        'Please summarize and organize the following conversation tree selections into a concise, well-structured note. Focus on the key insights, decisions, and important information:\n\n$rawContent',
+        [], // No context notes needed
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (summarizedContent.isNotEmpty) {
+        final note = summarizedContent.first;
+        
+        // Add conversation tree tag
+        final updatedNote = Note(
+          id: note.id,
+          title: note.title,
+          content: note.content,
+          type: note.type,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+          subNotes: note.subNotes,
+          tags: [...note.tags, 'conversation-tree', 'ai-summarized'],
+          attachmentPaths: note.attachmentPaths,
+          scheduledAt: note.scheduledAt,
+          completeBy: note.completeBy,
+          status: note.status,
+          completionPercentage: note.completionPercentage,
+          pinned: note.pinned,
+          isArchived: note.isArchived,
+        );
+
+        // Save to database
+        await _databaseService.insertNote(updatedNote);
+
+        if (mounted) {
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('AI-summarized note created successfully'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } catch (contextError) {
+            LoggerService.warning('Could not show success SnackBar: $contextError');
+          }
+        }
+      } else {
+        throw Exception('AI failed to generate summary');
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      LoggerService.error('Error creating AI-summarized note: $e', error: e);
+      if (mounted) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error creating AI-summarized note: ${e.toString()}'),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -429,9 +598,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             tooltip: _isMultiSelectMode ? 'Exit multi-select' : 'Multi-select mode',
           ),
           IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveTreeAsJson,
-            tooltip: 'Save tree as JSON',
+            icon: const Icon(Icons.note_add),
+            onPressed: _showSaveOptionsDialog,
+            tooltip: 'Save selected nodes as note',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -501,32 +670,32 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   Widget _buildTreeView() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return InteractiveViewer(
-          constrained: false,
-          child: SizedBox(
+    return InteractiveViewer(
+      constrained: false,
+      child: SizedBox(
             width: constraints.maxWidth > 1000 ? constraints.maxWidth : 1000,
             height: constraints.maxHeight > 500 ? constraints.maxHeight : 500,
-            child: GraphView.builder(
-              graph: _buildGraph(),
-              algorithm: BuchheimWalkerAlgorithm(
-                BuchheimWalkerConfiguration(
-                  orientation: BuchheimWalkerConfiguration.ORIENTATION_TOP_BOTTOM,
-                  siblingSeparation: 80,
-                  levelSeparation: 120,
-                  subtreeSeparation: 60,
-                ),
-                TreeEdgeRenderer(BuchheimWalkerConfiguration()),
-              ),
-              controller: _graphController,
-              builder: (Node node) {
-                final nodeId = (node.key?.value as String?) ?? '';
-                final treeNode = _tree!.getNode(nodeId);
-                if (treeNode == null) return const SizedBox.shrink();
-
-                return _buildTreeNode(treeNode);
-              },
+        child: GraphView.builder(
+          graph: _buildGraph(),
+          algorithm: BuchheimWalkerAlgorithm(
+            BuchheimWalkerConfiguration(
+              orientation: BuchheimWalkerConfiguration.ORIENTATION_TOP_BOTTOM,
+              siblingSeparation: 80,
+              levelSeparation: 120,
+              subtreeSeparation: 60,
             ),
+            TreeEdgeRenderer(BuchheimWalkerConfiguration()),
           ),
+          controller: _graphController,
+          builder: (Node node) {
+            final nodeId = (node.key?.value as String?) ?? '';
+            final treeNode = _tree!.getNode(nodeId);
+            if (treeNode == null) return const SizedBox.shrink();
+
+            return _buildTreeNode(treeNode);
+          },
+        ),
+      ),
         );
       },
     );
@@ -608,31 +777,31 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           maxWidth: 200, // Reasonable max width for tree nodes
           minWidth: 120, // Minimum width to ensure readability
         ),
-        child: Container(
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
+      child: Container(
+        padding: const EdgeInsets.all(12.0),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? Theme.of(context).colorScheme.primaryContainer
+              : isRoot
+                  ? Theme.of(context).colorScheme.surfaceVariant
+                  : Theme.of(context).colorScheme.surface,
+          border: Border.all(
             color: isSelected 
-                ? Theme.of(context).colorScheme.primaryContainer
+                ? Theme.of(context).colorScheme.primary
                 : isRoot
-                    ? Theme.of(context).colorScheme.surfaceVariant
-                    : Theme.of(context).colorScheme.surface,
-            border: Border.all(
-              color: isSelected 
-                  ? Theme.of(context).colorScheme.primary
-                  : isRoot
-                      ? Theme.of(context).colorScheme.outline
-                      : Theme.of(context).colorScheme.outline.withOpacity(0.3),
-              width: isSelected ? 2 : 1,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: isSelected ? [
-              BoxShadow(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ] : null,
+                    ? Theme.of(context).colorScheme.outline
+                    : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            width: isSelected ? 2 : 1,
           ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ] : null,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,35 +809,35 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             // First row: Control widgets (expand, icon, menu)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasChildren && !isRoot)
-                      IconButton(
-                        icon: Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 18,
-                        ),
-                        onPressed: () => _toggleNodeExpansion(node.id),
-                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                        padding: EdgeInsets.zero,
-                      )
-                    else
-                      const SizedBox(width: 28),
-                    Icon(
-                      isRoot 
-                          ? Icons.account_tree
-                          : isInteraction 
-                              ? Icons.chat_bubble_outline
-                              : Icons.folder_outlined,
+                if (hasChildren && !isRoot)
+                  IconButton(
+                    icon: Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
                       size: 18,
-                      color: isRoot
-                          ? Theme.of(context).colorScheme.primary
-                          : isInteraction 
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.secondary,
                     ),
+                    onPressed: () => _toggleNodeExpansion(node.id),
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    padding: EdgeInsets.zero,
+                  )
+                    else
+                  const SizedBox(width: 28),
+                Icon(
+                  isRoot 
+                      ? Icons.account_tree
+                          : isInteraction 
+                          ? Icons.chat_bubble_outline
+                          : Icons.folder_outlined,
+                  size: 18,
+                  color: isRoot
+                      ? Theme.of(context).colorScheme.primary
+                          : isInteraction 
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.secondary,
+                ),
                   ],
                 ),
                 if (isInteraction && !isRoot)
@@ -738,11 +907,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 'Select an interaction to view details',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
-            ],
-          ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
     // If a specific message is selected, show just that message
     if (_selectedMessage != null) {
@@ -766,8 +935,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
         return SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             // Header with close button
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -785,14 +954,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      conversation.title,
+              conversation.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                      ),
+            ),
                     ),
                   ),
-                  Text(
-                    '${messages.length} messages',
+            Text(
+              '${messages.length} messages',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -814,8 +983,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                ElevatedButton(
-                  onPressed: () {
+            ElevatedButton(
+              onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => ConversationChatScreen(
