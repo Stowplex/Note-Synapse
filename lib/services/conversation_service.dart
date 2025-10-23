@@ -54,8 +54,9 @@ class ConversationService {
       throw Exception('Original conversation not found');
     }
 
-    // Verify the fork message exists
-    final allMessages = await _databaseService.getConversationMessages(originalConversationId);
+    // Verify the fork message exists in the conversation we're forking from
+    // This includes the full history (shared history + own messages) for forked conversations
+    final allMessages = await _getFullConversationHistory(originalConversation);
     final forkMessageExists = allMessages.any((msg) => msg.id == forkFromMessageId);
     if (!forkMessageExists) {
       throw Exception('Fork message not found');
@@ -346,24 +347,45 @@ class ConversationService {
   Future<String?> _findForkNodeInTree(String parentConversationId, String forkMessageId, Map<String, ConversationTreeNode> nodes) async {
     LoggerService.info('Looking for fork node in ${nodes.length} nodes for parent conversation: $parentConversationId, fork message: $forkMessageId');
     
-    // Get the original conversation messages to find the fork message
-    final parentMessages = await _databaseService.getConversationMessages(parentConversationId);
-    LoggerService.info('Parent conversation has ${parentMessages.length} messages');
-    
-    // Check if the fork message exists in the parent conversation
-    final forkMessageExists = parentMessages.any((msg) => msg.id == forkMessageId);
-    if (!forkMessageExists) {
-      LoggerService.warning('Fork message $forkMessageId not found in parent conversation $parentConversationId');
-      LoggerService.info('Available message IDs in parent: ${parentMessages.map((m) => m.id).toList()}');
+    // Get the parent conversation to check if it's a forked conversation
+    final parentConversation = await _databaseService.getConversation(parentConversationId);
+    if (parentConversation == null) {
+      LoggerService.warning('Parent conversation not found: $parentConversationId');
       return null;
     }
     
-    final forkMessage = parentMessages.firstWhere((msg) => msg.id == forkMessageId);
-    LoggerService.info('Found fork message: ${forkMessage.id} at index ${parentMessages.indexOf(forkMessage)}');
+    // If the parent is a forked conversation, we need to look in the original conversation
+    // that contains the shared history, not just the immediate parent
+    String searchConversationId = parentConversationId;
+    if (parentConversation.parentConversationId != null) {
+      LoggerService.info('Parent is a forked conversation, looking in original conversation: ${parentConversation.parentConversationId}');
+      searchConversationId = parentConversation.parentConversationId!;
+    }
+    
+    // Get the full conversation history (including shared history for forked conversations)
+    final searchConversation = await _databaseService.getConversation(searchConversationId);
+    if (searchConversation == null) {
+      LoggerService.warning('Search conversation not found: $searchConversationId');
+      return null;
+    }
+    
+    final allMessages = await _getFullConversationHistory(searchConversation);
+    LoggerService.info('Search conversation has ${allMessages.length} messages in full history');
+    
+    // Check if the fork message exists in the full history
+    final forkMessageExists = allMessages.any((msg) => msg.id == forkMessageId);
+    if (!forkMessageExists) {
+      LoggerService.warning('Fork message $forkMessageId not found in search conversation $searchConversationId');
+      LoggerService.info('Available message IDs in search conversation: ${allMessages.map((m) => m.id).toList()}');
+      return null;
+    }
+    
+    final forkMessage = allMessages.firstWhere((msg) => msg.id == forkMessageId);
+    LoggerService.info('Found fork message: ${forkMessage.id} at index ${allMessages.indexOf(forkMessage)}');
     
     // Group messages into interactions to find which interaction contains the fork message
-    final interactions = _groupMessagesIntoInteractions(parentMessages);
-    LoggerService.info('Parent conversation has ${interactions.length} interactions');
+    final interactions = _groupMessagesIntoInteractions(allMessages);
+    LoggerService.info('Search conversation has ${interactions.length} interactions');
     
     // Find which interaction contains the fork message
     for (int i = 0; i < interactions.length; i++) {
@@ -372,7 +394,7 @@ class ConversationService {
         LoggerService.info('Fork message found in interaction $i');
         
         // Find the corresponding node in the tree
-        final nodeId = 'interaction_${parentConversationId}_$i';
+        final nodeId = 'interaction_${searchConversationId}_$i';
         if (nodes.containsKey(nodeId)) {
           LoggerService.info('Found fork node: $nodeId for fork message: $forkMessageId');
           return nodeId;
@@ -382,7 +404,7 @@ class ConversationService {
       }
     }
     
-    LoggerService.warning('Could not find fork node for parent conversation: $parentConversationId, fork message: $forkMessageId');
+    LoggerService.warning('Could not find fork node for search conversation: $searchConversationId, fork message: $forkMessageId');
     return null;
   }
 
