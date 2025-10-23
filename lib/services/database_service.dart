@@ -1679,6 +1679,10 @@ class DatabaseService {
     await db.delete('notes');
     await db.delete('tags');
     await db.delete('filters');
+    await db.delete('conversation_tree');
+    await db.delete('conversation_messages');
+    await db.delete('conversation_attachments');
+    await db.delete('conversations');
   }
 
   // Utility methods

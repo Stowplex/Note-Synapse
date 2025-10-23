@@ -675,15 +675,15 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             : const Text('Conversation Tree'),
         actions: [
           if (_isMultiSelectMode) ...[
-            IconButton(
+          IconButton(
               icon: const Icon(Icons.note_add),
               onPressed: _showSaveOptionsDialog,
               tooltip: 'Save selected nodes as note',
-            ),
-            if (_selectedNodes.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: _createConversationFromSelected,
+          ),
+          if (_selectedNodes.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _createConversationFromSelected,
                 tooltip: 'Create from selected',
               ),
             IconButton(
@@ -993,7 +993,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
 
     return FutureBuilder<ConversationWithMessages?>(
-      future: _conversationService.getConversationWithMessages(_selectedConversationId!),
+      future: _conversationService.getConversationWithFullHistory(_selectedConversationId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

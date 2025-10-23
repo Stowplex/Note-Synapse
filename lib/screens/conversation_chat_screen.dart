@@ -52,7 +52,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     try {
       if (widget.conversationId != null) {
         // Load existing conversation
-        final conversationWithMessages = await _conversationService.getConversationWithMessages(widget.conversationId!);
+        final conversationWithMessages = await _conversationService.getConversationWithFullHistory(widget.conversationId!);
         if (conversationWithMessages != null) {
           _conversation = conversationWithMessages.conversation;
           _messages = conversationWithMessages.messages;
@@ -797,7 +797,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   _formatTimestamp(message.timestamp),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (isUser) ...[
+                if (!isUser) ...[
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.call_split, size: 16),
