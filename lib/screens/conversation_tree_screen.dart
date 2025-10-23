@@ -235,27 +235,37 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     if (node.messageId == null) return;
     
     try {
-      // Create a new conversation forked from this interaction
-      final newConversation = await _conversationService.createConversation(
-        title: 'Forked from interaction',
-        parentConversationId: node.conversationId,
-        forkFromMessageId: node.messageId,
+      LoggerService.info('Starting fork from interaction: ${node.id}');
+      
+      // Create a new conversation forked from this interaction with full history
+      final newConversation = await _conversationService.forkConversation(
+        originalConversationId: node.conversationId,
+        forkFromMessageId: node.messageId!,
+        newTitle: 'Forked conversation',
       );
+      
+      LoggerService.info('Forked conversation created: ${newConversation.id}');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('New conversation created for forking'),
+            content: Text('Conversation forked successfully'),
             duration: Duration(seconds: 2),
           ),
         );
         
         // Navigate to the new conversation
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(conversationId: newConversation.id),
           ),
         );
+        
+        // Refresh tree when returning from conversation
+        if (mounted) {
+          LoggerService.info('Refreshing tree after fork');
+          await _refreshTree();
+        }
       }
     } catch (e) {
       LoggerService.error('Error forking interaction: $e', error: e);
@@ -1007,7 +1017,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () {
-                      // TODO: Implement fork from this interaction
+                      // Create a temporary node for forking
+                      final tempNode = ConversationTreeNode(
+                        id: 'temp_${message.id}',
+                        conversationId: message.conversationId,
+                        messageId: message.id,
+                        summary: 'Fork from here',
+                        level: 1,
+                        createdAt: message.timestamp,
+                      );
+                      _forkInteraction(tempNode);
                     },
                     icon: const Icon(Icons.call_split),
                     label: const Text('Fork from here'),

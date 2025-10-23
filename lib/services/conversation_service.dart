@@ -62,7 +62,7 @@ class ConversationService {
       forkFromMessageId: forkFromMessageId,
     );
 
-    // Copy messages up to the fork point
+    // Copy messages up to the fork point (inclusive) to show shared history
     final messagesToCopy = allMessages.take(forkMessageIndex + 1).toList();
     for (final message in messagesToCopy) {
       final newMessage = ConversationMessage(
@@ -328,15 +328,22 @@ class ConversationService {
     Conversation forkedConversation, 
     Map<String, ConversationTreeNode> nodes
   ) async {
+    LoggerService.info('Handling forked conversation: ${forkedConversation.id}');
+    
     // Find the parent conversation's interaction node that contains the fork message
     final parentConversation = await _databaseService.getConversation(forkedConversation.parentConversationId!);
-    if (parentConversation == null) return;
+    if (parentConversation == null) {
+      LoggerService.warning('Parent conversation not found: ${forkedConversation.parentConversationId}');
+      return;
+    }
 
     final parentMessages = await _databaseService.getConversationMessages(parentConversation.id);
     final forkMessage = parentMessages.firstWhere(
       (m) => m.id == forkedConversation.forkFromMessageId,
       orElse: () => parentMessages.first,
     );
+
+    LoggerService.info('Fork message found: ${forkMessage.id}');
 
     // Find the interaction node that contains this message
     String? forkNodeId;
@@ -354,9 +361,80 @@ class ConversationService {
       }
     }
 
+    LoggerService.info('Fork node ID found: $forkNodeId');
+
     if (forkNodeId != null) {
-      // Build interaction nodes for the forked conversation
-      await _buildInteractionNodes(forkedConversation, nodes);
+      // Only create nodes for the forked conversation if it has new interactions
+      await _buildInteractionNodesForFork(forkedConversation, nodes, forkNodeId);
+      LoggerService.info('Forked conversation nodes created successfully');
+    } else {
+      LoggerService.warning('Could not find fork node for forked conversation: ${forkedConversation.id}');
+    }
+  }
+
+  // Build interaction nodes for a forked conversation and attach them as siblings
+  Future<void> _buildInteractionNodesForFork(
+    Conversation forkedConversation, 
+    Map<String, ConversationTreeNode> nodes,
+    String forkNodeId
+  ) async {
+    final messages = await _databaseService.getConversationMessages(forkedConversation.id);
+    if (messages.isEmpty) {
+      LoggerService.info('Forked conversation has no messages yet, skipping node creation');
+      return;
+    }
+
+    // Group messages into User-AI interaction pairs
+    final interactions = _groupMessagesIntoInteractions(messages);
+    
+    // Find the fork node (this is where forked interactions should be attached)
+    final forkNode = nodes[forkNodeId];
+    if (forkNode == null) {
+      LoggerService.warning('Fork node not found: $forkNodeId');
+      return;
+    }
+    
+    LoggerService.info('Creating ${interactions.length} interaction nodes for forked conversation, attaching to fork node: $forkNodeId');
+    
+    // Only create nodes for completed interactions (User + AI)
+    String? previousForkedNodeId;
+    for (int i = 0; i < interactions.length; i++) {
+      final interaction = interactions[i];
+      if (interaction.length != 2) continue; // Skip incomplete interactions
+
+      final userMessage = interaction.first;
+      final aiMessage = interaction.last;
+      
+      // Create node for this interaction
+      final nodeId = 'interaction_${forkedConversation.id}_${i}';
+      final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
+      
+      // First forked interaction should be a child of the fork point
+      // Subsequent forked interactions should be children of each other
+      final nodeParentId = i == 0 ? forkNodeId : previousForkedNodeId!;
+      
+      final node = ConversationTreeNode(
+        id: nodeId,
+        conversationId: forkedConversation.id,
+        messageId: aiMessage.id, // Reference the AI message as the "completion" point
+        summary: summary,
+        level: forkNode.level + 1, // One level deeper than the fork point
+        parentId: nodeParentId,
+        createdAt: aiMessage.timestamp, // Use AI message timestamp as completion time
+        isExpanded: false, // All forked nodes collapsed by default
+      );
+
+      nodes[nodeId] = node;
+
+      // Add to parent's children
+      final parentNode = nodes[nodeParentId];
+      if (parentNode != null) {
+        final newChildren = List<String>.from(parentNode.children)..add(nodeId);
+        final updatedParentNode = parentNode.copyWith(children: newChildren);
+        nodes[nodeParentId] = updatedParentNode;
+      }
+
+      previousForkedNodeId = nodeId;
     }
   }
 

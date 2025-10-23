@@ -465,43 +465,34 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _forkConversation(String messageId) async {
-    final result = await showDialog<String>(
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Fork Conversation'),
-        content: TextField(
-          decoration: const InputDecoration(
-            labelText: 'New conversation title',
-            hintText: 'Enter a title for the forked conversation',
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
+        content: const Text('Fork this conversation?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              final controller = TextEditingController();
-              Navigator.of(context).pop(controller.text);
-            },
+            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Fork'),
           ),
         ],
       ),
     );
 
-    if (result != null && result.isNotEmpty) {
+    if (result == true) {
       try {
         final forkedConversation = await _conversationService.forkConversation(
           originalConversationId: _conversation!.id,
           forkFromMessageId: messageId,
-          newTitle: result,
+          newTitle: 'Forked conversation',
         );
 
         // Navigate to the forked conversation
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(
               conversationId: forkedConversation.id,
