@@ -419,20 +419,61 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     if (_tree == null || _selectedNodes.isEmpty) return;
 
     try {
-      // Collect content from selected nodes
-      final content = <String>[];
+      // Collect conversation context from selected nodes (same as createConversationFromSelectedNodes)
+      final conversationIds = <String>{};
+      final allNoteIds = <String>{};
+      
       for (final nodeId in _selectedNodes) {
         final node = _tree!.nodes[nodeId];
-        if (node != null) {
-          content.add('${node.summary}\n');
+        if (node != null && node.conversationId.isNotEmpty) {
+          conversationIds.add(node.conversationId);
+          
+          // Get notes from this conversation
+          final conversation = await _databaseService.getConversation(node.conversationId);
+          if (conversation != null) {
+            allNoteIds.addAll(conversation.noteIds);
+          }
         }
       }
 
-      // Create note
+      if (conversationIds.isEmpty) {
+        throw Exception('No valid conversations selected');
+      }
+
+      // Build context messages from conversations (same as _addConversationContext)
+      final contextMessages = <String>[];
+      
+      for (final sourceConvId in conversationIds) {
+        final messages = await _databaseService.getConversationMessages(sourceConvId);
+        if (messages.isNotEmpty) {
+          // Add a header for this conversation's context
+          contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
+          
+          // Add key messages (first few and last few)
+          final keyMessages = <ConversationMessage>[];
+          if (messages.length <= 4) {
+            keyMessages.addAll(messages);
+          } else {
+            // First 2 and last 2 messages
+            keyMessages.addAll(messages.take(2));
+            keyMessages.addAll(messages.skip(messages.length - 2));
+          }
+          
+          for (final message in keyMessages) {
+            final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
+            contextMessages.add('$prefix${message.content}');
+          }
+          contextMessages.add(''); // Empty line between conversations
+        }
+      }
+
+      final fullContext = contextMessages.join('\n');
+
+      // Create note with full conversation context
       final note = Note(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: 'Conversation Tree Selection - ${DateTime.now().toString().substring(0, 19)}',
-        content: content.join('\n'),
+        content: fullContext,
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -490,20 +531,59 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         ),
       );
 
-      // Collect content from selected nodes
-      final content = <String>[];
+      // Collect conversation context from selected nodes (same as createConversationFromSelectedNodes)
+      final conversationIds = <String>{};
+      final allNoteIds = <String>{};
+      
       for (final nodeId in _selectedNodes) {
         final node = _tree!.nodes[nodeId];
-        if (node != null) {
-          content.add('${node.summary}\n');
+        if (node != null && node.conversationId.isNotEmpty) {
+          conversationIds.add(node.conversationId);
+          
+          // Get notes from this conversation
+          final conversation = await _databaseService.getConversation(node.conversationId);
+          if (conversation != null) {
+            allNoteIds.addAll(conversation.noteIds);
+          }
         }
       }
 
-      final rawContent = content.join('\n');
+      if (conversationIds.isEmpty) {
+        throw Exception('No valid conversations selected');
+      }
 
-      // Use AI to summarize
+      // Build context messages from conversations (same as _addConversationContext)
+      final contextMessages = <String>[];
+      
+      for (final sourceConvId in conversationIds) {
+        final messages = await _databaseService.getConversationMessages(sourceConvId);
+        if (messages.isNotEmpty) {
+          // Add a header for this conversation's context
+          contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
+          
+          // Add key messages (first few and last few)
+          final keyMessages = <ConversationMessage>[];
+          if (messages.length <= 4) {
+            keyMessages.addAll(messages);
+          } else {
+            // First 2 and last 2 messages
+            keyMessages.addAll(messages.take(2));
+            keyMessages.addAll(messages.skip(messages.length - 2));
+          }
+          
+          for (final message in keyMessages) {
+            final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
+            contextMessages.add('$prefix${message.content}');
+          }
+          contextMessages.add(''); // Empty line between conversations
+        }
+      }
+
+      final fullContext = contextMessages.join('\n');
+
+      // Use AI to summarize with full conversation context
       final summarizedContent = await AIService.createNewNotes(
-        'Please summarize and organize the following conversation tree selections into a concise, well-structured note. Focus on the key insights, decisions, and important information:\n\n$rawContent',
+        'Please summarize and organize the following conversation context into a concise, well-structured note. Focus on the key insights, decisions, and important information from these conversations:\n\n$fullContext',
         [], // No context notes needed
       );
 
@@ -590,41 +670,35 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Conversation Tree'),
+        title: _isMultiSelectMode
+            ? Text('${_selectedNodes.length} selected')
+            : const Text('Conversation Tree'),
         actions: [
-          IconButton(
-            icon: Icon(_isMultiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
-            onPressed: _toggleMultiSelectMode,
-            tooltip: _isMultiSelectMode ? 'Exit multi-select' : 'Multi-select mode',
-          ),
-          IconButton(
-            icon: const Icon(Icons.note_add),
-            onPressed: _showSaveOptionsDialog,
-            tooltip: 'Save selected nodes as note',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshTree,
-            tooltip: 'Refresh tree',
-          ),
-          if (_selectedNodes.isNotEmpty)
+          if (_isMultiSelectMode) ...[
             IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: _createConversationFromSelected,
-              tooltip: 'Create from selected',
+              icon: const Icon(Icons.note_add),
+              onPressed: _showSaveOptionsDialog,
+              tooltip: 'Save selected nodes as note',
             ),
+            if (_selectedNodes.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: _createConversationFromSelected,
+                tooltip: 'Create from selected',
+              ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _toggleMultiSelectMode,
+              tooltip: 'Exit multi-select',
+            ),
+          ] else ...[
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshTree,
+              tooltip: 'Refresh tree',
+            ),
+          ],
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const ConversationChatScreen(),
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
-        tooltip: 'Start new conversation',
       ),
       body: Column(
         children: [
