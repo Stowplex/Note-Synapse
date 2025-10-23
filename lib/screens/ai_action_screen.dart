@@ -10,11 +10,12 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import 'note_detail_screen.dart';
+import 'conversation_chat_screen.dart';
 
 enum AIInteractionType {
-  noteQa,
   noteTransformation,
   newNoteCreation,
+  aiConversation,
 }
 
 class AIActionScreen extends StatefulWidget {
@@ -32,7 +33,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
   bool _isProcessing = false;
   String? _response;
   List<PlatformFile> _attachedFiles = [];
-  bool _answerOnlyFromNotes = true; // Default to checked
 
   @override
   void dispose() {
@@ -73,15 +73,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (widget.selectedNotes.isNotEmpty) ...[
-            _buildActionCard(
-              icon: Icons.quiz,
-              title: l10n.noteQa,
-              description: l10n.noteQaDescription,
-              action: AIInteractionType.noteQa,
-            ),
-            const SizedBox(height: 12),
-          ],
           if (widget.selectedNotes.length == 1) ...[
             _buildActionCard(
               icon: Icons.transform,
@@ -97,16 +88,24 @@ class _AIActionScreenState extends State<AIActionScreen> {
             description: l10n.createNewNotesDescription,
             action: AIInteractionType.newNoteCreation,
           ),
+          const SizedBox(height: 12),
+          _buildActionCard(
+            icon: Icons.chat,
+            title: 'AI Conversation',
+            description: 'Start a conversation with AI about your notes',
+            action: AIInteractionType.aiConversation,
+          ),
           const SizedBox(height: 24),
           if (_selectedAction != null) ...[
-            Text(
-              l10n.enterYourPrompt,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+            if (_selectedAction != AIInteractionType.aiConversation) ...[
+              Text(
+                l10n.enterYourPrompt,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
+              const SizedBox(height: 8),
+              TextField(
               controller: _promptController,
               decoration: InputDecoration(
                 hintText: _getPromptHint(),
@@ -138,32 +137,19 @@ class _AIActionScreenState extends State<AIActionScreen> {
               },
             ),
             const SizedBox(height: 8),
-            if (_selectedAction == AIInteractionType.noteQa) ...[
-              CheckboxListTile(
-                title: Text(l10n.answerOnlyFromNotes),
-                subtitle: const Text('When unchecked, AI can use its own knowledge for more expanded answers'),
-                value: _answerOnlyFromNotes,
-                onChanged: (bool? value) {
-                  setState(() {
-                    _answerOnlyFromNotes = value ?? true;
-                  });
-                },
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-              ),
-              const SizedBox(height: 8),
             ],
-            Text(
-              'Tip: Use Enter for new lines, click Process to submit',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                fontStyle: FontStyle.italic,
+            if (_selectedAction != AIInteractionType.aiConversation) ...[
+              Text(
+                'Tip: Use Enter for new lines, click Process to submit',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-            ),
-            if (_attachedFiles.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _buildAttachedFilesSection(),
+              if (_attachedFiles.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildAttachedFilesSection(),
+              ],
             ],
             const SizedBox(height: 16),
             SizedBox(
@@ -176,7 +162,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(l10n.process),
+                    : Text(_selectedAction == AIInteractionType.aiConversation ? 'Start Conversation' : l10n.process),
               ),
             ),
           ],
@@ -329,10 +315,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
   String _getPromptHint() {
     switch (_selectedAction) {
-      case AIInteractionType.noteQa:
-        return widget.selectedNotes.length == 1 
-            ? 'Ask a question about this note...'
-            : 'Ask a question about your selected notes...';
       case AIInteractionType.noteTransformation:
         return 'Describe how you want to transform this note...';
       case AIInteractionType.newNoteCreation:
@@ -343,7 +325,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   }
 
   Future<void> _processAction() async {
-    if (_promptController.text.trim().isEmpty) {
+    if (_selectedAction != AIInteractionType.aiConversation && _promptController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a prompt')),
       );
@@ -359,14 +341,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
       String response;
 
       switch (_selectedAction) {
-        case AIInteractionType.noteQa:
-          response = await appProvider.answerNoteQuestion(
-            _promptController.text.trim(),
-            widget.selectedNotes,
-            attachedFiles: _attachedFiles,
-            useOwnKnowledge: !_answerOnlyFromNotes,
-          );
-          break;
         case AIInteractionType.noteTransformation:
           response = await appProvider.transformNote(
             widget.selectedNotes.first,
@@ -382,6 +356,16 @@ class _AIActionScreenState extends State<AIActionScreen> {
           );
           response = 'Created ${newNotes.length} new notes successfully!';
           break;
+        case AIInteractionType.aiConversation:
+          // Navigate to conversation screen with selected notes
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ConversationChatScreen(
+                initialNoteIds: widget.selectedNotes.map((note) => note.id).toList(),
+              ),
+            ),
+          );
+          return; // Don't process further
         default:
           throw Exception('Invalid action type');
       }
@@ -410,7 +394,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
       _selectedAction = null;
       _promptController.clear();
       _attachedFiles.clear();
-      _answerOnlyFromNotes = true; // Reset to default
     });
   }
 

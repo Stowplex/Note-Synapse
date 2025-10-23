@@ -116,6 +116,9 @@ dependencies:
   # Debug overlay
   flutter_debug_overlay: ^0.1.0
   
+  # Graph visualization for conversation tree
+  graphview: ^1.5.1
+  
 
 dev_dependencies:
   flutter_test:
