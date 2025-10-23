@@ -447,6 +447,18 @@
   "aiDebugOverlayTitle": "AI Debug Overlay",
   "refreshLogs": "Refresh logs",
   "clearLogs": "Clear logs",
+  "basic": "Basic",
+  "advanced": "Advanced",
+  "addLibrary": "Add Library",
+  "libraryName": "Library Name",
+  "libraryNameHint": "Enter library name",
+  "libraryUsage": "Usage",
+  "libraryUsageHint": "Describe how to use this library",
+  "libraryLink": "Library Link",
+  "libraryLinkHint": "Enter JavaScript library URL",
+  "addLink": "Add Link",
+  "removeLibrary": "Remove Library",
+  "removeLink": "Remove Link",
   "noAiLogsAvailable": "No AI logs available",
   "aiLogsDescription": "AI requests and responses will appear here",
   "headers": "Headers",
@@ -623,5 +635,8 @@
   "undoBackupCompleted": "Backup undone successfully!",
   "errorUndoingBackup": "Error undoing backup: {error}",
   "backupRestored": "Backup restored successfully!",
-  "errorRestoringBackup": "Error restoring backup: {error}"
+  "errorRestoringBackup": "Error restoring backup: {error}",
+  "cloneApp": "Clone App",
+  "appClonedSuccessfully": "App cloned successfully!",
+  "errorCloningApp": "Error cloning app: {error}"
 }

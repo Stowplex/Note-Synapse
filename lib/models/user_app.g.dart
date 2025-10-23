@@ -22,6 +22,9 @@ UserApp _$UserAppFromJson(Map<String, dynamic> json) => UserApp(
   license: json['license'] as String? ?? '',
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
+  libraries: (json['libraries'] as List<dynamic>?)
+      ?.map((e) => UserAppLibraryInfo.fromJson(e as Map<String, dynamic>))
+      .toList(),
 );
 
 Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
@@ -38,6 +41,7 @@ Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
   'license': instance.license,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
+  'libraries': instance.libraries,
 };
 
 const _$UserAppTypeEnumMap = {

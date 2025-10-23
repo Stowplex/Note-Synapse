@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import 'ai_service.dart';
@@ -171,10 +172,11 @@ class UserAppService {
     UserAppType type = UserAppType.normal,
     String? userPrompt,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate the app using AI
-      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths);
+      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths, libraries: libraries);
       
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
@@ -196,6 +198,7 @@ class UserAppService {
         type: type,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        libraries: libraries,
       );
       
       await saveUserApp(app);
@@ -225,6 +228,12 @@ class UserAppService {
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
       await databaseService.updateUserApp(updatedApp);
       LoggerService.debug('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
+      
+      // Download and store libraries if provided
+      if (libraries != null && libraries.isNotEmpty) {
+        await _downloadAndStoreLibraries(updatedApp, revision, libraries);
+      }
+      
       return updatedApp;
     } catch (e) {
       LoggerService.error('Error creating user app: $e', error: e);
@@ -303,6 +312,7 @@ class UserAppService {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate new app based on original and edit suggestion
@@ -314,6 +324,7 @@ class UserAppService {
         editSuggestion,
         originalApp.type,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       
       // Parse the AI response to extract code and explanation
@@ -339,6 +350,11 @@ class UserAppService {
       
       // Save the revision
       await databaseService.insertAppRevision(revision);
+      
+      // Download and store libraries if provided
+      if (libraries != null && libraries.isNotEmpty) {
+        await _downloadAndStoreLibraries(originalApp, revision, libraries);
+      }
       
       // Copy dependencies from the current revision to the new revision
       if (originalApp.selectedRevisionId != null) {
@@ -380,9 +396,9 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths}) async {
+  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths, List<UserAppLibraryInfo>? libraries}) async {
     try {
-      final prompt = _buildAppGenerationPrompt(name, description, steps, type);
+      final prompt = _buildAppGenerationPrompt(name, description, steps, type, libraries: libraries);
       
       // Convert attachment paths to PlatformFile objects for the AI service
       List<PlatformFile>? attachedFiles;
@@ -420,14 +436,25 @@ class UserAppService {
     String editSuggestion,
     UserAppType type, {
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
+      final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+  - User-provided libraries:
+${libraries.map((lib) => '''
+    - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
+      Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
+''').join('')}
+''' : '';
+
       final prompt = '''
 Edit the following HTML application based on the user's suggestion:
 
 Original App Name: $name
 Description: $description
 Steps: ${steps.join(', ')}
+
+$librariesSection
 
 Original HTML:
 $originalHtml
@@ -525,9 +552,17 @@ IMPORTANT - REQUIREMENTS:
          * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
          * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
-         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
-       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+         * attachments: array of mixed attachment types (strings or objects):
+           - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - Base64 data: object with:
+             * type: 'base64' (required)
+             * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
+             * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
+     Param format: a string path to an attachment file (must exist in database)
+     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -625,12 +660,19 @@ IMPORTANT - REQUIREMENTS:
    // Basic usage - no parameters
    const result1 = await Synapse.chatAI('Explain quantum computing');
    
-   // With correct parameter types
+   // With correct parameter types and mixed attachments
    const result2 = await Synapse.chatAI('Analyze this data', {
      temperature: 0.7,    // number (double) 0.0-1.0
      topK: 40,           // integer 1-100
      topP: 0.9,          // number (double) 0.0-1.0
-     attachments: ['/path/to/file.pdf']  // array of strings
+     attachments: [      // mixed array of strings and objects
+       '/path/to/file.pdf',  // file path
+       {                     // base64 data object
+         type: 'base64',
+         mimeType: 'image/png',
+         data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
+       }
+     ]
    });
    
    // WRONG - will cause parameter validation errors:
@@ -639,6 +681,31 @@ IMPORTANT - REQUIREMENTS:
    //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
    //   temperature: "0.7" // WRONG: temperature must be number, not string
    // });
+   ```
+
+   CORRECT readAttachment Usage Examples:
+   ```javascript
+   // Read an attachment and get base64 data
+   const result1 = await Synapse.readAttachment('/path/to/image.jpg');
+   if (result1.success) {
+     console.log('MIME type:', result1.mimeType);
+     console.log('Base64 data:', result1.data);
+     // Use the data with chatAI or saveNotes
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Read attachment and use with chatAI
+   const attachmentResult = await Synapse.readAttachment('/path/to/document.pdf');
+   if (attachmentResult.success) {
+     const chatResult = await Synapse.chatAI('Analyze this document', {
+       attachments: [{
+         type: 'base64',
+         mimeType: attachmentResult.mimeType,
+         data: attachmentResult.data
+       }]
+     });
+   }
    ```
 
 5. Libraries you can utilize:
@@ -726,14 +793,24 @@ Here's the updated application with your requested changes:
   }
   
   // Build the app generation prompt
-  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type) {
-    return '''
+  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type, {List<UserAppLibraryInfo>? libraries}) {
+    final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+  - User-provided libraries:
+${libraries.map((lib) => '''
+    - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
+      Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
+''').join('')}
+''' : '';
+    
+    final basePrompt = '''
 Create a single-page self-contained HTML application based on the following requirements:
 
 App Name: $name
 Description: $description
 Steps: 
 - ${steps.join('\n - ')}
+
+$librariesSection
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
@@ -754,9 +831,17 @@ IMPORTANT - REQUIREMENTS:
          * temperature: number (double) between 0.0 and 1.0, controls randomness (e.g., 0.7)
          * topK: integer between 1 and 100, number of tokens to consider (e.g., 40)
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
-         * attachments: array of strings, file paths to attachments (e.g., ['/path/to/file1.pdf', '/path/to/file2.jpg'])
-       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', '/path/to/file2.jpg']}
+         * attachments: array of mixed attachment types (strings or objects):
+           - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - Base64 data: object with:
+             * type: 'base64' (required)
+             * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
+             * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
+       Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
+     Param format: a string path to an attachment file (must exist in database)
+     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -854,12 +939,19 @@ IMPORTANT - REQUIREMENTS:
    // Basic usage - no parameters
    const result1 = await Synapse.chatAI('Explain quantum computing');
    
-   // With correct parameter types
+   // With correct parameter types and mixed attachments
    const result2 = await Synapse.chatAI('Analyze this data', {
      temperature: 0.7,    // number (double) 0.0-1.0
      topK: 40,           // integer 1-100
      topP: 0.9,          // number (double) 0.0-1.0
-     attachments: ['/path/to/file.pdf']  // array of strings
+     attachments: [      // mixed array of strings and objects
+       '/path/to/file.pdf',  // file path
+       {                     // base64 data object
+         type: 'base64',
+         mimeType: 'image/png',
+         data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
+       }
+     ]
    });
    
    // WRONG - will cause parameter validation errors:
@@ -868,6 +960,31 @@ IMPORTANT - REQUIREMENTS:
    //   topP: 1.5,         // WRONG: topP must be 0.0-1.0
    //   temperature: "0.7" // WRONG: temperature must be number, not string
    // });
+   ```
+
+   CORRECT readAttachment Usage Examples:
+   ```javascript
+   // Read an attachment and get base64 data
+   const result1 = await Synapse.readAttachment('/path/to/image.jpg');
+   if (result1.success) {
+     console.log('MIME type:', result1.mimeType);
+     console.log('Base64 data:', result1.data);
+     // Use the data with chatAI or saveNotes
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Read attachment and use with chatAI
+   const attachmentResult = await Synapse.readAttachment('/path/to/document.pdf');
+   if (attachmentResult.success) {
+     const chatResult = await Synapse.chatAI('Analyze this document', {
+       attachments: [{
+         type: 'base64',
+         mimeType: attachmentResult.mimeType,
+         data: attachmentResult.data
+       }]
+     });
+   }
    ```
 
 5. Libraries you can utilize:
@@ -1005,6 +1122,8 @@ Here's the complete HTML application:
 </html>
 ```
 ''';
+    
+    return basePrompt + librariesSection;
   }
 
   // Get Note Action App specific instructions
@@ -1113,6 +1232,211 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     
     LoggerService.debug('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
     return result;
+  }
+
+  // Download and store libraries for a user app
+  static Future<void> _downloadAndStoreLibraries(UserApp app, AppRevision revision, List<UserAppLibraryInfo> libraries) async {
+    try {
+      LoggerService.info('Downloading ${libraries.length} libraries for app ${app.name}');
+      
+      final libraryService = UserAppLibraryService();
+      
+      // Get revision number from revision ID
+      final revisionNumber = revision.revisionNumber;
+      
+      for (final libraryInfo in libraries) {
+        if (libraryInfo.name.trim().isEmpty || libraryInfo.links.isEmpty) {
+          LoggerService.warning('Skipping library with empty name or no links: ${libraryInfo.name}');
+          continue;
+        }
+        
+        LoggerService.info('Processing library: ${libraryInfo.name}');
+        
+        // Download each library link
+        final dependencies = <LibraryDependency>[];
+        
+        for (final link in libraryInfo.links) {
+          if (link.trim().isEmpty) continue;
+          
+          try {
+            LoggerService.debug('Downloading library file: $link');
+            
+            final response = await http.get(Uri.parse(link));
+            if (response.statusCode == 200) {
+              // Process the URL to get the local path
+              final localPath = _processLibraryUrl(link);
+              
+              dependencies.add(LibraryDependency(
+                originalUrl: link,
+                localPath: localPath,
+                bytes: response.bodyBytes,
+              ));
+              
+              LoggerService.debug('Downloaded: $link -> $localPath (${response.bodyBytes.length} bytes)');
+            } else {
+              LoggerService.warning('Failed to download $link: HTTP ${response.statusCode}');
+            }
+          } catch (e) {
+            LoggerService.error('Error downloading $link: $e');
+          }
+        }
+        
+        if (dependencies.isNotEmpty) {
+          // Add the library to the database
+          await libraryService.addLibrary(
+            appUuid: app.uuid,
+            revisionId: revisionNumber,
+            name: libraryInfo.name,
+            usageInstructions: libraryInfo.usage,
+            dependencies: dependencies,
+          );
+          
+          LoggerService.info('Successfully added library: ${libraryInfo.name} with ${dependencies.length} dependencies');
+        } else {
+          LoggerService.warning('No dependencies downloaded for library: ${libraryInfo.name}');
+        }
+      }
+      
+      LoggerService.info('Completed downloading libraries for app ${app.name}');
+    } catch (e) {
+      LoggerService.error('Error downloading libraries: $e', error: e);
+      // Don't rethrow - library download failure shouldn't prevent app creation
+    }
+  }
+
+  // Process library URL to extract local path
+  static String _processLibraryUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      
+      // Remove the scheme and host, keep the path
+      // Example: https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js -> /npm/mermaid@11/dist/mermaid.min.js
+      var path = uri.path;
+      
+      // Ensure path starts with /
+      if (!path.startsWith('/')) {
+        path = '/$path';
+      }
+      
+      return path;
+    } catch (e) {
+      LoggerService.error('Error processing library URL $url: $e');
+      // Fallback to using the full URL as path
+      return Uri.parse(url).path;
+    }
+  }
+
+  // Clone a user app
+  static Future<UserApp> cloneUserApp(UserApp originalApp) async {
+    try {
+      LoggerService.info('Cloning user app: ${originalApp.name}');
+      
+      // Get the selected revision from the original app
+      AppRevision? selectedRevision;
+      if (originalApp.selectedRevisionId != null) {
+        selectedRevision = await getAppRevision(originalApp.selectedRevisionId!);
+      }
+      
+      if (selectedRevision == null) {
+        throw Exception('No selected revision found for app: ${originalApp.id}');
+      }
+      
+      // Create new app with new UUID and ID
+      final newApp = UserApp(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        uuid: const Uuid().v4(),
+        name: '${originalApp.name} (Copy)',
+        description: originalApp.description,
+        steps: List<String>.from(originalApp.steps),
+        htmlContent: '', // Will be set from revision
+        type: originalApp.type,
+        author: originalApp.author,
+        license: originalApp.license,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        libraries: originalApp.libraries != null ? List<UserAppLibraryInfo>.from(originalApp.libraries!) : null,
+      );
+      
+      // Save the new app
+      await saveUserApp(newApp);
+      
+      // Create a new revision with the selected revision's content
+      final newRevision = AppRevision(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + '_rev',
+        appId: newApp.id,
+        revisionNumber: 1,
+        revisionTimestamp: DateTime.now(),
+        userPrompt: 'Cloned from ${originalApp.name}',
+        aiResponse: 'This app was cloned from the selected revision of "${originalApp.name}".',
+        appCode: selectedRevision.appCode,
+        attachmentPaths: List<String>.from(selectedRevision.attachmentPaths),
+      );
+      
+      // Save the new revision
+      final databaseService = DatabaseService();
+      await databaseService.insertAppRevision(newRevision);
+      
+      // Update the app with the selected revision
+      final updatedApp = newApp.copyWith(selectedRevisionId: newRevision.id);
+      await databaseService.updateUserApp(updatedApp);
+      
+      // Copy libraries if they exist
+      LoggerService.debug('Checking for libraries in original app: ${originalApp.name}');
+      LoggerService.debug('Original app libraries field: ${originalApp.libraries?.length ?? 0}');
+      
+      try {
+        LoggerService.info('Copying libraries for cloned app: ${newApp.name}');
+        final libraryService = UserAppLibraryService();
+        
+        // Get libraries from the original app's selected revision
+        final sourceLibraries = await libraryService.getLibraries(
+          originalApp.uuid, 
+          selectedRevision.revisionNumber
+        );
+        
+        LoggerService.debug('Found ${sourceLibraries.length} libraries in source revision ${selectedRevision.revisionNumber}');
+        
+        if (sourceLibraries.isNotEmpty) {
+          // Copy each library to the new app
+          for (final library in sourceLibraries) {
+            LoggerService.debug('Copying library: ${library.name} (ID: ${library.id})');
+            
+            // Get all dependencies for this library
+            final dependencies = await libraryService.getDependencies(library.id);
+            LoggerService.debug('Found ${dependencies.length} dependencies for library ${library.name}');
+            
+            // Convert UserAppLibraryDependency to LibraryDependency
+            final libraryDependencies = dependencies.map((dep) => LibraryDependency(
+              originalUrl: dep.originalUrl,
+              localPath: dep.localPath,
+              bytes: dep.bytes,
+            )).toList();
+            
+            // Create the library in the new app
+            await libraryService.addLibrary(
+              appUuid: newApp.uuid,
+              revisionId: 1, // New app starts with revision 1
+              name: library.name,
+              usageInstructions: library.usageInstructions,
+              dependencies: libraryDependencies,
+            );
+          }
+          
+          LoggerService.info('Successfully copied ${sourceLibraries.length} libraries for cloned app');
+        } else {
+          LoggerService.debug('No libraries found in source revision ${selectedRevision.revisionNumber} for app ${originalApp.uuid}');
+        }
+      } catch (e) {
+        LoggerService.warning('Failed to copy libraries for cloned app: $e');
+        // Don't rethrow - the clone should still succeed
+      }
+      
+      LoggerService.info('Successfully cloned user app: ${originalApp.name} -> ${newApp.name}');
+      return updatedApp;
+    } catch (e) {
+      LoggerService.error('Error cloning user app: $e', error: e);
+      rethrow;
+    }
   }
 
 }

@@ -2696,6 +2696,72 @@ abstract class AppLocalizations {
   /// **'Clear logs'**
   String get clearLogs;
 
+  /// No description provided for @basic.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic'**
+  String get basic;
+
+  /// No description provided for @advanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get advanced;
+
+  /// No description provided for @addLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Library'**
+  String get addLibrary;
+
+  /// No description provided for @libraryName.
+  ///
+  /// In en, this message translates to:
+  /// **'Library Name'**
+  String get libraryName;
+
+  /// No description provided for @libraryNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter library name'**
+  String get libraryNameHint;
+
+  /// No description provided for @libraryUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage'**
+  String get libraryUsage;
+
+  /// No description provided for @libraryUsageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe how to use this library'**
+  String get libraryUsageHint;
+
+  /// No description provided for @libraryLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Library Link'**
+  String get libraryLink;
+
+  /// No description provided for @libraryLinkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter JavaScript library URL'**
+  String get libraryLinkHint;
+
+  /// No description provided for @removeLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Library'**
+  String get removeLibrary;
+
+  /// No description provided for @removeLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Link'**
+  String get removeLink;
+
   /// No description provided for @noAiLogsAvailable.
   ///
   /// In en, this message translates to:
@@ -3715,6 +3781,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error restoring backup: {error}'**
   String errorRestoringBackup(Object error);
+
+  /// No description provided for @cloneApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone App'**
+  String get cloneApp;
+
+  /// No description provided for @appClonedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'App cloned successfully!'**
+  String get appClonedSuccessfully;
+
+  /// No description provided for @errorCloningApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error cloning app: {error}'**
+  String errorCloningApp(Object error);
 }
 
 class _AppLocalizationsDelegate

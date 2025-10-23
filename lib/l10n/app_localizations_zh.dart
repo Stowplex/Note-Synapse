@@ -1406,6 +1406,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearLogs => '清除日志';
 
   @override
+  String get basic => '基础';
+
+  @override
+  String get advanced => '高级';
+
+  @override
+  String get addLibrary => '添加库';
+
+  @override
+  String get libraryName => '库名称';
+
+  @override
+  String get libraryNameHint => '输入库名称';
+
+  @override
+  String get libraryUsage => '用法';
+
+  @override
+  String get libraryUsageHint => '描述如何使用此库';
+
+  @override
+  String get libraryLink => '库链接';
+
+  @override
+  String get libraryLinkHint => '输入JavaScript库URL';
+
+  @override
+  String get removeLibrary => '删除库';
+
+  @override
+  String get removeLink => '删除链接';
+
+  @override
   String get noAiLogsAvailable => '没有AI日志可用';
 
   @override
@@ -1988,5 +2021,16 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorRestoringBackup(Object error) {
     return 'Error restoring backup: $error';
+  }
+
+  @override
+  String get cloneApp => 'Clone App';
+
+  @override
+  String get appClonedSuccessfully => 'App cloned successfully!';
+
+  @override
+  String errorCloningApp(Object error) {
+    return 'Error cloning app: $error';
   }
 }

@@ -1,19 +1,19 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
-/// Represents an attachment with proper path handling
-class Attachment {
+/// Represents an attachment for conversation messages
+class ConversationAttachment {
   final String id;
-  final String noteId;
+  final String messageId;
   final String filePath; // This is always stored as relative path in database
   final String fileName;
   final String fileType;
   final DateTime createdAt;
   final bool isRelativePath; // Always true for new attachments
 
-  const Attachment({
+  const ConversationAttachment({
     required this.id,
-    required this.noteId,
+    required this.messageId,
     required this.filePath,
     required this.fileName,
     required this.fileType,
@@ -21,11 +21,11 @@ class Attachment {
     this.isRelativePath = true,
   });
 
-  /// Creates an Attachment from database data
-  factory Attachment.fromDatabase(Map<String, dynamic> data) {
-    return Attachment(
+  /// Creates a ConversationAttachment from database data
+  factory ConversationAttachment.fromDatabase(Map<String, dynamic> data) {
+    return ConversationAttachment(
       id: data['id'] as String,
-      noteId: data['noteId'] as String,
+      messageId: data['messageId'] as String,
       filePath: data['filePath'] as String,
       fileName: data['fileName'] as String,
       fileType: data['fileType'] as String,
@@ -38,7 +38,7 @@ class Attachment {
   Map<String, dynamic> toDatabase() {
     return {
       'id': id,
-      'noteId': noteId,
+      'messageId': messageId,
       'filePath': filePath,
       'fileName': fileName,
       'fileType': fileType,
@@ -81,18 +81,18 @@ class Attachment {
   }
 
   /// Creates a copy with updated fields
-  Attachment copyWith({
+  ConversationAttachment copyWith({
     String? id,
-    String? noteId,
+    String? messageId,
     String? filePath,
     String? fileName,
     String? fileType,
     DateTime? createdAt,
     bool? isRelativePath,
   }) {
-    return Attachment(
+    return ConversationAttachment(
       id: id ?? this.id,
-      noteId: noteId ?? this.noteId,
+      messageId: messageId ?? this.messageId,
       filePath: filePath ?? this.filePath,
       fileName: fileName ?? this.fileName,
       fileType: fileType ?? this.fileType,
@@ -103,21 +103,20 @@ class Attachment {
 
   @override
   String toString() {
-    return 'Attachment(id: $id, fileName: $fileName, filePath: $filePath, isRelative: $isRelativePath)';
+    return 'ConversationAttachment(id: $id, fileName: $fileName, filePath: $filePath, isRelative: $isRelativePath)';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is Attachment &&
+    return other is ConversationAttachment &&
         other.id == id &&
-        other.noteId == noteId &&
+        other.messageId == messageId &&
         other.filePath == filePath;
   }
 
   @override
   int get hashCode {
-    return id.hashCode ^ noteId.hashCode ^ filePath.hashCode;
+    return id.hashCode ^ messageId.hashCode ^ filePath.hashCode;
   }
 }
-

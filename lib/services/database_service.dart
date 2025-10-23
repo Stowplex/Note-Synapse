@@ -14,6 +14,8 @@ import '../models/tag.dart';
 import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/conversation.dart';
+import '../models/conversation_attachment.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
@@ -178,6 +180,55 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createConversationsTable = '''
+      CREATE TABLE conversations(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        parentConversationId TEXT,
+        forkFromMessageId TEXT,
+        noteIds TEXT NOT NULL DEFAULT '[]',
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        isArchived INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (parentConversationId) REFERENCES conversations (id) ON DELETE SET NULL
+      )
+  ''';
+
+  static const String _createConversationMessagesTable = '''
+      CREATE TABLE conversation_messages(
+        id TEXT PRIMARY KEY,
+        conversationId TEXT NOT NULL,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        modelUsed TEXT,
+        metadata TEXT,
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE
+      )
+  ''';
+
+  static const String _createConversationAttachmentsTable = '''
+      CREATE TABLE conversation_attachments(
+        id TEXT PRIMARY KEY,
+        messageId TEXT NOT NULL,
+        filePath TEXT NOT NULL,
+        fileName TEXT NOT NULL,
+        fileType TEXT NOT NULL,
+        isRelativePath INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
+      )
+  ''';
+
+  static const String _createConversationTreeTable = '''
+      CREATE TABLE conversation_tree(
+        id TEXT PRIMARY KEY,
+        treeData TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -192,6 +243,12 @@ class DatabaseService {
     'CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
     'CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
     'CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
+    'CREATE INDEX idx_conversations_parentConversationId ON conversations(parentConversationId)',
+    'CREATE INDEX idx_conversations_createdAt ON conversations(createdAt)',
+    'CREATE INDEX idx_conversations_isArchived ON conversations(isArchived)',
+    'CREATE INDEX idx_conversation_messages_conversationId ON conversation_messages(conversationId)',
+    'CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)',
+    'CREATE INDEX idx_conversation_attachments_messageId ON conversation_attachments(messageId)',
   ];
 
   // For testing, allow creating new instances
@@ -212,7 +269,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 17,
+      version: 18,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -231,6 +288,10 @@ class DatabaseService {
     await db.execute(_createAppRevisionsTable);
     await db.execute(_createUserAppLibrariesTable);
     await db.execute(_createUserAppLibraryDependenciesTable);
+    await db.execute(_createConversationsTable);
+    await db.execute(_createConversationMessagesTable);
+    await db.execute(_createConversationAttachmentsTable);
+    await db.execute(_createConversationTreeTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -307,6 +368,10 @@ class DatabaseService {
     17: MigrationStep(
       description: 'Add isRelativePath column to attachments table',
       execute: _migrateToVersion17,
+    ),
+    18: MigrationStep(
+      description: 'Add conversation tables for AI chat functionality',
+      execute: _migrateToVersion18,
     ),
   };
 
@@ -791,6 +856,24 @@ class DatabaseService {
         await db.execute('ALTER TABLE attachments ADD COLUMN isRelativePath INTEGER NOT NULL DEFAULT 0');
         
         LoggerService.info('Migration to version 17 completed: Added isRelativePath column to attachments table');
+  }
+
+  static Future<void> _migrateToVersion18(Database db, {required bool isBackupMigration}) async {
+        // Create conversation tables
+        await db.execute(_createConversationsTable);
+        await db.execute(_createConversationMessagesTable);
+        await db.execute(_createConversationAttachmentsTable);
+        await db.execute(_createConversationTreeTable);
+        
+        // Create indexes for conversation tables
+        await db.execute('CREATE INDEX idx_conversations_parentConversationId ON conversations(parentConversationId)');
+        await db.execute('CREATE INDEX idx_conversations_createdAt ON conversations(createdAt)');
+        await db.execute('CREATE INDEX idx_conversations_isArchived ON conversations(isArchived)');
+        await db.execute('CREATE INDEX idx_conversation_messages_conversationId ON conversation_messages(conversationId)');
+        await db.execute('CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)');
+        await db.execute('CREATE INDEX idx_conversation_attachments_messageId ON conversation_attachments(messageId)');
+        
+        LoggerService.info('Migration to version 18 completed: Added conversation tables for AI chat functionality');
   }
 
 
@@ -2215,5 +2298,259 @@ class DatabaseService {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);
       return <int>[];
     }
+  }
+
+  // Conversations CRUD
+  Future<String> insertConversation(Conversation conversation) async {
+    final db = await database;
+    final json = conversation.toJson();
+    json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
+    json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
+    json['isArchived'] = conversation.isArchived ? 1 : 0;
+    json['noteIds'] = jsonEncode(conversation.noteIds);
+    
+    await db.insert('conversations', json);
+    return conversation.id;
+  }
+
+  Future<List<Conversation>> getAllConversations() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversations',
+      orderBy: 'createdAt DESC',
+    );
+
+    return maps.map((map) => _mapToConversation(map)).toList();
+  }
+
+  Future<Conversation?> getConversation(String id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversations',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isEmpty) return null;
+    return _mapToConversation(maps.first);
+  }
+
+  Future<void> updateConversation(Conversation conversation) async {
+    final db = await database;
+    final json = conversation.toJson();
+    json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
+    json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
+    json['isArchived'] = conversation.isArchived ? 1 : 0;
+    json['noteIds'] = jsonEncode(conversation.noteIds);
+    
+    await db.update(
+      'conversations',
+      json,
+      where: 'id = ?',
+      whereArgs: [conversation.id],
+    );
+  }
+
+  Future<void> deleteConversation(String id) async {
+    final db = await database;
+    await db.delete('conversations', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Conversation Messages CRUD
+  Future<String> insertConversationMessage(ConversationMessage message) async {
+    final db = await database;
+    final json = message.toJson();
+    json['timestamp'] = message.timestamp.millisecondsSinceEpoch;
+    json['metadata'] = message.metadata != null ? jsonEncode(message.metadata) : null;
+    // Remove attachmentPaths as it's not in the database schema
+    json.remove('attachmentPaths');
+    
+    await db.insert('conversation_messages', json);
+    return message.id;
+  }
+
+  Future<List<ConversationMessage>> getConversationMessages(String conversationId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversation_messages',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+      orderBy: 'timestamp ASC',
+    );
+
+    return maps.map((map) => _mapToConversationMessage(map)).toList();
+  }
+
+  Future<ConversationMessage?> getConversationMessage(String id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversation_messages',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isEmpty) return null;
+    return _mapToConversationMessage(maps.first);
+  }
+
+  Future<void> updateConversationMessage(ConversationMessage message) async {
+    final db = await database;
+    final json = message.toJson();
+    json['timestamp'] = message.timestamp.millisecondsSinceEpoch;
+    json['metadata'] = message.metadata != null ? jsonEncode(message.metadata) : null;
+    // Remove attachmentPaths as it's not in the database schema
+    json.remove('attachmentPaths');
+    
+    await db.update(
+      'conversation_messages',
+      json,
+      where: 'id = ?',
+      whereArgs: [message.id],
+    );
+  }
+
+  Future<void> deleteConversationMessage(String id) async {
+    final db = await database;
+    await db.delete('conversation_messages', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Conversation Attachments CRUD
+  Future<String> insertConversationAttachment(ConversationAttachment attachment) async {
+    final db = await database;
+    final json = attachment.toDatabase();
+    await db.insert('conversation_attachments', json);
+    return attachment.id;
+  }
+
+  Future<List<ConversationAttachment>> getConversationAttachments(String messageId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversation_attachments',
+      where: 'messageId = ?',
+      whereArgs: [messageId],
+      orderBy: 'createdAt ASC',
+    );
+
+    return maps.map((map) => ConversationAttachment.fromDatabase(map)).toList();
+  }
+
+  Future<void> deleteConversationAttachment(String id) async {
+    final db = await database;
+    await db.delete('conversation_attachments', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Conversation Tree CRUD
+  Future<String> insertConversationTree(ConversationTree tree) async {
+    final db = await database;
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
+    
+    await db.insert('conversation_tree', json);
+    return tree.id;
+  }
+
+  Future<ConversationTree?> getConversationTree(String id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'conversation_tree',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isEmpty) return null;
+    return _mapToConversationTree(maps.first);
+  }
+
+  Future<void> updateConversationTree(ConversationTree tree) async {
+    final db = await database;
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
+    
+    await db.update(
+      'conversation_tree',
+      json,
+      where: 'id = ?',
+      whereArgs: [tree.id],
+    );
+  }
+
+  Future<void> upsertConversationTree(ConversationTree tree) async {
+    final db = await database;
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
+    
+    // Try to insert first, if it fails due to unique constraint, update instead
+    try {
+      await db.insert('conversation_tree', json);
+    } catch (e) {
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        await db.update(
+          'conversation_tree',
+          json,
+          where: 'id = ?',
+          whereArgs: [tree.id],
+        );
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> deleteConversationTree(String id) async {
+    final db = await database;
+    await db.delete('conversation_tree', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Helper methods for mapping database results to models
+  Conversation _mapToConversation(Map<String, dynamic> map) {
+    return Conversation(
+      id: map['id'] as String,
+      title: map['title'] as String,
+      parentConversationId: map['parentConversationId'] as String?,
+      forkFromMessageId: map['forkFromMessageId'] as String?,
+      noteIds: map['noteIds'] != null 
+          ? List<String>.from(jsonDecode(map['noteIds'] as String))
+          : [],
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
+      isArchived: (map['isArchived'] ?? 0) == 1,
+    );
+  }
+
+  ConversationMessage _mapToConversationMessage(Map<String, dynamic> map) {
+    return ConversationMessage(
+      id: map['id'] as String,
+      conversationId: map['conversationId'] as String,
+      type: MessageType.values.firstWhere(
+        (e) => e.toString().split('.').last == map['type'],
+        orElse: () => MessageType.user,
+      ),
+      content: map['content'] as String,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int),
+      attachmentPaths: map['attachmentPaths'] != null 
+          ? List<String>.from(jsonDecode(map['attachmentPaths'] as String))
+          : [],
+      modelUsed: map['modelUsed'] as String?,
+      metadata: map['metadata'] != null 
+          ? Map<String, dynamic>.from(jsonDecode(map['metadata'] as String))
+          : null,
+    );
+  }
+
+  ConversationTree _mapToConversationTree(Map<String, dynamic> map) {
+    final treeData = jsonDecode(map['treeData'] as String) as Map<String, dynamic>;
+    return ConversationTree.fromJson(treeData);
   }
 }

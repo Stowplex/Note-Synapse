@@ -862,6 +862,18 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshUserApps() async {
+    try {
+      _userApps = await UserAppService.getAllUserApps();
+      notifyListeners();
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> updateUserApp(UserApp app) async {
     try {
       await UserAppService.updateUserApp(app);
@@ -931,6 +943,7 @@ class AppProvider extends ChangeNotifier {
     required List<String> steps,
     UserAppType type = UserAppType.normal,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Construct user prompt from the provided information
@@ -943,6 +956,7 @@ class AppProvider extends ChangeNotifier {
         type: type,
         userPrompt: userPrompt,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       _userApps.add(app);
       notifyListeners();
@@ -960,12 +974,14 @@ class AppProvider extends ChangeNotifier {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       final revision = await UserAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
         attachmentPaths: attachmentPaths,
+        libraries: libraries,
       );
       
       // Update the app in our local list

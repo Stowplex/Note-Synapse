@@ -6,6 +6,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/user_app_library.dart';
+import '../services/user_app_library_service.dart';
 import '../utils/file_utils.dart';
 
 class UserAppEditScreen extends StatefulWidget {
@@ -22,7 +24,7 @@ class UserAppEditScreen extends StatefulWidget {
   State<UserAppEditScreen> createState() => _UserAppEditScreenState();
 }
 
-class _UserAppEditScreenState extends State<UserAppEditScreen> {
+class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _editSuggestionController = TextEditingController();
   final _codeController = TextEditingController();
@@ -31,12 +33,22 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
   bool _isCodeEditable = false;
   String _originalCode = '';
   List<String> _attachmentPaths = [];
+  
+  // Tab management
+  late TabController _tabController;
+  
+  // Library management
+  List<UserAppLibrary> _modifiedLibraries = [];
+  Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
+  bool _isLoadingLibraries = false;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
+    _loadCurrentLibraries();
   }
 
   AppRevision? _currentRevision;
@@ -87,6 +99,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
         _originalCode = codeToLoad;
         _codeController.text = codeToLoad;
       });
+      
+      // Load libraries for the current revision
+      _loadCurrentLibraries();
     } catch (e) {
       // If there's an error loading revisions, show empty code
       setState(() {
@@ -104,10 +119,55 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     });
   }
 
+  Future<void> _loadCurrentLibraries() async {
+    if (_currentRevision == null) return;
+    
+    setState(() {
+      _isLoadingLibraries = true;
+    });
+
+    try {
+      final libraryService = UserAppLibraryService();
+      final libraries = await libraryService.getLibraries(
+        widget.app.uuid,
+        _currentRevision!.revisionNumber,
+      );
+      
+      // Load dependencies (links) for each library
+      final Map<int, List<String>> libraryLinks = {};
+      for (final library in libraries) {
+        final dependencies = await libraryService.getDependencies(library.id);
+        libraryLinks[library.id] = dependencies
+            .map((dep) => dep.originalUrl ?? '')
+            .where((url) => url.isNotEmpty)
+            .toList();
+      }
+      
+      setState(() {
+        _modifiedLibraries = List.from(libraries);
+        _libraryLinks = libraryLinks;
+        _isLoadingLibraries = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingLibraries = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading libraries: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _editSuggestionController.dispose();
     _codeController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -127,10 +187,32 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
         selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
       );
       
+      // Convert libraries to UserAppLibraryInfo format for AI prompt
+      List<UserAppLibraryInfo>? librariesForAI;
+      if (_modifiedLibraries.isNotEmpty) {
+        librariesForAI = _modifiedLibraries.map((library) {
+          final links = _libraryLinks[library.id] ?? [];
+          final validLinks = links.where((link) => link.trim().isNotEmpty).toList();
+          
+          return UserAppLibraryInfo(
+            name: library.name,
+            usage: library.usageInstructions,
+            links: validLinks,
+          );
+        }).where((lib) => lib.name.trim().isNotEmpty).toList();
+        
+        // If no valid libraries, set to null
+        if (librariesForAI.isEmpty) {
+          librariesForAI = null;
+        }
+      }
+      
+      // Create the new revision using the existing editUserApp method
       await appProvider.editUserApp(
         originalApp: currentApp,
         editSuggestion: _editSuggestionController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        libraries: librariesForAI,
       );
       
       if (mounted) {
@@ -178,6 +260,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
       }
     }
   }
+
+
 
   Future<void> _saveCodeDirectly() async {
     if (_codeController.text.trim().isEmpty) {
@@ -347,6 +431,82 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     );
   }
 
+  // Library management methods
+  void _addLibrary() {
+    setState(() {
+      final newLibrary = UserAppLibrary(
+        id: -1, // Temporary ID for new libraries
+        appUuid: widget.app.uuid,
+        revisionId: _currentRevision?.revisionNumber ?? 0,
+        name: '',
+        usageInstructions: '',
+      );
+      _modifiedLibraries.add(newLibrary);
+      _libraryLinks[newLibrary.id] = [''];
+    });
+  }
+
+  void _removeLibrary(int index) {
+    setState(() {
+      final library = _modifiedLibraries[index];
+      _libraryLinks.remove(library.id);
+      _modifiedLibraries.removeAt(index);
+    });
+  }
+
+  void _updateLibraryName(int index, String name) {
+    setState(() {
+      _modifiedLibraries[index] = UserAppLibrary(
+        id: _modifiedLibraries[index].id,
+        appUuid: _modifiedLibraries[index].appUuid,
+        revisionId: _modifiedLibraries[index].revisionId,
+        name: name,
+        usageInstructions: _modifiedLibraries[index].usageInstructions,
+      );
+    });
+  }
+
+  void _updateLibraryUsage(int index, String usage) {
+    setState(() {
+      _modifiedLibraries[index] = UserAppLibrary(
+        id: _modifiedLibraries[index].id,
+        appUuid: _modifiedLibraries[index].appUuid,
+        revisionId: _modifiedLibraries[index].revisionId,
+        name: _modifiedLibraries[index].name,
+        usageInstructions: usage.isEmpty ? null : usage,
+      );
+    });
+  }
+
+  void _addLibraryLink(int libraryIndex) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      currentLinks.add('');
+      _libraryLinks[library.id] = currentLinks;
+    });
+  }
+
+  void _removeLibraryLink(int libraryIndex, int linkIndex) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      if (currentLinks.length > 1) {
+        currentLinks.removeAt(linkIndex);
+        _libraryLinks[library.id] = currentLinks;
+      }
+    });
+  }
+
+  void _updateLibraryLink(int libraryIndex, int linkIndex, String link) {
+    setState(() {
+      final library = _modifiedLibraries[libraryIndex];
+      final currentLinks = List<String>.from(_libraryLinks[library.id] ?? []);
+      currentLinks[linkIndex] = link;
+      _libraryLinks[library.id] = currentLinks;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -355,6 +515,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
       resizeToAvoidBottomInset: !_isCodeEditable,
       appBar: AppBar(
         title: Text(l10n.editApp),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Basic'),
+            Tab(text: 'Advanced'),
+          ],
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -364,6 +531,16 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
   }
 
   Widget _buildViewModeLayout(AppLocalizations l10n) {
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildBasicTab(l10n),
+        _buildAdvancedTab(l10n),
+      ],
+    );
+  }
+
+  Widget _buildBasicTab(AppLocalizations l10n) {
     return Column(
       children: [
         // App Info Card
@@ -512,7 +689,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8.0),
                                   border: Border.all(
-                                    color: Colors.grey.withOpacity(0.3),
+                                    color: Colors.grey.withValues(alpha: 0.3),
                                     width: 1,
                                   ),
                                 ),
@@ -572,6 +749,145 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAdvancedTab(AppLocalizations l10n) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Add Library Button
+          OutlinedButton.icon(
+            onPressed: _addLibrary,
+            icon: const Icon(Icons.add),
+            label: Text(l10n.addLibrary),
+          ),
+          const SizedBox(height: 16),
+          
+          // Libraries List
+          if (_isLoadingLibraries)
+            const Center(child: CircularProgressIndicator())
+          else
+            ...List.generate(_modifiedLibraries.length, (index) {
+              return _buildLibraryCard(index, l10n);
+            }),
+          
+          if (_modifiedLibraries.isEmpty && !_isLoadingLibraries) ...[
+            const SizedBox(height: 32),
+            Center(
+              child: Text(
+                'No libraries added yet. Click "Add Library" to get started.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryCard(int index, AppLocalizations l10n) {
+    final library = _modifiedLibraries[index];
+    final links = _libraryLinks[library.id] ?? [];
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Library Header
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Library ${index + 1}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removeLibrary(index),
+                  icon: const Icon(Icons.delete),
+                  tooltip: l10n.removeLibrary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Name
+            TextFormField(
+              initialValue: library.name,
+              decoration: InputDecoration(
+                labelText: l10n.libraryName,
+                hintText: l10n.libraryNameHint,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (value) => _updateLibraryName(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Usage
+            TextFormField(
+              initialValue: library.usageInstructions ?? '',
+              decoration: InputDecoration(
+                labelText: l10n.libraryUsage,
+                hintText: l10n.libraryUsageHint,
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              onChanged: (value) => _updateLibraryUsage(index, value),
+            ),
+            const SizedBox(height: 16),
+            
+            // Library Links
+            Text(
+              l10n.libraryLink,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            
+            ...List.generate(links.length, (linkIndex) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: links[linkIndex],
+                        decoration: InputDecoration(
+                          hintText: l10n.libraryLinkHint,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (value) => _updateLibraryLink(index, linkIndex, value),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: links.length > 1
+                          ? () => _removeLibraryLink(index, linkIndex)
+                          : null,
+                      icon: const Icon(Icons.remove_circle),
+                      tooltip: l10n.removeLink,
+                    ),
+                  ],
+                ),
+              );
+            }),
+            
+            // Add Link Button
+            OutlinedButton.icon(
+              onPressed: () => _addLibraryLink(index),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.addLink),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -662,3 +978,4 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> {
     );
   }
 }
+

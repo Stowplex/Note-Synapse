@@ -242,10 +242,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       appProvider.updateModelConfig(config);
 
-      final currentModel = await ModelStorageService.getSelectedModel();
-      if (currentModel != widget.modelType) {
-        await ModelSelector.instance.switchToModel(widget.modelType);
-      }
+      // Always reload the model when configuration is saved to ensure
+      // the model uses the updated configuration, even if it's the same model type
+      await ModelSelector.instance.switchToModel(widget.modelType, config: config);
 
       if (mounted) {
         Navigator.of(context).pop(true);
