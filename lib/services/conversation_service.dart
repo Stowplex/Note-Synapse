@@ -523,12 +523,20 @@ class ConversationService {
       throw Exception('No conversation tree found');
     }
 
-    // Collect all conversation IDs from selected nodes
+    // Collect all conversation IDs and note IDs from selected nodes
     final conversationIds = <String>{};
+    final allNoteIds = <String>{};
+    
     for (final nodeId in selectedNodeIds) {
       final node = tree.nodes[nodeId];
       if (node != null && node.conversationId.isNotEmpty) {
         conversationIds.add(node.conversationId);
+        
+        // Get notes from this conversation
+        final conversation = await _databaseService.getConversation(node.conversationId);
+        if (conversation != null) {
+          allNoteIds.addAll(conversation.noteIds);
+        }
       }
     }
 
@@ -537,18 +545,54 @@ class ConversationService {
     }
 
     // Create new conversation with all selected conversations' notes
-    final allNoteIds = <String>{};
-    for (final convId in conversationIds) {
-      final conversation = await _databaseService.getConversation(convId);
-      if (conversation != null) {
-        allNoteIds.addAll(conversation.noteIds);
-      }
-    }
-
-    return await createConversation(
+    final newConversation = await createConversation(
       title: title,
       noteIds: allNoteIds.toList(),
     );
+
+    // Add context from selected conversations as initial messages
+    await _addConversationContext(newConversation.id, conversationIds.toList());
+
+    LoggerService.info('Created conversation from ${selectedNodeIds.length} selected nodes with ${allNoteIds.length} notes');
+    return newConversation;
+  }
+
+  // Add conversation context as initial messages
+  Future<void> _addConversationContext(String conversationId, List<String> sourceConversationIds) async {
+    final contextMessages = <String>[];
+    
+    for (final sourceConvId in sourceConversationIds) {
+      final messages = await _databaseService.getConversationMessages(sourceConvId);
+      if (messages.isNotEmpty) {
+        // Add a header for this conversation's context
+        contextMessages.add('--- Context from previous conversation ---');
+        
+        // Add key messages (first few and last few)
+        final keyMessages = <ConversationMessage>[];
+        if (messages.length <= 4) {
+          keyMessages.addAll(messages);
+        } else {
+          // First 2 and last 2 messages
+          keyMessages.addAll(messages.take(2));
+          keyMessages.addAll(messages.skip(messages.length - 2));
+        }
+        
+        for (final message in keyMessages) {
+          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
+          contextMessages.add('$prefix${message.content}');
+        }
+        contextMessages.add(''); // Empty line between conversations
+      }
+    }
+    
+    if (contextMessages.isNotEmpty) {
+      // Add context as a single user message
+      final contextText = contextMessages.join('\n');
+      await addUserMessage(
+        conversationId: conversationId,
+        content: 'Context from selected conversations:\n\n$contextText',
+      );
+    }
   }
 
   // Get notes for a conversation

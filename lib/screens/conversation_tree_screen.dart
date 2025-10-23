@@ -50,27 +50,35 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _tree = await _conversationService.refreshConversationTree();
       if (_tree == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No conversations found. Start a new conversation to see the tree.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No conversations found. Start a new conversation to see the tree.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } catch (contextError) {
+            LoggerService.warning('Could not show info SnackBar: $contextError');
+          }
         }
       }
     } catch (e) {
       LoggerService.error('Error loading conversation tree: $e', error: e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading tree: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: _loadTree,
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading tree: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: _loadTree,
+              ),
             ),
-          ),
-        );
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     } finally {
       if (mounted) {
@@ -86,36 +94,48 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _tree = await _conversationService.refreshConversationTree();
       if (_tree == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No conversations found. Start a new conversation to see the tree.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No conversations found. Start a new conversation to see the tree.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } catch (contextError) {
+            LoggerService.warning('Could not show info SnackBar: $contextError');
+          }
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tree refreshed successfully'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Tree refreshed successfully'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } catch (contextError) {
+            LoggerService.warning('Could not show success SnackBar: $contextError');
+          }
         }
       }
     } catch (e) {
       LoggerService.error('Error refreshing conversation tree: $e', error: e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error refreshing tree: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: _refreshTree,
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error refreshing tree: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: _refreshTree,
+              ),
             ),
-          ),
-        );
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     } finally {
       if (mounted) {
@@ -169,12 +189,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     } catch (e) {
       LoggerService.error('Error loading interaction message: $e', error: e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading interaction: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading interaction: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     }
   }
@@ -205,22 +229,32 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     _selectedConversationId = null;
                     _selectedMessage = null;
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Interaction deleted successfully'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                  // Safe to show SnackBar only if widget is still mounted
+                  try {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Interaction deleted successfully'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  } catch (contextError) {
+                    LoggerService.warning('Could not show success SnackBar: $contextError');
+                  }
                 }
               } catch (e) {
                 LoggerService.error('Error deleting interaction: $e', error: e);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error deleting interaction: ${e.toString()}'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
+                  // Safe to show SnackBar only if widget is still mounted
+                  try {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error deleting interaction: ${e.toString()}'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  } catch (contextError) {
+                    LoggerService.warning('Could not show error SnackBar: $contextError');
+                  }
                 }
               }
             },
@@ -247,12 +281,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.info('Forked conversation created: ${newConversation.id}');
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Conversation forked successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Conversation forked successfully'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show success SnackBar: $contextError');
+        }
         
         // Navigate to the new conversation
         await Navigator.of(context).push(
@@ -270,12 +308,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     } catch (e) {
       LoggerService.error('Error forking interaction: $e', error: e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error forking interaction: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error forking interaction: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     }
   }
@@ -283,57 +325,36 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _createConversationFromSelected() async {
     if (_selectedNodes.isEmpty) return;
 
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create New Conversation'),
-        content: TextField(
-          decoration: const InputDecoration(
-            labelText: 'Conversation title',
-            hintText: 'Enter a title for the new conversation',
+    try {
+      // Create conversation directly with auto-generated title
+      final newConversation = await _conversationService.createConversationFromSelectedNodes(
+        selectedNodeIds: _selectedNodes,
+        title: 'Conversation from ${_selectedNodes.length} selected nodes',
+      );
+
+      // Clear selected nodes and exit multi-select mode
+      setState(() {
+        _selectedNodes.clear();
+        _isMultiSelectMode = false;
+      });
+
+      // Navigate directly to the new conversation
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationChatScreen(
+            conversationId: newConversation.id,
           ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final controller = TextEditingController();
-              Navigator.of(context).pop(controller.text);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && result.isNotEmpty) {
-      try {
-        final newConversation = await _conversationService.createConversationFromSelectedNodes(
-          selectedNodeIds: _selectedNodes,
-          title: result,
-        );
-
-        // Clear selected nodes
-        setState(() {
-          _selectedNodes.clear();
-        });
-
-        // Navigate to the new conversation
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => ConversationChatScreen(
-              conversationId: newConversation.id,
-            ),
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating conversation: $e')),
-        );
+      );
+    } catch (e) {
+      if (mounted) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error creating conversation: $e')),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     }
   }
@@ -356,22 +377,30 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.info('Tree saved as JSON: $jsonString');
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tree saved successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tree saved successfully'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show success SnackBar: $contextError');
+        }
       }
     } catch (e) {
       LoggerService.error('Error saving tree: $e', error: e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving tree: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving tree: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        } catch (contextError) {
+          LoggerService.warning('Could not show error SnackBar: $contextError');
+        }
       }
     }
   }

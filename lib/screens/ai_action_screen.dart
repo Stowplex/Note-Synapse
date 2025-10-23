@@ -358,7 +358,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
           break;
         case AIInteractionType.aiConversation:
           // Navigate to conversation screen with selected notes
-          Navigator.of(context).push(
+          Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => ConversationChatScreen(
                 initialNoteIds: widget.selectedNotes.map((note) => note.id).toList(),
