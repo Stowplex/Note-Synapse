@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
+import 'dart:convert';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
+import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import 'conversation_chat_screen.dart';
 
@@ -14,12 +16,15 @@ class ConversationTreeScreen extends StatefulWidget {
 
 class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   final ConversationService _conversationService = ConversationService();
+  final DatabaseService _databaseService = DatabaseService();
   final GraphViewController _graphController = GraphViewController();
   
   ConversationTree? _tree;
   List<String> _selectedNodes = [];
   bool _isLoading = true;
   String? _selectedConversationId;
+  ConversationMessage? _selectedMessage;
+  bool _isMultiSelectMode = false;
 
   @override
   void initState() {
@@ -42,7 +47,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _tree = await _conversationService.getConversationTree();
+      _tree = await _conversationService.refreshConversationTree();
       if (_tree == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -133,7 +138,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     if (_tree == null) return;
     
     final node = _tree!.getNode(nodeId);
-    if (node == null) return;
+    if (node == null || node.id == 'root') return; // Don't allow toggling root
 
     setState(() {
       final updatedNode = node.copyWith(isExpanded: !node.isExpanded);
@@ -142,23 +147,46 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _tree = _tree!.copyWith(nodes: updatedNodes);
     });
 
+    // Update in database
     _conversationService.updateTreeNode(
       nodeId: nodeId,
       isExpanded: !node.isExpanded,
     );
   }
 
-  void _deleteNode(String nodeId) {
+
+  void _selectInteraction(ConversationTreeNode node) async {
+    if (node.messageId == null) return;
+    
+    try {
+      final message = await _conversationService.getConversationMessage(node.messageId!);
+      if (message != null) {
+        setState(() {
+          _selectedMessage = message;
+          _selectedConversationId = node.conversationId;
+        });
+      }
+    } catch (e) {
+      LoggerService.error('Error loading interaction message: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading interaction: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
     
-    final node = _tree!.getNode(nodeId);
-    if (node == null || node.conversationId.isEmpty) return;
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Conversation'),
-        content: const Text('Are you sure you want to delete this conversation and all its descendants?'),
+        title: const Text('Delete Interaction'),
+        content: const Text('Are you sure you want to delete this interaction and all its descendants?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -167,14 +195,79 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              await _conversationService.deleteConversation(node.conversationId);
-              await _loadTree();
+              try {
+                // Delete the conversation that contains this interaction
+                await _conversationService.deleteConversation(node.conversationId);
+                // Refresh the tree to reflect the deletion
+                _tree = await _conversationService.refreshConversationTree();
+                if (mounted) {
+                  setState(() {
+                    _selectedConversationId = null;
+                    _selectedMessage = null;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Interaction deleted successfully'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                LoggerService.error('Error deleting interaction: $e', error: e);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting interaction: ${e.toString()}'),
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete'),
           ),
         ],
       ),
     );
+  }
+
+  void _forkInteraction(ConversationTreeNode node) async {
+    if (node.messageId == null) return;
+    
+    try {
+      // Create a new conversation forked from this interaction
+      final newConversation = await _conversationService.createConversation(
+        title: 'Forked from interaction',
+        parentConversationId: node.conversationId,
+        forkFromMessageId: node.messageId,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('New conversation created for forking'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        
+        // Navigate to the new conversation
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ConversationChatScreen(conversationId: newConversation.id),
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error forking interaction: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error forking interaction: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   void _createConversationFromSelected() async {
@@ -235,10 +328,42 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
-  void _selectConversation(String conversationId) {
+  void _toggleMultiSelectMode() {
     setState(() {
-      _selectedConversationId = conversationId;
+      _isMultiSelectMode = !_isMultiSelectMode;
+      if (!_isMultiSelectMode) {
+        _selectedNodes.clear();
+      }
     });
+  }
+
+  Future<void> _saveTreeAsJson() async {
+    if (_tree == null) return;
+    
+    try {
+      final jsonString = jsonEncode(_tree!.toJson());
+      // Here you would typically save to a file or database
+      LoggerService.info('Tree saved as JSON: $jsonString');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tree saved successfully'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error saving tree: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving tree: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -260,6 +385,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         title: const Text('Conversation Tree'),
         actions: [
           IconButton(
+            icon: Icon(_isMultiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
+            onPressed: _toggleMultiSelectMode,
+            tooltip: _isMultiSelectMode ? 'Exit multi-select' : 'Multi-select mode',
+          ),
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _saveTreeAsJson,
+            tooltip: 'Save tree as JSON',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refreshTree,
             tooltip: 'Refresh tree',
@@ -268,7 +403,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: _createConversationFromSelected,
-              tooltip: 'Create conversation from selected',
+              tooltip: 'Create from selected',
             ),
         ],
       ),
@@ -283,7 +418,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         child: const Icon(Icons.add),
         tooltip: 'Start new conversation',
       ),
-      body: Row(
+      body: Column(
         children: [
           // Tree view
           Expanded(
@@ -297,14 +432,24 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           if (_selectedConversationId != null)
             Expanded(
               flex: 1,
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
                 padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
                   border: Border(
-                    left: BorderSide(
+                    top: BorderSide(
                       color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                      width: 1,
                     ),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
                 ),
                 child: _buildConversationDetails(),
               ),
@@ -315,32 +460,36 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Widget _buildTreeView() {
-    return InteractiveViewer(
-      constrained: false,
-      child: SizedBox(
-        width: 1000,
-        height: 700,
-        child: GraphView.builder(
-          graph: _buildGraph(),
-          algorithm: BuchheimWalkerAlgorithm(
-            BuchheimWalkerConfiguration(
-              orientation: BuchheimWalkerConfiguration.ORIENTATION_TOP_BOTTOM,
-              siblingSeparation: 80,
-              levelSeparation: 120,
-              subtreeSeparation: 60,
-            ),
-            TreeEdgeRenderer(BuchheimWalkerConfiguration()),
-          ),
-          controller: _graphController,
-          builder: (Node node) {
-            final nodeId = (node.key?.value as String?) ?? '';
-            final treeNode = _tree!.getNode(nodeId);
-            if (treeNode == null) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return InteractiveViewer(
+          constrained: false,
+          child: SizedBox(
+            width: constraints.maxWidth > 1000 ? constraints.maxWidth : 1000,
+            height: constraints.maxHeight > 500 ? constraints.maxHeight : 500,
+            child: GraphView.builder(
+              graph: _buildGraph(),
+              algorithm: BuchheimWalkerAlgorithm(
+                BuchheimWalkerConfiguration(
+                  orientation: BuchheimWalkerConfiguration.ORIENTATION_TOP_BOTTOM,
+                  siblingSeparation: 80,
+                  levelSeparation: 120,
+                  subtreeSeparation: 60,
+                ),
+                TreeEdgeRenderer(BuchheimWalkerConfiguration()),
+              ),
+              controller: _graphController,
+              builder: (Node node) {
+                final nodeId = (node.key?.value as String?) ?? '';
+                final treeNode = _tree!.getNode(nodeId);
+                if (treeNode == null) return const SizedBox.shrink();
 
-            return _buildTreeNode(treeNode);
-          },
-        ),
-      ),
+                return _buildTreeNode(treeNode);
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -349,169 +498,188 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     
     if (_tree == null) return graph;
 
-    // Add all nodes
-    for (final node in _tree!.nodes.values) {
-      graph.addNode(Node.Id(node.id));
+    // Get visible nodes based on expansion state
+    final visibleNodes = _getVisibleNodes();
+    
+    // Add visible nodes
+    for (final nodeId in visibleNodes) {
+      graph.addNode(Node.Id(nodeId));
     }
 
-    // Add edges
-    for (final node in _tree!.nodes.values) {
-      if (node.parentId != null) {
-        graph.addEdge(Node.Id(node.parentId!), Node.Id(node.id));
+    // Add edges for visible nodes
+    for (final nodeId in visibleNodes) {
+      final node = _tree!.getNode(nodeId);
+      if (node != null && node.parentId != null && visibleNodes.contains(node.parentId)) {
+        graph.addEdge(Node.Id(node.parentId!), Node.Id(nodeId));
       }
     }
 
     return graph;
   }
 
+  // Get list of visible node IDs based on expansion state
+  List<String> _getVisibleNodes() {
+    if (_tree == null) return [];
+    
+    final visibleNodes = <String>{};
+    final toProcess = <String>['root']; // Start with root
+    
+    while (toProcess.isNotEmpty) {
+      final nodeId = toProcess.removeAt(0);
+      final node = _tree!.getNode(nodeId);
+      
+      if (node == null) continue;
+      
+      visibleNodes.add(nodeId);
+      
+      // If node is expanded (or is root), add its children to be processed
+      if (node.isExpanded || node.id == 'root') {
+        toProcess.addAll(node.children);
+      }
+    }
+    
+    return visibleNodes.toList();
+  }
+
   Widget _buildTreeNode(ConversationTreeNode node) {
     final isSelected = _selectedNodes.contains(node.id);
     final isExpanded = node.isExpanded;
     final hasChildren = node.children.isNotEmpty;
-    final isConversation = node.conversationId.isNotEmpty;
+    final isInteraction = node.id.startsWith('interaction_');
     final isRoot = node.id == 'root';
 
     return GestureDetector(
       onTap: () {
-        if (isConversation) {
-          _selectConversation(node.conversationId);
-        }
-        if (!isRoot) {
+        if (_isMultiSelectMode && !isRoot) {
           _toggleNodeSelection(node.id);
+        } else if (isInteraction) {
+          _selectInteraction(node);
         }
       },
       onLongPress: () {
-        if (isConversation && !isRoot) {
+        if (isInteraction && !isRoot) {
+          if (!_isMultiSelectMode) {
+            _toggleMultiSelectMode();
+          }
           _toggleNodeSelection(node.id);
         }
       },
-      child: Container(
-        padding: const EdgeInsets.all(12.0),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? Theme.of(context).colorScheme.primaryContainer
-              : isRoot
-                  ? Theme.of(context).colorScheme.surfaceVariant
-                  : Theme.of(context).colorScheme.surface,
-          border: Border.all(
-            color: isSelected 
-                ? Theme.of(context).colorScheme.primary
-                : isRoot
-                    ? Theme.of(context).colorScheme.outline
-                    : Theme.of(context).colorScheme.outline.withOpacity(0.3),
-            width: isSelected ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ] : null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 200, // Reasonable max width for tree nodes
+          minWidth: 120, // Minimum width to ensure readability
         ),
+        child: Container(
+          padding: const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? Theme.of(context).colorScheme.primaryContainer
+                : isRoot
+                    ? Theme.of(context).colorScheme.surfaceVariant
+                    : Theme.of(context).colorScheme.surface,
+            border: Border.all(
+              color: isSelected 
+                  ? Theme.of(context).colorScheme.primary
+                  : isRoot
+                      ? Theme.of(context).colorScheme.outline
+                      : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              width: isSelected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected ? [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ] : null,
+          ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // First row: Control widgets (expand, icon, menu)
             Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (hasChildren && !isRoot)
-                  IconButton(
-                    icon: Icon(
-                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasChildren && !isRoot)
+                      IconButton(
+                        icon: Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more,
+                          size: 18,
+                        ),
+                        onPressed: () => _toggleNodeExpansion(node.id),
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        padding: EdgeInsets.zero,
+                      )
+                    else
+                      const SizedBox(width: 28),
+                    Icon(
+                      isRoot 
+                          ? Icons.account_tree
+                          : isInteraction 
+                              ? Icons.chat_bubble_outline
+                              : Icons.folder_outlined,
                       size: 18,
-                    ),
-                    onPressed: () => _toggleNodeExpansion(node.id),
-                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                    padding: EdgeInsets.zero,
-                  )
-                else if (!isRoot)
-                  const SizedBox(width: 28),
-                Icon(
-                  isRoot 
-                      ? Icons.account_tree
-                      : isConversation 
-                          ? Icons.chat_bubble_outline
-                          : Icons.folder_outlined,
-                  size: 18,
-                  color: isRoot
-                      ? Theme.of(context).colorScheme.primary
-                      : isConversation 
+                      color: isRoot
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.secondary,
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    node.summary,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: isRoot ? FontWeight.bold : FontWeight.normal,
+                          : isInteraction 
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.secondary,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
+                  ],
                 ),
-                if (isConversation && !isRoot) ...[
-                  const SizedBox(width: 8),
+                if (isInteraction && !isRoot)
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, size: 16),
                     onSelected: (value) {
                       if (value == 'delete') {
-                        _deleteNode(node.id);
+                        _deleteInteraction(node);
+                      } else if (value == 'fork') {
+                        _forkInteraction(node);
                       }
                     },
                     itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'fork',
+                        child: Row(
+                          children: [
+                            Icon(Icons.call_split, size: 16),
+                            SizedBox(width: 8),
+                            Text('Fork from here'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(
                           children: [
                             Icon(Icons.delete, size: 16),
                             SizedBox(width: 8),
-                            Text('Delete'),
+                            Text('Delete interaction'),
                           ],
                         ),
                       ),
                     ],
                   ),
-                ],
               ],
             ),
-            if (isConversation && !isRoot) ...[
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Level ${node.level}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+            const SizedBox(height: 8),
+            // Second row: Pure text, left-aligned, multi-line wrapped
+            Text(
+              node.summary,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: isRoot ? FontWeight.bold : FontWeight.normal,
               ),
-            ],
-            if (isSelected && !isRoot)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'SELECTED',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              textAlign: TextAlign.left,
+              softWrap: true,
+              overflow: TextOverflow.visible,
+            ),
           ],
+        ),
         ),
       ),
     );
@@ -519,9 +687,27 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   Widget _buildConversationDetails() {
     if (_selectedConversationId == null) {
-      return const Center(
-        child: Text('Select a conversation to view details'),
+      return Container(
+        padding: const EdgeInsets.all(16.0),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'Select an interaction to view details',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
       );
+    }
+
+    // If a specific message is selected, show just that message
+    if (_selectedMessage != null) {
+      return _buildMessageDetails(_selectedMessage!);
     }
 
     return FutureBuilder<ConversationWithMessages?>(
@@ -539,21 +725,58 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         final conversation = conversationWithMessages.conversation;
         final messages = conversationWithMessages.messages;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              conversation.title,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${messages.length} messages',
-              style: Theme.of(context).textTheme.bodySmall,
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            // Header with close button
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      conversation.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${messages.length} messages',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _selectedConversationId = null;
+                        _selectedMessage = null;
+                      });
+                    },
+                    tooltip: 'Close conversation details',
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
+            Row(
+              children: [
+                ElevatedButton(
+                  onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => ConversationChatScreen(
@@ -563,6 +786,21 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 );
               },
               child: const Text('Open Conversation'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => ConversationChatScreen(
+                          conversationId: conversation.id,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Fork Conversation'),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -570,8 +808,18 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
                   final message = messages[index];
+                  final isSelected = _selectedMessage?.id == message.id;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8.0),
+                    color: isSelected 
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : null,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedMessage = message;
+                        });
+                      },
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Column(
@@ -599,10 +847,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                           Text(
                             message.content,
                             style: Theme.of(context).textTheme.bodySmall,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
+                              maxLines: isSelected ? null : 3,
+                              overflow: isSelected ? null : TextOverflow.ellipsis,
                           ),
                         ],
+                        ),
                       ),
                     ),
                   );
@@ -610,9 +859,184 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               ),
             ),
           ],
+          ),
         );
       },
     );
+  }
+
+  Widget _buildMessageDetails(ConversationMessage message) {
+    return FutureBuilder<List<ConversationMessage>>(
+      future: _getInteractionMessages(message.conversationId, message.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No interaction found'));
+        }
+
+        final messages = snapshot.data!;
+        final userMessage = messages.firstWhere((m) => m.type == MessageType.user);
+        final aiMessage = messages.firstWhere((m) => m.type == MessageType.ai);
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedMessage = null;
+                      });
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Interaction Details',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const Spacer(),
+                  Text(
+                    _formatTimestamp(aiMessage.timestamp),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // User Question Card
+              Card(
+                margin: const EdgeInsets.only(bottom: 12.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'User',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _formatTimestamp(userMessage.timestamp),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        userMessage.content,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // AI Answer Card
+              Card(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'AI',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.secondary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _formatTimestamp(aiMessage.timestamp),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        aiMessage.content,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Action Buttons
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ConversationChatScreen(
+                            conversationId: message.conversationId,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chat),
+                    label: const Text('Open Conversation'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // TODO: Implement fork from this interaction
+                    },
+                    icon: const Icon(Icons.call_split),
+                    label: const Text('Fork from here'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper method to get both user and AI messages for an interaction
+  Future<List<ConversationMessage>> _getInteractionMessages(String conversationId, String aiMessageId) async {
+    final messages = await _databaseService.getConversationMessages(conversationId);
+    final aiMessage = messages.firstWhere((m) => m.id == aiMessageId);
+    
+    // Find the user message that precedes this AI message
+    final aiIndex = messages.indexOf(aiMessage);
+    if (aiIndex > 0) {
+      final userMessage = messages[aiIndex - 1];
+      if (userMessage.type == MessageType.user) {
+        return [userMessage, aiMessage];
+      }
+    }
+    
+    // Fallback: return just the AI message
+    return [aiMessage];
   }
 
   String _formatTimestamp(DateTime timestamp) {

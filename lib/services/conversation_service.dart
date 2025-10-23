@@ -221,9 +221,10 @@ class ConversationService {
     var rootNode = ConversationTreeNode(
       id: 'root',
       conversationId: '',
-      summary: 'All Conversations',
+      summary: 'All Interactions',
       level: 0,
       createdAt: DateTime.now(),
+      isExpanded: true, // Root should be expanded to show first level
     );
     nodes['root'] = rootNode;
     rootNodeId = 'root';
@@ -231,77 +232,14 @@ class ConversationService {
     // Sort conversations by creation time
     conversations.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-    // Group conversations by parent
-    final rootConversations = conversations.where((c) => c.parentConversationId == null).toList();
-    final forkedConversations = conversations.where((c) => c.parentConversationId != null).toList();
-
-    // Add root conversations as first level
-    for (final conversation in rootConversations) {
-      final nodeId = 'conv_${conversation.id}';
-      
-      // Get first message for summary
-      final messages = await _databaseService.getConversationMessages(conversation.id);
-      final summary = messages.isNotEmpty 
-          ? _generateSummary(messages.first.content)
-          : conversation.title;
-
-      final node = ConversationTreeNode(
-        id: nodeId,
-        conversationId: conversation.id,
-        messageId: messages.isNotEmpty ? messages.first.id : null,
-        summary: summary,
-        level: 1,
-        parentId: 'root',
-        createdAt: conversation.createdAt,
-      );
-      
-      nodes[nodeId] = node;
-      // Create a new list to avoid unmodifiable list issues
-      final newChildren = List<String>.from(rootNode.children)..add(nodeId);
-      rootNode = rootNode.copyWith(children: newChildren);
-      nodes['root'] = rootNode;
+    // Process each conversation to build interaction nodes
+    for (final conversation in conversations) {
+      await _buildInteractionNodes(conversation, nodes);
     }
 
-    // Add forked conversations as children in proper hierarchy
-    final processedForks = <String>{};
-    for (final conversation in forkedConversations) {
-      if (processedForks.contains(conversation.id)) continue;
-      
-      final parentNodeId = 'conv_${conversation.parentConversationId}';
-      if (nodes.containsKey(parentNodeId)) {
-        final nodeId = 'conv_${conversation.id}';
-        
-        // Get first message for summary
-        final messages = await _databaseService.getConversationMessages(conversation.id);
-        final summary = messages.isNotEmpty 
-            ? _generateSummary(messages.first.content)
-            : conversation.title;
-
-        final node = ConversationTreeNode(
-          id: nodeId,
-          conversationId: conversation.id,
-          messageId: messages.isNotEmpty ? messages.first.id : null,
-          summary: summary,
-          level: nodes[parentNodeId]!.level + 1,
-          parentId: parentNodeId,
-          createdAt: conversation.createdAt,
-        );
-        
-        nodes[nodeId] = node;
-        final parentNode = nodes[parentNodeId];
-        if (parentNode != null) {
-          // Create a new list to avoid unmodifiable list issues
-          final newChildren = List<String>.from(parentNode.children)..add(nodeId);
-          final updatedParentNode = parentNode.copyWith(children: newChildren);
-          nodes[parentNodeId] = updatedParentNode;
-        }
-        processedForks.add(conversation.id);
-      }
-    }
-
-    // Update root node children list
-    final updatedRootNode = rootNode.copyWith(children: List<String>.from(rootNode.children));
-    nodes['root'] = updatedRootNode;
+    // Update root node children list - get the latest root node from nodes map
+    final finalRootNode = nodes['root']!;
+    nodes['root'] = finalRootNode;
 
     final tree = ConversationTree(
       id: 'main_tree',
@@ -311,8 +249,8 @@ class ConversationService {
       updatedAt: DateTime.now(),
     );
 
-    // Save tree to database
-    await _databaseService.insertConversationTree(tree);
+    // Save tree to database using upsert (insert or update)
+    await _databaseService.upsertConversationTree(tree);
     return tree;
   }
 
@@ -321,6 +259,133 @@ class ConversationService {
     // Simple summary generation - take first 10 words
     final words = content.split(' ').take(10).join(' ');
     return words.length > 50 ? '${words.substring(0, 50)}...' : words;
+  }
+
+  // Build interaction nodes for a conversation
+  Future<void> _buildInteractionNodes(
+    Conversation conversation, 
+    Map<String, ConversationTreeNode> nodes
+  ) async {
+    final messages = await _databaseService.getConversationMessages(conversation.id);
+    if (messages.isEmpty) return;
+
+    // Group messages into User-AI interaction pairs
+    final interactions = _groupMessagesIntoInteractions(messages);
+    
+    // Only create nodes for completed interactions (User + AI)
+    String? previousNodeId;
+    for (int i = 0; i < interactions.length; i++) {
+      final interaction = interactions[i];
+      if (interaction.length != 2) continue; // Skip incomplete interactions
+
+      final userMessage = interaction.first;
+      final aiMessage = interaction.last;
+      
+      // Create node for this interaction
+      final nodeId = 'interaction_${conversation.id}_${i}';
+      final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
+      
+      final node = ConversationTreeNode(
+        id: nodeId,
+        conversationId: conversation.id,
+        messageId: aiMessage.id, // Reference the AI message as the "completion" point
+        summary: summary,
+        level: 1,
+        parentId: previousNodeId ?? 'root',
+        createdAt: aiMessage.timestamp, // Use AI message timestamp as completion time
+        isExpanded: false, // All first level nodes collapsed by default for cleaner look
+      );
+
+      nodes[nodeId] = node;
+
+      // Add to parent's children
+      if (previousNodeId == null) {
+        // First interaction in conversation - add to root
+        final rootNode = nodes['root']!;
+        final newChildren = List<String>.from(rootNode.children)..add(nodeId);
+        nodes['root'] = rootNode.copyWith(children: newChildren);
+      } else {
+        // Add to previous interaction node
+        final parentNode = nodes[previousNodeId];
+        if (parentNode != null) {
+          final newChildren = List<String>.from(parentNode.children)..add(nodeId);
+          final updatedParentNode = parentNode.copyWith(children: newChildren);
+          nodes[previousNodeId] = updatedParentNode;
+        }
+      }
+
+      previousNodeId = nodeId;
+    }
+
+    // Handle forked conversations
+    if (conversation.parentConversationId != null && conversation.forkFromMessageId != null) {
+      await _handleForkedConversation(conversation, nodes);
+    }
+  }
+
+  // Handle forked conversations by finding the fork point and creating a branch
+  Future<void> _handleForkedConversation(
+    Conversation forkedConversation, 
+    Map<String, ConversationTreeNode> nodes
+  ) async {
+    // Find the parent conversation's interaction node that contains the fork message
+    final parentConversation = await _databaseService.getConversation(forkedConversation.parentConversationId!);
+    if (parentConversation == null) return;
+
+    final parentMessages = await _databaseService.getConversationMessages(parentConversation.id);
+    final forkMessage = parentMessages.firstWhere(
+      (m) => m.id == forkedConversation.forkFromMessageId,
+      orElse: () => parentMessages.first,
+    );
+
+    // Find the interaction node that contains this message
+    String? forkNodeId;
+    for (final node in nodes.values) {
+      if (node.conversationId == parentConversation.id) {
+        final nodeMessages = await _databaseService.getConversationMessages(node.conversationId);
+        final interactions = _groupMessagesIntoInteractions(nodeMessages);
+        for (final interaction in interactions) {
+          if (interaction.any((m) => m.id == forkMessage.id)) {
+            forkNodeId = node.id;
+            break;
+          }
+        }
+        if (forkNodeId != null) break;
+      }
+    }
+
+    if (forkNodeId != null) {
+      // Build interaction nodes for the forked conversation
+      await _buildInteractionNodes(forkedConversation, nodes);
+    }
+  }
+
+  // Group messages into User-AI interaction pairs
+  List<List<ConversationMessage>> _groupMessagesIntoInteractions(List<ConversationMessage> messages) {
+    final interactions = <List<ConversationMessage>>[];
+    List<ConversationMessage> currentInteraction = [];
+    
+    for (final message in messages) {
+      if (message.type == MessageType.user) {
+        if (currentInteraction.isNotEmpty) {
+          interactions.add(List.from(currentInteraction));
+        }
+        currentInteraction = [message];
+      } else if (message.type == MessageType.ai && currentInteraction.isNotEmpty) {
+        currentInteraction.add(message);
+        interactions.add(List.from(currentInteraction));
+        currentInteraction = [];
+      }
+    }
+    
+    return interactions;
+  }
+
+  // Generate summary for a User-AI interaction pair
+  String _generateInteractionSummary(String userContent, String aiContent) {
+    final userSummary = _generateSummary(userContent);
+    final aiSummary = _generateSummary(aiContent);
+    return '$userSummary → $aiSummary';
   }
 
   // Delete a conversation and its descendants
@@ -453,6 +518,11 @@ class ConversationService {
 
     await _databaseService.updateConversation(updatedConversation);
     LoggerService.info('Removed notes from conversation: $conversationId');
+  }
+
+  // Get a specific conversation message
+  Future<ConversationMessage?> getConversationMessage(String messageId) async {
+    return await _databaseService.getConversationMessage(messageId);
   }
 }
 

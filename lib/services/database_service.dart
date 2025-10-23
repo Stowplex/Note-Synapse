@@ -2442,10 +2442,12 @@ class DatabaseService {
   // Conversation Tree CRUD
   Future<String> insertConversationTree(ConversationTree tree) async {
     final db = await database;
-    final json = tree.toJson();
-    json['createdAt'] = tree.createdAt.millisecondsSinceEpoch;
-    json['updatedAt'] = tree.updatedAt.millisecondsSinceEpoch;
-    json['treeData'] = jsonEncode(tree.toJson());
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
     
     await db.insert('conversation_tree', json);
     return tree.id;
@@ -2465,10 +2467,12 @@ class DatabaseService {
 
   Future<void> updateConversationTree(ConversationTree tree) async {
     final db = await database;
-    final json = tree.toJson();
-    json['createdAt'] = tree.createdAt.millisecondsSinceEpoch;
-    json['updatedAt'] = tree.updatedAt.millisecondsSinceEpoch;
-    json['treeData'] = jsonEncode(tree.toJson());
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
     
     await db.update(
       'conversation_tree',
@@ -2476,6 +2480,32 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [tree.id],
     );
+  }
+
+  Future<void> upsertConversationTree(ConversationTree tree) async {
+    final db = await database;
+    final json = {
+      'id': tree.id,
+      'treeData': jsonEncode(tree.toJson()),
+      'createdAt': tree.createdAt.millisecondsSinceEpoch,
+      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
+    };
+    
+    // Try to insert first, if it fails due to unique constraint, update instead
+    try {
+      await db.insert('conversation_tree', json);
+    } catch (e) {
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        await db.update(
+          'conversation_tree',
+          json,
+          where: 'id = ?',
+          whereArgs: [tree.id],
+        );
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<void> deleteConversationTree(String id) async {

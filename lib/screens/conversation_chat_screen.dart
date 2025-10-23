@@ -12,6 +12,7 @@ import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
+import 'conversation_tree_screen.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -754,19 +755,3 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 }
 
-// Placeholder for tree screen - will be implemented next
-class ConversationTreeScreen extends StatelessWidget {
-  const ConversationTreeScreen({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Conversation Tree'),
-      ),
-      body: const Center(
-        child: Text('Tree view will be implemented next'),
-      ),
-    );
-  }
-}
