@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -48,6 +50,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   List<McpEndpoint> _availableMcpEndpoints = [];
   Set<String> _selectedMcpEndpointIds = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
+  bool _isMcpPanelExpanded = false; // Collapsed by default
 
   @override
   void initState() {
@@ -539,79 +542,102 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.cloud_sync,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'MCP Tools',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+          // Header - clickable to toggle expansion
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isMcpPanelExpanded = !_isMcpPanelExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cloud_sync,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
-              ),
-              if (_selectedMcpEndpointIds.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
+                Text(
+                  'MCP Tools',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
                   ),
-                  child: Text(
-                    '${_selectedMcpEndpointIds.length} active',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.primary,
+                ),
+                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: Text(
+                      '${_selectedMcpEndpointIds.length} active',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                // Chevron icon that rotates based on expansion state
+                AnimatedRotation(
+                  turns: _isMcpPanelExpanded ? 0 : 0.5,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: _availableMcpEndpoints.map((endpoint) {
-              final isSelected = _selectedMcpEndpointIds.contains(endpoint.id);
-              return FilterChip(
-                label: Text(endpoint.name),
-                selected: isSelected,
-                onSelected: (selected) async {
-                  setState(() {
-                    if (selected) {
-                      _selectedMcpEndpointIds.add(endpoint.id);
-                    } else {
-                      _selectedMcpEndpointIds.remove(endpoint.id);
-                    }
-                  });
-                  await _updateMcpTools();
-                },
-                avatar: Icon(
-                  Icons.cloud,
-                  size: 16,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                ),
-              );
-            }).toList(),
-          ),
-          if (_mcpToolsByEndpoint.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                fontStyle: FontStyle.italic,
-              ),
             ),
+          ),
+          // Expandable content
+          if (_isMcpPanelExpanded) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: _availableMcpEndpoints.map((endpoint) {
+                final isSelected = _selectedMcpEndpointIds.contains(endpoint.id);
+                return FilterChip(
+                  label: Text(endpoint.name),
+                  selected: isSelected,
+                  onSelected: (selected) async {
+                    setState(() {
+                      if (selected) {
+                        _selectedMcpEndpointIds.add(endpoint.id);
+                      } else {
+                        _selectedMcpEndpointIds.remove(endpoint.id);
+                      }
+                    });
+                    await _updateMcpTools();
+                  },
+                  avatar: Icon(
+                    Icons.cloud,
+                    size: 16,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_mcpToolsByEndpoint.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
         ],
       ),
@@ -1074,22 +1100,72 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             const SizedBox(height: 8),
             if (isUser)
-              Text(message.content)
+              SelectableText(
+                message.content,
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
             else ...[
-              GptMarkdown(message.content),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
-                  onPressed: () => _addResponseToNote(message.content),
-                  icon: const Icon(Icons.note_add, size: 16),
-                  label: const Text('Add to Note'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+              SelectionArea(
+                child: GptMarkdown(
+                  message.content,
+                  onLinkTap: (url, _) {
+                    final uri = Uri.tryParse(url);
+                    if (uri != null) {
+                      canLaunchUrl(uri).then((canLaunch) {
+                        if (canLaunch) {
+                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Could not open link: $url')),
+                            );
+                          }
+                        }
+                      });
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Invalid URL: $url')),
+                        );
+                      }
+                    }
+                  },
                 ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: message.content));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Message copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _addResponseToNote(message.content),
+                    icon: const Icon(Icons.note_add, size: 16),
+                    label: const Text('Add to Note'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
