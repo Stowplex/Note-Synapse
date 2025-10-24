@@ -75,6 +75,40 @@ class GeminiModel implements AIModel {
     });
   }
 
+  @override
+  Future<Map<String, dynamic>> generateWithTools(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with tools', () async {
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final apiKey = await _validateApiKey(requestId: actualRequestId);
+
+      final generationConfig = {
+        'temperature': temperature ?? 0.1,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+      };
+
+      return await _makeGeminiRequestWithTools(
+        apiKey,
+        prompt,
+        tools,
+        attachedFiles: attachedFiles,
+        generationConfig: generationConfig,
+        requestId: actualRequestId,
+      );
+    });
+  }
+
 
   // Private helper methods
 
@@ -243,6 +277,126 @@ class GeminiModel implements AIModel {
     );
 
     return await _makeRequest(apiKey, requestBody, requestId: requestId);
+  }
+
+  Future<Map<String, dynamic>> _makeGeminiRequestWithTools(
+    String apiKey,
+    String prompt,
+    List<Map<String, dynamic>> tools, {
+    List<PlatformFile> attachedFiles = const [],
+    Map<String, dynamic>? generationConfig,
+    String? requestId,
+  }) async {
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    
+    final requestBody = _buildRequestBody(
+      prompt,
+      attachedFiles,
+      generationConfig: generationConfig,
+    );
+
+    // Add tools to request body
+    if (tools.isNotEmpty) {
+      requestBody['tools'] = [
+        {'function_declarations': tools}
+      ];
+    }
+
+    // Make request and get raw response
+    return await _makeRequestWithRawResponse(
+      apiKey,
+      requestBody,
+      requestId: actualRequestId,
+    );
+  }
+
+  Future<Map<String, dynamic>> _makeRequestWithRawResponse(
+    String apiKey,
+    Map<String, dynamic> requestBody, {
+    String? requestId,
+  }) async {
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+
+    final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final modelName = _config?.modelName ?? 'gemini-2.5-flash';
+
+    LoggerService.logAiRequest(
+      endpoint: '$endpoint/models/$modelName:generateContent',
+      headers: {'Content-Type': 'application/json'},
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
+
+    final response = await http.post(
+      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+
+    final duration = DateTime.now().difference(startTime);
+
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: actualRequestId,
+      duration: duration,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+        final candidate = data['candidates'][0];
+        final content = candidate['content'];
+
+        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
+          final parts = content['parts'] as List;
+          
+          // Check for function calls
+          final functionCalls = <Map<String, dynamic>>[];
+          String? textResponse;
+
+          for (final part in parts) {
+            if (part.containsKey('functionCall')) {
+              functionCalls.add(part['functionCall'] as Map<String, dynamic>);
+            } else if (part.containsKey('text')) {
+              textResponse = part['text'];
+            }
+          }
+
+          LoggerService.debug('Gemini API request completed', error: {
+            'hasFunctionCalls': functionCalls.isNotEmpty,
+            'hasText': textResponse != null,
+            'requestId': actualRequestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          return {
+            'text': textResponse,
+            'function_calls': functionCalls.isEmpty ? null : functionCalls,
+            'raw_data': data,
+          };
+        }
+      }
+      LoggerService.error('No content in Gemini API response', error: {
+        'responseData': data,
+        'requestId': actualRequestId,
+      });
+      throw Exception('No content in Gemini API response');
+    } else {
+      final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+      final modelName = _config?.modelName ?? 'gemini-2.5-flash';
+      
+      LoggerService.logAiError(
+        error: 'Gemini API request failed with status ${response.statusCode}: ${response.body}',
+        endpoint: '$endpoint/models/$modelName:generateContent',
+        requestId: actualRequestId,
+      );
+      throw Exception('Gemini API request failed with status ${response.statusCode}: ${response.body}');
+    }
   }
 
 }

@@ -115,6 +115,32 @@ class ModelSelector {
     );
   }
 
+  Future<Map<String, dynamic>> generateWithTools(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    if (_currentModel == null) {
+      throw Exception('No model is currently selected. Please select a model first.');
+    }
+
+    return await _currentModel!.generateWithTools(
+      prompt,
+      attachedFiles,
+      tools,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
 
   /// Create a model instance for the given model type
   AIModel _createModel(ModelType modelType) {

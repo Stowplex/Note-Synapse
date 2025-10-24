@@ -13,6 +13,7 @@ import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
+import '../services/model_selector.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
@@ -207,24 +208,131 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
       }
 
-      // Add MCP tool information if tools are available
+      // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
-        question = mcpPrompt + question;
-        LoggerService.info('MCP tools enabled for this request: ${_mcpToolsByEndpoint.length} services');
+        return await _generateWithMcpTools(question);
+      } else {
+        // Use AI service's answerNoteQuestion method which handles note context and attachments
+        final response = await AIService.answerNoteQuestion(
+          question,
+          _notes,
+          attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+          useOwnKnowledge: true,
+        );
+        return response;
       }
-
-      // Use AI service's answerNoteQuestion method which handles note context and attachments
-      final response = await AIService.answerNoteQuestion(
-        question,
-        _notes,
-        attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
-        useOwnKnowledge: true, // Allow AI to use its own knowledge in conversations
-      );
-      return response;
     } catch (e) {
       LoggerService.error('Error generating AI response: $e', error: e);
       return 'I apologize, but I encountered an error while generating a response. Please try again.';
+    }
+  }
+
+  Future<String> _generateWithMcpTools(String question) async {
+    try {
+      // Add MCP tool information to prompt
+      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+      final enhancedQuestion = mcpPrompt + question;
+      
+      // Build context from notes
+      String noteContext = '';
+      if (_notes.isNotEmpty) {
+        noteContext = '\n\n=== CONTEXT FROM NOTES ===\n';
+        for (final note in _notes) {
+          noteContext += '\nNote: ${note.title}\n${note.content}\n';
+        }
+      }
+      
+      final fullPrompt = enhancedQuestion + noteContext;
+      
+      // Get call_tool function definition
+      final callToolFunction = McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
+      
+      LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
+      
+      // Tool calling loop - max 5 iterations to prevent infinite loops
+      const maxIterations = 5;
+      String currentPrompt = fullPrompt;
+      final conversationParts = <String>[];
+      
+      for (int iteration = 0; iteration < maxIterations; iteration++) {
+        LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
+        
+        // Call AI with tools
+        final response = await ModelSelector.instance.generateWithTools(
+          currentPrompt,
+          _attachedFiles,
+          [callToolFunction],
+        );
+        
+        final textResponse = response['text'] as String?;
+        final functionCalls = response['function_calls'] as List?;
+        
+        if (functionCalls != null && functionCalls.isNotEmpty) {
+          LoggerService.info('AI requested ${functionCalls.length} tool call(s)');
+          
+          // Execute all function calls
+          final toolResults = <String>[];
+          for (final functionCall in functionCalls) {
+            final functionName = functionCall['name'] as String;
+            final args = functionCall['args'] as Map<String, dynamic>;
+            
+            if (functionName == 'call_tool') {
+              final parsedArgs = McpToolIntegrationService.parseCallToolArguments(args);
+              if (parsedArgs != null) {
+                final serviceName = parsedArgs['service_name'] as String;
+                final toolName = parsedArgs['tool_name'] as String;
+                final params = parsedArgs['params'] as Map<String, dynamic>;
+                
+                LoggerService.info('Executing: $serviceName.$toolName');
+                
+                try {
+                  final result = await McpToolIntegrationService.executeToolCall(
+                    serviceName: serviceName,
+                    toolName: toolName,
+                    parameters: params,
+                    enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+                  );
+                  
+                  toolResults.add('Tool: $serviceName.$toolName\nResult: $result');
+                  conversationParts.add('[Tool executed: $serviceName.$toolName]');
+                } catch (e) {
+                  LoggerService.error('Tool execution failed: $e');
+                  toolResults.add('Tool: $serviceName.$toolName\nError: $e');
+                }
+              }
+            }
+          }
+          
+          // If we have tool results, continue the conversation with them
+          if (toolResults.isNotEmpty) {
+            final toolResultsText = toolResults.join('\n\n');
+            currentPrompt = 'Previous tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response to the user.';
+            continue; // Go to next iteration
+          }
+        }
+        
+        // If we get here, either no function calls or we have a text response
+        if (textResponse != null && textResponse.isNotEmpty) {
+          if (conversationParts.isNotEmpty) {
+            return '${conversationParts.join('\n')}\n\n$textResponse';
+          }
+          return textResponse;
+        }
+        
+        // If no text and no function calls, something went wrong
+        LoggerService.warning('No text response and no function calls in iteration ${iteration + 1}');
+        break;
+      }
+      
+      // If we exhausted iterations, return what we have
+      LoggerService.warning('Reached maximum tool calling iterations');
+      return conversationParts.isEmpty 
+          ? 'I apologize, but I was unable to complete the task after multiple attempts.'
+          : conversationParts.join('\n');
+          
+    } catch (e) {
+      LoggerService.error('Error in MCP tool calling: $e', error: e);
+      return 'I apologize, but I encountered an error while using external tools. Error: $e';
     }
   }
 

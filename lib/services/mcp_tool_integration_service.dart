@@ -23,55 +23,94 @@ class McpToolIntegrationService {
     return toolsByEndpoint;
   }
 
-  /// Format tools for Gemini function calling
-  /// Gemini uses the function calling format in the API
-  static List<Map<String, dynamic>> formatToolsForGemini(
+  /// Get the call_tool function definition for Gemini
+  /// This is a single function that can call any MCP tool
+  static Map<String, dynamic> getCallToolFunctionForGemini(
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
-    final tools = <Map<String, dynamic>>[];
-
+    // Build enum of service names
+    final serviceNames = toolsByEndpoint.keys.toList();
+    
+    // Build description with available tools
+    final toolsDescription = StringBuffer();
+    toolsDescription.writeln('Call an MCP tool. Available tools by service:');
     for (final entry in toolsByEndpoint.entries) {
-      final serviceName = entry.key;
+      toolsDescription.writeln('${entry.key}:');
       for (final tool in entry.value) {
-        tools.add({
-          'name': '${serviceName}__${tool.name}',
-          'description': tool.description ?? 'No description available',
-          'parameters': tool.inputSchema ?? {
-            'type': 'object',
-            'properties': {},
-          },
-        });
+        toolsDescription.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
       }
     }
 
-    return tools;
+    return {
+      'name': 'call_tool',
+      'description': toolsDescription.toString(),
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'service_name': {
+            'type': 'string',
+            'description': 'The MCP service name',
+            'enum': serviceNames,
+          },
+          'tool_name': {
+            'type': 'string',
+            'description': 'The name of the tool to call within the service',
+          },
+          'params': {
+            'type': 'object',
+            'description': 'The parameters to pass to the tool',
+          },
+        },
+        'required': ['service_name', 'tool_name', 'params'],
+      },
+    };
   }
 
-  /// Format tools for OpenAI function calling
-  /// OpenAI uses the 'functions' array in the API
-  static List<Map<String, dynamic>> formatToolsForOpenAI(
+  /// Get the call_tool function definition for OpenAI
+  /// This is a single function that can call any MCP tool
+  static Map<String, dynamic> getCallToolFunctionForOpenAI(
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
-    final functions = <Map<String, dynamic>>[];
-
+    // Build enum of service names
+    final serviceNames = toolsByEndpoint.keys.toList();
+    
+    // Build description with available tools
+    final toolsDescription = StringBuffer();
+    toolsDescription.writeln('Call an MCP tool. Available tools by service:');
     for (final entry in toolsByEndpoint.entries) {
-      final serviceName = entry.key;
+      toolsDescription.writeln('${entry.key}:');
       for (final tool in entry.value) {
-        functions.add({
-          'name': '${serviceName}__${tool.name}',
-          'description': tool.description ?? 'No description available',
-          'parameters': tool.inputSchema ?? {
-            'type': 'object',
-            'properties': {},
-          },
-        });
+        toolsDescription.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
       }
     }
 
-    return functions;
+    return {
+      'name': 'call_tool',
+      'description': toolsDescription.toString(),
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'service_name': {
+            'type': 'string',
+            'description': 'The MCP service name',
+            'enum': serviceNames,
+          },
+          'tool_name': {
+            'type': 'string',
+            'description': 'The name of the tool to call within the service',
+          },
+          'params': {
+            'type': 'object',
+            'description': 'The parameters to pass to the tool',
+          },
+        },
+        'required': ['service_name', 'tool_name', 'params'],
+      },
+    };
   }
 
   /// Build system prompt that explains available MCP tools to the AI
+  /// When function calling is available, this is minimal since tools are in function definitions
   static String buildMcpSystemPrompt(
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
@@ -80,45 +119,51 @@ class McpToolIntegrationService {
     }
 
     final buffer = StringBuffer();
-    buffer.writeln('\n\n=== AVAILABLE MCP TOOLS ===\n');
-    buffer.writeln('You have access to the following external tools via Model Context Protocol (MCP):');
-    buffer.writeln();
+    buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
+    buffer.writeln('You have access to external tools via the call_tool function.');
+    buffer.writeln('Use function calling to invoke these tools when needed.\n');
 
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
       buffer.writeln('Service: $serviceName');
       
       for (final tool in entry.value) {
-        buffer.writeln('  - ${tool.name}');
-        if (tool.description != null && tool.description!.isNotEmpty) {
-          buffer.writeln('    Description: ${tool.description}');
-        }
+        buffer.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
         if (tool.inputSchema != null) {
-          buffer.writeln('    Parameters: ${jsonEncode(tool.inputSchema)}');
+          final props = tool.inputSchema!['properties'] as Map?;
+          if (props != null && props.isNotEmpty) {
+            buffer.writeln('    Required params: ${props.keys.join(", ")}');
+          }
         }
       }
       buffer.writeln();
     }
 
-    buffer.writeln('To call a tool, use function calling with the format: {serviceName}__{toolName}');
-    buffer.writeln('Example: weather__get_forecast with parameters {"location": "San Francisco"}');
-    buffer.writeln();
-
     return buffer.toString();
   }
 
-  /// Parse tool call from function call name
-  /// Format: {serviceName}__{toolName}
-  static Map<String, String>? parseToolCall(String functionName) {
-    final parts = functionName.split('__');
-    if (parts.length != 2) {
+  /// Parse call_tool function arguments
+  static Map<String, dynamic>? parseCallToolArguments(
+    Map<String, dynamic> arguments,
+  ) {
+    try {
+      final serviceName = arguments['service_name'] as String?;
+      final toolName = arguments['tool_name'] as String?;
+      final params = arguments['params'] as Map<String, dynamic>?;
+
+      if (serviceName == null || toolName == null || params == null) {
+        return null;
+      }
+
+      return {
+        'service_name': serviceName,
+        'tool_name': toolName,
+        'params': params,
+      };
+    } catch (e) {
+      LoggerService.error('Error parsing call_tool arguments: $e');
       return null;
     }
-
-    return {
-      'serviceName': parts[0],
-      'toolName': parts[1],
-    };
   }
 
   /// Execute an MCP tool call
