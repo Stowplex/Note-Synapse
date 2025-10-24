@@ -120,9 +120,8 @@ dependencies:
   graphview: ^1.5.1
   
   # MCP (Model Context Protocol) client
-  mcp_client: # ^1.0.2
-    path: ../mcp_client
-  
+  mcp_client: ^1.0.2
+
 
 dev_dependencies:
   flutter_test:
