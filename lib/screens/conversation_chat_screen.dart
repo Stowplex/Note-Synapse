@@ -57,6 +57,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           _conversation = conversationWithMessages.conversation;
           _messages = conversationWithMessages.messages;
           _notes = await _conversationService.getConversationNotes(widget.conversationId!);
+          
+          // Validate note references and show alert if any are missing
+          final missingNoteIds = await _conversationService.validateConversationNotes(widget.conversationId!);
+          if (missingNoteIds.isNotEmpty && mounted) {
+            _showMissingNotesAlert(missingNoteIds);
+          }
         }
       } else {
         // Create new conversation
@@ -846,6 +852,47 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     } else {
       return 'Just now';
     }
+  }
+
+  void _showMissingNotesAlert(List<String> missingNoteIds) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Missing Notes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This conversation references notes that no longer exist:'),
+              const SizedBox(height: 8),
+              ...missingNoteIds.map((noteId) => Text(
+                '• $noteId',
+                style: const TextStyle(fontFamily: 'monospace'),
+              )),
+              const SizedBox(height: 8),
+              const Text('These references will be automatically cleaned up.'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Clean up invalid note references
+                await _conversationService.cleanupInvalidNoteReferences();
+                // Refresh the conversation to reflect the cleanup
+                await _initializeConversation();
+              },
+              child: const Text('Clean Up'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

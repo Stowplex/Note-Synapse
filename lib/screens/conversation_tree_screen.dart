@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
 import '../services/conversation_service.dart';
 import '../services/database_service.dart';
+import '../services/fork_service.dart';
 import '../services/logger_service.dart';
 import '../services/ai_service.dart';
 import 'conversation_chat_screen.dart';
@@ -18,6 +20,7 @@ class ConversationTreeScreen extends StatefulWidget {
 class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   final ConversationService _conversationService = ConversationService();
   final DatabaseService _databaseService = DatabaseService();
+  final ForkService _forkService = ForkService();
   final GraphViewController _graphController = GraphViewController();
   
   ConversationTree? _tree;
@@ -211,18 +214,27 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Interaction'),
-        content: const Text('Are you sure you want to delete this interaction and all its descendants?'),
+        content: const Text('Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
               try {
-                // Delete the conversation that contains this interaction
-              await _conversationService.deleteConversation(node.conversationId);
+                if (node.messageId != null) {
+                  // Get all message IDs in the subtree using tree traversal
+                  final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
+                  LoggerService.info('Deleting ${messageIdsToDelete.length} messages from tree node: ${node.id}');
+                  
+                  // Delete all messages in the subtree efficiently
+                  await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
+                } else {
+                  // Fallback: delete the entire conversation
+                  await _conversationService.deleteConversation(node.conversationId);
+                }
                 // Refresh the tree to reflect the deletion
                 _tree = await _conversationService.refreshConversationTree();
                 if (mounted) {
@@ -259,6 +271,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 }
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -272,16 +288,17 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     try {
       LoggerService.info('Starting fork from interaction: ${node.id}');
       
-      // Create a new conversation forked from this interaction with full history
-      final newConversation = await _conversationService.forkConversation(
-        originalConversationId: node.conversationId,
+      // Use the new fork service with context selection
+      final newConversation = await _forkService.forkFromMessage(
+        context: context,
         forkFromMessageId: node.messageId!,
-        newTitle: 'Forked conversation',
+        suggestedTitle: 'Forked conversation',
       );
       
-      LoggerService.info('Forked conversation created: ${newConversation.id}');
-      
-      if (mounted) {
+      if (newConversation != null) {
+        LoggerService.info('Forked conversation created: ${newConversation.id}');
+        
+        if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -304,6 +321,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         if (mounted) {
           LoggerService.info('Refreshing tree after fork');
           await _refreshTree();
+        }
         }
       }
     } catch (e) {
@@ -1126,12 +1144,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            message.content,
-                            style: Theme.of(context).textTheme.bodySmall,
-                              maxLines: isSelected ? null : 3,
-                              overflow: isSelected ? null : TextOverflow.ellipsis,
-                          ),
+                          message.type == MessageType.user
+                              ? Text(
+                                  message.content,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  maxLines: isSelected ? null : 3,
+                                  overflow: isSelected ? null : TextOverflow.ellipsis,
+                                )
+                              : GptMarkdown(message.content),
                         ],
                         ),
                       ),
@@ -1173,6 +1193,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   IconButton(
                     onPressed: () {
                       setState(() {
+                        _selectedConversationId = null;
                         _selectedMessage = null;
                       });
                     },
@@ -1261,10 +1282,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        aiMessage.content,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
+                      GptMarkdown(aiMessage.content),
                     ],
                   ),
                 ),

@@ -6,8 +6,6 @@ part 'conversation.g.dart';
 class Conversation {
   final String id;
   final String title;
-  final String? parentConversationId; // For forked conversations
-  final String? forkFromMessageId; // The message ID where this conversation was forked from
   final List<String> noteIds; // Notes included in this conversation
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -16,8 +14,6 @@ class Conversation {
   Conversation({
     required this.id,
     required this.title,
-    this.parentConversationId,
-    this.forkFromMessageId,
     this.noteIds = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -30,8 +26,6 @@ class Conversation {
   Conversation copyWith({
     String? id,
     String? title,
-    String? parentConversationId,
-    String? forkFromMessageId,
     List<String>? noteIds,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -40,16 +34,12 @@ class Conversation {
     return Conversation(
       id: id ?? this.id,
       title: title ?? this.title,
-      parentConversationId: parentConversationId ?? this.parentConversationId,
-      forkFromMessageId: forkFromMessageId ?? this.forkFromMessageId,
       noteIds: noteIds ?? this.noteIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isArchived: isArchived ?? this.isArchived,
     );
   }
-
-  bool get isForked => parentConversationId != null;
 }
 
 @JsonSerializable()
