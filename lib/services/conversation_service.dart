@@ -45,6 +45,7 @@ class ConversationService {
     required String forkFromMessageId,
     required String newTitle,
   }) async {
+    LoggerService.info('Forking conversation ${originalConversationId} from message ${forkFromMessageId}');
     // Get the original conversation
     final originalConversation = await _databaseService.getConversation(originalConversationId);
     if (originalConversation == null) {
@@ -73,19 +74,10 @@ class ConversationService {
       );
     }
 
-    // Create parent relationships for the copied messages
-    String? previousMessageId;
-    for (final message in messagesToCopy) {
-      if (previousMessageId != null) {
-        await _databaseService.insertMessageParent(
-          messageId: message.id,
-          parentMessageId: previousMessageId,
-        );
-      }
-      previousMessageId = message.id;
-    }
+    // Parent relationships for copied messages already exist from the original conversation
+    // They are inherited since we're copying message IDs, not creating new messages
 
-    LoggerService.info('Forked conversation ${originalConversationId} to ${forkedConversation.id} at message ${forkFromMessageId}');
+    LoggerService.info('Forked conversation ${originalConversationId} to ${forkedConversation.id} from message ${forkFromMessageId}');
     
     // Refresh the conversation tree to include the new forked conversation
     await refreshConversationTree();
@@ -168,19 +160,13 @@ class ConversationService {
       );
     }
 
-    // Create parent relationships for the copied messages
-    String? previousMessageId;
-    for (final message in messagesToCopy) {
-      if (previousMessageId != null) {
-        await _databaseService.insertMessageParent(
-          messageId: message.id,
-          parentMessageId: previousMessageId,
-        );
-      }
-      previousMessageId = message.id;
-    }
+    // Parent relationships for copied messages already exist from the original conversation
+    // They are inherited since we're copying message IDs, not creating new messages
+    
+    // When the first new message is added, it will detect the fork point automatically
+    // by checking if the last message exists in multiple conversations
 
-    LoggerService.info('Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} at message ${forkFromMessageId} with selected context');
+    LoggerService.info('Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message ${forkFromMessageId} with selected context');
     
     // Refresh the conversation tree to include the new forked conversation
     await refreshConversationTree();
@@ -212,14 +198,29 @@ class ConversationService {
       messageId: message.id,
     );
 
-    // Create parent relationship with previous message
+    // Create parent relationship with previous message (if exists)
     final existingMessages = await _databaseService.getConversationMessages(conversationId);
     if (existingMessages.length > 1) { // More than just this message
       final previousMessage = existingMessages[existingMessages.length - 2];
-      await _databaseService.insertMessageParent(
-        messageId: message.id,
-        parentMessageId: previousMessage.id,
-      );
+      
+      // Check if previous message is a fork point (exists in multiple conversations)
+      // If so, this is the first new message in a forked conversation
+      final conversationsWithPrevious = await _databaseService.getConversationsContainingMessage(previousMessage.id);
+      
+      if (conversationsWithPrevious.length > 1 && previousMessage.type == MessageType.ai) {
+        // This is a fork - new message's parent is the fork point (AI message)
+        await _databaseService.insertMessageParent(
+          messageId: message.id,
+          parentMessageId: previousMessage.id,
+        );
+        LoggerService.info('Fork detected: ${message.id}.parent = ${previousMessage.id} (fork point)');
+      } else {
+        // Normal case - parent is previous message
+        await _databaseService.insertMessageParent(
+          messageId: message.id,
+          parentMessageId: previousMessage.id,
+        );
+      }
     }
 
     // Add attachments
@@ -387,6 +388,8 @@ class ConversationService {
     conversations.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     // Build tree nodes for each conversation
+    // The parent-child relationships are automatically established
+    // based on message parent relationships
     for (final conversation in conversations) {
       await _buildConversationTreeNodes(conversation, nodes, parentMap);
     }
@@ -402,6 +405,8 @@ class ConversationService {
         if (!rootChildren.contains(message.id)) {
           rootChildren.add(message.id);
         }
+        // Set root as parent for level 1 nodes so graph edges work correctly
+        nodes[message.id] = message.copyWith(parentId: 'root');
       }
       nodes['root'] = rootNode.copyWith(children: rootChildren);
     }
@@ -420,69 +425,75 @@ class ConversationService {
   }
 
   // Build tree nodes for a single conversation
+  // Tree nodes represent User-AI interaction pairs for UI display
+  // The tree structure comes from message parent relationships
   Future<void> _buildConversationTreeNodes(
-    Conversation conversation,
+    Conversation conversation, 
     Map<String, ConversationTreeNode> nodes,
     Map<String, String> parentMap,
   ) async {
     final messages = await _databaseService.getConversationMessages(conversation.id);
     if (messages.isEmpty) return;
 
-    // Group messages into User-AI interaction pairs
+    // Group messages into User-AI interaction pairs for display
     final interactions = _groupMessagesIntoInteractions(messages);
     
-    // Create nodes for completed interactions
-    for (int i = 0; i < interactions.length; i++) {
-      final interaction = interactions[i];
+    // Create tree nodes for completed interactions (User + AI pairs)
+    for (final interaction in interactions) {
       if (interaction.length != 2) continue; // Skip incomplete interactions
 
       final userMessage = interaction.first;
       final aiMessage = interaction.last;
       
-      // Create node for this interaction using AI message ID
+      // Node ID is the AI message ID
       final nodeId = aiMessage.id;
       final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
       
-      // Find parent node
-      String? parentId;
-      final parentMessageId = parentMap[aiMessage.id];
-      if (parentMessageId != null) {
-        // Check if parent message is in this conversation
-        final parentInConversation = messages.any((m) => m.id == parentMessageId);
-        if (parentInConversation) {
-          parentId = parentMessageId;
-        }
+      // Find parent node: look at the user message's parent (which could be a fork point)
+      String? parentNodeId;
+      final userParentId = parentMap[userMessage.id];
+      
+      if (userParentId != null) {
+        // User's parent is either:
+        // 1. Previous AI message in same conversation (normal case)
+        // 2. Fork point AI message from another conversation (fork case)
+        // In both cases, that AI message IS a tree node
+        parentNodeId = userParentId;
       }
       
-      // Calculate level
-      int level = 1;
-      if (parentId != null) {
-        final parentNode = nodes[parentId];
-        if (parentNode != null) {
-          level = parentNode.level + 1;
+      // Check if node already exists (for fork points that exist in multiple conversations)
+      if (!nodes.containsKey(nodeId)) {
+        // Calculate level based on parent
+        int level = 1;
+        if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
+          level = nodes[parentNodeId]!.level + 1;
         }
+        
+        // Level 1 nodes (immediate children of root) should always be visible/expanded
+        final shouldBeExpanded = (level == 1);
+        
+        // Create the tree node
+        final node = ConversationTreeNode(
+          id: nodeId,
+          conversationId: conversation.id,
+          messageId: aiMessage.id,
+          summary: summary,
+          level: level,
+          parentId: parentNodeId,
+          createdAt: aiMessage.timestamp,
+          isExpanded: shouldBeExpanded,
+        );
+
+        nodes[nodeId] = node;
       }
       
-      final node = ConversationTreeNode(
-        id: nodeId,
-        conversationId: conversation.id,
-        messageId: aiMessage.id,
-        summary: summary,
-        level: level,
-        parentId: parentId,
-        createdAt: aiMessage.timestamp,
-        isExpanded: false,
-      );
-
-      nodes[nodeId] = node;
-
-      // Add to parent's children
-      if (parentId != null) {
-        final parentNode = nodes[parentId];
-        if (parentNode != null) {
+      // Always add this node to parent's children list (even if node already existed)
+      if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
+        final parentNode = nodes[parentNodeId]!;
+        // Only add if not already in children list
+        if (!parentNode.children.contains(nodeId)) {
           final newChildren = List<String>.from(parentNode.children)..add(nodeId);
-          final updatedParentNode = parentNode.copyWith(children: newChildren);
-          nodes[parentId] = updatedParentNode;
+          nodes[parentNodeId] = parentNode.copyWith(children: newChildren);
         }
       }
     }

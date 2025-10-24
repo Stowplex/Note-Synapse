@@ -2515,12 +2515,14 @@ class DatabaseService {
 
   Future<List<ConversationMessage>> getConversationMessages(String conversationId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'conversation_messages',
-      where: 'conversationId = ?',
-      whereArgs: [conversationId],
-      orderBy: 'timestamp ASC',
-    );
+    // Join with conversation_message_mapping to get messages for this conversation
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT cm.* 
+      FROM conversation_messages cm
+      INNER JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp ASC
+    ''', [conversationId]);
 
     return maps.map((map) => _mapToConversationMessage(map)).toList();
   }
@@ -2888,7 +2890,7 @@ class DatabaseService {
       'messageId': messageId,
       'parentMessageId': parentMessageId,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
-    });
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
     return id;
   }
 

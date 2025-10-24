@@ -29,6 +29,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   String? _selectedConversationId;
   ConversationMessage? _selectedMessage;
   bool _isMultiSelectMode = false;
+  bool _hasRefreshedOnce = false;
 
   @override
   void initState() {
@@ -39,12 +40,15 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh tree when screen becomes visible
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _refreshTree();
-      }
-    });
+    // Refresh tree when screen becomes visible (but only once per mount)
+    if (!_hasRefreshedOnce) {
+      _hasRefreshedOnce = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _refreshTree();
+        }
+      });
+    }
   }
 
   Future<void> _loadTree() async {
@@ -845,7 +849,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     final isSelected = _selectedNodes.contains(node.id);
     final isExpanded = node.isExpanded;
     final hasChildren = node.children.isNotEmpty;
-    final isInteraction = node.id.startsWith('interaction_');
+    // All non-root nodes are interaction nodes (they represent User-AI message pairs)
+    final isInteraction = node.id != 'root';
     final isRoot = node.id == 'root';
 
     return GestureDetector(
@@ -1075,28 +1080,36 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
+              ElevatedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => ConversationChatScreen(
                       conversationId: conversation.id,
                     ),
                   ),
                 );
+                // Refresh tree when returning from conversation
+                if (mounted) {
+                  await _refreshTree();
+                }
               },
               child: const Text('Open Conversation'),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
+                  onPressed: () async {
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => ConversationChatScreen(
                           conversationId: conversation.id,
                         ),
                       ),
                     );
+                    // Refresh tree when returning from conversation
+                    if (mounted) {
+                      await _refreshTree();
+                    }
                   },
                   child: const Text('Fork Conversation'),
                 ),
@@ -1169,7 +1182,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   Widget _buildMessageDetails(ConversationMessage message) {
     return FutureBuilder<List<ConversationMessage>>(
-      future: _getInteractionMessages(message.conversationId, message.id),
+      future: _getInteractionMessages(_selectedConversationId!, message.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -1292,14 +1305,18 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               Row(
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => ConversationChatScreen(
                             conversationId: message.conversationId,
                           ),
                         ),
                       );
+                      // Refresh tree when returning from conversation
+                      if (mounted) {
+                        await _refreshTree();
+                      }
                     },
                     icon: const Icon(Icons.chat),
                     label: const Text('Open Conversation'),
