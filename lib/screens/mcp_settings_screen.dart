@@ -51,6 +51,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     final baseUrlController = TextEditingController();
     final bearerTokenController = TextEditingController();
     bool obscureToken = true;
+    McpTransportType selectedTransport = McpTransportType.streamableHttp;
 
     await showDialog(
       context: context,
@@ -60,6 +61,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: nameController,
@@ -74,18 +76,42 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                   controller: baseUrlController,
                   decoration: const InputDecoration(
                     labelText: 'Base URL',
-                    hintText: 'https://api.example.com',
+                    hintText: 'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx',
                     border: OutlineInputBorder(),
+                    helperText: 'Include query params for auth if needed (e.g., Smithery)',
+                    helperMaxLines: 2,
                   ),
                   keyboardType: TextInputType.url,
+                  maxLines: 2,
                 ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Transport Type',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                ...McpTransportType.values.map((type) => RadioListTile<McpTransportType>(
+                  title: Text(type.displayName),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: type,
+                  groupValue: selectedTransport,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        selectedTransport = value;
+                      });
+                    }
+                  },
+                )),
                 const SizedBox(height: 16),
                 TextField(
                   controller: bearerTokenController,
                   decoration: InputDecoration(
-                    labelText: 'Bearer Token',
-                    hintText: 'your-bearer-token',
+                    labelText: 'Bearer Token (Optional)',
+                    hintText: 'Leave empty if auth is in URL params',
                     border: const OutlineInputBorder(),
+                    helperText: 'Optional: For header-based authentication',
                     suffixIcon: IconButton(
                       icon: Icon(
                         obscureToken ? Icons.visibility : Icons.visibility_off,
@@ -113,10 +139,10 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                 final baseUrl = baseUrlController.text.trim();
                 final bearerToken = bearerTokenController.text.trim();
 
-                if (name.isEmpty || baseUrl.isEmpty || bearerToken.isEmpty) {
+                if (name.isEmpty || baseUrl.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Please fill in all fields'),
+                      content: Text('Please provide name and URL'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -124,11 +150,12 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                 }
 
                 try {
-                  // Add endpoint without testing connection
+                  // Add endpoint
                   await McpService.addEndpoint(
                     name: name,
                     baseUrl: baseUrl,
-                    bearerToken: bearerToken,
+                    transportType: selectedTransport,
+                    bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
                   );
 
                   if (context.mounted) {
@@ -397,14 +424,44 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                     Text(
                                       endpoint.baseUrl,
                                       style: const TextStyle(fontSize: 12),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'Updated: ${endpoint.updatedAt.toString().substring(0, 19)}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[600],
-                                      ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primaryContainer,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            endpoint.transportType.displayName,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onPrimaryContainer,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Updated: ${endpoint.updatedAt.toString().substring(0, 19)}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),

@@ -1,10 +1,26 @@
 import 'dart:convert';
 
+/// Transport type for MCP connections
+enum McpTransportType {
+  sse,
+  streamableHttp;
+
+  String get displayName {
+    switch (this) {
+      case McpTransportType.sse:
+        return 'SSE (Server-Sent Events)';
+      case McpTransportType.streamableHttp:
+        return 'StreamableHTTP';
+    }
+  }
+}
+
 /// Model representing an MCP endpoint configuration
 class McpEndpoint {
   final String id;
   final String name;
   final String baseUrl;
+  final McpTransportType transportType;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -12,6 +28,7 @@ class McpEndpoint {
     required this.id,
     required this.name,
     required this.baseUrl,
+    this.transportType = McpTransportType.streamableHttp,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -21,6 +38,12 @@ class McpEndpoint {
       id: json['id'] as String,
       name: json['name'] as String,
       baseUrl: json['baseUrl'] as String,
+      transportType: json['transportType'] != null
+          ? McpTransportType.values.firstWhere(
+              (e) => e.name == json['transportType'],
+              orElse: () => McpTransportType.streamableHttp,
+            )
+          : McpTransportType.streamableHttp,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -31,6 +54,7 @@ class McpEndpoint {
       'id': id,
       'name': name,
       'baseUrl': baseUrl,
+      'transportType': transportType.name,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -40,6 +64,7 @@ class McpEndpoint {
     String? id,
     String? name,
     String? baseUrl,
+    McpTransportType? transportType,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -47,6 +72,7 @@ class McpEndpoint {
       id: id ?? this.id,
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
+      transportType: transportType ?? this.transportType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

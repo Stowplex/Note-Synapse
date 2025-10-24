@@ -64,7 +64,8 @@ class McpService {
   static Future<McpEndpoint> addEndpoint({
     required String name,
     required String baseUrl,
-    required String bearerToken,
+    required McpTransportType transportType,
+    String? bearerToken,
   }) async {
     try {
       final now = DateTime.now();
@@ -72,15 +73,18 @@ class McpService {
         id: _uuid.v4(),
         name: name,
         baseUrl: baseUrl,
+        transportType: transportType,
         createdAt: now,
         updatedAt: now,
       );
 
-      // Save bearer token to secure storage
-      await _storage.write(
-        key: '$_bearerTokenPrefix${endpoint.id}',
-        value: bearerToken,
-      );
+      // Save bearer token to secure storage if provided
+      if (bearerToken != null && bearerToken.isNotEmpty) {
+        await _storage.write(
+          key: '$_bearerTokenPrefix${endpoint.id}',
+          value: bearerToken,
+        );
+      }
 
       // Add endpoint to list
       final endpoints = await getEndpoints();
@@ -88,7 +92,7 @@ class McpService {
       await _saveEndpoints(endpoints);
 
       LoggerService.debug(
-          'McpService: Added endpoint: ${endpoint.name} (${endpoint.id})');
+          'McpService: Added endpoint: ${endpoint.name} (${endpoint.id}) with ${transportType.displayName}');
       return endpoint;
     } catch (e) {
       LoggerService.error('McpService: Error adding endpoint: $e');
@@ -101,6 +105,7 @@ class McpService {
     required String id,
     String? name,
     String? baseUrl,
+    McpTransportType? transportType,
     String? bearerToken,
   }) async {
     try {
@@ -115,11 +120,12 @@ class McpService {
       endpoints[index] = endpoints[index].copyWith(
         name: name ?? endpoints[index].name,
         baseUrl: baseUrl ?? endpoints[index].baseUrl,
+        transportType: transportType ?? endpoints[index].transportType,
         updatedAt: now,
       );
 
       // Update bearer token if provided
-      if (bearerToken != null) {
+      if (bearerToken != null && bearerToken.isNotEmpty) {
         await _storage.write(
           key: '$_bearerTokenPrefix$id',
           value: bearerToken,
@@ -189,12 +195,8 @@ class McpService {
       final endpoint = endpoints.firstWhere((e) => e.id == endpointId);
       final bearerToken = await getBearerToken(endpointId);
 
-      if (bearerToken == null) {
-        throw Exception('Bearer token not found for endpoint: $endpointId');
-      }
-
       LoggerService.debug(
-          'McpService: Refreshing tools from ${endpoint.baseUrl}');
+          'McpService: Refreshing tools from ${endpoint.baseUrl} using ${endpoint.transportType.displayName}');
 
       // Create MCP client configuration
       final config = McpClient.simpleConfig(
@@ -203,15 +205,36 @@ class McpService {
         enableDebugLogging: true,
       );
 
-      // Create transport configuration for HTTP with bearer token (uses POST)
-      final transportConfig = TransportConfig.streamableHttp(
-        baseUrl: endpoint.baseUrl,
-        headers: {
-          'User-Agent': 'NoteSynapse/1.0',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $bearerToken',
-        },
-      );
+      // Build headers based on transport type
+      final headers = <String, String>{
+        'User-Agent': 'NoteSynapse/1.0',
+      };
+      
+      // Add bearer token to headers if available
+      if (bearerToken != null && bearerToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $bearerToken';
+      }
+
+      // Create transport configuration based on type
+      final TransportConfig transportConfig;
+      switch (endpoint.transportType) {
+        case McpTransportType.sse:
+          // SSE requires text/event-stream
+          headers['Accept'] = 'text/event-stream';
+          transportConfig = TransportConfig.sse(
+            serverUrl: endpoint.baseUrl,
+            headers: headers,
+          );
+          break;
+        case McpTransportType.streamableHttp:
+          // HTTP accepts JSON
+          headers['Accept'] = 'application/json';
+          transportConfig = TransportConfig.streamableHttp(
+            baseUrl: endpoint.baseUrl,
+            headers: headers,
+          );
+          break;
+      }
 
       // Create and connect client
       final clientResult = await McpClient.createAndConnect(
@@ -281,10 +304,6 @@ class McpService {
       final endpoint = endpoints.firstWhere((e) => e.id == endpointId);
       final bearerToken = await getBearerToken(endpointId);
 
-      if (bearerToken == null) {
-        throw Exception('Bearer token not found for endpoint: $endpointId');
-      }
-
       LoggerService.debug(
           'McpService: Calling tool $toolName on ${endpoint.baseUrl}');
 
@@ -295,15 +314,36 @@ class McpService {
         enableDebugLogging: false,
       );
 
-      // Create transport configuration (uses POST)
-      final transportConfig = TransportConfig.streamableHttp(
-        baseUrl: endpoint.baseUrl,
-        headers: {
-          'User-Agent': 'NoteSynapse/1.0',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $bearerToken',
-        },
-      );
+      // Build headers based on transport type
+      final headers = <String, String>{
+        'User-Agent': 'NoteSynapse/1.0',
+      };
+      
+      // Add bearer token to headers if available
+      if (bearerToken != null && bearerToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $bearerToken';
+      }
+
+      // Create transport configuration based on type
+      final TransportConfig transportConfig;
+      switch (endpoint.transportType) {
+        case McpTransportType.sse:
+          // SSE requires text/event-stream
+          headers['Accept'] = 'text/event-stream';
+          transportConfig = TransportConfig.sse(
+            serverUrl: endpoint.baseUrl,
+            headers: headers,
+          );
+          break;
+        case McpTransportType.streamableHttp:
+          // HTTP accepts JSON
+          headers['Accept'] = 'application/json';
+          transportConfig = TransportConfig.streamableHttp(
+            baseUrl: endpoint.baseUrl,
+            headers: headers,
+          );
+          break;
+      }
 
       // Create and connect client
       final clientResult = await McpClient.createAndConnect(
@@ -345,10 +385,11 @@ class McpService {
   /// Test connection to an MCP endpoint
   static Future<bool> testConnection({
     required String baseUrl,
-    required String bearerToken,
+    required McpTransportType transportType,
+    String? bearerToken,
   }) async {
     try {
-      LoggerService.debug('McpService: Testing connection to $baseUrl');
+      LoggerService.debug('McpService: Testing connection to $baseUrl using ${transportType.displayName}');
 
       final config = McpClient.simpleConfig(
         name: 'NoteSynapse',
@@ -356,14 +397,36 @@ class McpService {
         enableDebugLogging: false,
       );
 
-      final transportConfig = TransportConfig.streamableHttp(
-        baseUrl: baseUrl,
-        headers: {
-          'User-Agent': 'NoteSynapse/1.0',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $bearerToken',
-        },
-      );
+      // Build headers based on transport type
+      final headers = <String, String>{
+        'User-Agent': 'NoteSynapse/1.0',
+      };
+      
+      // Add bearer token to headers if available
+      if (bearerToken != null && bearerToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $bearerToken';
+      }
+
+      // Create transport configuration based on type
+      final TransportConfig transportConfig;
+      switch (transportType) {
+        case McpTransportType.sse:
+          // SSE requires text/event-stream
+          headers['Accept'] = 'text/event-stream';
+          transportConfig = TransportConfig.sse(
+            serverUrl: baseUrl,
+            headers: headers,
+          );
+          break;
+        case McpTransportType.streamableHttp:
+          // HTTP accepts JSON
+          headers['Accept'] = 'application/json';
+          transportConfig = TransportConfig.streamableHttp(
+            baseUrl: baseUrl,
+            headers: headers,
+          );
+          break;
+      }
 
       final clientResult = await McpClient.createAndConnect(
         config: config,
