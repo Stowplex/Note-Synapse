@@ -101,8 +101,7 @@ class ConversationService {
       if (conversation == null) continue;
 
       // Get notes for this conversation
-      final allNotes = await _databaseService.getAllNotes();
-      final conversationNotes = allNotes.where((note) => conversation.noteIds.contains(note.id)).toList();
+      final conversationNotes = await _databaseService.getNotesByIds(conversation.noteIds);
 
       // Get initial context (first user message)
       final messages = await _databaseService.getConversationMessages(conversationId);
@@ -702,10 +701,10 @@ class ConversationService {
   // Get notes for a conversation
   Future<List<Note>> getConversationNotes(String conversationId) async {
     final conversation = await _databaseService.getConversation(conversationId);
-    if (conversation == null) return [];
+    if (conversation == null || conversation.noteIds.isEmpty) return [];
 
-    final allNotes = await _databaseService.getAllNotes();
-    return allNotes.where((note) => conversation.noteIds.contains(note.id)).toList();
+    // Efficiently fetch only the notes referenced by this conversation
+    return await _databaseService.getNotesByIds(conversation.noteIds);
   }
 
   // Add notes to a conversation

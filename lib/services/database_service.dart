@@ -1137,10 +1137,17 @@ class DatabaseService {
   // Validate that all note IDs in a conversation exist
   Future<List<String>> validateConversationNotes(String conversationId) async {
     final conversation = await getConversation(conversationId);
-    if (conversation == null) return [];
+    if (conversation == null || conversation.noteIds.isEmpty) return [];
     
-    final allNotes = await getAllNotes();
-    final existingNoteIds = allNotes.map((note) => note.id).toSet();
+    final db = await database;
+    // Efficiently check which IDs exist using a simple COUNT query
+    final placeholders = List.filled(conversation.noteIds.length, '?').join(',');
+    final result = await db.rawQuery(
+      'SELECT id FROM notes WHERE id IN ($placeholders)',
+      conversation.noteIds,
+    );
+    
+    final existingNoteIds = result.map((row) => row['id'] as String).toSet();
     
     // Find missing note IDs
     final missingNoteIds = conversation.noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
@@ -1154,7 +1161,6 @@ class DatabaseService {
 
   // Clean up invalid note references from conversations
   Future<void> cleanupInvalidNoteReferences() async {
-    final db = await database;
     final allNotes = await getAllNotes();
     final existingNoteIds = allNotes.map((note) => note.id).toSet();
     
@@ -1261,6 +1267,33 @@ class DatabaseService {
 
     if (maps.isEmpty) return null;
     return await _mapToNote(maps.first);
+  }
+
+  // Get multiple notes by their IDs efficiently
+  Future<List<Note>> getNotesByIds(List<String> noteIds) async {
+    if (noteIds.isEmpty) return [];
+    
+    final db = await database;
+    // Use WHERE IN clause for efficient batch retrieval
+    final placeholders = List.filled(noteIds.length, '?').join(',');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      where: 'id IN ($placeholders)',
+      whereArgs: noteIds,
+    );
+
+    final List<Note> notes = [];
+    for (final map in maps) {
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
+    }
+    return notes;
   }
 
   Future<void> updateNote(Note note) async {
@@ -2562,8 +2595,6 @@ class DatabaseService {
 
   // Comprehensive message deletion with subtree cleanup
   Future<void> deleteMessageWithSubtree(String messageId) async {
-    final db = await database;
-    
     LoggerService.info('Starting deletion of message $messageId and its subtree');
     
     // 1. Find all messages in the subtree (children recursively)
