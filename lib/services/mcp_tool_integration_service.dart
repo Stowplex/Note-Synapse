@@ -31,13 +31,51 @@ class McpToolIntegrationService {
     // Build enum of service names
     final serviceNames = toolsByEndpoint.keys.toList();
     
-    // Build description with available tools
+    // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
-    toolsDescription.writeln('Call an MCP tool. Available tools by service:');
+    toolsDescription.writeln('Call an MCP tool. Available tools:\n');
+    
     for (final entry in toolsByEndpoint.entries) {
-      toolsDescription.writeln('${entry.key}:');
+      final serviceName = entry.key;
+      toolsDescription.writeln('=== Endpoint: $serviceName ===');
+      
       for (final tool in entry.value) {
-        toolsDescription.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
+        toolsDescription.writeln('Tool: ${tool.name}');
+        
+        if (tool.description != null && tool.description!.isNotEmpty) {
+          toolsDescription.writeln('Description: ${tool.description}');
+        }
+        
+        if (tool.inputSchema != null) {
+          final schema = tool.inputSchema!;
+          final schemaType = schema['type'] ?? 'object';
+          toolsDescription.writeln('Schema Type: $schemaType');
+          
+          // Parse and display properties
+          final properties = schema['properties'] as Map<String, dynamic>?;
+          if (properties != null && properties.isNotEmpty) {
+            toolsDescription.writeln('Parameters:');
+            properties.forEach((paramName, paramDetails) {
+              final details = paramDetails as Map<String, dynamic>;
+              final paramType = details['type'] ?? 'any';
+              final paramDesc = details['description'] ?? '';
+              toolsDescription.writeln('  - $paramName ($paramType): $paramDesc');
+              
+              // Include enum values if present
+              if (details.containsKey('enum')) {
+                toolsDescription.writeln('    Allowed values: ${details['enum']}');
+              }
+            });
+            
+            // Show required parameters
+            final required = schema['required'] as List?;
+            if (required != null && required.isNotEmpty) {
+              toolsDescription.writeln('Required parameters: ${required.join(", ")}');
+            }
+          }
+        }
+        
+        toolsDescription.writeln('');
       }
     }
 
@@ -58,7 +96,7 @@ class McpToolIntegrationService {
           },
           'params': {
             'type': 'object',
-            'description': 'The parameters to pass to the tool',
+            'description': 'The parameters to pass to the tool (as a JSON object matching the tool\'s schema)',
           },
         },
         'required': ['service_name', 'tool_name', 'params'],
@@ -74,13 +112,51 @@ class McpToolIntegrationService {
     // Build enum of service names
     final serviceNames = toolsByEndpoint.keys.toList();
     
-    // Build description with available tools
+    // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
-    toolsDescription.writeln('Call an MCP tool. Available tools by service:');
+    toolsDescription.writeln('Call an MCP tool. Available tools:\n');
+    
     for (final entry in toolsByEndpoint.entries) {
-      toolsDescription.writeln('${entry.key}:');
+      final serviceName = entry.key;
+      toolsDescription.writeln('=== Endpoint: $serviceName ===');
+      
       for (final tool in entry.value) {
-        toolsDescription.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
+        toolsDescription.writeln('Tool: ${tool.name}');
+        
+        if (tool.description != null && tool.description!.isNotEmpty) {
+          toolsDescription.writeln('Description: ${tool.description}');
+        }
+        
+        if (tool.inputSchema != null) {
+          final schema = tool.inputSchema!;
+          final schemaType = schema['type'] ?? 'object';
+          toolsDescription.writeln('Schema Type: $schemaType');
+          
+          // Parse and display properties
+          final properties = schema['properties'] as Map<String, dynamic>?;
+          if (properties != null && properties.isNotEmpty) {
+            toolsDescription.writeln('Parameters:');
+            properties.forEach((paramName, paramDetails) {
+              final details = paramDetails as Map<String, dynamic>;
+              final paramType = details['type'] ?? 'any';
+              final paramDesc = details['description'] ?? '';
+              toolsDescription.writeln('  - $paramName ($paramType): $paramDesc');
+              
+              // Include enum values if present
+              if (details.containsKey('enum')) {
+                toolsDescription.writeln('    Allowed values: ${details['enum']}');
+              }
+            });
+            
+            // Show required parameters
+            final required = schema['required'] as List?;
+            if (required != null && required.isNotEmpty) {
+              toolsDescription.writeln('Required parameters: ${required.join(", ")}');
+            }
+          }
+        }
+        
+        toolsDescription.writeln('');
       }
     }
 
@@ -101,7 +177,7 @@ class McpToolIntegrationService {
           },
           'params': {
             'type': 'object',
-            'description': 'The parameters to pass to the tool',
+            'description': 'The parameters to pass to the tool (as a JSON object matching the tool\'s schema)',
           },
         },
         'required': ['service_name', 'tool_name', 'params'],
@@ -110,7 +186,7 @@ class McpToolIntegrationService {
   }
 
   /// Build system prompt that explains available MCP tools to the AI
-  /// When function calling is available, this is minimal since tools are in function definitions
+  /// Provides detailed tool information to help the AI understand capabilities
   static String buildMcpSystemPrompt(
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
@@ -121,22 +197,42 @@ class McpToolIntegrationService {
     final buffer = StringBuffer();
     buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
     buffer.writeln('You have access to external tools via the call_tool function.');
-    buffer.writeln('Use function calling to invoke these tools when needed.\n');
+    buffer.writeln('Use function calling to invoke these tools when needed.');
+    buffer.writeln('Always check the parameter schemas and provide the correct types and required fields.\n');
 
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
-      buffer.writeln('Service: $serviceName');
+      buffer.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        buffer.writeln('  - ${tool.name}: ${tool.description ?? "No description"}');
+        buffer.writeln('Tool: ${tool.name}');
+        
+        if (tool.description != null && tool.description!.isNotEmpty) {
+          buffer.writeln('Description: ${tool.description}');
+        }
+        
         if (tool.inputSchema != null) {
-          final props = tool.inputSchema!['properties'] as Map?;
-          if (props != null && props.isNotEmpty) {
-            buffer.writeln('    Required params: ${props.keys.join(", ")}');
+          final schema = tool.inputSchema!;
+          final properties = schema['properties'] as Map<String, dynamic>?;
+          
+          if (properties != null && properties.isNotEmpty) {
+            buffer.writeln('Parameters:');
+            properties.forEach((paramName, paramDetails) {
+              final details = paramDetails as Map<String, dynamic>;
+              final paramType = details['type'] ?? 'any';
+              final paramDesc = details['description'] ?? '';
+              buffer.writeln('  - $paramName ($paramType): $paramDesc');
+            });
+            
+            final required = schema['required'] as List?;
+            if (required != null && required.isNotEmpty) {
+              buffer.writeln('Required: ${required.join(", ")}');
+            }
           }
         }
+        
+        buffer.writeln();
       }
-      buffer.writeln();
     }
 
     return buffer.toString();

@@ -205,30 +205,27 @@ class McpService {
         enableDebugLogging: true,
       );
 
-      // Build headers based on transport type
+      // Build base headers (let MCP client handle Accept header internally)
       final headers = <String, String>{
         'User-Agent': 'NoteSynapse/1.0',
       };
-      
-      // Add bearer token to headers if available
-      if (bearerToken != null && bearerToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $bearerToken';
-      }
 
       // Create transport configuration based on type
       final TransportConfig transportConfig;
       switch (endpoint.transportType) {
         case McpTransportType.sse:
-          // SSE requires text/event-stream
-          headers['Accept'] = 'text/event-stream';
+          // For SSE, bearer token is passed as a parameter
           transportConfig = TransportConfig.sse(
             serverUrl: endpoint.baseUrl,
             headers: headers,
+            bearerToken: bearerToken,
           );
           break;
         case McpTransportType.streamableHttp:
-          // HTTP accepts JSON
-          headers['Accept'] = 'application/json';
+          // For HTTP, bearer token goes in headers
+          if (bearerToken != null && bearerToken.isNotEmpty) {
+            headers['Authorization'] = 'Bearer $bearerToken';
+          }
           transportConfig = TransportConfig.streamableHttp(
             baseUrl: endpoint.baseUrl,
             headers: headers,
@@ -314,30 +311,27 @@ class McpService {
         enableDebugLogging: false,
       );
 
-      // Build headers based on transport type
+      // Build base headers (let MCP client handle Accept header internally)
       final headers = <String, String>{
         'User-Agent': 'NoteSynapse/1.0',
       };
-      
-      // Add bearer token to headers if available
-      if (bearerToken != null && bearerToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $bearerToken';
-      }
 
       // Create transport configuration based on type
       final TransportConfig transportConfig;
       switch (endpoint.transportType) {
         case McpTransportType.sse:
-          // SSE requires text/event-stream
-          headers['Accept'] = 'text/event-stream';
+          // For SSE, bearer token is passed as a parameter
           transportConfig = TransportConfig.sse(
             serverUrl: endpoint.baseUrl,
             headers: headers,
+            bearerToken: bearerToken,
           );
           break;
         case McpTransportType.streamableHttp:
-          // HTTP accepts JSON
-          headers['Accept'] = 'application/json';
+          // For HTTP, bearer token goes in headers
+          if (bearerToken != null && bearerToken.isNotEmpty) {
+            headers['Authorization'] = 'Bearer $bearerToken';
+          }
           transportConfig = TransportConfig.streamableHttp(
             baseUrl: endpoint.baseUrl,
             headers: headers,
@@ -397,30 +391,27 @@ class McpService {
         enableDebugLogging: false,
       );
 
-      // Build headers based on transport type
+      // Build base headers (let MCP client handle Accept header internally)
       final headers = <String, String>{
         'User-Agent': 'NoteSynapse/1.0',
       };
-      
-      // Add bearer token to headers if available
-      if (bearerToken != null && bearerToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $bearerToken';
-      }
 
       // Create transport configuration based on type
       final TransportConfig transportConfig;
       switch (transportType) {
         case McpTransportType.sse:
-          // SSE requires text/event-stream
-          headers['Accept'] = 'text/event-stream';
+          // For SSE, bearer token is passed as a parameter
           transportConfig = TransportConfig.sse(
             serverUrl: baseUrl,
             headers: headers,
+            bearerToken: bearerToken,
           );
           break;
         case McpTransportType.streamableHttp:
-          // HTTP accepts JSON
-          headers['Accept'] = 'application/json';
+          // For HTTP, bearer token goes in headers
+          if (bearerToken != null && bearerToken.isNotEmpty) {
+            headers['Authorization'] = 'Bearer $bearerToken';
+          }
           transportConfig = TransportConfig.streamableHttp(
             baseUrl: baseUrl,
             headers: headers,

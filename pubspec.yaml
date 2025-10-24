@@ -120,7 +120,8 @@ dependencies:
   graphview: ^1.5.1
   
   # MCP (Model Context Protocol) client
-  mcp_client: ^1.0.2
+  mcp_client: # ^1.0.2
+    path: ../mcp_client
   
 
 dev_dependencies:
