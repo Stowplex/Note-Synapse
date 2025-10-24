@@ -6,10 +6,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
+import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
+import '../services/mcp_service.dart';
+import '../services/mcp_tool_integration_service.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
@@ -39,11 +42,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   bool _isLoading = false;
   bool _isSending = false;
   List<PlatformFile> _attachedFiles = [];
+  
+  // MCP support
+  List<McpEndpoint> _availableMcpEndpoints = [];
+  Set<String> _selectedMcpEndpointIds = {};
+  Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
 
   @override
   void initState() {
     super.initState();
     _initializeConversation();
+    _loadMcpEndpoints();
   }
 
   Future<void> _initializeConversation() async {
@@ -79,6 +88,46 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadMcpEndpoints() async {
+    try {
+      final endpoints = await McpService.getEndpoints();
+      // Only show endpoints that have cached tools
+      final endpointsWithTools = <McpEndpoint>[];
+      for (final endpoint in endpoints) {
+        final cache = await McpService.getCachedTools(endpoint.id);
+        if (cache != null && cache.tools.isNotEmpty) {
+          endpointsWithTools.add(endpoint);
+        }
+      }
+      setState(() {
+        _availableMcpEndpoints = endpointsWithTools;
+      });
+    } catch (e) {
+      LoggerService.error('Error loading MCP endpoints: $e');
+    }
+  }
+
+  Future<void> _updateMcpTools() async {
+    if (_selectedMcpEndpointIds.isEmpty) {
+      setState(() {
+        _mcpToolsByEndpoint = {};
+      });
+      return;
+    }
+
+    try {
+      final toolsByEndpoint = await McpToolIntegrationService.getAvailableTools(
+        _selectedMcpEndpointIds.toList(),
+      );
+      setState(() {
+        _mcpToolsByEndpoint = toolsByEndpoint;
+      });
+      LoggerService.info('Updated MCP tools: ${toolsByEndpoint.length} services, ${toolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools');
+    } catch (e) {
+      LoggerService.error('Error updating MCP tools: $e');
     }
   }
 
@@ -156,6 +205,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       String question = userMessage;
       if (conversationHistory.isNotEmpty) {
         question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
+      }
+
+      // Add MCP tool information if tools are available
+      if (_mcpToolsByEndpoint.isNotEmpty) {
+        final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+        question = mcpPrompt + question;
+        LoggerService.info('MCP tools enabled for this request: ${_mcpToolsByEndpoint.length} services');
       }
 
       // Use AI service's answerNoteQuestion method which handles note context and attachments
@@ -356,6 +412,99 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMcpSelectionSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.cloud_sync,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'MCP Tools',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                ),
+              ),
+              if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${_selectedMcpEndpointIds.length} active',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: _availableMcpEndpoints.map((endpoint) {
+              final isSelected = _selectedMcpEndpointIds.contains(endpoint.id);
+              return FilterChip(
+                label: Text(endpoint.name),
+                selected: isSelected,
+                onSelected: (selected) async {
+                  setState(() {
+                    if (selected) {
+                      _selectedMcpEndpointIds.add(endpoint.id);
+                    } else {
+                      _selectedMcpEndpointIds.remove(endpoint.id);
+                    }
+                  });
+                  await _updateMcpTools();
+                },
+                avatar: Icon(
+                  Icons.cloud,
+                  size: 16,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              );
+            }).toList(),
+          ),
+          if (_mcpToolsByEndpoint.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -711,6 +860,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           ),
           // Attached files section
           _buildAttachedFilesSection(),
+          // MCP selection section
+          if (_availableMcpEndpoints.isNotEmpty) _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),
