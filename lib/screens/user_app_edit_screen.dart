@@ -68,26 +68,25 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     );
     
     // Add listener to find input controller to prevent text selection issues
-    _findController.findInputController.addListener(() {
-      final text = _findController.findInputController.text;
-      final selection = _findController.findInputController.selection;
-      
-      // If all text is selected, move cursor to end
-      if (selection.isValid && selection.start == 0 && selection.end == text.length && text.isNotEmpty) {
-        _findController.findInputController.selection = TextSelection.fromPosition(
-          TextPosition(offset: text.length),
-        );
-      }
-    });
-
-    // Add listener to code controller to update UI when selection changes
-    _codeController.addListener(() {
+    // Use addPostFrameCallback to avoid potential issues during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          // This will trigger a rebuild to show/hide the copy button
+        _findController.findInputController.addListener(() {
+          final text = _findController.findInputController.text;
+          final selection = _findController.findInputController.selection;
+          
+          // If all text is selected, move cursor to end
+          if (selection.isValid && selection.start == 0 && selection.end == text.length && text.isNotEmpty) {
+            _findController.findInputController.selection = TextSelection.fromPosition(
+              TextPosition(offset: text.length),
+            );
+          }
         });
       }
     });
+
+    // Note: No need to add listener to code controller as the mobile toolbar
+    // controller already handles selection-based UI updates automatically
 
     
     _tabController = TabController(length: 2, vsync: this);
@@ -644,22 +643,35 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   }
 
   /// Get the appropriate code theme based on the current app theme
+  /// Cached to avoid repeated Theme.of(context) calls during build
+  CodeHighlightTheme? _cachedCodeTheme;
+  Brightness? _lastBrightness;
+  
   CodeHighlightTheme get _codeTheme {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return CodeHighlightTheme(
-      languages: {
-        'html': CodeHighlightThemeMode(
-          mode: langXml, // HTML uses XML highlighting mode
-        ),
-        'javascript': CodeHighlightThemeMode(
-          mode: langJavascript,
-        ),
-        'css': CodeHighlightThemeMode(
-          mode: langCss,
-        ),
-      },
-      theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
-    );
+    final currentBrightness = Theme.of(context).brightness;
+    
+    // Only recreate theme if brightness has changed
+    if (_cachedCodeTheme == null || _lastBrightness != currentBrightness) {
+      _lastBrightness = currentBrightness;
+      final isDarkMode = currentBrightness == Brightness.dark;
+      
+      _cachedCodeTheme = CodeHighlightTheme(
+        languages: {
+          'html': CodeHighlightThemeMode(
+            mode: langXml, // HTML uses XML highlighting mode
+          ),
+          'javascript': CodeHighlightThemeMode(
+            mode: langJavascript,
+          ),
+          'css': CodeHighlightThemeMode(
+            mode: langCss,
+          ),
+        },
+        theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
+      );
+    }
+    
+    return _cachedCodeTheme!;
   }
 
   void _copyViewSelectedText() {
