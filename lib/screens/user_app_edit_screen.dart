@@ -8,6 +8,7 @@ import 'package:re_highlight/languages/xml.dart';
 import 'package:re_highlight/languages/javascript.dart';
 import 'package:re_highlight/languages/css.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -642,6 +643,25 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     }
   }
 
+  /// Get the appropriate code theme based on the current app theme
+  CodeHighlightTheme get _codeTheme {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return CodeHighlightTheme(
+      languages: {
+        'html': CodeHighlightThemeMode(
+          mode: langXml, // HTML uses XML highlighting mode
+        ),
+        'javascript': CodeHighlightThemeMode(
+          mode: langJavascript,
+        ),
+        'css': CodeHighlightThemeMode(
+          mode: langCss,
+        ),
+      },
+      theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
+    );
+  }
+
   void _copyViewSelectedText() {
     final selection = _viewController.selection;
     if (!selection.isCollapsed) {
@@ -1064,20 +1084,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                         showCursorWhenReadOnly: true, // Enable cursor and selection in read-only mode
                         wordWrap: false, // Disable word wrap for consistency
                         style: CodeEditorStyle(
-                          codeTheme: CodeHighlightTheme(
-                            languages: {
-                              'html': CodeHighlightThemeMode(
-                                mode: langXml, // HTML uses XML highlighting mode
-                              ),
-                              'javascript': CodeHighlightThemeMode(
-                                mode: langJavascript,
-                              ),
-                              'css': CodeHighlightThemeMode(
-                                mode: langCss,
-                              ),
-                            },
-                            theme: atomOneDarkTheme,
-                          ),
+                          codeTheme: _codeTheme,
                           fontFamily: 'monospace',
                           fontSize: 12,
                         ),
@@ -1449,20 +1456,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   toolbarController: _mobileToolbarController,
                   wordWrap: false, // Disable word wrap
                   style: CodeEditorStyle(
-                    codeTheme: CodeHighlightTheme(
-                      languages: {
-                        'html': CodeHighlightThemeMode(
-                          mode: langXml, // HTML uses XML highlighting mode
-                        ),
-                        'javascript': CodeHighlightThemeMode(
-                          mode: langJavascript,
-                        ),
-                        'css': CodeHighlightThemeMode(
-                          mode: langCss,
-                        ),
-                      },
-                      theme: atomOneDarkTheme,
-                    ),
+                    codeTheme: _codeTheme,
                     fontFamily: 'monospace',
                     fontSize: 12,
                   ),
