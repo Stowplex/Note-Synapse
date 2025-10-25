@@ -741,7 +741,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                         ),
                         indicatorBuilder: (context, editingController, chunkController, notifier) {
                           return DefaultCodeChunkIndicator(
-                            width: 20,
+                            width: 8,
                             controller: chunkController,
                             notifier: notifier,
                           );
@@ -1120,7 +1120,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   ),
                   indicatorBuilder: (context, editingController, chunkController, notifier) {
                     return DefaultCodeChunkIndicator(
-                      width: 20,
+                      width: 8,
                       controller: chunkController,
                       notifier: notifier,
                     );
