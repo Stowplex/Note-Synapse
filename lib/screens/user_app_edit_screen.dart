@@ -988,32 +988,39 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         // App Info Card
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.appName,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.app.name,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    l10n.appDescription,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.app.description,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                ],
+          child: SizedBox(
+            width: double.infinity, // Make card expand to full width
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.appName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.app.name,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.appDescription,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.app.description.length > 200 
+                          ? '${widget.app.description.substring(0, 200)}...'
+                          : widget.app.description,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
