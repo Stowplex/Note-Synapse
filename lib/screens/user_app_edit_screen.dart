@@ -36,12 +36,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   late final CodeLineEditingController _codeController;
   late final CodeLineEditingController _viewController; // Read-only controller for viewing
   late final CodeFindController _findController;
+  late final MobileSelectionToolbarController _mobileToolbarController;
+  late final MobileSelectionToolbarController _viewMobileToolbarController;
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isCodeEditable = false;
   bool _isSearchVisible = false; // Control search input visibility
-  bool _hasViewSelection = false; // Track if view has text selected
-  late VoidCallback _viewSelectionListener;
   String _originalCode = '';
   List<String> _attachmentPaths = [];
   
@@ -59,6 +59,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     _codeController = CodeLineEditingController.fromText('');
     _viewController = CodeLineEditingController.fromText('');
     _findController = CodeFindController(_codeController);
+    _mobileToolbarController = MobileSelectionToolbarController(
+      builder: _buildMobileToolbar,
+    );
+    _viewMobileToolbarController = MobileSelectionToolbarController(
+      builder: _buildViewMobileToolbar,
+    );
     
     // Add listener to find input controller to prevent text selection issues
     _findController.findInputController.addListener(() {
@@ -82,24 +88,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       }
     });
 
-    // Add listener to view controller to track selection changes
-    // Use Future.microtask to avoid setState during build
-    _viewSelectionListener = () {
-      if (mounted) {
-        final hasSelection = !_viewController.selection.isCollapsed;
-        if (_hasViewSelection != hasSelection) {
-          setState(() {
-            _hasViewSelection = hasSelection;
-          });
-        }
-      }
-    };
-    
-    Future.microtask(() {
-      if (mounted) {
-        _viewController.addListener(_viewSelectionListener);
-      }
-    });
     
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
@@ -233,7 +221,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void dispose() {
     _editSuggestionController.dispose();
     _codeController.dispose();
-    _viewController.removeListener(_viewSelectionListener);
     _viewController.dispose();
     _findController.dispose();
     _tabController.dispose();
@@ -596,17 +583,48 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void _copySelectedText() {
     final selection = _codeController.selection;
     if (!selection.isCollapsed) {
-      // Get the selected text from the controller
-      final selectedText = _codeController.text.substring(
-        _codeController.selection.baseOffset,
-        _codeController.selection.extentOffset,
-      );
+      // Get the selected text using the proper CodeLineSelection methods
+      final codeLines = _codeController.value.codeLines;
+      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
+      
       Clipboard.setData(ClipboardData(text: selectedText));
-      // Copy to clipboard (you might want to use a clipboard package)
-      // For now, we'll just show a message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Copied: ${selectedText.length} characters')),
       );
+    }
+  }
+
+  String _getSelectedTextFromCodeLines(CodeLines codeLines, CodeLineSelection selection) {
+    if (selection.isCollapsed) return '';
+    
+    final startIndex = selection.startIndex;
+    final endIndex = selection.endIndex;
+    final startOffset = selection.startOffset;
+    final endOffset = selection.endOffset;
+    
+    if (startIndex == endIndex) {
+      // Selection is within a single line
+      return codeLines[startIndex].text.substring(startOffset, endOffset);
+    } else {
+      // Selection spans multiple lines
+      final buffer = StringBuffer();
+      
+      // First line (from startOffset to end)
+      buffer.write(codeLines[startIndex].text.substring(startOffset));
+      
+      // Middle lines (complete lines)
+      for (int i = startIndex + 1; i < endIndex; i++) {
+        buffer.write('\n');
+        buffer.write(codeLines[i].text);
+      }
+      
+      // Last line (from start to endOffset)
+      if (endIndex < codeLines.length) {
+        buffer.write('\n');
+        buffer.write(codeLines[endIndex].text.substring(0, endOffset));
+      }
+      
+      return buffer.toString();
     }
   }
 
@@ -624,6 +642,32 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     }
   }
 
+  void _copyViewSelectedText() {
+    final selection = _viewController.selection;
+    if (!selection.isCollapsed) {
+      // Get the selected text using the proper CodeLineSelection methods
+      final codeLines = _viewController.value.codeLines;
+      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
+      
+      Clipboard.setData(ClipboardData(text: selectedText));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
+      );
+    }
+  }
+
+  void _selectAllView() {
+    final codeLines = _viewController.value.codeLines;
+    if (codeLines.isNotEmpty) {
+      _viewController.selection = CodeLineSelection(
+        baseIndex: 0,
+        baseOffset: 0,
+        extentIndex: codeLines.length - 1,
+        extentOffset: codeLines.last.length,
+      );
+    }
+  }
+
   void _undo() {
     _codeController.undo();
   }
@@ -632,9 +676,270 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     _codeController.redo();
   }
 
-  bool get _hasSelection => !_codeController.selection.isCollapsed;
   bool get _canUndo => _codeController.canUndo;
   bool get _canRedo => _codeController.canRedo;
+
+  Widget _buildMobileToolbar({
+    required BuildContext context,
+    required TextSelectionToolbarAnchors anchors,
+    required CodeLineEditingController controller,
+    required VoidCallback onDismiss,
+    required VoidCallback onRefresh,
+  }) {
+    final hasSelection = !controller.selection.isCollapsed;
+    
+    return Align(
+      alignment: Alignment.center,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 100, // Increased width to accommodate both buttons
+          height: 40,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Copy button when text is selected
+              if (hasSelection)
+                _buildCompactToolbarButton(
+                  context: context,
+                  icon: Icons.copy,
+                  onPressed: () {
+                    _copySelectedText();
+                    onDismiss();
+                  },
+                ),
+              // Select All button (always visible)
+              _buildCompactToolbarButton(
+                context: context,
+                icon: Icons.select_all,
+                onPressed: () {
+                  _selectAll();
+                  onRefresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewMobileToolbar({
+    required BuildContext context,
+    required TextSelectionToolbarAnchors anchors,
+    required CodeLineEditingController controller,
+    required VoidCallback onDismiss,
+    required VoidCallback onRefresh,
+  }) {
+    final hasSelection = !controller.selection.isCollapsed;
+    
+    return Align(
+      alignment: Alignment.center,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 100, // Same width as edit toolbar
+          height: 40,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Copy button when text is selected
+              if (hasSelection)
+                _buildCompactToolbarButton(
+                  context: context,
+                  icon: Icons.copy,
+                  onPressed: () {
+                    _copyViewSelectedText();
+                    onDismiss();
+                  },
+                ),
+              // Select All button (always visible)
+              _buildCompactToolbarButton(
+                context: context,
+                icon: Icons.select_all,
+                onPressed: () {
+                  _selectAllView();
+                  onRefresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactToolbarButton({
+    required BuildContext context,
+    required IconData icon,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: 40,
+      height: 32,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            icon,
+            size: 16,
+            color: onPressed != null 
+              ? Theme.of(context).textTheme.bodyMedium?.color
+              : Theme.of(context).disabledColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildPermanentToolbar() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Undo button
+          IconButton(
+            icon: const Icon(Icons.undo, size: 18),
+            onPressed: _canUndo ? _undo : null,
+            tooltip: 'Undo',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          // Redo button
+          IconButton(
+            icon: const Icon(Icons.redo, size: 18),
+            onPressed: _canRedo ? _redo : null,
+            tooltip: 'Redo',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const SizedBox(width: 8),
+          // Search toggle button
+          IconButton(
+            icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search, size: 18),
+            onPressed: _toggleSearch,
+            tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _findController.findInputController,
+              focusNode: _findController.findInputFocusNode,
+              decoration: const InputDecoration(
+                hintText: 'Find...',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                _findController.findMode();
+              },
+              onTap: () {
+                // Move cursor to end of text instead of selecting all
+                final text = _findController.findInputController.text;
+                _findController.findInputController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: text.length),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Match counter
+          ValueListenableBuilder<CodeFindValue?>(
+            valueListenable: _findController,
+            builder: (context, value, child) {
+              if (value?.result != null && value!.result!.matches.isNotEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Text(
+                    '${value.result!.index + 1}/${value.result!.matches.length}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_up, size: 16),
+            onPressed: () => _findController.previousMatch(),
+            tooltip: 'Find previous',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+            onPressed: () => _findController.nextMatch(),
+            tooltip: 'Find next',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          IconButton(
+            icon: const Icon(Icons.find_replace, size: 16),
+            onPressed: () => _findController.replaceMode(),
+            tooltip: 'Find and replace',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -727,75 +1032,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                       l10n.appCode,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    Row(
-                      children: [
-                        // Copy button
-                        Focus(
-                          descendantsAreFocusable: false,
-                          child: GestureDetector(
-                            onTap: () {
-                              final selection = _viewController.selection;
-                              if (!selection.isCollapsed) {
-                                final codeLines = _viewController.codeLines;
-                                String selectedText;
-                                if (selection.start.index == selection.end.index) {
-                                  selectedText = codeLines[selection.start.index].text.substring(selection.start.offset, selection.end.offset);
-                                } else {
-                                  final buffer = StringBuffer();
-                                  buffer.write(codeLines[selection.start.index].text.substring(selection.start.offset));
-                                  for (int i = selection.start.index + 1; i < selection.end.index; i++) {
-                                    buffer.write('\n');
-                                    buffer.write(codeLines[i].text);
-                                  }
-                                  buffer.write('\n');
-                                  buffer.write(codeLines[selection.end.index].text.substring(0, selection.end.offset));
-                                  selectedText = buffer.toString();
-                                }
-
-                                Clipboard.setData(ClipboardData(text: selectedText));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Copied: ${selectedText.length} characters')),
-                                );
-                              } else {
-                                final text = _viewController.text;
-                                Clipboard.setData(ClipboardData(text: text));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Copied: ${text.length} characters')),
-                                );
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[600],
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.copy, size: 16, color: Colors.white),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _hasViewSelection ? 'Copy Selected' : 'Copy All',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Edit button
-                        ElevatedButton.icon(
-                          onPressed: _toggleCodeEdit,
-                          icon: const Icon(Icons.edit, size: 16),
-                          label: Text(l10n.editCodeDirectly),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
+                    // Edit button
+                    ElevatedButton.icon(
+                      onPressed: _toggleCodeEdit,
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: Text(l10n.editCodeDirectly),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -806,6 +1051,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                       padding: const EdgeInsets.all(12.0),
                       child: CodeEditor(
                         controller: _viewController,
+                        toolbarController: _viewMobileToolbarController,
                         readOnly: true, // Make it read-only
                         showCursorWhenReadOnly: true, // Enable cursor and selection in read-only mode
                         wordWrap: false, // Disable word wrap for consistency
@@ -1171,11 +1417,16 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           ),
         ),
         
-        // Custom toolbar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
-          child: _buildCustomToolbar(),
-        ),
+        // Permanent toolbar
+        _buildPermanentToolbar(),
+        
+        // Search bar (only visible when search is enabled)
+        if (_isSearchVisible) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: _buildSearchBar(),
+          ),
+        ],
         
         // Full-screen code editor
         Expanded(
@@ -1187,6 +1438,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                 child: CodeEditor(
                   controller: _codeController,
                   findController: _findController,
+                  toolbarController: _mobileToolbarController,
                   wordWrap: false, // Disable word wrap
                   style: CodeEditorStyle(
                     codeTheme: CodeHighlightTheme(
@@ -1223,158 +1475,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     );
   }
 
-  Widget _buildCustomToolbar() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Main toolbar row
-        Container(
-          height: 36, // Fixed height
-          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: Theme.of(context).dividerColor,
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              // Copy button (only when text is selected)
-              if (_hasSelection) ...[
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 14),
-                  onPressed: _copySelectedText,
-                  tooltip: 'Copy selected text',
-                  padding: const EdgeInsets.all(2),
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                ),
-                const SizedBox(width: 2),
-              ],
-              // Select All button
-              IconButton(
-                icon: const Icon(Icons.select_all, size: 14),
-                onPressed: _selectAll,
-                tooltip: 'Select all',
-                padding: const EdgeInsets.all(2),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-              const SizedBox(width: 2),
-              // Undo button
-              IconButton(
-                icon: const Icon(Icons.undo, size: 14),
-                onPressed: _canUndo ? _undo : null,
-                tooltip: 'Undo',
-                padding: const EdgeInsets.all(2),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-              const SizedBox(width: 2),
-              // Redo button
-              IconButton(
-                icon: const Icon(Icons.redo, size: 14),
-                onPressed: _canRedo ? _redo : null,
-                tooltip: 'Redo',
-                padding: const EdgeInsets.all(2),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-              const Spacer(),
-              // Search toggle button
-              IconButton(
-                icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search, size: 14),
-                onPressed: _toggleSearch,
-                tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
-                padding: const EdgeInsets.all(2),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-              const SizedBox(width: 2),
-              // Find and replace button
-              IconButton(
-                icon: const Icon(Icons.find_replace, size: 14),
-                onPressed: () => _findController.replaceMode(),
-                tooltip: 'Find and replace',
-                padding: const EdgeInsets.all(2),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-            ],
-          ),
-        ),
-        // Search input row (only visible when search is enabled)
-        if (_isSearchVisible) ...[
-          const SizedBox(height: 4),
-          Container(
-            height: 32, // Fixed height
-            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: Theme.of(context).dividerColor,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _findController.findInputController,
-                    focusNode: _findController.findInputFocusNode,
-                    decoration: const InputDecoration(
-                      hintText: 'Find...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      isDense: true,
-                    ),
-                    onChanged: (value) {
-                      _findController.findMode();
-                    },
-                    onTap: () {
-                      // Move cursor to end of text instead of selecting all
-                      final text = _findController.findInputController.text;
-                      _findController.findInputController.selection = TextSelection.fromPosition(
-                        TextPosition(offset: text.length),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Match counter
-                ValueListenableBuilder<CodeFindValue?>(
-                  valueListenable: _findController,
-                  builder: (context, value, child) {
-                    if (value?.result != null && value!.result!.matches.isNotEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text(
-                          '${value.result!.index + 1}/${value.result!.matches.length}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_up, size: 14),
-                  onPressed: () => _findController.previousMatch(),
-                  tooltip: 'Find previous',
-                  padding: const EdgeInsets.all(2),
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 14),
-                  onPressed: () => _findController.nextMatch(),
-                  tooltip: 'Find next',
-                  padding: const EdgeInsets.all(2),
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
 }
 
