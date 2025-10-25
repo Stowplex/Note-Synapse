@@ -13,6 +13,7 @@ import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import 'conversation_chat_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -94,6 +95,17 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: l10n.exitMultiSelectMode,
             ),
           ] else ...[
+            IconButton(
+              icon: const Icon(Icons.chat),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const ConversationChatScreen(),
+                  ),
+                );
+              },
+              tooltip: 'AI Conversation',
+            ),
             MultiSelectTagFilter(
               availableTags: _availableTags,
               selectedTags: _selectedTags,

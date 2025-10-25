@@ -100,6 +100,47 @@ class OpenAIModel implements AIModel {
     });
   }
 
+  @override
+  Future<Map<String, dynamic>> generateWithTools(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with tools', () async {
+      await initialize(config: _config);
+
+      // Add date context
+      final todayContext = AIModel.getTodayContext();
+      final limitationNote = _buildLimitationNote(attachedFiles);
+      final enhancedPrompt = prompt + todayContext + limitationNote;
+
+      final requestBody = {
+        'model': _config!.modelName!,
+        'messages': [
+          {'role': 'user', 'content': enhancedPrompt}
+        ],
+        'temperature': temperature ?? 0.7,
+        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
+
+      // Add tools/functions to request body
+      if (tools.isNotEmpty) {
+        requestBody['functions'] = tools;
+        requestBody['function_call'] = 'auto';
+      }
+
+      return await _makeOpenAiRequestWithTools(
+        requestBody,
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      );
+    });
+  }
+
 
   // Private helper methods
 
@@ -255,6 +296,103 @@ class OpenAIModel implements AIModel {
           return content;
         }
       }
+      LoggerService.error('No content in OpenAI API response', error: {
+        'responseData': data,
+        'requestId': requestId,
+      });
+      throw Exception('No content in OpenAI API response');
+    } else {
+      LoggerService.logAiError(
+        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        endpoint: _config!.endpoint!,
+        requestId: requestId,
+        duration: duration,
+      );
+      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> _makeOpenAiRequestWithTools(
+    Map<String, dynamic> requestBody,
+    String requestId,
+  ) async {
+    final startTime = DateTime.now();
+
+    LoggerService.logAiRequest(
+      endpoint: _config!.endpoint!,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_config!.apiKey}',
+      },
+      requestBody: requestBody,
+      requestId: requestId,
+    );
+
+    final response = await http.post(
+      Uri.parse(_config!.endpoint!),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_config!.apiKey}',
+      },
+      body: jsonEncode(requestBody),
+    );
+
+    final duration = DateTime.now().difference(startTime);
+
+    LoggerService.logAiResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      responseBody: response.body,
+      requestId: requestId,
+      duration: duration,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['choices'] != null && data['choices'].isNotEmpty) {
+        final choice = data['choices'][0];
+        final message = choice['message'];
+
+        // Check for function call
+        final functionCall = message['function_call'];
+        String? textContent = message['content'];
+
+        if (functionCall != null) {
+          // OpenAI returns function call in a different format than Gemini
+          LoggerService.debug('OpenAI API request completed with function call', error: {
+            'functionName': functionCall['name'],
+            'requestId': requestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          return {
+            'text': textContent,
+            'function_calls': [
+              {
+                'name': functionCall['name'],
+                'args': jsonDecode(functionCall['arguments']),
+              }
+            ],
+            'raw_data': data,
+          };
+        }
+
+        // No function call, just text response
+        if (textContent != null) {
+          LoggerService.debug('OpenAI API request completed successfully', error: {
+            'responseLength': textContent.length,
+            'requestId': requestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          return {
+            'text': textContent,
+            'function_calls': null,
+            'raw_data': data,
+          };
+        }
+      }
+
       LoggerService.error('No content in OpenAI API response', error: {
         'responseData': data,
         'requestId': requestId,

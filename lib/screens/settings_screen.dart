@@ -11,6 +11,7 @@ import '../models/model_type.dart';
 import 'setup_screen.dart';
 import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
+import 'mcp_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -375,6 +376,20 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // MCP Settings Card
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_sync),
+                    title: const Text('MCP Settings'),
+                    subtitle: const Text('Configure Model Context Protocol endpoints'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const McpSettingsScreen()),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),

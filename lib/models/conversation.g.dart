@@ -9,8 +9,6 @@ part of 'conversation.dart';
 Conversation _$ConversationFromJson(Map<String, dynamic> json) => Conversation(
   id: json['id'] as String,
   title: json['title'] as String,
-  parentConversationId: json['parentConversationId'] as String?,
-  forkFromMessageId: json['forkFromMessageId'] as String?,
   noteIds:
       (json['noteIds'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const [],
@@ -23,8 +21,6 @@ Map<String, dynamic> _$ConversationToJson(Conversation instance) =>
     <String, dynamic>{
       'id': instance.id,
       'title': instance.title,
-      'parentConversationId': instance.parentConversationId,
-      'forkFromMessageId': instance.forkFromMessageId,
       'noteIds': instance.noteIds,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),

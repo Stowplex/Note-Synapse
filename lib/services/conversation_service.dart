@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
+import '../models/conversation_context.dart';
 import '../models/note.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
@@ -13,18 +14,21 @@ class ConversationService {
   final DatabaseService _databaseService = DatabaseService();
   final Uuid _uuid = const Uuid();
 
+  // For testing - allow injection of mock database service
+  static ConversationService _testInstance = ConversationService._internal();
+  static void setTestInstance(ConversationService instance) {
+    _testInstance = instance;
+  }
+  static ConversationService getTestInstance() => _testInstance;
+
   // Create a new conversation
   Future<Conversation> createConversation({
     required String title,
     List<String> noteIds = const [],
-    String? parentConversationId,
-    String? forkFromMessageId,
   }) async {
     final conversation = Conversation(
       id: _uuid.v4(),
       title: title,
-      parentConversationId: parentConversationId,
-      forkFromMessageId: forkFromMessageId,
       noteIds: noteIds,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -41,16 +45,17 @@ class ConversationService {
     required String forkFromMessageId,
     required String newTitle,
   }) async {
+    LoggerService.info('Forking conversation ${originalConversationId} from message ${forkFromMessageId}');
     // Get the original conversation
     final originalConversation = await _databaseService.getConversation(originalConversationId);
     if (originalConversation == null) {
       throw Exception('Original conversation not found');
     }
 
-    // Get messages up to the fork point
-    final allMessages = await _databaseService.getConversationMessages(originalConversationId);
-    final forkMessageIndex = allMessages.indexWhere((msg) => msg.id == forkFromMessageId);
-    if (forkMessageIndex == -1) {
+    // Get messages from the original conversation
+    final originalMessages = await _databaseService.getConversationMessages(originalConversationId);
+    final forkIndex = originalMessages.indexWhere((msg) => msg.id == forkFromMessageId);
+    if (forkIndex == -1) {
       throw Exception('Fork message not found');
     }
 
@@ -58,41 +63,113 @@ class ConversationService {
     final forkedConversation = await createConversation(
       title: newTitle,
       noteIds: originalConversation.noteIds,
-      parentConversationId: originalConversationId,
-      forkFromMessageId: forkFromMessageId,
     );
 
-    // Copy messages up to the fork point (inclusive) to show shared history
-    final messagesToCopy = allMessages.take(forkMessageIndex + 1).toList();
+    // Copy message IDs from root to fork point (inclusive)
+    final messagesToCopy = originalMessages.take(forkIndex + 1);
     for (final message in messagesToCopy) {
-      final newMessage = ConversationMessage(
-        id: _uuid.v4(),
+      await _databaseService.insertConversationMessageMapping(
         conversationId: forkedConversation.id,
-        type: message.type,
-        content: message.content,
-        timestamp: message.timestamp,
-        modelUsed: message.modelUsed,
-        metadata: message.metadata,
+        messageId: message.id,
       );
-      await _databaseService.insertConversationMessage(newMessage);
-
-      // Copy attachments
-      final attachments = await _databaseService.getConversationAttachments(message.id);
-      for (final attachment in attachments) {
-        final newAttachment = ConversationAttachment(
-          id: _uuid.v4(),
-          messageId: newMessage.id,
-          filePath: attachment.filePath,
-          fileName: attachment.fileName,
-          fileType: attachment.fileType,
-          createdAt: attachment.createdAt,
-          isRelativePath: attachment.isRelativePath,
-        );
-        await _databaseService.insertConversationAttachment(newAttachment);
-      }
     }
 
-    LoggerService.info('Forked conversation ${originalConversationId} to ${forkedConversation.id}');
+    // Parent relationships for copied messages already exist from the original conversation
+    // They are inherited since we're copying message IDs, not creating new messages
+
+    LoggerService.info('Forked conversation ${originalConversationId} to ${forkedConversation.id} from message ${forkFromMessageId}');
+    
+    // Refresh the conversation tree to include the new forked conversation
+    await refreshConversationTree();
+    
+    return forkedConversation;
+  }
+
+  // Prepare fork context selection - checks for conflicts and returns selection info
+  Future<ForkContextSelection> prepareForkContextSelection(String forkFromMessageId) async {
+    // Find all conversations containing this message
+    final conversationIds = await _databaseService.getConversationsContainingMessage(forkFromMessageId);
+    
+    if (conversationIds.isEmpty) {
+      throw Exception('Message not found in any conversation');
+    }
+
+    // Get context information for each conversation
+    final contexts = <ConversationContext>[];
+    for (final conversationId in conversationIds) {
+      final conversation = await _databaseService.getConversation(conversationId);
+      if (conversation == null) continue;
+
+      // Get notes for this conversation
+      final conversationNotes = await _databaseService.getNotesByIds(conversation.noteIds);
+
+      // Get initial context (first user message)
+      final messages = await _databaseService.getConversationMessages(conversationId);
+      ConversationMessage? firstUserMessage;
+      try {
+        firstUserMessage = messages.firstWhere((msg) => msg.type == MessageType.user);
+      } catch (e) {
+        firstUserMessage = messages.isNotEmpty ? messages.first : null;
+      }
+      
+      final context = ConversationContext(
+        conversationId: conversationId,
+        title: conversation.title,
+        noteIds: conversation.noteIds,
+        notes: conversationNotes,
+        initialContext: firstUserMessage?.content,
+        createdAt: conversation.createdAt,
+        messageCount: messages.length,
+      );
+      
+      contexts.add(context);
+    }
+
+    return ForkContextSelection(
+      forkMessageId: forkFromMessageId,
+      availableContexts: contexts,
+    );
+  }
+
+  // Fork conversation with context selection
+  Future<Conversation> forkConversationWithContext({
+    required String forkFromMessageId,
+    required ConversationContext selectedContext,
+    required String newTitle,
+  }) async {
+    // Get messages from the selected conversation
+    final originalMessages = await _databaseService.getConversationMessages(selectedContext.conversationId);
+    final forkIndex = originalMessages.indexWhere((msg) => msg.id == forkFromMessageId);
+    if (forkIndex == -1) {
+      throw Exception('Fork message not found in selected conversation');
+    }
+
+    // Create new conversation with selected context's notes
+    final forkedConversation = await createConversation(
+      title: newTitle,
+      noteIds: selectedContext.noteIds,
+    );
+
+    // Copy message IDs from root to fork point (inclusive)
+    final messagesToCopy = originalMessages.take(forkIndex + 1);
+    for (final message in messagesToCopy) {
+      await _databaseService.insertConversationMessageMapping(
+        conversationId: forkedConversation.id,
+        messageId: message.id,
+      );
+    }
+
+    // Parent relationships for copied messages already exist from the original conversation
+    // They are inherited since we're copying message IDs, not creating new messages
+    
+    // When the first new message is added, it will detect the fork point automatically
+    // by checking if the last message exists in multiple conversations
+
+    LoggerService.info('Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message ${forkFromMessageId} with selected context');
+    
+    // Refresh the conversation tree to include the new forked conversation
+    await refreshConversationTree();
+    
     return forkedConversation;
   }
 
@@ -111,7 +188,39 @@ class ConversationService {
       attachmentPaths: attachmentPaths,
     );
 
+    // Insert message
     await _databaseService.insertConversationMessage(message);
+    
+    // Create conversation-message mapping
+    await _databaseService.insertConversationMessageMapping(
+      conversationId: conversationId,
+      messageId: message.id,
+    );
+
+    // Create parent relationship with previous message (if exists)
+    final existingMessages = await _databaseService.getConversationMessages(conversationId);
+    if (existingMessages.length > 1) { // More than just this message
+      final previousMessage = existingMessages[existingMessages.length - 2];
+      
+      // Check if previous message is a fork point (exists in multiple conversations)
+      // If so, this is the first new message in a forked conversation
+      final conversationsWithPrevious = await _databaseService.getConversationsContainingMessage(previousMessage.id);
+      
+      if (conversationsWithPrevious.length > 1 && previousMessage.type == MessageType.ai) {
+        // This is a fork - new message's parent is the fork point (AI message)
+        await _databaseService.insertMessageParent(
+          messageId: message.id,
+          parentMessageId: previousMessage.id,
+        );
+        LoggerService.info('Fork detected: ${message.id}.parent = ${previousMessage.id} (fork point)');
+      } else {
+        // Normal case - parent is previous message
+        await _databaseService.insertMessageParent(
+          messageId: message.id,
+          parentMessageId: previousMessage.id,
+        );
+      }
+    }
 
     // Add attachments
     for (final attachmentPath in attachmentPaths) {
@@ -158,7 +267,24 @@ class ConversationService {
       metadata: metadata,
     );
 
+    // Insert message
     await _databaseService.insertConversationMessage(message);
+    
+    // Create conversation-message mapping
+    await _databaseService.insertConversationMessageMapping(
+      conversationId: conversationId,
+      messageId: message.id,
+    );
+
+    // Create parent relationship with previous message
+    final existingMessages = await _databaseService.getConversationMessages(conversationId);
+    if (existingMessages.length > 1) { // More than just this message
+      final previousMessage = existingMessages[existingMessages.length - 2];
+      await _databaseService.insertMessageParent(
+        messageId: message.id,
+        parentMessageId: previousMessage.id,
+      );
+    }
 
     // Update conversation timestamp
     final conversation = await _databaseService.getConversation(conversationId);
@@ -169,6 +295,10 @@ class ConversationService {
     }
 
     LoggerService.info('Added AI response to conversation: $conversationId');
+    
+    // Refresh the conversation tree to include the new interaction
+    await refreshConversationTree();
+    
     return message;
   }
 
@@ -188,6 +318,23 @@ class ConversationService {
       messages: messages,
     );
   }
+
+  // Get a conversation with full history (alias for backward compatibility)
+  Future<ConversationWithMessages?> getConversationWithFullHistory(String conversationId) async {
+    return await getConversationWithMessages(conversationId);
+  }
+
+  // Validate conversation notes and return missing note IDs
+  Future<List<String>> validateConversationNotes(String conversationId) async {
+    return await _databaseService.validateConversationNotes(conversationId);
+  }
+
+  // Clean up invalid note references across all conversations
+  Future<void> cleanupInvalidNoteReferences() async {
+    await _databaseService.cleanupInvalidNoteReferences();
+  }
+
+
 
   // Get conversation tree
   Future<ConversationTree?> getConversationTree() async {
@@ -212,7 +359,7 @@ class ConversationService {
     return await _buildConversationTree(conversations);
   }
 
-  // Build conversation tree from conversations
+  // Build conversation tree from conversations using message parent relationships
   Future<ConversationTree> _buildConversationTree(List<Conversation> conversations) async {
     final nodes = <String, ConversationTreeNode>{};
     String? rootNodeId;
@@ -229,17 +376,39 @@ class ConversationService {
     nodes['root'] = rootNode;
     rootNodeId = 'root';
 
+    // Get all message parent relationships
+    final allMessageParents = await _databaseService.getAllMessageParents();
+    final parentMap = <String, String>{};
+    for (final parent in allMessageParents) {
+      parentMap[parent['messageId'] as String] = parent['parentMessageId'] as String;
+    }
+
     // Sort conversations by creation time
     conversations.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-    // Process each conversation to build interaction nodes
+    // Build tree nodes for each conversation
+    // The parent-child relationships are automatically established
+    // based on message parent relationships
     for (final conversation in conversations) {
-      await _buildInteractionNodes(conversation, nodes);
+      await _buildConversationTreeNodes(conversation, nodes, parentMap);
     }
 
-    // Update root node children list - get the latest root node from nodes map
-    final finalRootNode = nodes['root']!;
-    nodes['root'] = finalRootNode;
+    // Connect root-level messages to root node
+    final rootLevelMessages = nodes.values
+        .where((node) => node.parentId == null && node.id != 'root')
+        .toList();
+    
+    if (rootLevelMessages.isNotEmpty) {
+      final rootChildren = List<String>.from(rootNode.children);
+      for (final message in rootLevelMessages) {
+        if (!rootChildren.contains(message.id)) {
+          rootChildren.add(message.id);
+        }
+        // Set root as parent for level 1 nodes so graph edges work correctly
+        nodes[message.id] = message.copyWith(parentId: 'root');
+      }
+      nodes['root'] = rootNode.copyWith(children: rootChildren);
+    }
 
     final tree = ConversationTree(
       id: 'main_tree',
@@ -254,6 +423,81 @@ class ConversationService {
     return tree;
   }
 
+  // Build tree nodes for a single conversation
+  // Tree nodes represent User-AI interaction pairs for UI display
+  // The tree structure comes from message parent relationships
+  Future<void> _buildConversationTreeNodes(
+    Conversation conversation, 
+    Map<String, ConversationTreeNode> nodes,
+    Map<String, String> parentMap,
+  ) async {
+    final messages = await _databaseService.getConversationMessages(conversation.id);
+    if (messages.isEmpty) return;
+
+    // Group messages into User-AI interaction pairs for display
+    final interactions = _groupMessagesIntoInteractions(messages);
+    
+    // Create tree nodes for completed interactions (User + AI pairs)
+    for (final interaction in interactions) {
+      if (interaction.length != 2) continue; // Skip incomplete interactions
+
+      final userMessage = interaction.first;
+      final aiMessage = interaction.last;
+      
+      // Node ID is the AI message ID
+      final nodeId = aiMessage.id;
+      final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
+      
+      // Find parent node: look at the user message's parent (which could be a fork point)
+      String? parentNodeId;
+      final userParentId = parentMap[userMessage.id];
+      
+      if (userParentId != null) {
+        // User's parent is either:
+        // 1. Previous AI message in same conversation (normal case)
+        // 2. Fork point AI message from another conversation (fork case)
+        // In both cases, that AI message IS a tree node
+        parentNodeId = userParentId;
+      }
+      
+      // Check if node already exists (for fork points that exist in multiple conversations)
+      if (!nodes.containsKey(nodeId)) {
+        // Calculate level based on parent
+        int level = 1;
+        if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
+          level = nodes[parentNodeId]!.level + 1;
+        }
+        
+        // Level 1 nodes (immediate children of root) should always be visible/expanded
+        final shouldBeExpanded = (level == 1);
+        
+        // Create the tree node
+        final node = ConversationTreeNode(
+          id: nodeId,
+          conversationId: conversation.id,
+          messageId: aiMessage.id,
+          summary: summary,
+          level: level,
+          parentId: parentNodeId,
+          createdAt: aiMessage.timestamp,
+          isExpanded: shouldBeExpanded,
+        );
+
+        nodes[nodeId] = node;
+      }
+      
+      // Always add this node to parent's children list (even if node already existed)
+      if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
+        final parentNode = nodes[parentNodeId]!;
+        // Only add if not already in children list
+        if (!parentNode.children.contains(nodeId)) {
+          final newChildren = List<String>.from(parentNode.children)..add(nodeId);
+          nodes[parentNodeId] = parentNode.copyWith(children: newChildren);
+        }
+      }
+    }
+  }
+
   // Generate a brief summary from content
   String _generateSummary(String content) {
     // Simple summary generation - take first 10 words
@@ -261,182 +505,11 @@ class ConversationService {
     return words.length > 50 ? '${words.substring(0, 50)}...' : words;
   }
 
-  // Build interaction nodes for a conversation
-  Future<void> _buildInteractionNodes(
-    Conversation conversation, 
-    Map<String, ConversationTreeNode> nodes
-  ) async {
-    final messages = await _databaseService.getConversationMessages(conversation.id);
-    if (messages.isEmpty) return;
 
-    // Group messages into User-AI interaction pairs
-    final interactions = _groupMessagesIntoInteractions(messages);
-    
-    // Only create nodes for completed interactions (User + AI)
-    String? previousNodeId;
-    for (int i = 0; i < interactions.length; i++) {
-      final interaction = interactions[i];
-      if (interaction.length != 2) continue; // Skip incomplete interactions
 
-      final userMessage = interaction.first;
-      final aiMessage = interaction.last;
-      
-      // Create node for this interaction
-      final nodeId = 'interaction_${conversation.id}_${i}';
-      final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
-      
-      final node = ConversationTreeNode(
-        id: nodeId,
-        conversationId: conversation.id,
-        messageId: aiMessage.id, // Reference the AI message as the "completion" point
-        summary: summary,
-        level: 1,
-        parentId: previousNodeId ?? 'root',
-        createdAt: aiMessage.timestamp, // Use AI message timestamp as completion time
-        isExpanded: false, // All first level nodes collapsed by default for cleaner look
-      );
 
-      nodes[nodeId] = node;
 
-      // Add to parent's children
-      if (previousNodeId == null) {
-        // First interaction in conversation - add to root
-        final rootNode = nodes['root']!;
-        final newChildren = List<String>.from(rootNode.children)..add(nodeId);
-        nodes['root'] = rootNode.copyWith(children: newChildren);
-      } else {
-        // Add to previous interaction node
-        final parentNode = nodes[previousNodeId];
-        if (parentNode != null) {
-          final newChildren = List<String>.from(parentNode.children)..add(nodeId);
-          final updatedParentNode = parentNode.copyWith(children: newChildren);
-          nodes[previousNodeId] = updatedParentNode;
-        }
-      }
 
-      previousNodeId = nodeId;
-    }
-
-    // Handle forked conversations
-    if (conversation.parentConversationId != null && conversation.forkFromMessageId != null) {
-      await _handleForkedConversation(conversation, nodes);
-    }
-  }
-
-  // Handle forked conversations by finding the fork point and creating a branch
-  Future<void> _handleForkedConversation(
-    Conversation forkedConversation, 
-    Map<String, ConversationTreeNode> nodes
-  ) async {
-    LoggerService.info('Handling forked conversation: ${forkedConversation.id}');
-    
-    // Find the parent conversation's interaction node that contains the fork message
-    final parentConversation = await _databaseService.getConversation(forkedConversation.parentConversationId!);
-    if (parentConversation == null) {
-      LoggerService.warning('Parent conversation not found: ${forkedConversation.parentConversationId}');
-      return;
-    }
-
-    final parentMessages = await _databaseService.getConversationMessages(parentConversation.id);
-    final forkMessage = parentMessages.firstWhere(
-      (m) => m.id == forkedConversation.forkFromMessageId,
-      orElse: () => parentMessages.first,
-    );
-
-    LoggerService.info('Fork message found: ${forkMessage.id}');
-
-    // Find the interaction node that contains this message
-    String? forkNodeId;
-    for (final node in nodes.values) {
-      if (node.conversationId == parentConversation.id) {
-        final nodeMessages = await _databaseService.getConversationMessages(node.conversationId);
-        final interactions = _groupMessagesIntoInteractions(nodeMessages);
-        for (final interaction in interactions) {
-          if (interaction.any((m) => m.id == forkMessage.id)) {
-            forkNodeId = node.id;
-            break;
-          }
-        }
-        if (forkNodeId != null) break;
-      }
-    }
-
-    LoggerService.info('Fork node ID found: $forkNodeId');
-
-    if (forkNodeId != null) {
-      // Only create nodes for the forked conversation if it has new interactions
-      await _buildInteractionNodesForFork(forkedConversation, nodes, forkNodeId);
-      LoggerService.info('Forked conversation nodes created successfully');
-    } else {
-      LoggerService.warning('Could not find fork node for forked conversation: ${forkedConversation.id}');
-    }
-  }
-
-  // Build interaction nodes for a forked conversation and attach them as siblings
-  Future<void> _buildInteractionNodesForFork(
-    Conversation forkedConversation, 
-    Map<String, ConversationTreeNode> nodes,
-    String forkNodeId
-  ) async {
-    final messages = await _databaseService.getConversationMessages(forkedConversation.id);
-    if (messages.isEmpty) {
-      LoggerService.info('Forked conversation has no messages yet, skipping node creation');
-      return;
-    }
-
-    // Group messages into User-AI interaction pairs
-    final interactions = _groupMessagesIntoInteractions(messages);
-    
-    // Find the fork node (this is where forked interactions should be attached)
-    final forkNode = nodes[forkNodeId];
-    if (forkNode == null) {
-      LoggerService.warning('Fork node not found: $forkNodeId');
-      return;
-    }
-    
-    LoggerService.info('Creating ${interactions.length} interaction nodes for forked conversation, attaching to fork node: $forkNodeId');
-    
-    // Only create nodes for completed interactions (User + AI)
-    String? previousForkedNodeId;
-    for (int i = 0; i < interactions.length; i++) {
-      final interaction = interactions[i];
-      if (interaction.length != 2) continue; // Skip incomplete interactions
-
-      final userMessage = interaction.first;
-      final aiMessage = interaction.last;
-      
-      // Create node for this interaction
-      final nodeId = 'interaction_${forkedConversation.id}_${i}';
-      final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
-      
-      // First forked interaction should be a child of the fork point
-      // Subsequent forked interactions should be children of each other
-      final nodeParentId = i == 0 ? forkNodeId : previousForkedNodeId!;
-      
-      final node = ConversationTreeNode(
-        id: nodeId,
-        conversationId: forkedConversation.id,
-        messageId: aiMessage.id, // Reference the AI message as the "completion" point
-        summary: summary,
-        level: forkNode.level + 1, // One level deeper than the fork point
-        parentId: nodeParentId,
-        createdAt: aiMessage.timestamp, // Use AI message timestamp as completion time
-        isExpanded: false, // All forked nodes collapsed by default
-      );
-
-      nodes[nodeId] = node;
-
-      // Add to parent's children
-      final parentNode = nodes[nodeParentId];
-      if (parentNode != null) {
-        final newChildren = List<String>.from(parentNode.children)..add(nodeId);
-        final updatedParentNode = parentNode.copyWith(children: newChildren);
-        nodes[nodeParentId] = updatedParentNode;
-      }
-
-      previousForkedNodeId = nodeId;
-    }
-  }
 
   // Group messages into User-AI interaction pairs
   List<List<ConversationMessage>> _groupMessagesIntoInteractions(List<ConversationMessage> messages) {
@@ -466,22 +539,52 @@ class ConversationService {
     return '$userSummary → $aiSummary';
   }
 
-  // Delete a conversation and its descendants
+  // Delete a conversation (explicit deletion)
   Future<void> deleteConversation(String conversationId) async {
-    // Get all child conversations
-    final allConversations = await _databaseService.getAllConversations();
-    final childConversations = allConversations
-        .where((c) => c.parentConversationId == conversationId)
-        .toList();
-
-    // Recursively delete child conversations
-    for (final child in childConversations) {
-      await deleteConversation(child.id);
-    }
-
-    // Delete the conversation itself
-    await _databaseService.deleteConversation(conversationId);
+    await _databaseService.deleteConversationExplicitly(conversationId);
     LoggerService.info('Deleted conversation: $conversationId');
+  }
+
+  // Delete a message and its entire subtree
+  Future<void> deleteMessageWithSubtree(String messageId) async {
+    await _databaseService.deleteMessageWithSubtree(messageId);
+    
+    // Refresh the conversation tree after deletion
+    await refreshConversationTree();
+  }
+
+  // Delete messages using tree node traversal (for UI efficiency)
+  Future<void> deleteMessagesFromTreeNodes(List<String> messageIds) async {
+    await _databaseService.deleteMessagesFromTreeNodes(messageIds);
+    
+    // Refresh the conversation tree after deletion
+    await refreshConversationTree();
+  }
+
+  // Get all message IDs in a tree node's subtree using proper tree traversal
+  Future<List<String>> getMessageIdsFromTreeNode(ConversationTreeNode node) async {
+    final messageIds = <String>{};
+    final tree = await getConversationTree();
+    if (tree == null) return messageIds.toList();
+    
+    // Recursive function to traverse the tree node
+    void _traverseNode(ConversationTreeNode currentNode) {
+      if (currentNode.messageId != null) {
+        messageIds.add(currentNode.messageId!);
+      }
+      
+      // Traverse all children by finding their nodes in the tree
+      for (final childId in currentNode.children) {
+        final childNode = tree.nodes[childId];
+        if (childNode == null) {
+          throw Exception('Child node $childId not found in tree');
+        }
+        _traverseNode(childNode);
+      }
+    }
+    
+    _traverseNode(node);
+    return messageIds.toList();
   }
 
   // Update conversation tree node
@@ -598,10 +701,10 @@ class ConversationService {
   // Get notes for a conversation
   Future<List<Note>> getConversationNotes(String conversationId) async {
     final conversation = await _databaseService.getConversation(conversationId);
-    if (conversation == null) return [];
+    if (conversation == null || conversation.noteIds.isEmpty) return [];
 
-    final allNotes = await _databaseService.getAllNotes();
-    return allNotes.where((note) => conversation.noteIds.contains(note.id)).toList();
+    // Efficiently fetch only the notes referenced by this conversation
+    return await _databaseService.getNotesByIds(conversation.noteIds);
   }
 
   // Add notes to a conversation

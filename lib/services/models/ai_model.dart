@@ -29,6 +29,34 @@ abstract class AIModel {
     String? requestId,
   });
 
+  /// Generate with function calling support
+  /// Returns raw response data that may contain function calls
+  Future<Map<String, dynamic>> generateWithTools(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    // Default implementation just calls generateWithAttachments
+    // Models that support function calling should override this
+    final text = await generateWithAttachments(
+      prompt,
+      attachedFiles,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+    return {
+      'text': text,
+      'function_calls': null,
+    };
+  }
 
   /// Common utility methods for all AI models
 

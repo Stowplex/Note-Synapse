@@ -1,15 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
+import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
+import '../services/mcp_service.dart';
+import '../services/mcp_tool_integration_service.dart';
+import '../services/model_selector.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
@@ -39,11 +45,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   bool _isLoading = false;
   bool _isSending = false;
   List<PlatformFile> _attachedFiles = [];
+  
+  // MCP support
+  List<McpEndpoint> _availableMcpEndpoints = [];
+  Set<String> _selectedMcpEndpointIds = {};
+  Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
+  bool _isMcpPanelExpanded = false; // Collapsed by default
 
   @override
   void initState() {
     super.initState();
     _initializeConversation();
+    _loadMcpEndpoints();
   }
 
   Future<void> _initializeConversation() async {
@@ -52,11 +65,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     try {
       if (widget.conversationId != null) {
         // Load existing conversation
-        final conversationWithMessages = await _conversationService.getConversationWithMessages(widget.conversationId!);
+        final conversationWithMessages = await _conversationService.getConversationWithFullHistory(widget.conversationId!);
         if (conversationWithMessages != null) {
           _conversation = conversationWithMessages.conversation;
           _messages = conversationWithMessages.messages;
           _notes = await _conversationService.getConversationNotes(widget.conversationId!);
+          
+          // Validate note references and show alert if any are missing
+          final missingNoteIds = await _conversationService.validateConversationNotes(widget.conversationId!);
+          if (missingNoteIds.isNotEmpty && mounted) {
+            _showMissingNotesAlert(missingNoteIds);
+          }
         }
       } else {
         // Create new conversation
@@ -73,6 +92,46 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadMcpEndpoints() async {
+    try {
+      final endpoints = await McpService.getEndpoints();
+      // Only show endpoints that have cached tools
+      final endpointsWithTools = <McpEndpoint>[];
+      for (final endpoint in endpoints) {
+        final cache = await McpService.getCachedTools(endpoint.id);
+        if (cache != null && cache.tools.isNotEmpty) {
+          endpointsWithTools.add(endpoint);
+        }
+      }
+      setState(() {
+        _availableMcpEndpoints = endpointsWithTools;
+      });
+    } catch (e) {
+      LoggerService.error('Error loading MCP endpoints: $e');
+    }
+  }
+
+  Future<void> _updateMcpTools() async {
+    if (_selectedMcpEndpointIds.isEmpty) {
+      setState(() {
+        _mcpToolsByEndpoint = {};
+      });
+      return;
+    }
+
+    try {
+      final toolsByEndpoint = await McpToolIntegrationService.getAvailableTools(
+        _selectedMcpEndpointIds.toList(),
+      );
+      setState(() {
+        _mcpToolsByEndpoint = toolsByEndpoint;
+      });
+      LoggerService.info('Updated MCP tools: ${toolsByEndpoint.length} services, ${toolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools');
+    } catch (e) {
+      LoggerService.error('Error updating MCP tools: $e');
     }
   }
 
@@ -152,17 +211,131 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
       }
 
-      // Use AI service's answerNoteQuestion method which handles note context and attachments
-      final response = await AIService.answerNoteQuestion(
-        question,
-        _notes,
-        attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
-        useOwnKnowledge: true, // Allow AI to use its own knowledge in conversations
-      );
-      return response;
+      // Check if MCP tools are available
+      if (_mcpToolsByEndpoint.isNotEmpty) {
+        return await _generateWithMcpTools(question);
+      } else {
+        // Use AI service's answerNoteQuestion method which handles note context and attachments
+        final response = await AIService.answerNoteQuestion(
+          question,
+          _notes,
+          attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+          useOwnKnowledge: true,
+        );
+        return response;
+      }
     } catch (e) {
       LoggerService.error('Error generating AI response: $e', error: e);
       return 'I apologize, but I encountered an error while generating a response. Please try again.';
+    }
+  }
+
+  Future<String> _generateWithMcpTools(String question) async {
+    try {
+      // Add MCP tool information to prompt
+      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+      final enhancedQuestion = mcpPrompt + question;
+      
+      // Build context from notes
+      String noteContext = '';
+      if (_notes.isNotEmpty) {
+        noteContext = '\n\n=== CONTEXT FROM NOTES ===\n';
+        for (final note in _notes) {
+          noteContext += '\nNote: ${note.title}\n${note.content}\n';
+        }
+      }
+      
+      final fullPrompt = enhancedQuestion + noteContext;
+      
+      // Get call_tool function definition
+      final callToolFunction = McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
+      
+      LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
+      
+      // Tool calling loop - max 5 iterations to prevent infinite loops
+      const maxIterations = 5;
+      String currentPrompt = fullPrompt;
+      final conversationParts = <String>[];
+      
+      for (int iteration = 0; iteration < maxIterations; iteration++) {
+        LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
+        
+        // Call AI with tools
+        final response = await ModelSelector.instance.generateWithTools(
+          currentPrompt,
+          _attachedFiles,
+          [callToolFunction],
+        );
+        
+        final textResponse = response['text'] as String?;
+        final functionCalls = response['function_calls'] as List?;
+        
+        if (functionCalls != null && functionCalls.isNotEmpty) {
+          LoggerService.info('AI requested ${functionCalls.length} tool call(s)');
+          
+          // Execute all function calls
+          final toolResults = <String>[];
+          for (final functionCall in functionCalls) {
+            final functionName = functionCall['name'] as String;
+            final args = functionCall['args'] as Map<String, dynamic>;
+            
+            if (functionName == 'call_tool') {
+              final parsedArgs = McpToolIntegrationService.parseCallToolArguments(args);
+              if (parsedArgs != null) {
+                final serviceName = parsedArgs['service_name'] as String;
+                final toolName = parsedArgs['tool_name'] as String;
+                final params = parsedArgs['params'] as Map<String, dynamic>;
+                
+                LoggerService.info('Executing: $serviceName.$toolName');
+                
+                try {
+                  final result = await McpToolIntegrationService.executeToolCall(
+                    serviceName: serviceName,
+                    toolName: toolName,
+                    parameters: params,
+                    enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+                  );
+                  
+                  toolResults.add('Tool: $serviceName.$toolName\nResult: $result');
+                  conversationParts.add('[Tool executed: $serviceName.$toolName]');
+                } catch (e) {
+                  LoggerService.error('Tool execution failed: $e');
+                  toolResults.add('Tool: $serviceName.$toolName\nError: $e');
+                }
+              }
+            }
+          }
+          
+          // If we have tool results, continue the conversation with them
+          if (toolResults.isNotEmpty) {
+            final toolResultsText = toolResults.join('\n\n');
+            currentPrompt = 'Previous tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response to the user.';
+            continue; // Go to next iteration
+          }
+        }
+        
+        // If we get here, either no function calls or we have a text response
+        if (textResponse != null && textResponse.isNotEmpty) {
+          if (conversationParts.isNotEmpty) {
+            return '${conversationParts.join('\n')}\n\n$textResponse';
+          }
+          return textResponse;
+        }
+        
+        // If no text and no function calls, something went wrong
+        LoggerService.warning('No text response and no function calls in iteration ${iteration + 1}');
+        break;
+      }
+      
+      // If we exhausted iterations, return what we have
+      LoggerService.warning('Reached maximum tool calling iterations');
+      return conversationParts.isEmpty 
+          ? 'I apologize, but I was unable to complete the task after multiple attempts.'
+          : conversationParts.join('\n');
+          
+    } catch (e) {
+      LoggerService.error('Error in MCP tool calling: $e', error: e);
+      return 'I apologize, but I encountered an error while using external tools. Error: $e';
     }
   }
 
@@ -350,6 +523,122 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMcpSelectionSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header - clickable to toggle expansion
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isMcpPanelExpanded = !_isMcpPanelExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cloud_sync,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'MCP Tools',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  ),
+                ),
+                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_selectedMcpEndpointIds.length} active',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                // Chevron icon that rotates based on expansion state
+                AnimatedRotation(
+                  turns: _isMcpPanelExpanded ? 0 : 0.5,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Expandable content
+          if (_isMcpPanelExpanded) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: _availableMcpEndpoints.map((endpoint) {
+                final isSelected = _selectedMcpEndpointIds.contains(endpoint.id);
+                return FilterChip(
+                  label: Text(endpoint.name),
+                  selected: isSelected,
+                  onSelected: (selected) async {
+                    setState(() {
+                      if (selected) {
+                        _selectedMcpEndpointIds.add(endpoint.id);
+                      } else {
+                        _selectedMcpEndpointIds.remove(endpoint.id);
+                      }
+                    });
+                    await _updateMcpTools();
+                  },
+                  avatar: Icon(
+                    Icons.cloud,
+                    size: 16,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_mcpToolsByEndpoint.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -705,6 +994,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           ),
           // Attached files section
           _buildAttachedFilesSection(),
+          // MCP selection section
+          if (_availableMcpEndpoints.isNotEmpty) _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),
@@ -797,7 +1088,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   _formatTimestamp(message.timestamp),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (isUser) ...[
+                if (!isUser) ...[
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.call_split, size: 16),
@@ -809,22 +1100,72 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             const SizedBox(height: 8),
             if (isUser)
-              Text(message.content)
+              SelectableText(
+                message.content,
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
             else ...[
-              GptMarkdown(message.content),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
-                  onPressed: () => _addResponseToNote(message.content),
-                  icon: const Icon(Icons.note_add, size: 16),
-                  label: const Text('Add to Note'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+              SelectionArea(
+                child: GptMarkdown(
+                  message.content,
+                  onLinkTap: (url, _) {
+                    final uri = Uri.tryParse(url);
+                    if (uri != null) {
+                      canLaunchUrl(uri).then((canLaunch) {
+                        if (canLaunch) {
+                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Could not open link: $url')),
+                            );
+                          }
+                        }
+                      });
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Invalid URL: $url')),
+                        );
+                      }
+                    }
+                  },
                 ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: message.content));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Message copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _addResponseToNote(message.content),
+                    icon: const Icon(Icons.note_add, size: 16),
+                    label: const Text('Add to Note'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -846,6 +1187,47 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     } else {
       return 'Just now';
     }
+  }
+
+  void _showMissingNotesAlert(List<String> missingNoteIds) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Missing Notes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This conversation references notes that no longer exist:'),
+              const SizedBox(height: 8),
+              ...missingNoteIds.map((noteId) => Text(
+                '• $noteId',
+                style: const TextStyle(fontFamily: 'monospace'),
+              )),
+              const SizedBox(height: 8),
+              const Text('These references will be automatically cleaned up.'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Clean up invalid note references
+                await _conversationService.cleanupInvalidNoteReferences();
+                // Refresh the conversation to reflect the cleanup
+                await _initializeConversation();
+              },
+              child: const Text('Clean Up'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

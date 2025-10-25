@@ -184,26 +184,21 @@ class DatabaseService {
       CREATE TABLE conversations(
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        parentConversationId TEXT,
-        forkFromMessageId TEXT,
         noteIds TEXT NOT NULL DEFAULT '[]',
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
-        isArchived INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (parentConversationId) REFERENCES conversations (id) ON DELETE SET NULL
+        isArchived INTEGER NOT NULL DEFAULT 0
       )
   ''';
 
   static const String _createConversationMessagesTable = '''
       CREATE TABLE conversation_messages(
         id TEXT PRIMARY KEY,
-        conversationId TEXT NOT NULL,
         type TEXT NOT NULL,
         content TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         modelUsed TEXT,
-        metadata TEXT,
-        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE
+        metadata TEXT
       )
   ''';
 
@@ -229,6 +224,30 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createConversationMessageMappingTable = '''
+      CREATE TABLE conversation_message_mapping(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversationId TEXT NOT NULL,
+        messageId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+        UNIQUE(conversationId, messageId)
+      )
+  ''';
+
+  static const String _createMessageParentsTable = '''
+      CREATE TABLE message_parents(
+        id TEXT PRIMARY KEY,
+        messageId TEXT NOT NULL,
+        parentMessageId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+        FOREIGN KEY (parentMessageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+        UNIQUE(messageId, parentMessageId)
+      )
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -243,12 +262,14 @@ class DatabaseService {
     'CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
     'CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
     'CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
-    'CREATE INDEX idx_conversations_parentConversationId ON conversations(parentConversationId)',
     'CREATE INDEX idx_conversations_createdAt ON conversations(createdAt)',
     'CREATE INDEX idx_conversations_isArchived ON conversations(isArchived)',
-    'CREATE INDEX idx_conversation_messages_conversationId ON conversation_messages(conversationId)',
     'CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)',
     'CREATE INDEX idx_conversation_attachments_messageId ON conversation_attachments(messageId)',
+    'CREATE INDEX idx_conversation_message_mapping_conversationId ON conversation_message_mapping(conversationId)',
+    'CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)',
+    'CREATE INDEX idx_message_parents_messageId ON message_parents(messageId)',
+    'CREATE INDEX idx_message_parents_parentMessageId ON message_parents(parentMessageId)',
   ];
 
   // For testing, allow creating new instances
@@ -269,7 +290,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 18,
+      version: 19,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -292,6 +313,8 @@ class DatabaseService {
     await db.execute(_createConversationMessagesTable);
     await db.execute(_createConversationAttachmentsTable);
     await db.execute(_createConversationTreeTable);
+    await db.execute(_createConversationMessageMappingTable);
+    await db.execute(_createMessageParentsTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -372,6 +395,10 @@ class DatabaseService {
     18: MigrationStep(
       description: 'Add conversation tables for AI chat functionality',
       execute: _migrateToVersion18,
+    ),
+    19: MigrationStep(
+      description: 'Restructure conversation system with message mapping and parent relationships',
+      execute: _migrateToVersion19,
     ),
   };
 
@@ -876,6 +903,79 @@ class DatabaseService {
         LoggerService.info('Migration to version 18 completed: Added conversation tables for AI chat functionality');
   }
 
+  static Future<void> _migrateToVersion19(Database db, {required bool isBackupMigration}) async {
+        LoggerService.info('Starting migration to version 19: Restructuring conversation system');
+        
+        // Create new tables
+        await db.execute(_createConversationMessageMappingTable);
+        await db.execute(_createMessageParentsTable);
+        
+        // Create indexes for new tables
+        await db.execute('CREATE INDEX idx_conversation_message_mapping_conversationId ON conversation_message_mapping(conversationId)');
+        await db.execute('CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)');
+        await db.execute('CREATE INDEX idx_message_parents_messageId ON message_parents(messageId)');
+        await db.execute('CREATE INDEX idx_message_parents_parentMessageId ON message_parents(parentMessageId)');
+        
+        // Migrate existing data
+        await _migrateExistingConversationData(db);
+        
+        // Clear old tree data to force rebuild
+        await db.delete('conversation_tree');
+        
+        LoggerService.info('Migration to version 19 completed: Restructured conversation system');
+  }
+
+  // Migrate existing conversation data to new structure
+  static Future<void> _migrateExistingConversationData(Database db) async {
+        LoggerService.info('Migrating existing conversation data to new structure');
+        
+        // Get all existing conversations
+        final conversations = await db.query('conversations');
+        LoggerService.info('Found ${conversations.length} conversations to migrate');
+        
+        for (final conversation in conversations) {
+          final conversationId = conversation['id'] as String;
+          
+          // Get messages for this conversation
+          final messages = await db.query(
+            'conversation_messages',
+            where: 'conversationId = ?',
+            whereArgs: [conversationId],
+            orderBy: 'timestamp ASC',
+          );
+          
+          LoggerService.info('Migrating conversation $conversationId with ${messages.length} messages');
+          
+          // Create message mappings and parent relationships
+          String? previousMessageId;
+          for (int i = 0; i < messages.length; i++) {
+            final message = messages[i];
+            final messageId = message['id'] as String;
+            
+            // Create conversation-message mapping
+            await db.insert('conversation_message_mapping', {
+              'conversationId': conversationId,
+              'messageId': messageId,
+              'createdAt': DateTime.now().millisecondsSinceEpoch,
+            });
+            
+            // Create parent relationship (except for first message)
+            if (previousMessageId != null) {
+              await db.insert('message_parents', {
+                'id': '${messageId}_${previousMessageId}',
+                'messageId': messageId,
+                'parentMessageId': previousMessageId,
+                'createdAt': DateTime.now().millisecondsSinceEpoch,
+              });
+            }
+            
+            previousMessageId = messageId;
+          }
+        }
+        
+        LoggerService.info('Completed migration of existing conversation data');
+  }
+
 
   // Migration helper method to create initial revisions for existing apps
   static Future<void> _migrateExistingAppsToRevisions(Database db) async {
@@ -1034,6 +1134,52 @@ class DatabaseService {
     return notes;
   }
 
+  // Validate that all note IDs in a conversation exist
+  Future<List<String>> validateConversationNotes(String conversationId) async {
+    final conversation = await getConversation(conversationId);
+    if (conversation == null || conversation.noteIds.isEmpty) return [];
+    
+    final db = await database;
+    // Efficiently check which IDs exist using a simple COUNT query
+    final placeholders = List.filled(conversation.noteIds.length, '?').join(',');
+    final result = await db.rawQuery(
+      'SELECT id FROM notes WHERE id IN ($placeholders)',
+      conversation.noteIds,
+    );
+    
+    final existingNoteIds = result.map((row) => row['id'] as String).toSet();
+    
+    // Find missing note IDs
+    final missingNoteIds = conversation.noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
+    
+    if (missingNoteIds.isNotEmpty) {
+      LoggerService.warning('Conversation $conversationId references missing notes: $missingNoteIds');
+    }
+    
+    return missingNoteIds;
+  }
+
+  // Clean up invalid note references from conversations
+  Future<void> cleanupInvalidNoteReferences() async {
+    final allNotes = await getAllNotes();
+    final existingNoteIds = allNotes.map((note) => note.id).toSet();
+    
+    // Get all conversations
+    final conversations = await getAllConversations();
+    
+    for (final conversation in conversations) {
+      final validNoteIds = conversation.noteIds.where((noteId) => existingNoteIds.contains(noteId)).toList();
+      
+      if (validNoteIds.length != conversation.noteIds.length) {
+        LoggerService.info('Cleaning up invalid note references for conversation ${conversation.id}');
+        
+        // Update conversation with only valid note IDs
+        final updatedConversation = conversation.copyWith(noteIds: validNoteIds);
+        await updateConversation(updatedConversation);
+      }
+    }
+  }
+
   Future<List<Note>> getNotesByArchiveStatus({bool? isArchived}) async {
     final db = await database;
     String whereClause = '';
@@ -1121,6 +1267,33 @@ class DatabaseService {
 
     if (maps.isEmpty) return null;
     return await _mapToNote(maps.first);
+  }
+
+  // Get multiple notes by their IDs efficiently
+  Future<List<Note>> getNotesByIds(List<String> noteIds) async {
+    if (noteIds.isEmpty) return [];
+    
+    final db = await database;
+    // Use WHERE IN clause for efficient batch retrieval
+    final placeholders = List.filled(noteIds.length, '?').join(',');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      where: 'id IN ($placeholders)',
+      whereArgs: noteIds,
+    );
+
+    final List<Note> notes = [];
+    for (final map in maps) {
+      try {
+        final note = await _mapToNote(map);
+        notes.add(note);
+      } catch (e) {
+        LoggerService.error('Error mapping note with id ${map['id']}: $e', error: e);
+        // Skip corrupted notes instead of crashing
+        continue;
+      }
+    }
+    return notes;
   }
 
   Future<void> updateNote(Note note) async {
@@ -1679,6 +1852,10 @@ class DatabaseService {
     await db.delete('notes');
     await db.delete('tags');
     await db.delete('filters');
+    await db.delete('conversation_tree');
+    await db.delete('conversation_messages');
+    await db.delete('conversation_attachments');
+    await db.delete('conversations');
   }
 
   // Utility methods
@@ -2371,12 +2548,14 @@ class DatabaseService {
 
   Future<List<ConversationMessage>> getConversationMessages(String conversationId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'conversation_messages',
-      where: 'conversationId = ?',
-      whereArgs: [conversationId],
-      orderBy: 'timestamp ASC',
-    );
+    // Join with conversation_message_mapping to get messages for this conversation
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT cm.* 
+      FROM conversation_messages cm
+      INNER JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp ASC
+    ''', [conversationId]);
 
     return maps.map((map) => _mapToConversationMessage(map)).toList();
   }
@@ -2412,6 +2591,155 @@ class DatabaseService {
   Future<void> deleteConversationMessage(String id) async {
     final db = await database;
     await db.delete('conversation_messages', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Comprehensive message deletion with subtree cleanup
+  Future<void> deleteMessageWithSubtree(String messageId) async {
+    LoggerService.info('Starting deletion of message $messageId and its subtree');
+    
+    // 1. Find all messages in the subtree (children recursively)
+    final messagesToDelete = await _getMessageSubtree(messageId);
+    LoggerService.info('Found ${messagesToDelete.length} messages to delete in subtree');
+    
+    // 2. Delete all related data efficiently
+    await _deleteMessagesBatch(messagesToDelete);
+    
+    // 3. Find conversations that now have no messages and delete them
+    await _cleanupEmptyConversations();
+    
+    LoggerService.info('Successfully deleted message $messageId and its subtree');
+  }
+
+  // Efficiently delete a batch of messages and all their related data
+  Future<void> _deleteMessagesBatch(List<String> messageIds) async {
+    if (messageIds.isEmpty) return;
+    
+    final db = await database;
+    
+    // Create placeholders for IN clause
+    final placeholders = messageIds.map((_) => '?').join(',');
+    
+    // 1. Delete attachments for all messages
+    await db.delete(
+      'conversation_attachments', 
+      where: 'messageId IN ($placeholders)', 
+      whereArgs: messageIds,
+    );
+    
+    // 2. Delete message-parent relationships for all messages
+    await db.delete(
+      'message_parents', 
+      where: 'messageId IN ($placeholders) OR parentMessageId IN ($placeholders)', 
+      whereArgs: [...messageIds, ...messageIds],
+    );
+    
+    // 3. Delete conversation-message mappings for all messages
+    await db.delete(
+      'conversation_message_mapping', 
+      where: 'messageId IN ($placeholders)', 
+      whereArgs: messageIds,
+    );
+    
+    // 4. Delete the messages themselves
+    await db.delete(
+      'conversation_messages', 
+      where: 'id IN ($placeholders)', 
+      whereArgs: messageIds,
+    );
+  }
+
+  // Get all messages in the subtree of a given message using proper recursive traversal
+  Future<List<String>> _getMessageSubtree(String messageId) async {
+    final db = await database;
+    final messagesToDelete = <String>{};
+    
+    // Recursive function to traverse the tree
+    Future<void> _traverseSubtree(String currentMessageId) async {
+      if (messagesToDelete.contains(currentMessageId)) {
+        return; // Already processed
+      }
+      
+      messagesToDelete.add(currentMessageId);
+      
+      // Find all children of current message
+      final children = await db.query(
+        'message_parents',
+        where: 'parentMessageId = ?',
+        whereArgs: [currentMessageId],
+      );
+      
+      // Recursively process each child
+      for (final child in children) {
+        final childId = child['messageId'] as String;
+        await _traverseSubtree(childId);
+      }
+    }
+    
+    await _traverseSubtree(messageId);
+    return messagesToDelete.toList();
+  }
+
+  // Clean up conversations that have no messages
+  Future<void> _cleanupEmptyConversations() async {
+    final db = await database;
+    
+    // Find conversations with no message mappings
+    final emptyConversations = await db.rawQuery('''
+      SELECT c.id 
+      FROM conversations c 
+      LEFT JOIN conversation_message_mapping cmm ON c.id = cmm.conversationId 
+      WHERE cmm.conversationId IS NULL
+    ''');
+    
+    for (final conversation in emptyConversations) {
+      final conversationId = conversation['id'] as String;
+      LoggerService.info('Deleting empty conversation: $conversationId');
+      await db.delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    }
+    
+    if (emptyConversations.isNotEmpty) {
+      LoggerService.info('Cleaned up ${emptyConversations.length} empty conversations');
+    }
+  }
+
+  // Delete conversation (only if explicitly requested)
+  Future<void> deleteConversationExplicitly(String conversationId) async {
+    final db = await database;
+    
+    LoggerService.info('Explicitly deleting conversation: $conversationId');
+    
+    // Get all messages in this conversation
+    final messageMappings = await db.query(
+      'conversation_message_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+    );
+    
+    // Delete all messages in this conversation
+    for (final mapping in messageMappings) {
+      final messageId = mapping['messageId'] as String;
+      await deleteMessageWithSubtree(messageId);
+    }
+    
+    // Delete the conversation itself
+    await db.delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    
+    LoggerService.info('Successfully deleted conversation: $conversationId');
+  }
+
+  // Delete messages using tree node traversal (for UI efficiency)
+  Future<void> deleteMessagesFromTreeNodes(List<String> messageIds) async {
+    if (messageIds.isEmpty) return;
+    
+    LoggerService.info('Deleting ${messageIds.length} messages from tree nodes');
+    
+    // Delete all related data efficiently
+    await _deleteMessagesBatch(messageIds);
+    
+    // Find conversations that now have no messages and delete them
+    await _cleanupEmptyConversations();
+    
+    LoggerService.info('Successfully deleted messages from tree nodes');
   }
 
   // Conversation Attachments CRUD
@@ -2518,8 +2846,6 @@ class DatabaseService {
     return Conversation(
       id: map['id'] as String,
       title: map['title'] as String,
-      parentConversationId: map['parentConversationId'] as String?,
-      forkFromMessageId: map['forkFromMessageId'] as String?,
       noteIds: map['noteIds'] != null 
           ? List<String>.from(jsonDecode(map['noteIds'] as String))
           : [],
@@ -2553,4 +2879,87 @@ class DatabaseService {
     final treeData = jsonDecode(map['treeData'] as String) as Map<String, dynamic>;
     return ConversationTree.fromJson(treeData);
   }
+
+  // New conversation-message mapping methods
+  Future<String> insertConversationMessageMapping({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final db = await database;
+    final result = await db.insert('conversation_message_mapping', {
+      'conversationId': conversationId,
+      'messageId': messageId,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    });
+    return result.toString();
+  }
+
+  Future<List<Map<String, dynamic>>> getConversationMessageMappings(String conversationId) async {
+    final db = await database;
+    return await db.query(
+      'conversation_message_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+      orderBy: 'id ASC', // Use auto-increment ID for canonical ordering
+    );
+  }
+
+  Future<List<String>> getConversationMessageIds(String conversationId) async {
+    final mappings = await getConversationMessageMappings(conversationId);
+    return mappings.map((m) => m['messageId'] as String).toList();
+  }
+
+  // New message parent methods
+  Future<String> insertMessageParent({
+    required String messageId,
+    required String parentMessageId,
+  }) async {
+    final db = await database;
+    final id = '${messageId}_${parentMessageId}';
+    await db.insert('message_parents', {
+      'id': id,
+      'messageId': messageId,
+      'parentMessageId': parentMessageId,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return id;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllMessageParents() async {
+    final db = await database;
+    return await db.query('message_parents');
+  }
+
+  Future<String?> getMessageParent(String messageId) async {
+    final db = await database;
+    final results = await db.query(
+      'message_parents',
+      where: 'messageId = ?',
+      whereArgs: [messageId],
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first['parentMessageId'] as String? : null;
+  }
+
+  Future<List<String>> getMessageChildren(String parentMessageId) async {
+    final db = await database;
+    final results = await db.query(
+      'message_parents',
+      where: 'parentMessageId = ?',
+      whereArgs: [parentMessageId],
+    );
+    return results.map((r) => r['messageId'] as String).toList();
+  }
+
+  // Find all conversations that contain a specific message
+  Future<List<String>> getConversationsContainingMessage(String messageId) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_message_mapping',
+      where: 'messageId = ?',
+      whereArgs: [messageId],
+    );
+    return results.map((r) => r['conversationId'] as String).toList();
+  }
+
 }
