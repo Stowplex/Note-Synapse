@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:re_editor/re_editor.dart';
+import 'package:re_highlight/languages/xml.dart';
+import 'package:re_highlight/languages/javascript.dart';
+import 'package:re_highlight/languages/css.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -27,7 +32,9 @@ class UserAppEditScreen extends StatefulWidget {
 class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _editSuggestionController = TextEditingController();
-  final _codeController = TextEditingController();
+  late final CodeLineEditingController _codeController;
+  late final CodeLineEditingController _viewController; // Read-only controller for viewing
+  late final CodeFindController _findController;
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isCodeEditable = false;
@@ -45,6 +52,23 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   @override
   void initState() {
     super.initState();
+    _codeController = CodeLineEditingController.fromText('');
+    _viewController = CodeLineEditingController.fromText('');
+    _findController = CodeFindController(_codeController);
+    
+    // Add listener to find input controller to prevent text selection issues
+    _findController.findInputController.addListener(() {
+      final text = _findController.findInputController.text;
+      final selection = _findController.findInputController.selection;
+      
+      // If all text is selected, move cursor to end
+      if (selection.isValid && selection.start == 0 && selection.end == text.length && text.isNotEmpty) {
+        _findController.findInputController.selection = TextSelection.fromPosition(
+          TextPosition(offset: text.length),
+        );
+      }
+    });
+    
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
@@ -98,6 +122,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       setState(() {
         _originalCode = codeToLoad;
         _codeController.text = codeToLoad;
+        _viewController.text = codeToLoad;
       });
       
       // Load libraries for the current revision
@@ -107,6 +132,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       setState(() {
         _originalCode = '';
         _codeController.text = '';
+        _viewController.text = '';
         _currentRevision = null;
       });
     }
@@ -167,6 +193,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void dispose() {
     _editSuggestionController.dispose();
     _codeController.dispose();
+    _viewController.dispose();
+    _findController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -334,6 +362,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       if (!_isCodeEditable) {
         // Reset to original code if canceling edit
         _codeController.text = _originalCode;
+        _viewController.text = _originalCode;
       }
     });
   }
@@ -515,6 +544,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       resizeToAvoidBottomInset: !_isCodeEditable,
       appBar: AppBar(
         title: Text(l10n.editApp),
+        actions: _isCodeEditable ? [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => _findController.findMode(),
+            tooltip: 'Find in code',
+          ),
+        ] : null,
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -607,13 +643,44 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   child: Card(
                     child: Container(
                       padding: const EdgeInsets.all(12.0),
-                      child: SingleChildScrollView(
-                        child: Text(
-                          _codeController.text,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontFamily: 'monospace',
+                      child: CodeEditor(
+                        controller: _viewController,
+                        readOnly: true, // Make it read-only
+                        wordWrap: false, // Disable word wrap for consistency
+                        style: CodeEditorStyle(
+                          codeTheme: CodeHighlightTheme(
+                            languages: {
+                              'html': CodeHighlightThemeMode(
+                                mode: langXml, // HTML uses XML highlighting mode
+                              ),
+                              'javascript': CodeHighlightThemeMode(
+                                mode: langJavascript,
+                              ),
+                              'css': CodeHighlightThemeMode(
+                                mode: langCss,
+                              ),
+                            },
+                            theme: atomOneDarkTheme,
                           ),
+                          fontFamily: 'monospace',
+                          fontSize: 12,
                         ),
+                        indicatorBuilder: (context, editingController, chunkController, notifier) {
+                          return Row(
+                            children: [
+                              DefaultCodeLineNumber(
+                                controller: editingController,
+                                notifier: notifier,
+                              ),
+                              DefaultCodeChunkIndicator(
+                                width: 20,
+                                controller: chunkController,
+                                notifier: notifier,
+                              ),
+                            ],
+                          );
+                        },
+                        chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                       ),
                     ),
                   ),
@@ -957,18 +1024,45 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             child: Card(
               child: Container(
                 padding: const EdgeInsets.all(12.0),
-                child: TextFormField(
+                child: CodeEditor(
                   controller: _codeController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  findController: _findController,
+                  wordWrap: false, // Disable word wrap
+                  style: CodeEditorStyle(
+                    codeTheme: CodeHighlightTheme(
+                      languages: {
+                        'html': CodeHighlightThemeMode(
+                          mode: langXml, // HTML uses XML highlighting mode
+                        ),
+                        'javascript': CodeHighlightThemeMode(
+                          mode: langJavascript,
+                        ),
+                        'css': CodeHighlightThemeMode(
+                          mode: langCss,
+                        ),
+                      },
+                      theme: atomOneDarkTheme,
+                    ),
                     fontFamily: 'monospace',
+                    fontSize: 12,
                   ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: 'Enter your HTML code here...',
-                  ),
+                  indicatorBuilder: (context, editingController, chunkController, notifier) {
+                    return Row(
+                      children: [
+                        DefaultCodeLineNumber(
+                          controller: editingController,
+                          notifier: notifier,
+                        ),
+                        DefaultCodeChunkIndicator(
+                          width: 20,
+                          controller: chunkController,
+                          notifier: notifier,
+                        ),
+                      ],
+                    );
+                  },
+                  findBuilder: (context, controller, readOnly) => _buildFindPanel(controller, readOnly),
+                  chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                 ),
               ),
             ),
@@ -977,5 +1071,96 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       ],
     );
   }
+
+  PreferredSizeWidget _buildFindPanel(CodeFindController controller, bool readOnly) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(60),
+      child: Container(
+        padding: const EdgeInsets.all(8.0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).dividerColor,
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller.findInputController,
+                focusNode: controller.findInputFocusNode,
+                decoration: const InputDecoration(
+                  hintText: 'Find...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  controller.findMode();
+                },
+                onTap: () {
+                  // Move cursor to end of text instead of selecting all
+                  final text = controller.findInputController.text;
+                  controller.findInputController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: text.length),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Match counter
+            ValueListenableBuilder<CodeFindValue?>(
+              valueListenable: controller,
+              builder: (context, value, child) {
+                if (value?.result != null && value!.result!.matches.isNotEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Text(
+                      '${value.result!.index + 1}/${value.result!.matches.length}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_up),
+              onPressed: () {
+                // Find previous
+                controller.previousMatch();
+              },
+              tooltip: 'Find previous',
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_down),
+              onPressed: () {
+                // Find next
+                controller.nextMatch();
+              },
+              tooltip: 'Find next',
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => controller.close(),
+              tooltip: 'Close search',
+            ),
+            if (!readOnly) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.find_replace),
+                onPressed: () => controller.replaceMode(),
+                tooltip: 'Find and replace',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
 }
 
