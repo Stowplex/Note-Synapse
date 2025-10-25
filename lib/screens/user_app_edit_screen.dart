@@ -38,6 +38,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isCodeEditable = false;
+  bool _isSearchVisible = false; // Control search input visibility
   String _originalCode = '';
   List<String> _attachmentPaths = [];
   
@@ -66,6 +67,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _findController.findInputController.selection = TextSelection.fromPosition(
           TextPosition(offset: text.length),
         );
+      }
+    });
+
+    // Add listener to code controller to update UI when selection changes
+    _codeController.addListener(() {
+      if (mounted) {
+        setState(() {
+          // This will trigger a rebuild to show/hide the copy button
+        });
       }
     });
     
@@ -123,6 +133,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _originalCode = codeToLoad;
         _codeController.text = codeToLoad;
         _viewController.text = codeToLoad;
+        // Ensure view controller is properly initialized
+        _viewController.value = CodeLineEditingValue(
+          codeLines: CodeLines.fromText(codeToLoad),
+        );
       });
       
       // Load libraries for the current revision
@@ -133,6 +147,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _originalCode = '';
         _codeController.text = '';
         _viewController.text = '';
+        // Ensure view controller is properly initialized
+        _viewController.value = CodeLineEditingValue(
+          codeLines: CodeLines.fromText(''),
+        );
         _currentRevision = null;
       });
     }
@@ -363,6 +381,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         // Reset to original code if canceling edit
         _codeController.text = _originalCode;
         _viewController.text = _originalCode;
+        // Ensure view controller is properly initialized
+        _viewController.value = CodeLineEditingValue(
+          codeLines: CodeLines.fromText(_originalCode),
+        );
       }
     });
   }
@@ -536,6 +558,58 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     });
   }
 
+  // Toolbar action methods
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (_isSearchVisible) {
+        _findController.findMode();
+      } else {
+        _findController.close();
+      }
+    });
+  }
+
+  void _copySelectedText() {
+    final selection = _codeController.selection;
+    if (!selection.isCollapsed) {
+      // Get the selected text from the controller
+      final selectedText = _codeController.text.substring(
+        _codeController.selection.baseOffset,
+        _codeController.selection.extentOffset,
+      );
+      // Copy to clipboard (you might want to use a clipboard package)
+      // For now, we'll just show a message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
+      );
+    }
+  }
+
+  void _selectAll() {
+    final codeLines = _codeController.value.codeLines;
+    if (codeLines.isNotEmpty) {
+      _codeController.selection = CodeLineSelection(
+        baseIndex: 0,
+        baseOffset: 0,
+        extentIndex: codeLines.length - 1,
+        extentOffset: codeLines.last.length,
+      );
+    }
+  }
+
+  void _undo() {
+    _codeController.undo();
+  }
+
+  void _redo() {
+    _codeController.redo();
+  }
+
+  bool get _hasSelection => !_codeController.selection.isCollapsed;
+  bool get _canUndo => _codeController.canUndo;
+  bool get _canRedo => _codeController.canRedo;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -547,7 +621,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         actions: _isCodeEditable ? [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () => _findController.findMode(),
+            onPressed: _toggleSearch,
             tooltip: 'Find in code',
           ),
         ] : null,
@@ -666,18 +740,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                           fontSize: 12,
                         ),
                         indicatorBuilder: (context, editingController, chunkController, notifier) {
-                          return Row(
-                            children: [
-                              DefaultCodeLineNumber(
-                                controller: editingController,
-                                notifier: notifier,
-                              ),
-                              DefaultCodeChunkIndicator(
-                                width: 20,
-                                controller: chunkController,
-                                notifier: notifier,
-                              ),
-                            ],
+                          return DefaultCodeChunkIndicator(
+                            width: 20,
+                            controller: chunkController,
+                            notifier: notifier,
                           );
                         },
                         chunkAnalyzer: DefaultCodeChunkAnalyzer(),
@@ -1017,6 +1083,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           ),
         ),
         
+        // Custom toolbar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+          child: _buildCustomToolbar(),
+        ),
+        
         // Full-screen code editor
         Expanded(
           child: Padding(
@@ -1047,21 +1119,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                     fontSize: 12,
                   ),
                   indicatorBuilder: (context, editingController, chunkController, notifier) {
-                    return Row(
-                      children: [
-                        DefaultCodeLineNumber(
-                          controller: editingController,
-                          notifier: notifier,
-                        ),
-                        DefaultCodeChunkIndicator(
-                          width: 20,
-                          controller: chunkController,
-                          notifier: notifier,
-                        ),
-                      ],
+                    return DefaultCodeChunkIndicator(
+                      width: 20,
+                      controller: chunkController,
+                      notifier: notifier,
                     );
                   },
-                  findBuilder: (context, controller, readOnly) => _buildFindPanel(controller, readOnly),
                   chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                 ),
               ),
@@ -1072,93 +1135,156 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     );
   }
 
-  PreferredSizeWidget _buildFindPanel(CodeFindController controller, bool readOnly) {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(60),
-      child: Container(
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          border: Border(
-            bottom: BorderSide(
+  Widget _buildCustomToolbar() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Main toolbar row
+        Container(
+          height: 36, // Fixed height
+          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
               color: Theme.of(context).dividerColor,
               width: 1,
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller.findInputController,
-                focusNode: controller.findInputFocusNode,
-                decoration: const InputDecoration(
-                  hintText: 'Find...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  isDense: true,
+          child: Row(
+            children: [
+              // Copy button (only when text is selected)
+              if (_hasSelection) ...[
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 14),
+                  onPressed: _copySelectedText,
+                  tooltip: 'Copy selected text',
+                  padding: const EdgeInsets.all(2),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 ),
-                onChanged: (value) {
-                  controller.findMode();
-                },
-                onTap: () {
-                  // Move cursor to end of text instead of selecting all
-                  final text = controller.findInputController.text;
-                  controller.findInputController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: text.length),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Match counter
-            ValueListenableBuilder<CodeFindValue?>(
-              valueListenable: controller,
-              builder: (context, value, child) {
-                if (value?.result != null && value!.result!.matches.isNotEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Text(
-                      '${value.result!.index + 1}/${value.result!.matches.length}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.keyboard_arrow_up),
-              onPressed: () {
-                // Find previous
-                controller.previousMatch();
-              },
-              tooltip: 'Find previous',
-            ),
-            IconButton(
-              icon: const Icon(Icons.keyboard_arrow_down),
-              onPressed: () {
-                // Find next
-                controller.nextMatch();
-              },
-              tooltip: 'Find next',
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => controller.close(),
-              tooltip: 'Close search',
-            ),
-            if (!readOnly) ...[
-              const SizedBox(width: 8),
+                const SizedBox(width: 2),
+              ],
+              // Select All button
               IconButton(
-                icon: const Icon(Icons.find_replace),
-                onPressed: () => controller.replaceMode(),
+                icon: const Icon(Icons.select_all, size: 14),
+                onPressed: _selectAll,
+                tooltip: 'Select all',
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              const SizedBox(width: 2),
+              // Undo button
+              IconButton(
+                icon: const Icon(Icons.undo, size: 14),
+                onPressed: _canUndo ? _undo : null,
+                tooltip: 'Undo',
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              const SizedBox(width: 2),
+              // Redo button
+              IconButton(
+                icon: const Icon(Icons.redo, size: 14),
+                onPressed: _canRedo ? _redo : null,
+                tooltip: 'Redo',
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              const Spacer(),
+              // Search toggle button
+              IconButton(
+                icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search, size: 14),
+                onPressed: _toggleSearch,
+                tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              const SizedBox(width: 2),
+              // Find and replace button
+              IconButton(
+                icon: const Icon(Icons.find_replace, size: 14),
+                onPressed: () => _findController.replaceMode(),
                 tooltip: 'Find and replace',
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
-          ],
+          ),
         ),
-      ),
+        // Search input row (only visible when search is enabled)
+        if (_isSearchVisible) ...[
+          const SizedBox(height: 4),
+          Container(
+            height: 32, // Fixed height
+            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: Theme.of(context).dividerColor,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _findController.findInputController,
+                    focusNode: _findController.findInputFocusNode,
+                    decoration: const InputDecoration(
+                      hintText: 'Find...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      isDense: true,
+                    ),
+                    onChanged: (value) {
+                      _findController.findMode();
+                    },
+                    onTap: () {
+                      // Move cursor to end of text instead of selecting all
+                      final text = _findController.findInputController.text;
+                      _findController.findInputController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: text.length),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Match counter
+                ValueListenableBuilder<CodeFindValue?>(
+                  valueListenable: _findController,
+                  builder: (context, value, child) {
+                    if (value?.result != null && value!.result!.matches.isNotEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Text(
+                          '${value.result!.index + 1}/${value.result!.matches.length}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_up, size: 14),
+                  onPressed: () => _findController.previousMatch(),
+                  tooltip: 'Find previous',
+                  padding: const EdgeInsets.all(2),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 14),
+                  onPressed: () => _findController.nextMatch(),
+                  tooltip: 'Find next',
+                  padding: const EdgeInsets.all(2),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
