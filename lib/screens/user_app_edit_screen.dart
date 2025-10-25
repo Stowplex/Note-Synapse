@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/languages/xml.dart';
 import 'package:re_highlight/languages/javascript.dart';
@@ -39,6 +40,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   bool _isSaving = false;
   bool _isCodeEditable = false;
   bool _isSearchVisible = false; // Control search input visibility
+  bool _hasViewSelection = false; // Track if view has text selected
+  late VoidCallback _viewSelectionListener;
   String _originalCode = '';
   List<String> _attachmentPaths = [];
   
@@ -76,6 +79,25 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         setState(() {
           // This will trigger a rebuild to show/hide the copy button
         });
+      }
+    });
+
+    // Add listener to view controller to track selection changes
+    // Use Future.microtask to avoid setState during build
+    _viewSelectionListener = () {
+      if (mounted) {
+        final hasSelection = !_viewController.selection.isCollapsed;
+        if (_hasViewSelection != hasSelection) {
+          setState(() {
+            _hasViewSelection = hasSelection;
+          });
+        }
+      }
+    };
+    
+    Future.microtask(() {
+      if (mounted) {
+        _viewController.addListener(_viewSelectionListener);
       }
     });
     
@@ -211,6 +233,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void dispose() {
     _editSuggestionController.dispose();
     _codeController.dispose();
+    _viewController.removeListener(_viewSelectionListener);
     _viewController.dispose();
     _findController.dispose();
     _tabController.dispose();
@@ -578,6 +601,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _codeController.selection.baseOffset,
         _codeController.selection.extentOffset,
       );
+      Clipboard.setData(ClipboardData(text: selectedText));
       // Copy to clipboard (you might want to use a clipboard package)
       // For now, we'll just show a message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -585,6 +609,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       );
     }
   }
+
+
 
   void _selectAll() {
     final codeLines = _codeController.value.codeLines;
@@ -701,14 +727,75 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                       l10n.appCode,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _toggleCodeEdit,
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: Text(l10n.editCodeDirectly),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
+                    Row(
+                      children: [
+                        // Copy button
+                        Focus(
+                          descendantsAreFocusable: false,
+                          child: GestureDetector(
+                            onTap: () {
+                              final selection = _viewController.selection;
+                              if (!selection.isCollapsed) {
+                                final codeLines = _viewController.codeLines;
+                                String selectedText;
+                                if (selection.start.index == selection.end.index) {
+                                  selectedText = codeLines[selection.start.index].text.substring(selection.start.offset, selection.end.offset);
+                                } else {
+                                  final buffer = StringBuffer();
+                                  buffer.write(codeLines[selection.start.index].text.substring(selection.start.offset));
+                                  for (int i = selection.start.index + 1; i < selection.end.index; i++) {
+                                    buffer.write('\n');
+                                    buffer.write(codeLines[i].text);
+                                  }
+                                  buffer.write('\n');
+                                  buffer.write(codeLines[selection.end.index].text.substring(0, selection.end.offset));
+                                  selectedText = buffer.toString();
+                                }
+
+                                Clipboard.setData(ClipboardData(text: selectedText));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Copied: ${selectedText.length} characters')),
+                                );
+                              } else {
+                                final text = _viewController.text;
+                                Clipboard.setData(ClipboardData(text: text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Copied: ${text.length} characters')),
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[600],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.copy, size: 16, color: Colors.white),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _hasViewSelection ? 'Copy Selected' : 'Copy All',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Edit button
+                        ElevatedButton.icon(
+                          onPressed: _toggleCodeEdit,
+                          icon: const Icon(Icons.edit, size: 16),
+                          label: Text(l10n.editCodeDirectly),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -720,6 +807,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                       child: CodeEditor(
                         controller: _viewController,
                         readOnly: true, // Make it read-only
+                        showCursorWhenReadOnly: true, // Enable cursor and selection in read-only mode
                         wordWrap: false, // Disable word wrap for consistency
                         style: CodeEditorStyle(
                           codeTheme: CodeHighlightTheme(
