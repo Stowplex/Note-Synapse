@@ -1267,12 +1267,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
 
-  void _openAIAction() {
-    Navigator.of(context).push(
+  void _updateNote(Note newNote) {
+    setState(() {
+      _titleController.text = newNote.title;
+      _contentController.text = newNote.content;
+      if (newNote.isTask) {
+        _scheduledAt = newNote.scheduledAt != null
+            ? DateTime.tryParse(newNote.scheduledAt!)
+            : null;
+        _completeBy = newNote.completeBy != null
+            ? DateTime.tryParse(newNote.completeBy!)
+            : null;
+      }
+    });
+  }
+
+  void _openAIAction() async {
+    final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AIActionScreen(selectedNotes: [widget.note]),
       ),
     );
+
+    if (result != null && result is Note) {
+      _updateNote(result);
+    }
   }
 
   void _openNoteActionApps() {

@@ -291,19 +291,44 @@ class _AIActionScreenState extends State<AIActionScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          if (_selectedAction == AIInteractionType.noteTransformation) ...[
+            Text(
+              'Original Note',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SingleChildScrollView(
+                    child: SelectionArea(
+                      child: Text(
+                        widget.selectedNotes.first.content,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: _clearResponse,
-                  child: const Text('New Action'),
+                  child: Text(l10n.cancel),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
                   onPressed: _saveResponse,
-                  child: const Text('Save Response'),
+                  child: Text(_selectedAction == AIInteractionType.noteTransformation ? 'Replace' : 'Save Response'),
                 ),
               ),
             ],
@@ -596,31 +621,47 @@ class _AIActionScreenState extends State<AIActionScreen> {
     }
 
     try {
-      // Create a new note from the AI response
-      final newNote = Note(
-        id: const Uuid().v4(),
-        title: _generateNoteTitle(),
-        content: _response!,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        tags: ['AI Generated'], // Tag to identify AI-generated notes
-      );
+      if (_selectedAction == AIInteractionType.noteTransformation) {
+        final originalNote = widget.selectedNotes.first;
+        final updatedNote = originalNote.copyWith(
+          content: _response!,
+          updatedAt: DateTime.now(),
+        );
 
-      // Save the note to the database
-      await context.read<AppProvider>().addNote(newNote);
+        await context.read<AppProvider>().updateNote(updatedNote);
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Response saved as new note')),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Note updated successfully')),
+        );
 
-      // Navigate to the newly created note
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => NoteDetailScreen(note: newNote),
-        ),
-      );
+        Navigator.of(context).pop(updatedNote);
+      } else {
+        // Create a new note from the AI response
+        final newNote = Note(
+          id: const Uuid().v4(),
+          title: _generateNoteTitle(),
+          content: _response!,
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          tags: ['AI Generated'], // Tag to identify AI-generated notes
+        );
+
+        // Save the note to the database
+        await context.read<AppProvider>().addNote(newNote);
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Response saved as new note')),
+        );
+
+        // Navigate to the newly created note
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => NoteDetailScreen(note: newNote),
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
