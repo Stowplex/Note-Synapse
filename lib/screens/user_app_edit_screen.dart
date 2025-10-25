@@ -978,7 +978,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     final l10n = AppLocalizations.of(context)!;
     
     return Scaffold(
-      resizeToAvoidBottomInset: !_isCodeEditable,
+      resizeToAvoidBottomInset: true, // Always resize to avoid keyboard
       appBar: AppBar(
         title: Text(l10n.editApp),
         actions: _isCodeEditable ? [
