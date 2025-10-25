@@ -974,6 +974,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   Widget _buildViewModeLayout(AppLocalizations l10n) {
     return TabBarView(
       controller: _tabController,
+      physics: const NeverScrollableScrollPhysics(), // Disable tab swipe
       children: [
         _buildBasicTab(l10n),
         _buildAdvancedTab(l10n),
