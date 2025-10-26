@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:provider/provider.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
-import '../providers/app_provider.dart';
 import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/fork_service.dart';
 import '../services/logger_service.dart';
-import '../services/ai_service.dart';
 import 'conversation_chat_screen.dart';
+import '../widgets/add_note_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   const ConversationTreeScreen({Key? key}) : super(key: key);
@@ -393,7 +391,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     });
   }
 
-  void _showSaveOptionsDialog() {
+  Future<void> _showSaveOptionsDialog() async {
     if (_selectedNodes.isEmpty) {
       if (mounted) {
         try {
@@ -410,268 +408,38 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       return;
     }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save Selected Nodes'),
-        content: Text('You have selected ${_selectedNodes.length} node(s). How would you like to save them?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _saveSelectedNodesAsNote();
-            },
-            child: const Text('Save to Note'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _aiSummarizeAndSaveAsNote();
-            },
-            child: const Text('AI Summarize and Save to Note'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _saveSelectedNodesAsNote() async {
-    if (_tree == null || _selectedNodes.isEmpty) return;
-
     try {
-      // Collect conversation context from selected nodes (same as createConversationFromSelectedNodes)
-      final conversationIds = <String>{};
-      final allNoteIds = <String>{};
+      // Collect conversation context from selected nodes
+      final conversationContent = await _buildConversationContentFromNodes();
+      final contextNotes = await _collectContextNotesFromNodes();
       
-      for (final nodeId in _selectedNodes) {
-        final node = _tree!.nodes[nodeId];
-        if (node != null && node.conversationId.isNotEmpty) {
-          conversationIds.add(node.conversationId);
-          
-          // Get notes from this conversation
-          final conversation = await _databaseService.getConversation(node.conversationId);
-          if (conversation != null) {
-            allNoteIds.addAll(conversation.noteIds);
-          }
-        }
-      }
-
-      if (conversationIds.isEmpty) {
-        throw Exception('No valid conversations selected');
-      }
-
-      // Build context messages from conversations (same as _addConversationContext)
-      final contextMessages = <String>[];
-      
-      for (final sourceConvId in conversationIds) {
-        final messages = await _databaseService.getConversationMessages(sourceConvId);
-        if (messages.isNotEmpty) {
-          // Add a header for this conversation's context
-          contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
-          
-          // Add key messages (first few and last few)
-          final keyMessages = <ConversationMessage>[];
-          if (messages.length <= 4) {
-            keyMessages.addAll(messages);
-          } else {
-            // First 2 and last 2 messages
-            keyMessages.addAll(messages.take(2));
-            keyMessages.addAll(messages.skip(messages.length - 2));
-          }
-          
-          for (final message in keyMessages) {
-            final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-            contextMessages.add('$prefix${message.content}');
-          }
-          contextMessages.add(''); // Empty line between conversations
-        }
-      }
-
-      final fullContext = contextMessages.join('\n');
-
-      // Create note with full conversation context
-      final note = Note(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: 'Conversation Tree Selection - ${DateTime.now().toString().substring(0, 19)}',
-        content: fullContext,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        tags: ['conversation-tree'],
-      );
-
-      // Save to database and notify AppProvider to update UI
-      if (mounted) {
-        await context.read<AppProvider>().addNote(note);
-      }
-
-      if (mounted) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Note created successfully'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        } catch (contextError) {
-          LoggerService.warning('Could not show success SnackBar: $contextError');
-        }
-      }
-    } catch (e) {
-      LoggerService.error('Error creating note: $e', error: e);
-      if (mounted) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error creating note: ${e.toString()}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        } catch (contextError) {
-          LoggerService.warning('Could not show error SnackBar: $contextError');
-        }
-      }
-    }
-  }
-
-  Future<void> _aiSummarizeAndSaveAsNote() async {
-    if (_tree == null || _selectedNodes.isEmpty) return;
-
-    try {
-      // Show loading dialog
-      showDialog(
+      // Show the unified add note dialog
+      final createdNotes = await AddNoteDialog.show(
         context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('AI is summarizing the selected nodes...'),
-            ],
+        content: conversationContent,
+        contextNotes: contextNotes,
+      );
+      
+      // If notes were created, show success message
+      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              createdNotes.length == 1
+                  ? 'Note "${createdNotes.first.title}" created successfully'
+                  : '${createdNotes.length} notes created successfully',
+            ),
+            backgroundColor: Colors.green,
           ),
-        ),
-      );
-
-      // Collect conversation context from selected nodes (same as createConversationFromSelectedNodes)
-      final conversationIds = <String>{};
-      final allNoteIds = <String>{};
-      
-      for (final nodeId in _selectedNodes) {
-        final node = _tree!.nodes[nodeId];
-        if (node != null && node.conversationId.isNotEmpty) {
-          conversationIds.add(node.conversationId);
-          
-          // Get notes from this conversation
-          final conversation = await _databaseService.getConversation(node.conversationId);
-          if (conversation != null) {
-            allNoteIds.addAll(conversation.noteIds);
-          }
-        }
-      }
-
-      if (conversationIds.isEmpty) {
-        throw Exception('No valid conversations selected');
-      }
-
-      // Build context messages from conversations (same as _addConversationContext)
-      final contextMessages = <String>[];
-      
-      for (final sourceConvId in conversationIds) {
-        final messages = await _databaseService.getConversationMessages(sourceConvId);
-        if (messages.isNotEmpty) {
-          // Add a header for this conversation's context
-          contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
-          
-          // Add key messages (first few and last few)
-          final keyMessages = <ConversationMessage>[];
-          if (messages.length <= 4) {
-            keyMessages.addAll(messages);
-          } else {
-            // First 2 and last 2 messages
-            keyMessages.addAll(messages.take(2));
-            keyMessages.addAll(messages.skip(messages.length - 2));
-          }
-          
-          for (final message in keyMessages) {
-            final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-            contextMessages.add('$prefix${message.content}');
-          }
-          contextMessages.add(''); // Empty line between conversations
-        }
-      }
-
-      final fullContext = contextMessages.join('\n');
-
-      // Use AI to summarize with full conversation context
-      final summarizedContent = await AIService.createNewNotes(
-        'Please summarize and organize the following conversation context into a concise, well-structured note. Focus on the key insights, decisions, and important information from these conversations:\n\n$fullContext',
-        [], // No context notes needed
-      );
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      if (summarizedContent.isNotEmpty) {
-        final note = summarizedContent.first;
-        
-        // Add conversation tree tag
-        final updatedNote = Note(
-          id: note.id,
-          title: note.title,
-          content: note.content,
-          type: note.type,
-          createdAt: note.createdAt,
-          updatedAt: note.updatedAt,
-          subNotes: note.subNotes,
-          tags: [...note.tags, 'conversation-tree', 'ai-summarized'],
-          attachmentPaths: note.attachmentPaths,
-          scheduledAt: note.scheduledAt,
-          completeBy: note.completeBy,
-          status: note.status,
-          completionPercentage: note.completionPercentage,
-          pinned: note.pinned,
-          isArchived: note.isArchived,
         );
-
-        // Save to database and notify AppProvider to update UI
-        if (mounted) {
-          await context.read<AppProvider>().addNote(updatedNote);
-        }
-
-        if (mounted) {
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('AI-summarized note created successfully'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          } catch (contextError) {
-            LoggerService.warning('Could not show success SnackBar: $contextError');
-          }
-        }
-      } else {
-        throw Exception('AI failed to generate summary');
       }
     } catch (e) {
-      // Close loading dialog if still open
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      
-      LoggerService.error('Error creating AI-summarized note: $e', error: e);
+      LoggerService.error('Error saving nodes as note: $e', error: e);
       if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error creating AI-summarized note: ${e.toString()}'),
+              content: Text('Error saving nodes: ${e.toString()}'),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -681,6 +449,83 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       }
     }
   }
+
+  /// Build conversation content from selected nodes
+  Future<String> _buildConversationContentFromNodes() async {
+    if (_tree == null || _selectedNodes.isEmpty) return '';
+
+    final conversationIds = <String>{};
+    
+    for (final nodeId in _selectedNodes) {
+      final node = _tree!.nodes[nodeId];
+      if (node != null && node.conversationId.isNotEmpty) {
+        conversationIds.add(node.conversationId);
+      }
+    }
+
+    if (conversationIds.isEmpty) {
+      return '';
+    }
+
+    // Build context messages from conversations
+    final contextMessages = <String>[];
+    
+    for (final sourceConvId in conversationIds) {
+      final messages = await _databaseService.getConversationMessages(sourceConvId);
+      if (messages.isNotEmpty) {
+        // Add a header for this conversation's context
+        contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
+        
+        // Add key messages (first few and last few)
+        final keyMessages = <ConversationMessage>[];
+        if (messages.length <= 4) {
+          keyMessages.addAll(messages);
+        } else {
+          // First 2 and last 2 messages
+          keyMessages.addAll(messages.take(2));
+          keyMessages.addAll(messages.skip(messages.length - 2));
+        }
+        
+        for (final message in keyMessages) {
+          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
+          contextMessages.add('$prefix${message.content}');
+        }
+        contextMessages.add(''); // Empty line between conversations
+      }
+    }
+
+    return contextMessages.join('\n');
+  }
+
+  /// Collect context notes from selected nodes
+  Future<List<Note>> _collectContextNotesFromNodes() async {
+    if (_tree == null || _selectedNodes.isEmpty) return [];
+
+    final allNoteIds = <String>{};
+    
+    for (final nodeId in _selectedNodes) {
+      final node = _tree!.nodes[nodeId];
+      if (node != null && node.conversationId.isNotEmpty) {
+        // Get notes from this conversation
+        final conversation = await _databaseService.getConversation(node.conversationId);
+        if (conversation != null) {
+          allNoteIds.addAll(conversation.noteIds);
+        }
+      }
+    }
+
+    // Load the notes
+    final notes = <Note>[];
+    for (final noteId in allNoteIds) {
+      final note = await _databaseService.getNote(noteId);
+      if (note != null) {
+        notes.add(note);
+      }
+    }
+
+    return notes;
+  }
+
 
   @override
   Widget build(BuildContext context) {

@@ -5,20 +5,19 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
-import '../services/database_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
+import '../widgets/add_note_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -754,87 +753,37 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Future<void> _addResponseToNote(String responseContent) async {
     try {
-      // Show a dialog to get the note title
-      final titleController = TextEditingController();
-      final result = await showDialog<String>(
+      // Show the unified add note dialog
+      final createdNotes = await AddNoteDialog.show(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Add to Note'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Enter a title for the new note:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  hintText: 'Note title',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
-                if (title.isNotEmpty) {
-                  Navigator.of(context).pop(title);
-                }
-              },
-              child: const Text('Create Note'),
-            ),
-          ],
-        ),
+        content: responseContent,
+        contextNotes: _notes,
       );
-
-      if (result != null && result.isNotEmpty) {
-        // Create a new note with the AI response content
-        final newNote = Note(
-          id: const Uuid().v4(),
-          title: result,
-          content: responseContent,
-          type: NoteType.note,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          subNotes: [],
-          tags: [],
-          attachmentPaths: [],
-          scheduledAt: null,
-          completeBy: null,
-          status: null,
-          pinned: false,
-          isArchived: false,
-        );
-
-        // Save the note to the database
-        final databaseService = DatabaseService();
-        await databaseService.insertNote(newNote);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Note "${result}" created successfully'),
-              backgroundColor: Colors.green,
-              action: SnackBarAction(
-                label: 'View',
-                onPressed: () {
-                  // Navigate to the note detail screen
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailScreen(note: newNote),
-                    ),
-                  );
-                },
-              ),
+      
+      // If notes were created through AI, show success message with view action
+      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+        final firstNote = createdNotes.first;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              createdNotes.length == 1
+                  ? 'Note "${firstNote.title}" created successfully'
+                  : '${createdNotes.length} notes created successfully',
             ),
-          );
-        }
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                // Navigate to the first created note
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(note: firstNote),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
       }
     } catch (e) {
       LoggerService.error('Error creating note from AI response: $e', error: e);
