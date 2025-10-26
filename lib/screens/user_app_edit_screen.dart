@@ -53,6 +53,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   List<UserAppLibrary> _modifiedLibraries = [];
   Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
   bool _isLoadingLibraries = false;
+  
+  // Prevent rapid state changes during transitions
+  bool _isTransitioning = false;
 
   @override
   void initState() {
@@ -219,6 +222,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
   @override
   void dispose() {
+    // Reset transition flag to prevent any pending operations
+    _isTransitioning = false;
+    
     _editSuggestionController.dispose();
     _codeController.dispose();
     _viewController.dispose();
@@ -385,18 +391,33 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   }
 
   void _toggleCodeEdit() {
-    setState(() {
-      _isCodeEditable = !_isCodeEditable;
-      if (!_isCodeEditable) {
-        // Reset to original code if canceling edit
-        _codeController.text = _originalCode;
-        _viewController.text = _originalCode;
-        // Ensure view controller is properly initialized
-        _viewController.value = CodeLineEditingValue(
-          codeLines: CodeLines.fromText(_originalCode),
-        );
-      }
-    });
+    // Prevent rapid state changes during transitions
+    if (_isTransitioning) return;
+    
+    if (!_isCodeEditable) {
+      // Switching to edit mode - can do immediately
+      setState(() {
+        _isCodeEditable = true;
+      });
+    } else {
+      // Switching to view mode - add delay to allow rendering to complete
+      _isTransitioning = true;
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) {
+          setState(() {
+            _isCodeEditable = false;
+            _isTransitioning = false;
+            // Reset to original code if canceling edit
+            _codeController.text = _originalCode;
+            _viewController.text = _originalCode;
+            // Ensure view controller is properly initialized
+            _viewController.value = CodeLineEditingValue(
+              codeLines: CodeLines.fromText(_originalCode),
+            );
+          });
+        }
+      });
+    }
   }
 
   Future<void> _pickImage() async {
@@ -1093,13 +1114,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                           fontFamily: 'monospace',
                           fontSize: 12,
                         ),
-                        indicatorBuilder: (context, editingController, chunkController, notifier) {
-                          return DefaultCodeChunkIndicator(
-                            width: 8,
-                            controller: chunkController,
-                            notifier: notifier,
-                          );
-                        },
                         chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                       ),
                     ),
@@ -1465,13 +1479,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                     fontFamily: 'monospace',
                     fontSize: 12,
                   ),
-                  indicatorBuilder: (context, editingController, chunkController, notifier) {
-                    return DefaultCodeChunkIndicator(
-                      width: 8,
-                      controller: chunkController,
-                      notifier: notifier,
-                    );
-                  },
                   chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                 ),
               ),
