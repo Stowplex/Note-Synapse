@@ -652,7 +652,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editSubNote => '编辑子笔记';
 
   @override
-  String get reparentSubNote => '重新分配';
+  String get reparentSubNote => '设置父笔记';
 
   @override
   String get deleteSubNote => '删除子笔记';

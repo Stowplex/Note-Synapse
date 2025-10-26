@@ -200,7 +200,7 @@
   "noSubNotes": "没有子笔记",
   "addNewSubNote": "添加新子笔记",
   "editSubNote": "编辑子笔记",
-  "reparentSubNote": "重新分配",
+  "reparentSubNote": "设置父笔记",
   "deleteSubNote": "删除子笔记",
   "confirmDeleteSubNote": "您确定要删除这条子笔记吗？",
   "subNoteAddedSuccessfully": "子笔记添加成功！",
