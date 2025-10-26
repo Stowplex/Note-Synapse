@@ -239,15 +239,36 @@ class McpToolIntegrationService {
   }
 
   /// Parse call_tool function arguments
+  /// Handles both nested format (with 'params' key) and flat format (all at top level)
   static Map<String, dynamic>? parseCallToolArguments(
     Map<String, dynamic> arguments,
   ) {
     try {
       final serviceName = arguments['service_name'] as String?;
       final toolName = arguments['tool_name'] as String?;
-      final params = arguments['params'] as Map<String, dynamic>?;
 
-      if (serviceName == null || toolName == null || params == null) {
+      if (serviceName == null || toolName == null) {
+        LoggerService.error('Missing required fields: service_name or tool_name');
+        return null;
+      }
+
+      // Try to get params in nested format first
+      Map<String, dynamic>? params = arguments['params'] as Map<String, dynamic>?;
+      
+      // If params is not in nested format, check if all other fields are at top level
+      if (params == null || params.isEmpty) {
+        // Extract everything except service_name and tool_name as params
+        params = <String, dynamic>{};
+        arguments.forEach((key, value) {
+          if (key != 'service_name' && key != 'tool_name') {
+            params![key] = value;
+          }
+        });
+      }
+
+      // If we still don't have params, fail
+      if (params.isEmpty) {
+        LoggerService.error('No params found in arguments');
         return null;
       }
 

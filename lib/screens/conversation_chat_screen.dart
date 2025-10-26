@@ -14,6 +14,7 @@ import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
+import '../models/model_type.dart';
 import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
@@ -339,8 +340,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       
       final fullPrompt = enhancedQuestion + noteContext;
       
-      // Get call_tool function definition
-      final callToolFunction = McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
+      // Get call_tool function definition based on current model type
+      final currentModelType = ModelSelector.instance.currentModelType;
+      final callToolFunction = currentModelType == ModelType.openaiCompatible
+          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(_mcpToolsByEndpoint)
+          : McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
       
       LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
       
@@ -386,6 +390,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             final functionName = functionCall['name'] as String;
             final args = functionCall['args'] as Map<String, dynamic>;
             
+            LoggerService.debug('Processing function call', error: {
+              'functionName': functionName,
+              'args': args,
+            });
+            
             if (functionName == 'call_tool') {
               final parsedArgs = McpToolIntegrationService.parseCallToolArguments(args);
               if (parsedArgs != null) {
@@ -394,6 +403,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 final params = parsedArgs['params'] as Map<String, dynamic>;
                 
                 LoggerService.info('Executing: $serviceName.$toolName');
+                LoggerService.debug('Tool parameters', error: params);
                 
                 try {
                   final result = await McpToolIntegrationService.executeToolCall(
@@ -409,6 +419,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   LoggerService.error('Tool execution failed: $e');
                   toolResults.add('Tool: $serviceName.$toolName\nError: $e');
                 }
+              } else {
+                LoggerService.error('Failed to parse call_tool arguments', error: {'args': args});
               }
             }
           }
