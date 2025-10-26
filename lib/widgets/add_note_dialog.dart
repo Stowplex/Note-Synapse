@@ -135,14 +135,11 @@ class AddNoteDialog extends StatelessWidget {
   Future<void> _addAsIs(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     
-    // Close the dialog first
-    Navigator.of(context).pop();
-    
-    // Show title input dialog
+    // Show title input dialog (don't close the main dialog yet)
     final titleController = TextEditingController();
     final title = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(l10n.noteTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -161,14 +158,14 @@ class AddNoteDialog extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () {
               final text = titleController.text.trim();
               if (text.isNotEmpty) {
-                Navigator.of(context).pop(text);
+                Navigator.of(dialogContext).pop(text);
               }
             },
             child: Text(l10n.createNote),
@@ -177,9 +174,18 @@ class AddNoteDialog extends StatelessWidget {
       ),
     );
     
-    if (title == null || title.isEmpty) return;
+    // If user cancelled the title dialog, close the main dialog without creating a note
+    if (title == null || title.isEmpty) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
     
     try {
+      // Get the AppProvider reference before any async operations
+      final appProvider = context.read<AppProvider>();
+      
       // Create the note
       final newNote = Note(
         id: const Uuid().v4(),
@@ -199,43 +205,44 @@ class AddNoteDialog extends StatelessWidget {
       );
       
       // Save to database
-      await context.read<AppProvider>().addNote(newNote);
+      await appProvider.addNote(newNote);
       
       if (context.mounted) {
-        final l10n = AppLocalizations.of(context)!;
+        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.noteCreatedSuccessfully(title)),
             backgroundColor: Colors.green,
           ),
         );
+        
+        // Close the main dialog and return the created note to the caller
+        Navigator.of(context).pop([newNote]);
       }
     } catch (e) {
       if (context.mounted) {
-        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.errorCreatingNote(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
+        // Close the main dialog without returning anything on error
+        Navigator.of(context).pop();
       }
     }
   }
   
   Future<void> _letAICreate(BuildContext context) async {
-    // Close the initial dialog
-    Navigator.of(context).pop();
-    
-    // Show AI note creator dialog
+    // Show AI note creator dialog (don't close the main dialog yet)
     final createdNotes = await AINoteCreatorDialog.show(
       context: context,
       conversationContent: content,
       contextNotes: contextNotes,
     );
     
-    // Return the created notes through the original dialog's result
-    if (context.mounted && createdNotes != null && createdNotes.isNotEmpty) {
+    // Close the main dialog and return the created notes to the caller
+    if (context.mounted) {
       Navigator.of(context).pop(createdNotes);
     }
   }
