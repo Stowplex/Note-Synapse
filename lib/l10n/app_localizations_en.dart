@@ -2071,4 +2071,127 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorCloningApp(Object error) {
     return 'Error cloning app: $error';
   }
+
+  @override
+  String get mcpSettings => 'MCP Settings';
+
+  @override
+  String get mcpSettingsSubtitle =>
+      'Configure Model Context Protocol endpoints';
+
+  @override
+  String errorLoadingEndpoints(Object error) {
+    return 'Error loading endpoints: $error';
+  }
+
+  @override
+  String get addMcpEndpoint => 'Add MCP Endpoint';
+
+  @override
+  String get addMcpEndpointTitle => 'Add MCP Endpoint';
+
+  @override
+  String get nameHint => 'My MCP Server';
+
+  @override
+  String get baseUrl => 'Base URL';
+
+  @override
+  String get baseUrlHint =>
+      'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx';
+
+  @override
+  String get baseUrlHelperText =>
+      'Include query params for auth if needed (e.g., Smithery)';
+
+  @override
+  String get transportType => 'Transport Type';
+
+  @override
+  String get bearerTokenOptional => 'Bearer Token (Optional)';
+
+  @override
+  String get bearerTokenHint => 'Leave empty if auth is in URL params';
+
+  @override
+  String get bearerTokenHelperText =>
+      'Optional: For header-based authentication';
+
+  @override
+  String get pleaseProvideNameAndUrl => 'Please provide name and URL';
+
+  @override
+  String addedEndpoint(Object name) {
+    return 'Added endpoint: $name';
+  }
+
+  @override
+  String errorAddingEndpoint(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get deleteEndpoint => 'Delete Endpoint';
+
+  @override
+  String deleteEndpointConfirmation(Object name) {
+    return 'Are you sure you want to delete \"$name\"? This will also delete cached tools.';
+  }
+
+  @override
+  String deletedEndpoint(Object name) {
+    return 'Deleted endpoint: $name';
+  }
+
+  @override
+  String errorDeletingEndpoint(Object error) {
+    return 'Error deleting endpoint: $error';
+  }
+
+  @override
+  String refreshedToolsFor(Object name) {
+    return 'Refreshed tools for $name';
+  }
+
+  @override
+  String errorRefreshingTools(Object error) {
+    return 'Error refreshing tools: $error';
+  }
+
+  @override
+  String get tools => 'Tools';
+
+  @override
+  String toolsFor(Object name) {
+    return 'Tools - $name';
+  }
+
+  @override
+  String get fetched => 'Fetched';
+
+  @override
+  String toolsCount(Object count) {
+    return 'Tools: $count';
+  }
+
+  @override
+  String get noToolsAvailable => 'No tools available';
+
+  @override
+  String noToolsCachedFor(Object name) {
+    return 'No tools cached for $name. Click refresh to fetch tools.';
+  }
+
+  @override
+  String get refreshTools => 'Refresh Tools';
+
+  @override
+  String get viewTools => 'View Tools';
+
+  @override
+  String get noMcpEndpointsConfigured => 'No MCP endpoints configured';
+
+  @override
+  String get clickAddMcpEndpointToGetStarted =>
+      'Click \"Add MCP Endpoint\" to get started';
 }

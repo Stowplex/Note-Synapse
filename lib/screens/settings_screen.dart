@@ -380,8 +380,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.cloud_sync),
-                    title: const Text('MCP Settings'),
-                    subtitle: const Text('Configure Model Context Protocol endpoints'),
+                    title: Text(l10n.mcpSettings),
+                    subtitle: Text(l10n.mcpSettingsSubtitle),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
                       context,

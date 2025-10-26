@@ -3799,6 +3799,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error cloning app: {error}'**
   String errorCloningApp(Object error);
+
+  /// No description provided for @mcpSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP Settings'**
+  String get mcpSettings;
+
+  /// No description provided for @mcpSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure Model Context Protocol endpoints'**
+  String get mcpSettingsSubtitle;
+
+  /// No description provided for @errorLoadingEndpoints.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading endpoints: {error}'**
+  String errorLoadingEndpoints(Object error);
+
+  /// No description provided for @addMcpEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add MCP Endpoint'**
+  String get addMcpEndpoint;
+
+  /// No description provided for @addMcpEndpointTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add MCP Endpoint'**
+  String get addMcpEndpointTitle;
+
+  /// No description provided for @nameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'My MCP Server'**
+  String get nameHint;
+
+  /// No description provided for @baseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL'**
+  String get baseUrl;
+
+  /// No description provided for @baseUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx'**
+  String get baseUrlHint;
+
+  /// No description provided for @baseUrlHelperText.
+  ///
+  /// In en, this message translates to:
+  /// **'Include query params for auth if needed (e.g., Smithery)'**
+  String get baseUrlHelperText;
+
+  /// No description provided for @transportType.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport Type'**
+  String get transportType;
+
+  /// No description provided for @bearerTokenOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Bearer Token (Optional)'**
+  String get bearerTokenOptional;
+
+  /// No description provided for @bearerTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty if auth is in URL params'**
+  String get bearerTokenHint;
+
+  /// No description provided for @bearerTokenHelperText.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional: For header-based authentication'**
+  String get bearerTokenHelperText;
+
+  /// No description provided for @pleaseProvideNameAndUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please provide name and URL'**
+  String get pleaseProvideNameAndUrl;
+
+  /// No description provided for @addedEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Added endpoint: {name}'**
+  String addedEndpoint(Object name);
+
+  /// No description provided for @errorAddingEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String errorAddingEndpoint(Object error);
+
+  /// No description provided for @deleteEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Endpoint'**
+  String get deleteEndpoint;
+
+  /// No description provided for @deleteEndpointConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete \"{name}\"? This will also delete cached tools.'**
+  String deleteEndpointConfirmation(Object name);
+
+  /// No description provided for @deletedEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted endpoint: {name}'**
+  String deletedEndpoint(Object name);
+
+  /// No description provided for @errorDeletingEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting endpoint: {error}'**
+  String errorDeletingEndpoint(Object error);
+
+  /// No description provided for @refreshedToolsFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshed tools for {name}'**
+  String refreshedToolsFor(Object name);
+
+  /// No description provided for @errorRefreshingTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Error refreshing tools: {error}'**
+  String errorRefreshingTools(Object error);
+
+  /// No description provided for @tools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get tools;
+
+  /// No description provided for @toolsFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools - {name}'**
+  String toolsFor(Object name);
+
+  /// No description provided for @fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetched'**
+  String get fetched;
+
+  /// No description provided for @toolsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools: {count}'**
+  String toolsCount(Object count);
+
+  /// No description provided for @noToolsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No tools available'**
+  String get noToolsAvailable;
+
+  /// No description provided for @noToolsCachedFor.
+  ///
+  /// In en, this message translates to:
+  /// **'No tools cached for {name}. Click refresh to fetch tools.'**
+  String noToolsCachedFor(Object name);
+
+  /// No description provided for @refreshTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Tools'**
+  String get refreshTools;
+
+  /// No description provided for @viewTools.
+  ///
+  /// In en, this message translates to:
+  /// **'View Tools'**
+  String get viewTools;
+
+  /// No description provided for @noMcpEndpointsConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No MCP endpoints configured'**
+  String get noMcpEndpointsConfigured;
+
+  /// No description provided for @clickAddMcpEndpointToGetStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Click \"Add MCP Endpoint\" to get started'**
+  String get clickAddMcpEndpointToGetStarted;
 }
 
 class _AppLocalizationsDelegate

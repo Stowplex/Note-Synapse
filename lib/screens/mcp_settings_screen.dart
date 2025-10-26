@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/mcp_service.dart';
 import '../services/logger_service.dart';
+import '../l10n/app_localizations.dart';
 
 class McpSettingsScreen extends StatefulWidget {
   const McpSettingsScreen({super.key});
@@ -47,6 +48,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
   }
 
   Future<void> _showAddEndpointDialog() async {
+    final l10n = AppLocalizations.of(context)!;
     final nameController = TextEditingController();
     final baseUrlController = TextEditingController();
     final bearerTokenController = TextEditingController();
@@ -57,7 +59,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Add MCP Endpoint'),
+          title: Text(l10n.addMcpEndpointTitle),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -65,29 +67,29 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
-                    hintText: 'My MCP Server',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.name,
+                    hintText: l10n.nameHint,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: baseUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Base URL',
-                    hintText: 'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx',
-                    border: OutlineInputBorder(),
-                    helperText: 'Include query params for auth if needed (e.g., Smithery)',
+                  decoration: InputDecoration(
+                    labelText: l10n.baseUrl,
+                    hintText: l10n.baseUrlHint,
+                    border: const OutlineInputBorder(),
+                    helperText: l10n.baseUrlHelperText,
                     helperMaxLines: 2,
                   ),
                   keyboardType: TextInputType.url,
                   maxLines: 2,
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Transport Type',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                Text(
+                  l10n.transportType,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 8),
                 ...McpTransportType.values.map((type) => RadioListTile<McpTransportType>(
@@ -108,10 +110,10 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                 TextField(
                   controller: bearerTokenController,
                   decoration: InputDecoration(
-                    labelText: 'Bearer Token (Optional)',
-                    hintText: 'Leave empty if auth is in URL params',
+                    labelText: l10n.bearerTokenOptional,
+                    hintText: l10n.bearerTokenHint,
                     border: const OutlineInputBorder(),
-                    helperText: 'Optional: For header-based authentication',
+                    helperText: l10n.bearerTokenHelperText,
                     suffixIcon: IconButton(
                       icon: Icon(
                         obscureToken ? Icons.visibility : Icons.visibility_off,
@@ -131,7 +133,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             TextButton(
               onPressed: () async {
@@ -141,8 +143,8 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
                 if (name.isEmpty || baseUrl.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please provide name and URL'),
+                    SnackBar(
+                      content: Text(l10n.pleaseProvideNameAndUrl),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -162,7 +164,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Added endpoint: $name'),
+                        content: Text(l10n.addedEndpoint(name)),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -175,14 +177,14 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error: $e'),
+                        content: Text(l10n.errorAddingEndpoint(e)),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(l10n.create),
             ),
           ],
         ),
@@ -191,20 +193,20 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
   }
 
   Future<void> _deleteEndpoint(McpEndpoint endpoint) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Endpoint'),
-        content: Text(
-            'Are you sure you want to delete "${endpoint.name}"? This will also delete cached tools.'),
+        title: Text(l10n.deleteEndpoint),
+        content: Text(l10n.deleteEndpointConfirmation(endpoint.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -216,7 +218,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Deleted endpoint: ${endpoint.name}'),
+              content: Text(l10n.deletedEndpoint(endpoint.name)),
               backgroundColor: Colors.green,
             ),
           );
@@ -226,7 +228,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error deleting endpoint: $e'),
+              content: Text(l10n.errorDeletingEndpoint(e)),
               backgroundColor: Colors.red,
             ),
           );
@@ -236,6 +238,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
   }
 
   Future<void> _refreshTools(McpEndpoint endpoint) async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _isLoading = true;
     });
@@ -245,7 +248,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Refreshed tools for ${endpoint.name}'),
+            content: Text(l10n.refreshedToolsFor(endpoint.name)),
             backgroundColor: Colors.green,
           ),
         );
@@ -260,7 +263,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error refreshing tools: $e'),
+            content: Text(l10n.errorRefreshingTools(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -269,6 +272,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
   }
 
   Future<void> _showToolsDialog(McpEndpoint endpoint) async {
+    final l10n = AppLocalizations.of(context)!;
     final cache = await McpService.getCachedTools(endpoint.id);
 
     if (!mounted) return;
@@ -276,8 +280,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     if (cache == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              'No tools cached for ${endpoint.name}. Click refresh to fetch tools.'),
+          content: Text(l10n.noToolsCachedFor(endpoint.name)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -287,7 +290,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Tools - ${endpoint.name}'),
+        title: Text(l10n.toolsFor(endpoint.name)),
         content: SizedBox(
           width: double.maxFinite,
           height: 400,
@@ -295,14 +298,14 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Fetched: ${cache.fetchedAt.toString().substring(0, 19)}',
+                '${l10n.fetched}: ${cache.fetchedAt.toString().substring(0, 19)}',
                 style: TextStyle(
                   color: Colors.grey[600],
                   fontSize: 12,
                 ),
               ),
               Text(
-                'Tools: ${cache.tools.length}',
+                l10n.toolsCount(cache.tools.length),
                 style: TextStyle(
                   color: Colors.grey[600],
                   fontSize: 12,
@@ -324,7 +327,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     ),
                     child: SelectableText(
                       cache.tools.isEmpty
-                          ? 'No tools available'
+                          ? l10n.noToolsAvailable
                           : cache.tools
                               .map((tool) => tool.toDisplayString())
                               .join('\n${'=' * 60}\n\n'),
@@ -343,7 +346,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -352,9 +355,11 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MCP Settings'),
+        title: Text(l10n.mcpSettings),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -367,7 +372,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     child: ElevatedButton.icon(
                       onPressed: _showAddEndpointDialog,
                       icon: const Icon(Icons.add),
-                      label: const Text('Add MCP Endpoint'),
+                      label: Text(l10n.addMcpEndpoint),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.all(16),
                       ),
@@ -387,7 +392,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No MCP endpoints configured',
+                            l10n.noMcpEndpointsConfigured,
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.grey[600],
@@ -395,7 +400,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Click "Add MCP Endpoint" to get started',
+                            l10n.clickAddMcpEndpointToGetStarted,
                             style: TextStyle(
                               color: Colors.grey[500],
                             ),
@@ -454,7 +459,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'Updated: ${endpoint.updatedAt.toString().substring(0, 19)}',
+                                            '${l10n.updated}: ${endpoint.updatedAt.toString().substring(0, 19)}',
                                             style: TextStyle(
                                               fontSize: 11,
                                               color: Colors.grey[600],
@@ -481,7 +486,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: () => _refreshTools(endpoint),
                                         icon: const Icon(Icons.refresh, size: 18),
-                                        label: const Text('Refresh Tools'),
+                                        label: Text(l10n.refreshTools),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -489,7 +494,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: () => _showToolsDialog(endpoint),
                                         icon: const Icon(Icons.visibility, size: 18),
-                                        label: const Text('View Tools'),
+                                        label: Text(l10n.viewTools),
                                       ),
                                     ),
                                   ],

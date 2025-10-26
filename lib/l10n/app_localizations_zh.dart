@@ -2033,4 +2033,123 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorCloningApp(Object error) {
     return 'Error cloning app: $error';
   }
+
+  @override
+  String get mcpSettings => 'MCP设置';
+
+  @override
+  String get mcpSettingsSubtitle => '配置模型上下文协议端点';
+
+  @override
+  String errorLoadingEndpoints(Object error) {
+    return '加载端点时出错：$error';
+  }
+
+  @override
+  String get addMcpEndpoint => '添加MCP端点';
+
+  @override
+  String get addMcpEndpointTitle => '添加MCP端点';
+
+  @override
+  String get nameHint => '我的MCP服务器';
+
+  @override
+  String get baseUrl => '基础URL';
+
+  @override
+  String get baseUrlHint =>
+      'https://api.example.com 或 https://server.smithery.ai/@user/server/mcp?api_key=xxx';
+
+  @override
+  String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
+
+  @override
+  String get transportType => '传输类型';
+
+  @override
+  String get bearerTokenOptional => 'Bearer令牌（可选）';
+
+  @override
+  String get bearerTokenHint => '如果认证在URL参数中，请留空';
+
+  @override
+  String get bearerTokenHelperText => '可选：用于基于头的认证';
+
+  @override
+  String get pleaseProvideNameAndUrl => '请提供名称和URL';
+
+  @override
+  String addedEndpoint(Object name) {
+    return '已添加端点：$name';
+  }
+
+  @override
+  String errorAddingEndpoint(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get deleteEndpoint => '删除端点';
+
+  @override
+  String deleteEndpointConfirmation(Object name) {
+    return '您确定要删除\"$name\"吗？这将同时删除缓存的工具。';
+  }
+
+  @override
+  String deletedEndpoint(Object name) {
+    return '已删除端点：$name';
+  }
+
+  @override
+  String errorDeletingEndpoint(Object error) {
+    return '删除端点时出错：$error';
+  }
+
+  @override
+  String refreshedToolsFor(Object name) {
+    return '已刷新$name的工具';
+  }
+
+  @override
+  String errorRefreshingTools(Object error) {
+    return '刷新工具时出错：$error';
+  }
+
+  @override
+  String get tools => '工具';
+
+  @override
+  String toolsFor(Object name) {
+    return '工具 - $name';
+  }
+
+  @override
+  String get fetched => '获取时间';
+
+  @override
+  String toolsCount(Object count) {
+    return '工具：$count';
+  }
+
+  @override
+  String get noToolsAvailable => '没有可用工具';
+
+  @override
+  String noToolsCachedFor(Object name) {
+    return '没有为$name缓存工具。点击刷新以获取工具。';
+  }
+
+  @override
+  String get refreshTools => '刷新工具';
+
+  @override
+  String get viewTools => '查看工具';
+
+  @override
+  String get noMcpEndpointsConfigured => '未配置MCP端点';
+
+  @override
+  String get clickAddMcpEndpointToGetStarted => '点击\"添加MCP端点\"开始';
 }
