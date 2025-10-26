@@ -578,8 +578,47 @@ class AIService {
         throw Exception('No JSON found in response');
       }
       
-      final jsonString = response.substring(jsonStart, jsonEnd);
-      final Map<String, dynamic> json = jsonDecode(jsonString);
+      String jsonString = response.substring(jsonStart, jsonEnd);
+      
+      // Try to parse the JSON
+      Map<String, dynamic> json;
+      try {
+        json = jsonDecode(jsonString);
+      } catch (jsonError) {
+        // Check if the error is due to invalid escape sequences (common with LaTeX notation)
+        if (jsonError.toString().contains('escape') || 
+            jsonError.toString().contains('Unexpected character')) {
+          LoggerService.warning('JSON parsing failed, possibly due to invalid escape sequences. Attempting to fix LaTeX notation...');
+          
+          // Log a sample of the problematic JSON for debugging
+          final sampleLength = jsonString.length > 500 ? 500 : jsonString.length;
+          LoggerService.debug('JSON sample (first $sampleLength chars): ${jsonString.substring(0, sampleLength)}');
+          
+          // Attempt to fix common LaTeX escape sequence issues
+          // Replace single backslashes in LaTeX notation with double backslashes
+          // This regex looks for \( \) \[ \] that aren't already escaped
+          jsonString = jsonString.replaceAllMapped(
+            RegExp(r'(?<!\\)\\([()[\]])'),
+            (match) => '\\\\${match.group(1)}',
+          );
+          
+          // Try parsing again with the fixed JSON
+          try {
+            json = jsonDecode(jsonString);
+            LoggerService.info('Successfully parsed JSON after fixing escape sequences');
+          } catch (e2) {
+            // If it still fails, provide a detailed error message
+            throw Exception(
+              'Failed to parse JSON response even after attempting to fix escape sequences. '
+              'The AI may have generated invalid JSON with improperly escaped special characters (e.g., LaTeX notation like \\( or \\)). '
+              'Original error: $jsonError. Error after fix attempt: $e2'
+            );
+          }
+        } else {
+          // Different JSON parsing error, rethrow with original error
+          rethrow;
+        }
+      }
       
       final List<dynamic> notesJson = json['notes'] as List<dynamic>;
       final List<Note> notes = [];
