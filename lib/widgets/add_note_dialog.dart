@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
+import '../l10n/app_localizations.dart';
 import 'ai_note_creator_dialog.dart';
 
 /// Dialog for choosing how to add a note from conversation messages
@@ -34,27 +35,29 @@ class AddNoteDialog extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return AlertDialog(
-      title: const Text('Add to Note'),
+      title: Text(l10n.addNoteDialogTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('How would you like to add this content to your notes?'),
+          Text(l10n.addNoteDialogMessage),
           const SizedBox(height: 16),
           _buildOptionCard(
             context: context,
             icon: Icons.note_add,
-            title: 'Add as-is',
-            description: 'Add the content directly without modification',
+            title: l10n.addAsIs,
+            description: l10n.addAsIsDescription,
             onTap: () => _addAsIs(context),
           ),
           const SizedBox(height: 12),
           _buildOptionCard(
             context: context,
             icon: Icons.psychology,
-            title: 'Let AI create note',
-            description: 'Use AI to summarize or transform the content',
+            title: l10n.letAICreateNote,
+            description: l10n.letAICreateNoteDescription,
             onTap: () => _letAICreate(context),
           ),
         ],
@@ -62,7 +65,7 @@ class AddNoteDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
       ],
     );
@@ -130,6 +133,8 @@ class AddNoteDialog extends StatelessWidget {
   }
   
   Future<void> _addAsIs(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     // Close the dialog first
     Navigator.of(context).pop();
     
@@ -138,17 +143,17 @@ class AddNoteDialog extends StatelessWidget {
     final title = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Note Title'),
+        title: Text(l10n.noteTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter a title for the new note:'),
+            Text(l10n.enterNoteTitlePrompt),
             const SizedBox(height: 16),
             TextField(
               controller: titleController,
-              decoration: const InputDecoration(
-                hintText: 'Note title',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: l10n.noteTitleHint,
+                border: const OutlineInputBorder(),
               ),
               autofocus: true,
             ),
@@ -157,7 +162,7 @@ class AddNoteDialog extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -166,7 +171,7 @@ class AddNoteDialog extends StatelessWidget {
                 Navigator.of(context).pop(text);
               }
             },
-            child: const Text('Create Note'),
+            child: Text(l10n.createNote),
           ),
         ],
       ),
@@ -197,18 +202,20 @@ class AddNoteDialog extends StatelessWidget {
       await context.read<AppProvider>().addNote(newNote);
       
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Note "$title" created successfully'),
+            content: Text(l10n.noteCreatedSuccessfully(title)),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating note: $e'),
+            content: Text(l10n.errorCreatingNote(e.toString())),
             backgroundColor: Colors.red,
           ),
         );

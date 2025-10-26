@@ -584,7 +584,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noteCreatedSuccessfully => '笔记创建成功！';
+  String noteCreatedSuccessfully(Object title) {
+    return '笔记\"$title\"创建成功';
+  }
 
   @override
   String errorCreatingNote(Object error) {
@@ -2164,4 +2166,255 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noLibrariesAddedYet => '尚未添加库。点击\"添加库\"开始。';
+
+  @override
+  String get conversation => '对话';
+
+  @override
+  String get newConversation => '新对话';
+
+  @override
+  String get conversationTree => '对话树';
+
+  @override
+  String get conversations => '对话';
+
+  @override
+  String get typeYourMessage => '输入您的消息...';
+
+  @override
+  String get cancellingRequest => '正在取消请求...';
+
+  @override
+  String get takePhotoAttachment => '拍照';
+
+  @override
+  String get mcpTools => 'MCP工具';
+
+  @override
+  String get active => '活动';
+
+  @override
+  String toolsAvailable(Object count) {
+    return '$count个工具可用';
+  }
+
+  @override
+  String get manageNotes => '管理笔记';
+
+  @override
+  String get viewTree => '查看树';
+
+  @override
+  String noteIncluded(Object count) {
+    return '包含$count个笔记';
+  }
+
+  @override
+  String get messageCopiedToClipboard => '消息已复制到剪贴板';
+
+  @override
+  String get addToNote => '添加到笔记';
+
+  @override
+  String get forkConversation => '分叉对话';
+
+  @override
+  String get forkConversationConfirm => '分叉此对话？';
+
+  @override
+  String get fork => '分叉';
+
+  @override
+  String get forkedConversationSuccess => '对话分叉成功';
+
+  @override
+  String errorForkingConversation(Object error) {
+    return '分叉对话时出错：$error';
+  }
+
+  @override
+  String get selectNotesForConversation => '选择对话笔记';
+
+  @override
+  String get addNotesToConversation => '添加笔记';
+
+  @override
+  String get clearAllNotes => '清除全部';
+
+  @override
+  String get notesAndContext => '笔记和上下文';
+
+  @override
+  String get missingNotes => '缺失的笔记';
+
+  @override
+  String get missingNotesMessage => '此对话引用了不再存在的笔记：';
+
+  @override
+  String get missingNotesWillCleanup => '这些引用将被自动清理。';
+
+  @override
+  String get cleanUp => '清理';
+
+  @override
+  String get ok => '确定';
+
+  @override
+  String get refreshTree => '刷新树';
+
+  @override
+  String get noConversationsFound => '未找到对话。开始新对话以查看树。';
+
+  @override
+  String get treeRefreshedSuccessfully => '树刷新成功';
+
+  @override
+  String errorRefreshingTree(Object error) {
+    return '刷新树时出错：$error';
+  }
+
+  @override
+  String get selectInteractionToViewDetails => '选择交互以查看详细信息';
+
+  @override
+  String get deleteInteraction => '删除交互';
+
+  @override
+  String get deleteInteractionConfirm => '您确定要删除此交互及其所有后代吗？此操作无法撤消。';
+
+  @override
+  String get interactionDeletedSuccessfully => '交互删除成功';
+
+  @override
+  String errorDeletingInteraction(Object error) {
+    return '删除交互时出错：$error';
+  }
+
+  @override
+  String get forkFromHere => '从这里分叉';
+
+  @override
+  String get deleteInteractionAction => '删除交互';
+
+  @override
+  String get saveSelectedNodesAsNote => '将选中的节点保存为笔记';
+
+  @override
+  String get createFromSelected => '从选中创建';
+
+  @override
+  String get exitMultiSelect => '退出多选';
+
+  @override
+  String get pleaseSelectNodesFirst => '请先选择节点';
+
+  @override
+  String get interaction => '交互';
+
+  @override
+  String get open => '打开';
+
+  @override
+  String get user => '用户';
+
+  @override
+  String get ai => 'AI';
+
+  @override
+  String get justNow => '刚刚';
+
+  @override
+  String get addNoteDialogTitle => '添加到笔记';
+
+  @override
+  String get addNoteDialogMessage => '您想如何将此内容添加到笔记？';
+
+  @override
+  String get addAsIs => '原样添加';
+
+  @override
+  String get addAsIsDescription => '直接添加内容而不修改';
+
+  @override
+  String get letAICreateNote => '让AI创建笔记';
+
+  @override
+  String get letAICreateNoteDescription => '使用AI总结或转换内容';
+
+  @override
+  String get noteTitle => '笔记标题';
+
+  @override
+  String get enterNoteTitlePrompt => '输入新笔记的标题：';
+
+  @override
+  String get noteTitleHint => '笔记标题';
+
+  @override
+  String multipleNotesCreatedSuccessfully(Object count) {
+    return '$count个笔记创建成功';
+  }
+
+  @override
+  String get aiNoteCreator => 'AI笔记创建器';
+
+  @override
+  String get aiNoteCreatorInstructions =>
+      'AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。';
+
+  @override
+  String get prompt => '提示';
+
+  @override
+  String get promptHint => '描述您希望AI执行的操作...';
+
+  @override
+  String get promptTip =>
+      '提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。';
+
+  @override
+  String additionalContextNotes(Object count) {
+    return '额外上下文笔记（$count）';
+  }
+
+  @override
+  String get addNotes => '添加笔记';
+
+  @override
+  String get noAdditionalNotesSelected => '未选择额外笔记。AI将仅使用对话内容。';
+
+  @override
+  String get proceed => '继续';
+
+  @override
+  String get pleaseEnterPrompt => '请输入提示';
+
+  @override
+  String get view => '查看';
+
+  @override
+  String errorSavingNodes(Object error) {
+    return '保存节点时出错：$error';
+  }
+
+  @override
+  String get cancelAiRequest => '取消AI请求';
+
+  @override
+  String get copy => '复制';
+
+  @override
+  String attachedFiles(Object count) {
+    return '附加文件（$count）';
+  }
+
+  @override
+  String get you => '您';
+
+  @override
+  String get errorLoadingData => '加载数据时出错';
+
+  @override
+  String get retry => '重试';
 }

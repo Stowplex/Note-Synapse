@@ -7,6 +7,7 @@ import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/fork_service.dart';
 import '../services/logger_service.dart';
+import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
 
@@ -59,10 +60,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       if (_tree == null) {
         if (mounted) {
           try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No conversations found. Start a new conversation to see the tree.'),
-              duration: Duration(seconds: 3),
+            SnackBar(
+              content: Text(l10n.noConversationsFound),
+              duration: const Duration(seconds: 3),
             ),
           );
           } catch (contextError) {
@@ -74,12 +76,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error loading conversation tree: $e', error: e);
       if (mounted) {
         try {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading tree: ${e.toString()}'),
+            content: Text(l10n.errorRefreshingTree(e.toString())),
             backgroundColor: Theme.of(context).colorScheme.error,
             action: SnackBarAction(
-              label: 'Retry',
+              label: l10n.retry,
               onPressed: _loadTree,
             ),
           ),
@@ -103,10 +106,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       if (_tree == null) {
         if (mounted) {
           try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No conversations found. Start a new conversation to see the tree.'),
-              duration: Duration(seconds: 3),
+            SnackBar(
+              content: Text(l10n.noConversationsFound),
+              duration: const Duration(seconds: 3),
             ),
           );
           } catch (contextError) {
@@ -116,10 +120,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       } else {
         if (mounted) {
           try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tree refreshed successfully'),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(l10n.treeRefreshedSuccessfully),
+              duration: const Duration(seconds: 2),
             ),
           );
           } catch (contextError) {
@@ -131,12 +136,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error refreshing conversation tree: $e', error: e);
       if (mounted) {
         try {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error refreshing tree: ${e.toString()}'),
+            content: Text(l10n.errorRefreshingTree(e.toString())),
             backgroundColor: Theme.of(context).colorScheme.error,
             action: SnackBarAction(
-              label: 'Retry',
+              label: l10n.retry,
               onPressed: _refreshTree,
             ),
           ),
@@ -198,9 +204,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error loading interaction message: $e', error: e);
       if (mounted) {
         try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error loading interaction: ${e.toString()}'),
+              content: Text(l10n.errorForkingConversation(e.toString())),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -214,15 +221,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
 
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Interaction'),
-        content: const Text('Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.'),
+        title: Text(l10n.deleteInteraction),
+        content: Text(l10n.deleteInteractionConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -248,10 +256,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   });
                   // Safe to show SnackBar only if widget is still mounted
                   try {
+                    final l10n = AppLocalizations.of(context)!;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Interaction deleted successfully'),
-                        duration: Duration(seconds: 2),
+                      SnackBar(
+                        content: Text(l10n.interactionDeletedSuccessfully),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   } catch (contextError) {
@@ -263,9 +272,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 if (mounted) {
                   // Safe to show SnackBar only if widget is still mounted
                   try {
+                    final l10n = AppLocalizations.of(context)!;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error deleting interaction: ${e.toString()}'),
+                        content: Text(l10n.errorDeletingInteraction(e.toString())),
                         backgroundColor: Theme.of(context).colorScheme.error,
                       ),
                     );
@@ -279,7 +289,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
-            child: const Text('Delete'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -304,10 +314,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         
         if (mounted) {
         try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Conversation forked successfully'),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(l10n.forkedConversationSuccess),
+              duration: const Duration(seconds: 2),
             ),
           );
         } catch (contextError) {
@@ -332,9 +343,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error forking interaction: $e', error: e);
       if (mounted) {
         try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error forking interaction: ${e.toString()}'),
+              content: Text(l10n.errorForkingConversation(e.toString())),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -372,8 +384,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       } catch (e) {
       if (mounted) {
         try {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating conversation: $e')),
+          SnackBar(content: Text(l10n.errorForkingConversation(e.toString()))),
         );
         } catch (contextError) {
           LoggerService.warning('Could not show error SnackBar: $contextError');
@@ -392,13 +405,15 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Future<void> _showSaveOptionsDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_selectedNodes.isEmpty) {
       if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please select nodes first'),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(l10n.pleaseSelectNodesFirst),
+              duration: const Duration(seconds: 2),
             ),
           );
         } catch (contextError) {
@@ -422,12 +437,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       
       // If notes were created, show success message
       if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               createdNotes.length == 1
-                  ? 'Note "${createdNotes.first.title}" created successfully'
-                  : '${createdNotes.length} notes created successfully',
+                  ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
+                  : l10n.multipleNotesCreatedSuccessfully(createdNotes.length),
             ),
             backgroundColor: Colors.green,
           ),
@@ -437,9 +453,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error saving nodes as note: $e', error: e);
       if (mounted) {
         try {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error saving nodes: ${e.toString()}'),
+              content: Text(l10n.errorSavingNodes(e.toString())),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -454,45 +471,45 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   Future<String> _buildConversationContentFromNodes() async {
     if (_tree == null || _selectedNodes.isEmpty) return '';
 
-    final conversationIds = <String>{};
-    
-    for (final nodeId in _selectedNodes) {
-      final node = _tree!.nodes[nodeId];
-      if (node != null && node.conversationId.isNotEmpty) {
-        conversationIds.add(node.conversationId);
+      final conversationIds = <String>{};
+      
+      for (final nodeId in _selectedNodes) {
+        final node = _tree!.nodes[nodeId];
+        if (node != null && node.conversationId.isNotEmpty) {
+          conversationIds.add(node.conversationId);
+        }
       }
-    }
 
-    if (conversationIds.isEmpty) {
+      if (conversationIds.isEmpty) {
       return '';
-    }
+      }
 
     // Build context messages from conversations
-    final contextMessages = <String>[];
-    
-    for (final sourceConvId in conversationIds) {
-      final messages = await _databaseService.getConversationMessages(sourceConvId);
-      if (messages.isNotEmpty) {
-        // Add a header for this conversation's context
-        contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
-        
-        // Add key messages (first few and last few)
-        final keyMessages = <ConversationMessage>[];
-        if (messages.length <= 4) {
-          keyMessages.addAll(messages);
-        } else {
-          // First 2 and last 2 messages
-          keyMessages.addAll(messages.take(2));
-          keyMessages.addAll(messages.skip(messages.length - 2));
+      final contextMessages = <String>[];
+      
+      for (final sourceConvId in conversationIds) {
+        final messages = await _databaseService.getConversationMessages(sourceConvId);
+        if (messages.isNotEmpty) {
+          // Add a header for this conversation's context
+          contextMessages.add('--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---');
+          
+          // Add key messages (first few and last few)
+          final keyMessages = <ConversationMessage>[];
+          if (messages.length <= 4) {
+            keyMessages.addAll(messages);
+          } else {
+            // First 2 and last 2 messages
+            keyMessages.addAll(messages.take(2));
+            keyMessages.addAll(messages.skip(messages.length - 2));
+          }
+          
+          for (final message in keyMessages) {
+            final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
+            contextMessages.add('$prefix${message.content}');
+          }
+          contextMessages.add(''); // Empty line between conversations
         }
-        
-        for (final message in keyMessages) {
-          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-          contextMessages.add('$prefix${message.content}');
-        }
-        contextMessages.add(''); // Empty line between conversations
       }
-    }
 
     return contextMessages.join('\n');
   }
@@ -529,6 +546,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -536,39 +555,39 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
 
     if (_tree == null) {
-      return const Scaffold(
-        body: Center(child: Text('No conversation tree found')),
+      return Scaffold(
+        body: Center(child: Text(l10n.noConversationsFound)),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
         title: _isMultiSelectMode
-            ? Text('${_selectedNodes.length} selected')
-            : const Text('Conversation Tree'),
+            ? Text(l10n.selected.replaceAll('{count}', _selectedNodes.length.toString()))
+            : Text(l10n.conversationTree),
         actions: [
           if (_isMultiSelectMode) ...[
           IconButton(
               icon: const Icon(Icons.note_add),
               onPressed: _showSaveOptionsDialog,
-              tooltip: 'Save selected nodes as note',
+              tooltip: l10n.saveSelectedNodesAsNote,
           ),
           if (_selectedNodes.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: _createConversationFromSelected,
-                tooltip: 'Create from selected',
+                tooltip: l10n.createFromSelected,
               ),
             IconButton(
               icon: const Icon(Icons.close),
               onPressed: _toggleMultiSelectMode,
-              tooltip: 'Exit multi-select',
+              tooltip: l10n.exitMultiSelect,
             ),
           ] else ...[
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshTree,
-              tooltip: 'Refresh tree',
+              tooltip: l10n.refreshTree,
             ),
           ],
         ],
@@ -804,28 +823,31 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                         _forkInteraction(node);
                       }
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
+                    itemBuilder: (popupContext) {
+                      final popupL10n = AppLocalizations.of(popupContext)!;
+                      return [
+                      PopupMenuItem(
                         value: 'fork',
                         child: Row(
                           children: [
-                            Icon(Icons.call_split, size: 16),
-                            SizedBox(width: 8),
-                            Text('Fork from here'),
+                            const Icon(Icons.call_split, size: 16),
+                            const SizedBox(width: 8),
+                            Text(popupL10n.forkFromHere),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(Icons.delete, size: 16),
-                            SizedBox(width: 8),
-                            Text('Delete interaction'),
+                            const Icon(Icons.delete, size: 16),
+                            const SizedBox(width: 8),
+                            Text(popupL10n.deleteInteractionAction),
                           ],
                         ),
                       ),
-                    ],
+                    ];
+                    },
                   ),
               ],
             ),
@@ -849,18 +871,20 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Widget _buildConversationDetails() {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_selectedConversationId == null) {
       return Container(
         padding: const EdgeInsets.all(16.0),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
-              SizedBox(height: 16),
+              const Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 16),
               Text(
-                'Select an interaction to view details',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                l10n.selectInteractionToViewDetails,
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
               ),
           ],
         ),
@@ -881,7 +905,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         }
 
         if (!snapshot.hasData) {
-          return const Center(child: Text('Conversation not found'));
+          return Center(child: Text(l10n.errorLoadingData));
         }
 
         final conversationWithMessages = snapshot.data!;
@@ -935,7 +959,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                       }
                     },
                     icon: const Icon(Icons.chat, size: 14),
-                    label: const Text('Open', style: TextStyle(fontSize: 12)),
+                    label: Text(l10n.open, style: const TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       minimumSize: Size.zero,
@@ -951,7 +975,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                           id: 'temp_${_selectedMessage!.id}',
                           conversationId: _selectedMessage!.conversationId,
                           messageId: _selectedMessage!.id,
-                          summary: 'Fork from here',
+                          summary: l10n.forkFromHere,
                           level: 1,
                           createdAt: _selectedMessage!.timestamp,
                         );
@@ -959,7 +983,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                       }
                     },
                     icon: const Icon(Icons.call_split, size: 14),
-                    label: const Text('Fork', style: TextStyle(fontSize: 12)),
+                    label: Text(l10n.fork, style: const TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       minimumSize: Size.zero,
@@ -977,7 +1001,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     },
                     constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                     padding: EdgeInsets.zero,
-                    tooltip: 'Close',
+                    tooltip: l10n.close,
                   ),
                 ],
               ),
@@ -1013,7 +1037,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                message.type == MessageType.user ? 'User' : 'AI',
+                                message.type == MessageType.user ? l10n.user : l10n.ai,
                                 style: Theme.of(context).textTheme.labelSmall,
                               ),
                               const Spacer(),
@@ -1049,13 +1073,15 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   Widget _buildMessageDetails(ConversationMessage message) {
     return FutureBuilder<List<ConversationMessage>>(
       future: _getInteractionMessages(_selectedConversationId!, message.id),
-      builder: (context, snapshot) {
+      builder: (futureContext, snapshot) {
+        final futureL10n = AppLocalizations.of(futureContext)!;
+        
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No interaction found'));
+          return Center(child: Text(futureL10n.errorLoadingData));
         }
 
         final messages = snapshot.data!;
@@ -1068,10 +1094,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                  color: Theme.of(futureContext).colorScheme.surfaceVariant.withOpacity(0.5),
                   border: Border(
                     bottom: BorderSide(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                      color: Theme.of(futureContext).colorScheme.outline.withOpacity(0.3),
                       width: 1,
                     ),
                   ),
@@ -1081,13 +1107,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     Icon(
                       Icons.chat,
                       size: 16,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: Theme.of(futureContext).colorScheme.primary,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Interaction',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        futureL10n.interaction,
+                        style: Theme.of(futureContext).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -1096,7 +1122,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.of(context).push(
+                        await Navigator.of(futureContext).push(
                           MaterialPageRoute(
                             builder: (context) => ConversationChatScreen(
                               conversationId: message.conversationId,
@@ -1108,7 +1134,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                         }
                       },
                       icon: const Icon(Icons.chat, size: 14),
-                      label: const Text('Open', style: TextStyle(fontSize: 12)),
+                      label: Text(futureL10n.open, style: const TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minimumSize: Size.zero,
@@ -1122,14 +1148,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                           id: 'temp_${message.id}',
                           conversationId: message.conversationId,
                           messageId: message.id,
-                          summary: 'Fork from here',
+                          summary: futureL10n.forkFromHere,
                           level: 1,
                           createdAt: message.timestamp,
                         );
                         _forkInteraction(tempNode);
                       },
                       icon: const Icon(Icons.call_split, size: 14),
-                      label: const Text('Fork', style: TextStyle(fontSize: 12)),
+                      label: Text(futureL10n.fork, style: const TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minimumSize: Size.zero,
@@ -1147,7 +1173,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                       icon: const Icon(Icons.close, size: 16),
                       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                       padding: EdgeInsets.zero,
-                      tooltip: 'Close',
+                      tooltip: futureL10n.close,
                     ),
                   ],
                 ),
@@ -1262,6 +1288,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   String _formatTimestamp(DateTime timestamp) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final difference = now.difference(timestamp);
     
@@ -1272,7 +1299,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     } else if (difference.inMinutes > 0) {
       return '${difference.inMinutes}m ago';
     } else {
-      return 'Just now';
+      return l10n.justNow;
     }
   }
 }

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
+import '../l10n/app_localizations.dart';
 import '../screens/note_selection_dialog.dart';
 
 /// Dialog for creating notes using AI with customizable prompt
@@ -60,6 +61,8 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
   
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Dialog(
       child: Container(
         constraints: BoxConstraints(
@@ -88,7 +91,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'AI Note Creator',
+                      l10n.aiNoteCreator,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,
@@ -113,7 +116,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                   children: [
                     // Instruction text
                     Text(
-                      'The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.',
+                      l10n.aiNoteCreatorInstructions,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                       ),
@@ -122,7 +125,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                     
                     // Prompt input
                     Text(
-                      'Prompt',
+                      l10n.prompt,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -131,7 +134,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                     TextField(
                       controller: _promptController,
                       decoration: InputDecoration(
-                        hintText: 'Describe what you want the AI to do...',
+                        hintText: l10n.promptHint,
                         border: const OutlineInputBorder(),
                         prefixIcon: const Icon(Icons.edit),
                         suffixIcon: Row(
@@ -140,12 +143,12 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                             IconButton(
                               icon: const Icon(Icons.attach_file),
                               onPressed: _attachFiles,
-                              tooltip: 'Attach files',
+                              tooltip: l10n.attachFiles,
                             ),
                             IconButton(
                               icon: const Icon(Icons.camera_alt),
                               onPressed: _captureImage,
-                              tooltip: 'Take photo',
+                              tooltip: l10n.takePhotoAttachment,
                             ),
                           ],
                         ),
@@ -156,7 +159,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tip: The default "Summarize" will create a concise summary. You can change this to any instruction like "Extract action items", "Create a detailed outline", etc.',
+                      l10n.promptTip,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         fontStyle: FontStyle.italic,
@@ -175,7 +178,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Additional Context Notes (${_selectedNotes.length})',
+                          l10n.additionalContextNotes(_selectedNotes.length),
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -183,7 +186,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                         TextButton.icon(
                           onPressed: _isProcessing ? null : _selectAdditionalNotes,
                           icon: const Icon(Icons.add),
-                          label: const Text('Add Notes'),
+                          label: Text(l10n.addNotes),
                         ),
                       ],
                     ),
@@ -231,7 +234,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                       )
                     else
                       Text(
-                        'No additional notes selected. The AI will only use the conversation content.',
+                        l10n.noAdditionalNotesSelected,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                           fontStyle: FontStyle.italic,
@@ -257,7 +260,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: _isProcessing ? null : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(l10n.cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -270,7 +273,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Proceed'),
+                          : Text(l10n.proceed),
                     ),
                   ),
                 ],
@@ -283,6 +286,8 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
   }
   
   Widget _buildAttachedFilesSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -298,7 +303,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
               Icon(Icons.attach_file, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
               const SizedBox(width: 8),
               Text(
-                'Attached Files (${_attachedFiles.length})',
+                l10n.attachedFiles(_attachedFiles.length),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
@@ -442,9 +447,11 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
   }
   
   Future<void> _proceed() async {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_promptController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a prompt')),
+        SnackBar(content: Text(l10n.pleaseEnterPrompt)),
       );
       return;
     }
@@ -471,9 +478,14 @@ ${widget.conversationContent}
       );
       
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Created ${createdNotes.length} note(s) successfully'),
+            content: Text(
+              createdNotes.length == 1
+                  ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
+                  : l10n.multipleNotesCreatedSuccessfully(createdNotes.length)
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -487,9 +499,10 @@ ${widget.conversationContent}
           _isProcessing = false;
         });
         
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating notes: $e'),
+            content: Text(l10n.errorCreatingNote(e.toString())),
             backgroundColor: Colors.red,
           ),
         );

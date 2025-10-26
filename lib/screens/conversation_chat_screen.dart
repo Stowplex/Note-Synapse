@@ -14,6 +14,7 @@ import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
+import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
@@ -636,6 +637,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Widget _buildMcpSelectionSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -665,13 +668,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'MCP Tools',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  Text(
+                    l10n.mcpTools,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    ),
                   ),
-                ),
                 if (_selectedMcpEndpointIds.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -681,7 +684,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${_selectedMcpEndpointIds.length} active',
+                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -738,7 +741,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             if (_mcpToolsByEndpoint.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
+                l10n.toolsAvailable(_mcpToolsByEndpoint.values.fold<int>(0, (sum, tools) => sum + tools.length)),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   fontStyle: FontStyle.italic,
@@ -978,15 +981,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_conversation == null) {
-      return const Scaffold(
-        body: Center(child: Text('Error loading conversation')),
+      return Scaffold(
+        body: Center(child: Text(l10n.errorLoadingData)),
       );
     }
 
@@ -997,7 +1002,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           IconButton(
             icon: const Icon(Icons.library_books),
             onPressed: _showNoteSelection,
-            tooltip: 'Manage Notes',
+            tooltip: l10n.manageNotes,
           ),
           IconButton(
             icon: const Icon(Icons.account_tree),
@@ -1009,7 +1014,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
               );
             },
-            tooltip: 'View Tree',
+            tooltip: l10n.viewTree,
           ),
         ],
       ),
@@ -1028,7 +1033,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_notes.length} note${_notes.length == 1 ? '' : 's'} included',
+                        l10n.noteIncluded(_notes.length),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -1066,33 +1071,33 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    enabled: !_isSending || _isAborting,
-                    decoration: InputDecoration(
-                      hintText: _isAborting ? 'Cancelling request...' : 'Type your message...',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            onPressed: _isSending ? null : _attachFiles,
-                            tooltip: 'Attach files',
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.camera_alt),
-                            onPressed: _isSending ? null : _captureImage,
-                            tooltip: 'Take photo',
-                          ),
-                        ],
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      enabled: !_isSending || _isAborting,
+                      decoration: InputDecoration(
+                        hintText: _isAborting ? l10n.cancellingRequest : l10n.typeYourMessage,
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.attach_file),
+                              onPressed: _isSending ? null : _attachFiles,
+                              tooltip: l10n.attachFiles,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.camera_alt),
+                              onPressed: _isSending ? null : _captureImage,
+                              tooltip: l10n.takePhotoAttachment,
+                            ),
+                          ],
+                        ),
                       ),
+                      maxLines: null,
+                      onSubmitted: (_) => _isSending ? null : _sendMessage(),
                     ),
-                    maxLines: null,
-                    onSubmitted: (_) => _isSending ? null : _sendMessage(),
                   ),
-                ),
                 const SizedBox(width: 8),
                 if (_isSending && !_isAborting)
                   _buildAbortButtonWithSpinner()
@@ -1126,6 +1131,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Widget _buildAbortButtonWithSpinner() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return SizedBox(
       width: 48,
       height: 48,
@@ -1160,15 +1167,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             child: IconButton(
               onPressed: _abortRequest,
-              icon: const Icon(
-                Icons.stop,
-                color: Colors.white,
-                size: 16,
-              ),
-              tooltip: 'Cancel AI request',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
+                              icon: const Icon(
+                                Icons.stop,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              tooltip: l10n.cancelAiRequest,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
           ),
         ],
       ),
@@ -1176,6 +1183,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Widget _buildMessageCard(ConversationMessage message) {
+    final l10n = AppLocalizations.of(context)!;
     final isUser = message.type == MessageType.user;
     
     return Card(
@@ -1196,7 +1204,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isUser ? 'You' : 'AI',
+                  isUser ? l10n.you : l10n.ai,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: isUser 
                         ? Theme.of(context).colorScheme.primary
@@ -1214,7 +1222,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   IconButton(
                     icon: const Icon(Icons.call_split, size: 16),
                     onPressed: () => _forkConversation(message.id),
-                    tooltip: 'Fork conversation',
+                    tooltip: l10n.forkConversation,
                   ),
                 ],
               ],
@@ -1261,14 +1269,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: message.content));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Message copied to clipboard'),
-                          duration: Duration(seconds: 2),
+                        SnackBar(
+                          content: Text(l10n.messageCopiedToClipboard),
+                          duration: const Duration(seconds: 2),
                         ),
                       );
                     },
                     icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy'),
+                    label: Text(l10n.copy),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
@@ -1279,7 +1287,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   OutlinedButton.icon(
                     onPressed: () => _addResponseToNote(message.content),
                     icon: const Icon(Icons.note_add, size: 16),
-                    label: const Text('Add to Note'),
+                    label: Text(l10n.addToNote),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
@@ -1296,6 +1304,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   String _formatTimestamp(DateTime timestamp) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final difference = now.difference(timestamp);
     
@@ -1306,7 +1315,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     } else if (difference.inMinutes > 0) {
       return '${difference.inMinutes}m ago';
     } else {
-      return 'Just now';
+      return l10n.justNow;
     }
   }
 

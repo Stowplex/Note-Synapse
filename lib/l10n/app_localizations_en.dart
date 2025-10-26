@@ -463,7 +463,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enterYourPrompt => 'Enter your prompt:';
 
   @override
-  String get attachFiles => 'Attach Files';
+  String get attachFiles => 'Attach files';
 
   @override
   String get answerOnlyFromNotes => 'Answer only from selected notes';
@@ -591,7 +591,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get noteCreatedSuccessfully => 'Note created successfully!';
+  String noteCreatedSuccessfully(Object title) {
+    return 'Note \"$title\" created successfully';
+  }
 
   @override
   String errorCreatingNote(Object error) {
@@ -2215,4 +2217,265 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get noLibrariesAddedYet =>
       'No libraries added yet. Click \"Add Library\" to get started.';
+
+  @override
+  String get conversation => 'Conversation';
+
+  @override
+  String get newConversation => 'New Conversation';
+
+  @override
+  String get conversationTree => 'Conversation Tree';
+
+  @override
+  String get conversations => 'Conversations';
+
+  @override
+  String get typeYourMessage => 'Type your message...';
+
+  @override
+  String get cancellingRequest => 'Cancelling request...';
+
+  @override
+  String get takePhotoAttachment => 'Take photo';
+
+  @override
+  String get mcpTools => 'MCP Tools';
+
+  @override
+  String get active => 'active';
+
+  @override
+  String toolsAvailable(Object count) {
+    return '$count tools available';
+  }
+
+  @override
+  String get manageNotes => 'Manage Notes';
+
+  @override
+  String get viewTree => 'View Tree';
+
+  @override
+  String noteIncluded(Object count) {
+    return '$count note(s) included';
+  }
+
+  @override
+  String get messageCopiedToClipboard => 'Message copied to clipboard';
+
+  @override
+  String get addToNote => 'Add to Note';
+
+  @override
+  String get forkConversation => 'Fork conversation';
+
+  @override
+  String get forkConversationConfirm => 'Fork this conversation?';
+
+  @override
+  String get fork => 'Fork';
+
+  @override
+  String get forkedConversationSuccess => 'Conversation forked successfully';
+
+  @override
+  String errorForkingConversation(Object error) {
+    return 'Error forking conversation: $error';
+  }
+
+  @override
+  String get selectNotesForConversation => 'Select notes for conversation';
+
+  @override
+  String get addNotesToConversation => 'Add Notes';
+
+  @override
+  String get clearAllNotes => 'Clear All';
+
+  @override
+  String get notesAndContext => 'Notes and Context';
+
+  @override
+  String get missingNotes => 'Missing Notes';
+
+  @override
+  String get missingNotesMessage =>
+      'This conversation references notes that no longer exist:';
+
+  @override
+  String get missingNotesWillCleanup =>
+      'These references will be automatically cleaned up.';
+
+  @override
+  String get cleanUp => 'Clean Up';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get refreshTree => 'Refresh tree';
+
+  @override
+  String get noConversationsFound =>
+      'No conversations found. Start a new conversation to see the tree.';
+
+  @override
+  String get treeRefreshedSuccessfully => 'Tree refreshed successfully';
+
+  @override
+  String errorRefreshingTree(Object error) {
+    return 'Error refreshing tree: $error';
+  }
+
+  @override
+  String get selectInteractionToViewDetails =>
+      'Select an interaction to view details';
+
+  @override
+  String get deleteInteraction => 'Delete Interaction';
+
+  @override
+  String get deleteInteractionConfirm =>
+      'Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.';
+
+  @override
+  String get interactionDeletedSuccessfully =>
+      'Interaction deleted successfully';
+
+  @override
+  String errorDeletingInteraction(Object error) {
+    return 'Error deleting interaction: $error';
+  }
+
+  @override
+  String get forkFromHere => 'Fork from here';
+
+  @override
+  String get deleteInteractionAction => 'Delete interaction';
+
+  @override
+  String get saveSelectedNodesAsNote => 'Save selected nodes as note';
+
+  @override
+  String get createFromSelected => 'Create from selected';
+
+  @override
+  String get exitMultiSelect => 'Exit multi-select';
+
+  @override
+  String get pleaseSelectNodesFirst => 'Please select nodes first';
+
+  @override
+  String get interaction => 'Interaction';
+
+  @override
+  String get open => 'Open';
+
+  @override
+  String get user => 'User';
+
+  @override
+  String get ai => 'AI';
+
+  @override
+  String get justNow => 'Just now';
+
+  @override
+  String get addNoteDialogTitle => 'Add to Note';
+
+  @override
+  String get addNoteDialogMessage =>
+      'How would you like to add this content to your notes?';
+
+  @override
+  String get addAsIs => 'Add as-is';
+
+  @override
+  String get addAsIsDescription =>
+      'Add the content directly without modification';
+
+  @override
+  String get letAICreateNote => 'Let AI create note';
+
+  @override
+  String get letAICreateNoteDescription =>
+      'Use AI to summarize or transform the content';
+
+  @override
+  String get noteTitle => 'Note Title';
+
+  @override
+  String get enterNoteTitlePrompt => 'Enter a title for the new note:';
+
+  @override
+  String get noteTitleHint => 'Note title';
+
+  @override
+  String multipleNotesCreatedSuccessfully(Object count) {
+    return '$count notes created successfully';
+  }
+
+  @override
+  String get aiNoteCreator => 'AI Note Creator';
+
+  @override
+  String get aiNoteCreatorInstructions =>
+      'The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get promptHint => 'Describe what you want the AI to do...';
+
+  @override
+  String get promptTip =>
+      'Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.';
+
+  @override
+  String additionalContextNotes(Object count) {
+    return 'Additional Context Notes ($count)';
+  }
+
+  @override
+  String get addNotes => 'Add Notes';
+
+  @override
+  String get noAdditionalNotesSelected =>
+      'No additional notes selected. The AI will only use the conversation content.';
+
+  @override
+  String get proceed => 'Proceed';
+
+  @override
+  String get pleaseEnterPrompt => 'Please enter a prompt';
+
+  @override
+  String get view => 'View';
+
+  @override
+  String errorSavingNodes(Object error) {
+    return 'Error saving nodes: $error';
+  }
+
+  @override
+  String get cancelAiRequest => 'Cancel AI request';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String attachedFiles(Object count) {
+    return 'Attached Files ($count)';
+  }
+
+  @override
+  String get you => 'You';
+
+  @override
+  String get errorLoadingData => 'Error loading data';
+
+  @override
+  String get retry => 'Retry';
 }

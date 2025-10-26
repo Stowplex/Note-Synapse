@@ -947,7 +947,7 @@ abstract class AppLocalizations {
   /// No description provided for @attachFiles.
   ///
   /// In en, this message translates to:
-  /// **'Attach Files'**
+  /// **'Attach files'**
   String get attachFiles;
 
   /// No description provided for @answerOnlyFromNotes.
@@ -1187,8 +1187,8 @@ abstract class AppLocalizations {
   /// No description provided for @noteCreatedSuccessfully.
   ///
   /// In en, this message translates to:
-  /// **'Note created successfully!'**
-  String get noteCreatedSuccessfully;
+  /// **'Note \"{title}\" created successfully'**
+  String noteCreatedSuccessfully(Object title);
 
   /// No description provided for @errorCreatingNote.
   ///
@@ -4027,6 +4027,468 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No libraries added yet. Click \"Add Library\" to get started.'**
   String get noLibrariesAddedYet;
+
+  /// No description provided for @conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get conversation;
+
+  /// No description provided for @newConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'New Conversation'**
+  String get newConversation;
+
+  /// No description provided for @conversationTree.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Tree'**
+  String get conversationTree;
+
+  /// No description provided for @conversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations'**
+  String get conversations;
+
+  /// No description provided for @typeYourMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Type your message...'**
+  String get typeYourMessage;
+
+  /// No description provided for @cancellingRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling request...'**
+  String get cancellingRequest;
+
+  /// No description provided for @takePhotoAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get takePhotoAttachment;
+
+  /// No description provided for @mcpTools.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP Tools'**
+  String get mcpTools;
+
+  /// No description provided for @active.
+  ///
+  /// In en, this message translates to:
+  /// **'active'**
+  String get active;
+
+  /// No description provided for @toolsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} tools available'**
+  String toolsAvailable(Object count);
+
+  /// No description provided for @manageNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Notes'**
+  String get manageNotes;
+
+  /// No description provided for @viewTree.
+  ///
+  /// In en, this message translates to:
+  /// **'View Tree'**
+  String get viewTree;
+
+  /// No description provided for @noteIncluded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} note(s) included'**
+  String noteIncluded(Object count);
+
+  /// No description provided for @messageCopiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Message copied to clipboard'**
+  String get messageCopiedToClipboard;
+
+  /// No description provided for @addToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Note'**
+  String get addToNote;
+
+  /// No description provided for @forkConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Fork conversation'**
+  String get forkConversation;
+
+  /// No description provided for @forkConversationConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Fork this conversation?'**
+  String get forkConversationConfirm;
+
+  /// No description provided for @fork.
+  ///
+  /// In en, this message translates to:
+  /// **'Fork'**
+  String get fork;
+
+  /// No description provided for @forkedConversationSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation forked successfully'**
+  String get forkedConversationSuccess;
+
+  /// No description provided for @errorForkingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Error forking conversation: {error}'**
+  String errorForkingConversation(Object error);
+
+  /// No description provided for @selectNotesForConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Select notes for conversation'**
+  String get selectNotesForConversation;
+
+  /// No description provided for @addNotesToConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Notes'**
+  String get addNotesToConversation;
+
+  /// No description provided for @clearAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear All'**
+  String get clearAllNotes;
+
+  /// No description provided for @notesAndContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes and Context'**
+  String get notesAndContext;
+
+  /// No description provided for @missingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing Notes'**
+  String get missingNotes;
+
+  /// No description provided for @missingNotesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation references notes that no longer exist:'**
+  String get missingNotesMessage;
+
+  /// No description provided for @missingNotesWillCleanup.
+  ///
+  /// In en, this message translates to:
+  /// **'These references will be automatically cleaned up.'**
+  String get missingNotesWillCleanup;
+
+  /// No description provided for @cleanUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean Up'**
+  String get cleanUp;
+
+  /// No description provided for @ok.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ok;
+
+  /// No description provided for @refreshTree.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh tree'**
+  String get refreshTree;
+
+  /// No description provided for @noConversationsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations found. Start a new conversation to see the tree.'**
+  String get noConversationsFound;
+
+  /// No description provided for @treeRefreshedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Tree refreshed successfully'**
+  String get treeRefreshedSuccessfully;
+
+  /// No description provided for @errorRefreshingTree.
+  ///
+  /// In en, this message translates to:
+  /// **'Error refreshing tree: {error}'**
+  String errorRefreshingTree(Object error);
+
+  /// No description provided for @selectInteractionToViewDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an interaction to view details'**
+  String get selectInteractionToViewDetails;
+
+  /// No description provided for @deleteInteraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Interaction'**
+  String get deleteInteraction;
+
+  /// No description provided for @deleteInteractionConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.'**
+  String get deleteInteractionConfirm;
+
+  /// No description provided for @interactionDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Interaction deleted successfully'**
+  String get interactionDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingInteraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting interaction: {error}'**
+  String errorDeletingInteraction(Object error);
+
+  /// No description provided for @forkFromHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Fork from here'**
+  String get forkFromHere;
+
+  /// No description provided for @deleteInteractionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete interaction'**
+  String get deleteInteractionAction;
+
+  /// No description provided for @saveSelectedNodesAsNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Save selected nodes as note'**
+  String get saveSelectedNodesAsNote;
+
+  /// No description provided for @createFromSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Create from selected'**
+  String get createFromSelected;
+
+  /// No description provided for @exitMultiSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit multi-select'**
+  String get exitMultiSelect;
+
+  /// No description provided for @pleaseSelectNodesFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select nodes first'**
+  String get pleaseSelectNodesFirst;
+
+  /// No description provided for @interaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Interaction'**
+  String get interaction;
+
+  /// No description provided for @open.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get open;
+
+  /// No description provided for @user.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get user;
+
+  /// No description provided for @ai.
+  ///
+  /// In en, this message translates to:
+  /// **'AI'**
+  String get ai;
+
+  /// No description provided for @justNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get justNow;
+
+  /// No description provided for @addNoteDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Note'**
+  String get addNoteDialogTitle;
+
+  /// No description provided for @addNoteDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'How would you like to add this content to your notes?'**
+  String get addNoteDialogMessage;
+
+  /// No description provided for @addAsIs.
+  ///
+  /// In en, this message translates to:
+  /// **'Add as-is'**
+  String get addAsIs;
+
+  /// No description provided for @addAsIsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Add the content directly without modification'**
+  String get addAsIsDescription;
+
+  /// No description provided for @letAICreateNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Let AI create note'**
+  String get letAICreateNote;
+
+  /// No description provided for @letAICreateNoteDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use AI to summarize or transform the content'**
+  String get letAICreateNoteDescription;
+
+  /// No description provided for @noteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Title'**
+  String get noteTitle;
+
+  /// No description provided for @enterNoteTitlePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a title for the new note:'**
+  String get enterNoteTitlePrompt;
+
+  /// No description provided for @noteTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Note title'**
+  String get noteTitleHint;
+
+  /// No description provided for @multipleNotesCreatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} notes created successfully'**
+  String multipleNotesCreatedSuccessfully(Object count);
+
+  /// No description provided for @aiNoteCreator.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Note Creator'**
+  String get aiNoteCreator;
+
+  /// No description provided for @aiNoteCreatorInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.'**
+  String get aiNoteCreatorInstructions;
+
+  /// No description provided for @prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get prompt;
+
+  /// No description provided for @promptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what you want the AI to do...'**
+  String get promptHint;
+
+  /// No description provided for @promptTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.'**
+  String get promptTip;
+
+  /// No description provided for @additionalContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Context Notes ({count})'**
+  String additionalContextNotes(Object count);
+
+  /// No description provided for @addNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Notes'**
+  String get addNotes;
+
+  /// No description provided for @noAdditionalNotesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No additional notes selected. The AI will only use the conversation content.'**
+  String get noAdditionalNotesSelected;
+
+  /// No description provided for @proceed.
+  ///
+  /// In en, this message translates to:
+  /// **'Proceed'**
+  String get proceed;
+
+  /// No description provided for @pleaseEnterPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a prompt'**
+  String get pleaseEnterPrompt;
+
+  /// No description provided for @view.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get view;
+
+  /// No description provided for @errorSavingNodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving nodes: {error}'**
+  String errorSavingNodes(Object error);
+
+  /// No description provided for @cancelAiRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel AI request'**
+  String get cancelAiRequest;
+
+  /// No description provided for @copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copy;
+
+  /// No description provided for @attachedFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Attached Files ({count})'**
+  String attachedFiles(Object count);
+
+  /// No description provided for @you.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get you;
+
+  /// No description provided for @errorLoadingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading data'**
+  String get errorLoadingData;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
 }
 
 class _AppLocalizationsDelegate
