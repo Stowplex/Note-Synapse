@@ -229,6 +229,63 @@ void main() {
         expect(tree, isNull);
       }
     });
+
+    test('Incomplete interaction in middle does not break subsequent complete interactions', () async {
+      // This test addresses the specific bug where incomplete interactions break tree building
+      final conversation = await conversationService.createConversation(title: 'Mixed Complete/Incomplete');
+      
+      // Add complete interaction A-B
+      await conversationService.addUserMessage(conversationId: conversation.id, content: 'Question A');
+      final aiA = await conversationService.addAIResponse(conversationId: conversation.id, content: 'Answer A');
+      
+      // Add incomplete interaction C (user message only, no AI response)
+      await conversationService.addUserMessage(conversationId: conversation.id, content: 'Question C (incomplete)');
+      
+      // Add complete interaction D-E
+      await conversationService.addUserMessage(conversationId: conversation.id, content: 'Question D');
+      final aiD = await conversationService.addAIResponse(conversationId: conversation.id, content: 'Answer D');
+      
+      // Add complete interaction F-G
+      await conversationService.addUserMessage(conversationId: conversation.id, content: 'Question F');
+      final aiF = await conversationService.addAIResponse(conversationId: conversation.id, content: 'Answer F');
+
+      final tree = await conversationService.refreshConversationTree();
+      
+      expect(tree, isNotNull);
+      
+      // Should have 3 complete interactions: A-B, D-E, F-G
+      // The incomplete interaction C should be ignored
+      final interactionNodes = tree!.nodes.values.where((node) => node.id != 'root').toList();
+      expect(interactionNodes.length, equals(3), reason: 'Should have 3 complete interactions, ignoring incomplete C');
+      
+      // Find the nodes for each complete interaction
+      final nodeA = interactionNodes.firstWhere((n) => n.messageId == aiA.id);
+      final nodeD = interactionNodes.firstWhere((n) => n.messageId == aiD.id);
+      final nodeF = interactionNodes.firstWhere((n) => n.messageId == aiF.id);
+      
+      // Verify tree structure: ROOT -- A -- D -- F
+      final rootNode = tree.nodes['root']!;
+      expect(rootNode.children.length, equals(1), reason: 'Root should have 1 child (A)');
+      expect(rootNode.children, contains(nodeA.id), reason: 'Root should have A as child');
+      
+      expect(nodeA.children.length, equals(1), reason: 'A should have 1 child (D)');
+      expect(nodeA.children, contains(nodeD.id), reason: 'A should have D as child');
+      
+      expect(nodeD.children.length, equals(1), reason: 'D should have 1 child (F)');
+      expect(nodeD.children, contains(nodeF.id), reason: 'D should have F as child');
+      
+      // Verify parent relationships
+      expect(nodeA.parentId, equals('root'), reason: 'A\'s parent should be root');
+      expect(nodeD.parentId, equals(nodeA.id), reason: 'D\'s parent should be A');
+      expect(nodeF.parentId, equals(nodeD.id), reason: 'F\'s parent should be D');
+      
+      // Verify levels
+      expect(nodeA.level, equals(1), reason: 'A is level 1');
+      expect(nodeD.level, equals(2), reason: 'D is level 2');
+      expect(nodeF.level, equals(3), reason: 'F is level 3');
+      
+      print('✓ Tree structure verified: ROOT -- A -- D -- F (incomplete C ignored)');
+    });
   });
 }
 

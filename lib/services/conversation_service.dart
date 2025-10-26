@@ -423,6 +423,21 @@ class ConversationService {
     return tree;
   }
 
+  // Find the AI message that should be the tree node parent
+  // Walks up the parent chain until it finds an AI message (tree node)
+  String? _findAITreeNodeParent(String messageId, Map<String, String> parentMap, Map<String, ConversationTreeNode> nodes) {
+    String? parent = parentMap[messageId];
+    while (parent != null) {
+      // If this parent is already a tree node (AI message), return it
+      if (nodes.containsKey(parent)) {
+        return parent;
+      }
+      // Otherwise, continue walking up the parent chain
+      parent = parentMap[parent];
+    }
+    return null;
+  }
+
   // Build tree nodes for a single conversation
   // Tree nodes represent User-AI interaction pairs for UI display
   // The tree structure comes from message parent relationships
@@ -437,10 +452,7 @@ class ConversationService {
     // Group messages into User-AI interaction pairs for display
     final interactions = _groupMessagesIntoInteractions(messages);
     
-    // Create tree nodes for completed interactions (User + AI pairs)
     for (final interaction in interactions) {
-      if (interaction.length != 2) continue; // Skip incomplete interactions
-
       final userMessage = interaction.first;
       final aiMessage = interaction.last;
       
@@ -448,17 +460,8 @@ class ConversationService {
       final nodeId = aiMessage.id;
       final summary = _generateInteractionSummary(userMessage.content, aiMessage.content);
       
-      // Find parent node: look at the user message's parent (which could be a fork point)
-      String? parentNodeId;
-      final userParentId = parentMap[userMessage.id];
-      
-      if (userParentId != null) {
-        // User's parent is either:
-        // 1. Previous AI message in same conversation (normal case)
-        // 2. Fork point AI message from another conversation (fork case)
-        // In both cases, that AI message IS a tree node
-        parentNodeId = userParentId;
-      }
+      // Find parent node
+      final parentNodeId = _findAITreeNodeParent(userMessage.id, parentMap, nodes);
       
       // Check if node already exists (for fork points that exist in multiple conversations)
       if (!nodes.containsKey(nodeId)) {
@@ -484,15 +487,14 @@ class ConversationService {
         );
 
         nodes[nodeId] = node;
-      }
-      
-      // Always add this node to parent's children list (even if node already existed)
-      if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
-        final parentNode = nodes[parentNodeId]!;
-        // Only add if not already in children list
-        if (!parentNode.children.contains(nodeId)) {
-          final newChildren = List<String>.from(parentNode.children)..add(nodeId);
-          nodes[parentNodeId] = parentNode.copyWith(children: newChildren);
+        
+        // Add this node to parent's children list
+        if (parentNodeId != null && nodes.containsKey(parentNodeId)) {
+          final parentNode = nodes[parentNodeId]!;
+          if (!parentNode.children.contains(nodeId)) {
+            final newChildren = List<String>.from(parentNode.children)..add(nodeId);
+            nodes[parentNodeId] = parentNode.copyWith(children: newChildren);
+          }
         }
       }
     }
@@ -518,14 +520,30 @@ class ConversationService {
     
     for (final message in messages) {
       if (message.type == MessageType.user) {
+        // If we have a current interaction, check if it's complete before adding it
         if (currentInteraction.isNotEmpty) {
-          interactions.add(List.from(currentInteraction));
+          // Only add complete interactions (User + AI pairs)
+          if (currentInteraction.length == 2) {
+            interactions.add(List.from(currentInteraction));
+          }
+          // If incomplete, we simply discard it and start fresh
         }
         currentInteraction = [message];
       } else if (message.type == MessageType.ai && currentInteraction.isNotEmpty) {
         currentInteraction.add(message);
-        interactions.add(List.from(currentInteraction));
+        // Only add complete interactions (User + AI pairs)
+        if (currentInteraction.length == 2) {
+          interactions.add(List.from(currentInteraction));
+        }
         currentInteraction = [];
+      }
+    }
+    
+    // Handle any remaining incomplete interaction at the end
+    // We don't add it since it's incomplete
+    if (currentInteraction.isNotEmpty) {
+      if (currentInteraction.length == 2) {
+        interactions.add(List.from(currentInteraction));
       }
     }
     
@@ -761,3 +779,4 @@ class ConversationWithMessages {
     required this.messages,
   });
 }
+
