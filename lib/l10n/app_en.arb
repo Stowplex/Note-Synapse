@@ -672,5 +672,11 @@
   "viewTools": "View Tools",
   "noMcpEndpointsConfigured": "No MCP endpoints configured",
   "clickAddMcpEndpointToGetStarted": "Click \"Add MCP Endpoint\" to get started",
-  "updated": "Updated"
+  "updated": "Updated",
+  "noteActionApp": "Note Action App",
+  "noteActionAppSubtitle": "This type of app will operate specifically on pre-selected notes",
+  "imageAttachmentsOptional": "Image Attachments (Optional)",
+  "imageAttachmentsSubtitle": "Attach images to help explain what you want the AI to create",
+  "addImage": "Add Image",
+  "noLibrariesAddedYet": "No libraries added yet. Click \"Add Library\" to get started."
 }

@@ -3991,6 +3991,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Click \"Add MCP Endpoint\" to get started'**
   String get clickAddMcpEndpointToGetStarted;
+
+  /// No description provided for @noteActionApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Action App'**
+  String get noteActionApp;
+
+  /// No description provided for @noteActionAppSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This type of app will operate specifically on pre-selected notes'**
+  String get noteActionAppSubtitle;
+
+  /// No description provided for @imageAttachmentsOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Attachments (Optional)'**
+  String get imageAttachmentsOptional;
+
+  /// No description provided for @imageAttachmentsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach images to help explain what you want the AI to create'**
+  String get imageAttachmentsSubtitle;
+
+  /// No description provided for @addImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Image'**
+  String get addImage;
+
+  /// No description provided for @noLibrariesAddedYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No libraries added yet. Click \"Add Library\" to get started.'**
+  String get noLibrariesAddedYet;
 }
 
 class _AppLocalizationsDelegate

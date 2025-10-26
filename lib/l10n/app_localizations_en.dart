@@ -2194,4 +2194,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get clickAddMcpEndpointToGetStarted =>
       'Click \"Add MCP Endpoint\" to get started';
+
+  @override
+  String get noteActionApp => 'Note Action App';
+
+  @override
+  String get noteActionAppSubtitle =>
+      'This type of app will operate specifically on pre-selected notes';
+
+  @override
+  String get imageAttachmentsOptional => 'Image Attachments (Optional)';
+
+  @override
+  String get imageAttachmentsSubtitle =>
+      'Attach images to help explain what you want the AI to create';
+
+  @override
+  String get addImage => 'Add Image';
+
+  @override
+  String get noLibrariesAddedYet =>
+      'No libraries added yet. Click \"Add Library\" to get started.';
 }

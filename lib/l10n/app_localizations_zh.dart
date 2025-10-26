@@ -1318,31 +1318,31 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get saveCode => 'Save Code';
+  String get saveCode => '保存代码';
 
   @override
-  String get saveCodeDirectly => 'Save Code Directly';
+  String get saveCodeDirectly => '直接保存代码';
 
   @override
-  String get codeSavedSuccessfully => 'Code saved successfully!';
+  String get codeSavedSuccessfully => '代码保存成功！';
 
   @override
   String errorSavingCode(Object error) {
-    return 'Error saving code: $error';
+    return '保存代码时出错：$error';
   }
 
   @override
-  String get editCodeDirectly => 'Edit Code Directly';
+  String get editCodeDirectly => '直接编辑代码';
 
   @override
-  String get editAppName => 'Edit App Name';
+  String get editAppName => '编辑应用名称';
 
   @override
-  String get appNameUpdated => 'App name updated successfully!';
+  String get appNameUpdated => '应用名称更新成功！';
 
   @override
   String errorUpdatingAppName(Object error) {
-    return 'Error updating app name: $error';
+    return '更新应用名称时出错：$error';
   }
 
   @override
@@ -1922,116 +1922,110 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get importBackup => 'Import Backup';
+  String get importBackup => '导入备份';
 
   @override
-  String get importBackupDescription => 'Restore your notes from a backup file';
+  String get importBackupDescription => '从备份文件恢复您的笔记';
 
   @override
-  String get importingBackup => 'Importing Backup...';
+  String get importingBackup => '正在导入备份...';
 
   @override
-  String get importLogs => 'Import Logs';
+  String get importLogs => '导入日志';
 
   @override
-  String get selectBackupFile => 'Select Backup File';
+  String get selectBackupFile => '选择备份文件';
 
   @override
-  String get selectBackupFileDescription =>
-      'Choose a backup zip file to restore from';
+  String get selectBackupFileDescription => '选择要恢复的备份zip文件';
 
   @override
   String importFailed(Object error) {
-    return 'Import failed: $error';
+    return '导入失败：$error';
   }
 
   @override
-  String get invalidBackupFile => 'Invalid backup file format';
+  String get invalidBackupFile => '无效的备份文件格式';
 
   @override
-  String get backupVersionTooNew =>
-      'Backup is from a newer version of the app. Please update the app first.';
+  String get backupVersionTooNew => '备份来自较新版本的应用。请先更新应用。';
 
   @override
-  String get checkpointingDatabase => 'Checkpointing current database...';
+  String get checkpointingDatabase => '检查点当前数据库...';
 
   @override
-  String get copyingDatabaseToStaging =>
-      'Copying database to staging directory...';
+  String get copyingDatabaseToStaging => '复制数据库到暂存目录...';
 
   @override
-  String get extractingBackupFile => 'Extracting backup file...';
+  String get extractingBackupFile => '提取备份文件...';
 
   @override
-  String get validatingBackupDatabase =>
-      'Validating backup database version...';
+  String get validatingBackupDatabase => '验证备份数据库版本...';
 
   @override
-  String get migratingBackupDatabase =>
-      'Migrating backup database to current version...';
+  String get migratingBackupDatabase => '将备份数据库迁移到当前版本...';
 
   @override
-  String get mergingNotes => 'Merging notes...';
+  String get mergingNotes => '合并笔记...';
 
   @override
-  String get mergingSubNotes => 'Merging sub-notes...';
+  String get mergingSubNotes => '合并子笔记...';
 
   @override
-  String get mergingTags => 'Merging tags...';
+  String get mergingTags => '合并标签...';
 
   @override
-  String get mergingRelationships => 'Merging relationships...';
+  String get mergingRelationships => '合并关系...';
 
   @override
-  String get mergingFilters => 'Merging filters...';
+  String get mergingFilters => '合并筛选器...';
 
   @override
-  String get mergingUserApps => 'Merging user apps...';
+  String get mergingUserApps => '合并用户应用...';
 
   @override
-  String get copyingAttachments => 'Copying attachments...';
+  String get copyingAttachments => '复制附件...';
 
   @override
-  String get swappingDatabases => 'Swapping databases...';
+  String get swappingDatabases => '交换数据库...';
 
   @override
-  String get reloadingData => 'Reloading data...';
+  String get reloadingData => '重新加载数据...';
 
   @override
-  String get undoBackup => 'Undo Backup';
+  String get undoBackup => '撤销备份';
 
   @override
-  String get undoBackupDescription => 'Restore the original database';
+  String get undoBackupDescription => '恢复原始数据库';
 
   @override
-  String get undoBackupConfirmation =>
-      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+  String get undoBackupConfirmation => '您确定要撤销备份吗？这将恢复您的原始数据库并丢失自导入以来所做的任何更改。';
 
   @override
-  String get undoBackupCompleted => 'Backup undone successfully!';
+  String get undoBackupCompleted => '备份撤销成功！';
 
   @override
   String errorUndoingBackup(Object error) {
-    return 'Error undoing backup: $error';
+    return '撤销备份时出错：$error';
   }
 
   @override
-  String get backupRestored => 'Backup restored successfully!';
+  String get backupRestored => '备份恢复成功！';
 
   @override
   String errorRestoringBackup(Object error) {
-    return 'Error restoring backup: $error';
+    return '恢复备份时出错：$error';
   }
 
   @override
-  String get cloneApp => 'Clone App';
+  String get cloneApp => '复制应用';
 
   @override
-  String get appClonedSuccessfully => 'App cloned successfully!';
+  String get appClonedSuccessfully => '复制成功!';
 
   @override
   String errorCloningApp(Object error) {
-    return 'Error cloning app: $error';
+    return '复制出错: $error';
   }
 
   @override
@@ -2152,4 +2146,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clickAddMcpEndpointToGetStarted => '点击\"添加MCP端点\"开始';
+
+  @override
+  String get noteActionApp => '笔记操作应用';
+
+  @override
+  String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
+
+  @override
+  String get imageAttachmentsOptional => '图片附件（可选）';
+
+  @override
+  String get imageAttachmentsSubtitle => '附加图片以帮助解释您希望AI创建的内容';
+
+  @override
+  String get addImage => '添加图片';
+
+  @override
+  String get noLibrariesAddedYet => '尚未添加库。点击\"添加库\"开始。';
 }

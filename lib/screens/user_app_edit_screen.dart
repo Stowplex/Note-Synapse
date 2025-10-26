@@ -981,18 +981,11 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       resizeToAvoidBottomInset: true, // Always resize to avoid keyboard
       appBar: AppBar(
         title: Text(l10n.editApp),
-        actions: _isCodeEditable ? [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _toggleSearch,
-            tooltip: 'Find in code',
-          ),
-        ] : null,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Basic'),
-            Tab(text: 'Advanced'),
+          tabs: [
+            Tab(text: l10n.basic),
+            Tab(text: l10n.advanced),
           ],
         ),
       ),
