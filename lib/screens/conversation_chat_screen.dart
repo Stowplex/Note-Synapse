@@ -139,25 +139,35 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     if (_messageController.text.trim().isEmpty || _isSending) return;
 
     final messageText = _messageController.text.trim();
+    final attachedFiles = List<PlatformFile>.from(_attachedFiles); // Copy attachments before clearing
     _messageController.clear();
 
     setState(() {
       _isSending = true;
-      _attachedFiles.clear(); // Clear attachments after sending
+      _attachedFiles.clear(); // Clear attachments after copying
     });
 
     try {
-      // Add user message
+      // Save attachment paths for database storage
+      final attachmentPaths = <String>[];
+      for (final file in attachedFiles) {
+        if (file.path != null) {
+          attachmentPaths.add(file.path!);
+        }
+      }
+
+      // Add user message with attachments
       final userMessage = await _conversationService.addUserMessage(
         conversationId: _conversation!.id,
         content: messageText,
+        attachmentPaths: attachmentPaths,
       );
       _messages.add(userMessage);
       setState(() {});
       _scrollToBottom();
 
-      // Generate AI response
-      final aiResponse = await _generateAIResponse(messageText);
+      // Generate AI response with attachments
+      final aiResponse = await _generateAIResponse(messageText, attachedFiles);
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
         content: aiResponse,
@@ -191,7 +201,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
-  Future<String> _generateAIResponse(String userMessage) async {
+  Future<String> _generateAIResponse(String userMessage, List<PlatformFile> attachedFiles) async {
     try {
       // Build conversation context for the prompt
       final contextMessages = _messages.map((msg) => {
@@ -213,13 +223,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(question);
+        return await _generateWithMcpTools(question, attachedFiles);
       } else {
         // Use AI service's answerNoteQuestion method which handles note context and attachments
         final response = await AIService.answerNoteQuestion(
           question,
           _notes,
-          attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+          attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
           useOwnKnowledge: true,
         );
         return response;
@@ -230,7 +240,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
-  Future<String> _generateWithMcpTools(String question) async {
+  Future<String> _generateWithMcpTools(String question, List<PlatformFile> attachedFiles) async {
     try {
       // Add MCP tool information to prompt
       final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
@@ -263,7 +273,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         // Call AI with tools
         final response = await ModelSelector.instance.generateWithTools(
           currentPrompt,
-          _attachedFiles,
+          attachedFiles,
           [callToolFunction],
         );
         
