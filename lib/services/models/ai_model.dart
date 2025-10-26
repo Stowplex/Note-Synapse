@@ -60,10 +60,25 @@ abstract class AIModel {
 
   /// Common utility methods for all AI models
 
-  /// Get today's date context string
+  /// Get today's date, time, and timezone context string
   static String getTodayContext() {
-    final today = DateTime.now();
-    return '\n\nToday\'s date: ${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')} (${getDayOfWeek(today)})';
+    final now = DateTime.now();
+    final localNow = now.toLocal();
+    
+    // Format date
+    final dateStr = '${localNow.year}-${localNow.month.toString().padLeft(2, '0')}-${localNow.day.toString().padLeft(2, '0')}';
+    
+    // Format time
+    final timeStr = '${localNow.hour.toString().padLeft(2, '0')}:${localNow.minute.toString().padLeft(2, '0')}:${localNow.second.toString().padLeft(2, '0')}';
+    
+    // Get timezone offset
+    final offset = localNow.timeZoneOffset;
+    final offsetHours = offset.inHours;
+    final offsetMinutes = offset.inMinutes.remainder(60).abs();
+    final offsetSign = offset.isNegative ? '-' : '+';
+    final timezoneStr = 'UTC$offsetSign${offsetHours.abs().toString().padLeft(2, '0')}:${offsetMinutes.toString().padLeft(2, '0')}';
+    
+    return '\n\nCurrent date and time: $dateStr (${getDayOfWeek(localNow)}) $timeStr $timezoneStr';
   }
 
   /// Get day of week for a given date
