@@ -2,6 +2,7 @@ model_type: openai_compatible
 model_endpoint: https://api.openai.com/v1/chat/completions
 model_name: gpt-5-mini
 model_display_name: GPT-5 Mini
+api_key_url: https://platform.openai.com/api-keys
 model_capabilities:
   - support_audio
   - support_video

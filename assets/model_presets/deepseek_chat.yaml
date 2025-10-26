@@ -2,6 +2,7 @@ model_type: openai_compatible
 model_endpoint: https://api.deepseek.com/chat/completions
 model_name: deepseek-chat
 model_display_name: DeepSeek Chat
+api_key_url: https://platform.deepseek.com/api_keys
 model_capabilities:
   - support_image
 max_input_token: 32768
