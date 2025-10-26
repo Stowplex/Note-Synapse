@@ -1146,14 +1146,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 if (_isSending && !_isAborting)
-                  IconButton(
-                    onPressed: _abortRequest,
-                    icon: const Icon(Icons.stop),
-                    tooltip: 'Cancel AI request',
-                    style: IconButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  )
+                  _buildAbortButtonWithSpinner()
                 else if (_isAborting)
                   IconButton(
                     onPressed: null,
@@ -1176,6 +1169,56 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                         : const Icon(Icons.send),
                   ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAbortButtonWithSpinner() {
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Rotating border spinner
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.error.withOpacity(0.3),
+              ),
+            ),
+          ),
+          // Stop button in the center
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: _abortRequest,
+              icon: const Icon(
+                Icons.stop,
+                color: Colors.white,
+                size: 16,
+              ),
+              tooltip: 'Cancel AI request',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ),
         ],
