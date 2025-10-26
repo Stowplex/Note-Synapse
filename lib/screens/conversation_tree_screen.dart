@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:provider/provider.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
+import '../providers/app_provider.dart';
 import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/fork_service.dart';
@@ -502,8 +504,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         tags: ['conversation-tree'],
       );
 
-      // Save to database
-      await _databaseService.insertNote(note);
+      // Save to database and notify AppProvider to update UI
+      if (mounted) {
+        await context.read<AppProvider>().addNote(note);
+      }
 
       if (mounted) {
         try {
@@ -636,8 +640,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           isArchived: note.isArchived,
         );
 
-        // Save to database
-        await _databaseService.insertNote(updatedNote);
+        // Save to database and notify AppProvider to update UI
+        if (mounted) {
+          await context.read<AppProvider>().addNote(updatedNote);
+        }
 
         if (mounted) {
           try {
