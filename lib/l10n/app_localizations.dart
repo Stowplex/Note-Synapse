@@ -1304,6 +1304,12 @@ abstract class AppLocalizations {
   /// **'Edit Sub-Note'**
   String get editSubNote;
 
+  /// No description provided for @reparentSubNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Reparent'**
+  String get reparentSubNote;
+
   /// No description provided for @deleteSubNote.
   ///
   /// In en, this message translates to:

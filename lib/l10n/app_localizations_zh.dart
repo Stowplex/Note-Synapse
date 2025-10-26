@@ -652,6 +652,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editSubNote => '编辑子笔记';
 
   @override
+  String get reparentSubNote => '重新分配';
+
+  @override
   String get deleteSubNote => '删除子笔记';
 
   @override
@@ -2217,20 +2220,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addToNote => '添加到笔记';
 
   @override
-  String get forkConversation => '分叉对话';
+  String get forkConversation => '创建分支对话';
 
   @override
-  String get forkConversationConfirm => '分叉此对话？';
+  String get forkConversationConfirm => '创建分支对话？';
 
   @override
-  String get fork => '分叉';
+  String get fork => '分支对话';
 
   @override
-  String get forkedConversationSuccess => '对话分叉成功';
+  String get forkedConversationSuccess => '对话分支成功';
 
   @override
   String errorForkingConversation(Object error) {
-    return '分叉对话时出错：$error';
+    return '分支对话时出错：$error';
   }
 
   @override

@@ -452,11 +452,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                     PopupMenuItem(
                       value: 'reparent',
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.move_to_inbox, size: 16),
-                          SizedBox(width: 8),
-                          Text('Reparent'),
+                          const Icon(Icons.move_to_inbox, size: 16),
+                          const SizedBox(width: 8),
+                          Text(l10n.reparentSubNote),
                         ],
                       ),
                     ),

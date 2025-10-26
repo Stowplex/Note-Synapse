@@ -200,6 +200,7 @@
   "noSubNotes": "No sub-notes",
   "addNewSubNote": "Add New Sub-Note",
   "editSubNote": "Edit Sub-Note",
+  "reparentSubNote": "Reparent",
   "deleteSubNote": "Delete Sub-Note",
   "confirmDeleteSubNote": "Are you sure you want to delete this sub-note?",
   "subNoteAddedSuccessfully": "Sub-note added successfully!",

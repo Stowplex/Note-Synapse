@@ -659,6 +659,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editSubNote => 'Edit Sub-Note';
 
   @override
+  String get reparentSubNote => 'Reparent';
+
+  @override
   String get deleteSubNote => 'Delete Sub-Note';
 
   @override
