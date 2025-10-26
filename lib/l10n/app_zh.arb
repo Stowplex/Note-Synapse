@@ -761,5 +761,110 @@
   "attachedFiles": "附加文件（{count}）",
   "you": "您",
   "errorLoadingData": "加载数据时出错",
-  "retry": "重试"
+  "retry": "重试",
+  "errorProcessingSharedContent": "处理共享内容时出错",
+  "whatWouldYouLikeToDo": "您想要做什么？",
+  "createNewNoteWithThisContent": "创建包含此内容的新笔记",
+  "addThisContentToExistingNote": "将此内容添加到现有笔记",
+  "searchNotes": "搜索笔记...",
+  "selectNote": "选择笔记...",
+  "showingNotes": "显示 {filteredCount} / {totalCount} 条笔记",
+  "@showingNotes": {
+    "placeholders": {
+      "filteredCount": {
+        "type": "int"
+      },
+      "totalCount": {
+        "type": "int"
+      }
+    }
+  },
+  "noteDetails": "笔记详情",
+  "contentPreview": "内容预览",
+  "createNote": "创建笔记",
+  "appendToNote": "追加到笔记",
+  "selectedTags": "已选标签：",
+  "availableTags": "可用标签：",
+  "urlDetected": "检测到URL",
+  "webContentExtractionNotSupportedLinux": "Linux不支持网页内容提取。",
+  "pleaseUseOtherPlatformsForWebExtraction": "请使用Android、iOS或Web版本来提取网页内容。",
+  "extractWebContent": "提取网页内容",
+  "extracting": "提取中...",
+  "extractContentUsingAiForBetterResults": "使用AI提取内容以获得更好的结果",
+  "extractWithAi": "使用AI提取（较慢）",
+  "extractingWithAi": "AI提取中...",
+  "asIs": "原样",
+  "loadingWebPage": "加载网页中...",
+  "extractingContent": "提取内容中...",
+  "imageDetected": "检测到图片",
+  "extractImageContent": "提取图片内容",
+  "extractingImageContent": "提取中...",
+  "pdfDetected": "检测到PDF",
+  "extractPdfContent": "提取PDF内容",
+  "extractingPdfContent": "提取中...",
+  "sharedImage": "共享图片",
+  "title": "标题",
+  "content": "内容",
+  "attachments": "附件",
+  "tags": "标签",
+  "pleaseSelectNoteToAppend": "请选择要追加的笔记",
+  "contentAppendedSuccessfully": "内容追加成功！",
+  "extractingWebContent": "提取网页内容",
+  "sharedContentFrom": "共享内容来自",
+  "sharedUrl": "共享URL",
+  "unknownSource": "未知来源",
+  "failedToPrepareNote": "准备笔记失败：{error}",
+  "@failedToPrepareNote": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorExtractingWebContent": "提取网页内容时出错：{error}",
+  "@errorExtractingWebContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToLoadWebPage": "加载网页失败：{message}",
+  "@failedToLoadWebPage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "extractionCancelledByUser": "用户取消提取",
+  "readabilityExtractionFailed": "Readability提取失败：{error}",
+  "@readabilityExtractionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToExtractContentFromWebPage": "无法从网页提取内容",
+  "processingWithAi": "使用AI处理中...",
+  "checkingApiKey": "检查API密钥中...",
+  "errorExtractingImageContent": "提取图片内容时出错：{error}",
+  "@errorExtractingImageContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorExtractingPdfContent": "提取PDF内容时出错：{error}",
+  "@errorExtractingPdfContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "unknownImage": "未知图片",
+  "unknownPdf": "未知PDF"
 }

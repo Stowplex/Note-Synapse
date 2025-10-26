@@ -2481,4 +2481,156 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get retry => 'Retry';
+
+  @override
+  String get errorProcessingSharedContent => 'Error Processing Shared Content';
+
+  @override
+  String get whatWouldYouLikeToDo => 'What would you like to do?';
+
+  @override
+  String get createNewNoteWithThisContent =>
+      'Create a new note with this content';
+
+  @override
+  String get addThisContentToExistingNote =>
+      'Add this content to an existing note';
+
+  @override
+  String get selectNote => 'Select a note...';
+
+  @override
+  String showingNotes(int filteredCount, int totalCount) {
+    return 'Showing $filteredCount of $totalCount notes';
+  }
+
+  @override
+  String get noteDetails => 'Note Details';
+
+  @override
+  String get contentPreview => 'Content Preview';
+
+  @override
+  String get selectedTags => 'Selected tags:';
+
+  @override
+  String get availableTags => 'Available tags:';
+
+  @override
+  String get webContentExtractionNotSupportedLinux =>
+      'Web content extraction is not supported on Linux.';
+
+  @override
+  String get pleaseUseOtherPlatformsForWebExtraction =>
+      'Please use Android, iOS, or Web to extract web content.';
+
+  @override
+  String get extractWebContent => 'Extract Web Content';
+
+  @override
+  String get extracting => 'Extracting...';
+
+  @override
+  String get extractContentUsingAiForBetterResults =>
+      'Extract content using AI for better results';
+
+  @override
+  String get extractWithAi => 'Extract with AI (Slower)';
+
+  @override
+  String get extractingWithAi => 'Extracting with AI...';
+
+  @override
+  String get asIs => 'As-Is';
+
+  @override
+  String get loadingWebPage => 'Loading web page...';
+
+  @override
+  String get imageDetected => 'Image Detected';
+
+  @override
+  String get extractImageContent => 'Extract Image Content';
+
+  @override
+  String get extractingImageContent => 'Extracting...';
+
+  @override
+  String get pdfDetected => 'PDF Detected';
+
+  @override
+  String get extractPdfContent => 'Extract PDF Content';
+
+  @override
+  String get extractingPdfContent => 'Extracting...';
+
+  @override
+  String get sharedImage => 'Shared Image';
+
+  @override
+  String get pleaseSelectNoteToAppend => 'Please select a note to append to';
+
+  @override
+  String get contentAppendedSuccessfully => 'Content appended successfully!';
+
+  @override
+  String get extractingWebContent => 'Extracting Web Content';
+
+  @override
+  String get sharedContentFrom => 'Shared content from';
+
+  @override
+  String get sharedUrl => 'Shared URL';
+
+  @override
+  String get unknownSource => 'unknown source';
+
+  @override
+  String failedToPrepareNote(String error) {
+    return 'Failed to prepare note: $error';
+  }
+
+  @override
+  String errorExtractingWebContent(String error) {
+    return 'Error extracting web content: $error';
+  }
+
+  @override
+  String failedToLoadWebPage(String message) {
+    return 'Failed to load web page: $message';
+  }
+
+  @override
+  String get extractionCancelledByUser => 'Extraction cancelled by user';
+
+  @override
+  String readabilityExtractionFailed(String error) {
+    return 'Readability extraction failed: $error';
+  }
+
+  @override
+  String get failedToExtractContentFromWebPage =>
+      'Failed to extract content from the web page';
+
+  @override
+  String get processingWithAi => 'Processing with AI...';
+
+  @override
+  String get checkingApiKey => 'Checking API key...';
+
+  @override
+  String errorExtractingImageContent(String error) {
+    return 'Error extracting image content: $error';
+  }
+
+  @override
+  String errorExtractingPdfContent(String error) {
+    return 'Error extracting PDF content: $error';
+  }
+
+  @override
+  String get unknownImage => 'Unknown image';
+
+  @override
+  String get unknownPdf => 'Unknown PDF';
 }

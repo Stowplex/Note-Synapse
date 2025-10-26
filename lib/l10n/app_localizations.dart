@@ -4495,6 +4495,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get retry;
+
+  /// No description provided for @errorProcessingSharedContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Error Processing Shared Content'**
+  String get errorProcessingSharedContent;
+
+  /// No description provided for @whatWouldYouLikeToDo.
+  ///
+  /// In en, this message translates to:
+  /// **'What would you like to do?'**
+  String get whatWouldYouLikeToDo;
+
+  /// No description provided for @createNewNoteWithThisContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new note with this content'**
+  String get createNewNoteWithThisContent;
+
+  /// No description provided for @addThisContentToExistingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add this content to an existing note'**
+  String get addThisContentToExistingNote;
+
+  /// No description provided for @selectNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a note...'**
+  String get selectNote;
+
+  /// No description provided for @showingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing {filteredCount} of {totalCount} notes'**
+  String showingNotes(int filteredCount, int totalCount);
+
+  /// No description provided for @noteDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Details'**
+  String get noteDetails;
+
+  /// No description provided for @contentPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Content Preview'**
+  String get contentPreview;
+
+  /// No description provided for @selectedTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected tags:'**
+  String get selectedTags;
+
+  /// No description provided for @availableTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Available tags:'**
+  String get availableTags;
+
+  /// No description provided for @webContentExtractionNotSupportedLinux.
+  ///
+  /// In en, this message translates to:
+  /// **'Web content extraction is not supported on Linux.'**
+  String get webContentExtractionNotSupportedLinux;
+
+  /// No description provided for @pleaseUseOtherPlatformsForWebExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Please use Android, iOS, or Web to extract web content.'**
+  String get pleaseUseOtherPlatformsForWebExtraction;
+
+  /// No description provided for @extractWebContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract Web Content'**
+  String get extractWebContent;
+
+  /// No description provided for @extracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting...'**
+  String get extracting;
+
+  /// No description provided for @extractContentUsingAiForBetterResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract content using AI for better results'**
+  String get extractContentUsingAiForBetterResults;
+
+  /// No description provided for @extractWithAi.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract with AI (Slower)'**
+  String get extractWithAi;
+
+  /// No description provided for @extractingWithAi.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting with AI...'**
+  String get extractingWithAi;
+
+  /// No description provided for @asIs.
+  ///
+  /// In en, this message translates to:
+  /// **'As-Is'**
+  String get asIs;
+
+  /// No description provided for @loadingWebPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading web page...'**
+  String get loadingWebPage;
+
+  /// No description provided for @imageDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Detected'**
+  String get imageDetected;
+
+  /// No description provided for @extractImageContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract Image Content'**
+  String get extractImageContent;
+
+  /// No description provided for @extractingImageContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting...'**
+  String get extractingImageContent;
+
+  /// No description provided for @pdfDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF Detected'**
+  String get pdfDetected;
+
+  /// No description provided for @extractPdfContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract PDF Content'**
+  String get extractPdfContent;
+
+  /// No description provided for @extractingPdfContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting...'**
+  String get extractingPdfContent;
+
+  /// No description provided for @sharedImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared Image'**
+  String get sharedImage;
+
+  /// No description provided for @pleaseSelectNoteToAppend.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a note to append to'**
+  String get pleaseSelectNoteToAppend;
+
+  /// No description provided for @contentAppendedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Content appended successfully!'**
+  String get contentAppendedSuccessfully;
+
+  /// No description provided for @extractingWebContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting Web Content'**
+  String get extractingWebContent;
+
+  /// No description provided for @sharedContentFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared content from'**
+  String get sharedContentFrom;
+
+  /// No description provided for @sharedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared URL'**
+  String get sharedUrl;
+
+  /// No description provided for @unknownSource.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown source'**
+  String get unknownSource;
+
+  /// No description provided for @failedToPrepareNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to prepare note: {error}'**
+  String failedToPrepareNote(String error);
+
+  /// No description provided for @errorExtractingWebContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Error extracting web content: {error}'**
+  String errorExtractingWebContent(String error);
+
+  /// No description provided for @failedToLoadWebPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load web page: {message}'**
+  String failedToLoadWebPage(String message);
+
+  /// No description provided for @extractionCancelledByUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Extraction cancelled by user'**
+  String get extractionCancelledByUser;
+
+  /// No description provided for @readabilityExtractionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Readability extraction failed: {error}'**
+  String readabilityExtractionFailed(String error);
+
+  /// No description provided for @failedToExtractContentFromWebPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to extract content from the web page'**
+  String get failedToExtractContentFromWebPage;
+
+  /// No description provided for @processingWithAi.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing with AI...'**
+  String get processingWithAi;
+
+  /// No description provided for @checkingApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking API key...'**
+  String get checkingApiKey;
+
+  /// No description provided for @errorExtractingImageContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Error extracting image content: {error}'**
+  String errorExtractingImageContent(String error);
+
+  /// No description provided for @errorExtractingPdfContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Error extracting PDF content: {error}'**
+  String errorExtractingPdfContent(String error);
+
+  /// No description provided for @unknownImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown image'**
+  String get unknownImage;
+
+  /// No description provided for @unknownPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown PDF'**
+  String get unknownPdf;
 }
 
 class _AppLocalizationsDelegate

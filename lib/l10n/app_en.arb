@@ -761,5 +761,110 @@
   "attachedFiles": "Attached Files ({count})",
   "you": "You",
   "errorLoadingData": "Error loading data",
-  "retry": "Retry"
+  "retry": "Retry",
+  "errorProcessingSharedContent": "Error Processing Shared Content",
+  "whatWouldYouLikeToDo": "What would you like to do?",
+  "createNewNoteWithThisContent": "Create a new note with this content",
+  "addThisContentToExistingNote": "Add this content to an existing note",
+  "searchNotes": "Search notes...",
+  "selectNote": "Select a note...",
+  "showingNotes": "Showing {filteredCount} of {totalCount} notes",
+  "@showingNotes": {
+    "placeholders": {
+      "filteredCount": {
+        "type": "int"
+      },
+      "totalCount": {
+        "type": "int"
+      }
+    }
+  },
+  "noteDetails": "Note Details",
+  "contentPreview": "Content Preview",
+  "createNote": "Create Note",
+  "appendToNote": "Append to Note",
+  "selectedTags": "Selected tags:",
+  "availableTags": "Available tags:",
+  "urlDetected": "URL Detected",
+  "webContentExtractionNotSupportedLinux": "Web content extraction is not supported on Linux.",
+  "pleaseUseOtherPlatformsForWebExtraction": "Please use Android, iOS, or Web to extract web content.",
+  "extractWebContent": "Extract Web Content",
+  "extracting": "Extracting...",
+  "extractContentUsingAiForBetterResults": "Extract content using AI for better results",
+  "extractWithAi": "Extract with AI (Slower)",
+  "extractingWithAi": "Extracting with AI...",
+  "asIs": "As-Is",
+  "loadingWebPage": "Loading web page...",
+  "extractingContent": "Extracting content...",
+  "imageDetected": "Image Detected",
+  "extractImageContent": "Extract Image Content",
+  "extractingImageContent": "Extracting...",
+  "pdfDetected": "PDF Detected",
+  "extractPdfContent": "Extract PDF Content",
+  "extractingPdfContent": "Extracting...",
+  "sharedImage": "Shared Image",
+  "title": "Title",
+  "content": "Content",
+  "attachments": "Attachments",
+  "tags": "Tags",
+  "pleaseSelectNoteToAppend": "Please select a note to append to",
+  "contentAppendedSuccessfully": "Content appended successfully!",
+  "extractingWebContent": "Extracting Web Content",
+  "sharedContentFrom": "Shared content from",
+  "sharedUrl": "Shared URL",
+  "unknownSource": "unknown source",
+  "failedToPrepareNote": "Failed to prepare note: {error}",
+  "@failedToPrepareNote": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorExtractingWebContent": "Error extracting web content: {error}",
+  "@errorExtractingWebContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToLoadWebPage": "Failed to load web page: {message}",
+  "@failedToLoadWebPage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "extractionCancelledByUser": "Extraction cancelled by user",
+  "readabilityExtractionFailed": "Readability extraction failed: {error}",
+  "@readabilityExtractionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToExtractContentFromWebPage": "Failed to extract content from the web page",
+  "processingWithAi": "Processing with AI...",
+  "checkingApiKey": "Checking API key...",
+  "errorExtractingImageContent": "Error extracting image content: {error}",
+  "@errorExtractingImageContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorExtractingPdfContent": "Error extracting PDF content: {error}",
+  "@errorExtractingPdfContent": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "unknownImage": "Unknown image",
+  "unknownPdf": "Unknown PDF"
 }

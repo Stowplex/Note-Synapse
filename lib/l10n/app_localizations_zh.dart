@@ -538,7 +538,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get extractContent => '提取内容';
 
   @override
-  String get extractingContent => '正在提取内容...';
+  String get extractingContent => '提取内容中...';
 
   @override
   String get contentExtracted => '内容提取成功！';
@@ -2420,4 +2420,151 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get retry => '重试';
+
+  @override
+  String get errorProcessingSharedContent => '处理共享内容时出错';
+
+  @override
+  String get whatWouldYouLikeToDo => '您想要做什么？';
+
+  @override
+  String get createNewNoteWithThisContent => '创建包含此内容的新笔记';
+
+  @override
+  String get addThisContentToExistingNote => '将此内容添加到现有笔记';
+
+  @override
+  String get selectNote => '选择笔记...';
+
+  @override
+  String showingNotes(int filteredCount, int totalCount) {
+    return '显示 $filteredCount / $totalCount 条笔记';
+  }
+
+  @override
+  String get noteDetails => '笔记详情';
+
+  @override
+  String get contentPreview => '内容预览';
+
+  @override
+  String get selectedTags => '已选标签：';
+
+  @override
+  String get availableTags => '可用标签：';
+
+  @override
+  String get webContentExtractionNotSupportedLinux => 'Linux不支持网页内容提取。';
+
+  @override
+  String get pleaseUseOtherPlatformsForWebExtraction =>
+      '请使用Android、iOS或Web版本来提取网页内容。';
+
+  @override
+  String get extractWebContent => '提取网页内容';
+
+  @override
+  String get extracting => '提取中...';
+
+  @override
+  String get extractContentUsingAiForBetterResults => '使用AI提取内容以获得更好的结果';
+
+  @override
+  String get extractWithAi => '使用AI提取（较慢）';
+
+  @override
+  String get extractingWithAi => 'AI提取中...';
+
+  @override
+  String get asIs => '原样';
+
+  @override
+  String get loadingWebPage => '加载网页中...';
+
+  @override
+  String get imageDetected => '检测到图片';
+
+  @override
+  String get extractImageContent => '提取图片内容';
+
+  @override
+  String get extractingImageContent => '提取中...';
+
+  @override
+  String get pdfDetected => '检测到PDF';
+
+  @override
+  String get extractPdfContent => '提取PDF内容';
+
+  @override
+  String get extractingPdfContent => '提取中...';
+
+  @override
+  String get sharedImage => '共享图片';
+
+  @override
+  String get pleaseSelectNoteToAppend => '请选择要追加的笔记';
+
+  @override
+  String get contentAppendedSuccessfully => '内容追加成功！';
+
+  @override
+  String get extractingWebContent => '提取网页内容';
+
+  @override
+  String get sharedContentFrom => '共享内容来自';
+
+  @override
+  String get sharedUrl => '共享URL';
+
+  @override
+  String get unknownSource => '未知来源';
+
+  @override
+  String failedToPrepareNote(String error) {
+    return '准备笔记失败：$error';
+  }
+
+  @override
+  String errorExtractingWebContent(String error) {
+    return '提取网页内容时出错：$error';
+  }
+
+  @override
+  String failedToLoadWebPage(String message) {
+    return '加载网页失败：$message';
+  }
+
+  @override
+  String get extractionCancelledByUser => '用户取消提取';
+
+  @override
+  String readabilityExtractionFailed(String error) {
+    return 'Readability提取失败：$error';
+  }
+
+  @override
+  String get failedToExtractContentFromWebPage => '无法从网页提取内容';
+
+  @override
+  String get processingWithAi => '使用AI处理中...';
+
+  @override
+  String get checkingApiKey => '检查API密钥中...';
+
+  @override
+  String errorExtractingImageContent(String error) {
+    return '提取图片内容时出错：$error';
+  }
+
+  @override
+  String errorExtractingPdfContent(String error) {
+    return '提取PDF内容时出错：$error';
+  }
+
+  @override
+  String get unknownImage => '未知图片';
+
+  @override
+  String get unknownPdf => '未知PDF';
 }
