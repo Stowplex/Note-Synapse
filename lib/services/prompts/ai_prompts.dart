@@ -22,15 +22,22 @@ IMPORTANT - Math Formula Guidelines:
 
   /// Build prompt for note Q&A with context
   static String buildNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
+    // Check if context is empty (no notes provided)
+    final hasNotes = context.trim().isNotEmpty;
+    
+    final relationshipSection = hasNotes ? '''
+Consider the relationships between the NOTES in the context:
+$relationshipGuidelines
+''' : '';
+
     if (useOwnKnowledge) {
       return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
+Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
 
-Context Notes (including linked notes and their relationships):
-$context
+${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
+${hasNotes ? context : ''}
 
-Please provide a comprehensive answer using both the information in the notes and your own knowledge. Consider:
-$relationshipGuidelines
+Please provide a comprehensive answer using both the information in the notes and your own knowledge.$relationshipSection
 - Your own knowledge to provide additional insights, explanations, or expanded context
 
 $mathFormulaGuidelines
@@ -39,13 +46,12 @@ You may supplement the information from the notes with your own knowledge to pro
 ''';
     } else {
       return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
+Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
 
-Context Notes (including linked notes and their relationships):
-$context
+${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
+${hasNotes ? context : ''}
 
-Please provide a comprehensive answer based ONLY on the information in the notes and their relationships. Consider:
-$relationshipGuidelines
+Please provide a comprehensive answer based ONLY on the information in the notes${hasNotes ? ' and their relationships' : ''}.$relationshipSection
 
 $mathFormulaGuidelines
 

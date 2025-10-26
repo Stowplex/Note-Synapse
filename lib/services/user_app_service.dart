@@ -535,7 +535,7 @@ The app has access to the following database tables:
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
-2. Do not reference any external resources
+2. Do not reference any external resources unless explicitly instructed by user.
 3. Document the purpose, requirements, and approach in comments
 4. Use the following APIs to interact with the Flutter app, generated code should strictly follow the API parameter types.
    - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
