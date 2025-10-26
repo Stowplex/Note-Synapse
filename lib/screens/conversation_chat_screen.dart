@@ -44,6 +44,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   List<Note> _notes = [];
   bool _isLoading = false;
   bool _isSending = false;
+  bool _isAborting = false;
+  String? _currentRequestId;
+  Set<String> _cancelledRequestIds = {};
   List<PlatformFile> _attachedFiles = [];
   
   // MCP support
@@ -140,10 +143,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
     final messageText = _messageController.text.trim();
     final attachedFiles = List<PlatformFile>.from(_attachedFiles); // Copy attachments before clearing
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     _messageController.clear();
 
     setState(() {
       _isSending = true;
+      _currentRequestId = requestId;
       _attachedFiles.clear(); // Clear attachments after copying
     });
 
@@ -166,8 +171,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       setState(() {});
       _scrollToBottom();
 
+      // Check if this specific request was cancelled before generating AI response
+      if (_cancelledRequestIds.contains(requestId)) {
+        return;
+      }
+
       // Generate AI response with attachments
-      final aiResponse = await _generateAIResponse(messageText, attachedFiles);
+      final aiResponse = await _generateAIResponse(messageText, attachedFiles, requestId);
+      
+      // Check if this specific request was cancelled after AI response
+      if (_cancelledRequestIds.contains(requestId)) {
+        return;
+      }
+      
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
         content: aiResponse,
@@ -178,31 +194,77 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       setState(() {});
       _scrollToBottom();
     } catch (e) {
-      LoggerService.error('Error sending message: $e', error: e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: () {
-                _messageController.text = messageText;
-                _sendMessage();
-              },
+      // Only show error if this request wasn't cancelled
+      if (!_cancelledRequestIds.contains(requestId)) {
+        LoggerService.error('Error sending message: $e', error: e);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error sending message: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () {
+                  _messageController.text = messageText;
+                  _sendMessage();
+                },
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     } finally {
       if (mounted) {
-        setState(() => _isSending = false);
+        setState(() {
+          _isSending = false;
+          _isAborting = false;
+          _currentRequestId = null;
+        });
+        // Clean up the cancelled request ID after a delay to avoid memory leaks
+        Future.delayed(const Duration(minutes: 5), () {
+          _cancelledRequestIds.remove(requestId);
+        });
       }
     }
   }
 
-  Future<String> _generateAIResponse(String userMessage, List<PlatformFile> attachedFiles) async {
+  Future<void> _abortRequest() async {
+    if (!_isSending || _currentRequestId == null) return;
+    
+    setState(() {
+      _isAborting = true;
+    });
+    
+    // Mark the current request as cancelled
+    _cancelledRequestIds.add(_currentRequestId!);
+    
+    // Show feedback to user
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cancelling AI request...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Wait a moment for the request to be cancelled
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    setState(() {
+      _isSending = false;
+      _isAborting = false;
+      _currentRequestId = null;
+    });
+  }
+
+  Future<String> _generateAIResponse(String userMessage, List<PlatformFile> attachedFiles, String requestId) async {
     try {
+      // Check if this specific request was cancelled before starting
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Build conversation context for the prompt
       final contextMessages = _messages.map((msg) => {
         'role': msg.type == MessageType.user ? 'user' : 'assistant',
@@ -221,9 +283,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
       }
 
+      // Check if this specific request was cancelled before AI generation
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(question, attachedFiles);
+        return await _generateWithMcpTools(question, attachedFiles, requestId);
       } else {
         // Use AI service's answerNoteQuestion method which handles note context and attachments
         final response = await AIService.answerNoteQuestion(
@@ -232,16 +299,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
           useOwnKnowledge: true,
         );
+        
+        // Check if this specific request was cancelled after AI response
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
+        
         return response;
       }
     } catch (e) {
+      if (_cancelledRequestIds.contains(requestId)) {
+        // Don't show error for cancelled requests
+        rethrow;
+      }
       LoggerService.error('Error generating AI response: $e', error: e);
       return 'I apologize, but I encountered an error while generating a response. Please try again.';
     }
   }
 
-  Future<String> _generateWithMcpTools(String question, List<PlatformFile> attachedFiles) async {
+  Future<String> _generateWithMcpTools(String question, List<PlatformFile> attachedFiles, String requestId) async {
     try {
+      // Check if this specific request was cancelled before starting
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Add MCP tool information to prompt
       final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
       final enhancedQuestion = mcpPrompt + question;
@@ -268,6 +350,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       final conversationParts = <String>[];
       
       for (int iteration = 0; iteration < maxIterations; iteration++) {
+        // Check if this specific request was cancelled before each iteration
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
+
         LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
         
         // Call AI with tools
@@ -276,6 +363,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           attachedFiles,
           [callToolFunction],
         );
+        
+        // Check if this specific request was cancelled after AI response
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
         
         final textResponse = response['text'] as String?;
         final functionCalls = response['function_calls'] as List?;
@@ -286,6 +378,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           // Execute all function calls
           final toolResults = <String>[];
           for (final functionCall in functionCalls) {
+            // Check if this specific request was cancelled before each tool execution
+            if (_cancelledRequestIds.contains(requestId)) {
+              throw Exception('Request cancelled by user');
+            }
+
             final functionName = functionCall['name'] as String;
             final args = functionCall['args'] as Map<String, dynamic>;
             
@@ -344,6 +441,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           : conversationParts.join('\n');
           
     } catch (e) {
+      if (_cancelledRequestIds.contains(requestId)) {
+        // Don't show error for cancelled requests
+        rethrow;
+      }
       LoggerService.error('Error in MCP tool calling: $e', error: e);
       return 'I apologize, but I encountered an error while using external tools. Error: $e';
     }
@@ -1019,40 +1120,61 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    enabled: !_isSending || _isAborting,
                     decoration: InputDecoration(
-                      hintText: 'Type your message...',
+                      hintText: _isAborting ? 'Cancelling request...' : 'Type your message...',
                       border: const OutlineInputBorder(),
                       suffixIcon: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                             icon: const Icon(Icons.attach_file),
-                            onPressed: _attachFiles,
+                            onPressed: _isSending ? null : _attachFiles,
                             tooltip: 'Attach files',
                           ),
                           IconButton(
                             icon: const Icon(Icons.camera_alt),
-                            onPressed: _captureImage,
+                            onPressed: _isSending ? null : _captureImage,
                             tooltip: 'Take photo',
                           ),
                         ],
                       ),
                     ),
                     maxLines: null,
-                    onSubmitted: (_) => _sendMessage(),
+                    onSubmitted: (_) => _isSending ? null : _sendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _isSending ? null : _sendMessage,
-                  icon: _isSending 
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                ),
+                if (_isSending && !_isAborting)
+                  IconButton(
+                    onPressed: _abortRequest,
+                    icon: const Icon(Icons.stop),
+                    tooltip: 'Cancel AI request',
+                    style: IconButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  )
+                else if (_isAborting)
+                  IconButton(
+                    onPressed: null,
+                    icon: const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    tooltip: 'Cancelling...',
+                  )
+                else
+                  IconButton(
+                    onPressed: _isSending ? null : _sendMessage,
+                    icon: _isSending 
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                  ),
               ],
             ),
           ),
