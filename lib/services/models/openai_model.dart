@@ -92,8 +92,8 @@ class OpenAIModel implements AIModel {
         'messages': [
           {'role': 'user', 'content': enhancedPrompt}
         ],
-        'temperature': temperature ?? 0.7,
-        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
       return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
@@ -124,8 +124,8 @@ class OpenAIModel implements AIModel {
         'messages': [
           {'role': 'user', 'content': enhancedPrompt}
         ],
-        'temperature': temperature ?? 0.7,
-        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        'temperature': 1.0, // temperature is not supported by OpenAI, only 1.0 is used.
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
       // Add tools/functions to request body
