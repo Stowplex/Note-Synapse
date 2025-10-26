@@ -400,15 +400,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         setState(() {
           _attachedFiles.add(platformFile);
         });
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Photo captured and added as attachment'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -502,9 +493,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             final file = _attachedFiles[index];
             return Container(
               margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
               ),
@@ -519,12 +510,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   Expanded(
                     child: Text(
                       file.name,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 16),
+                    icon: Icon(
+                      Icons.close, 
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    ),
                     onPressed: () => _removeAttachedFile(index),
                     constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                     padding: EdgeInsets.zero,
