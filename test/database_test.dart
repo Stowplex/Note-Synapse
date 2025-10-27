@@ -12,7 +12,8 @@ void main() {
     setUpAll(() {
       // Initialize FFI for testing
       sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      // Use in-memory database for speed (no isolate for testing)
+      databaseFactory = databaseFactoryFfiNoIsolate;
     });
 
     setUp(() async {
