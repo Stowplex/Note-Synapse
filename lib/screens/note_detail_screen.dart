@@ -20,6 +20,7 @@ import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import 'note_selection_dialog.dart';
 import '../services/logger_service.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -1760,22 +1761,73 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }).toList();
   }
 
-  void _addLinkedNote() {
-    showDialog(
+  void _addLinkedNote() async {
+    final l10n = AppLocalizations.of(context)!;
+    
+    // Step 1: Show multi-note selection dialog
+    final selectedNotes = await showDialog<List<Note>>(
       context: context,
-      builder: (context) => _AddLinkedNoteDialog(
-        currentNote: widget.note,
-        onLink: (noteId, relationshipType) async {
-          Navigator.pop(context);
-          await context.read<AppProvider>().createNoteRelationships(
-            widget.note.id,
-            [noteId],
-            relationshipType,
-          );
-          await _loadRelationships();
-        },
+      builder: (context) => NoteSelectionDialog(
+        onNotesSelected: (notes) => Navigator.of(context).pop(notes),
       ),
     );
+
+    if (selectedNotes == null || selectedNotes.isEmpty) return;
+    
+    // Filter out the current note if it was somehow selected
+    final notesToLink = selectedNotes.where((note) => note.id != widget.note.id).toList();
+    if (notesToLink.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot link a note to itself')),
+        );
+      }
+      return;
+    }
+    
+    // Step 2: Show relationship type selection dialog
+    final relationshipType = await showDialog<String>(
+      context: context,
+      builder: (context) => _RelationshipTypeSelectionDialog(
+        noteCount: notesToLink.length,
+      ),
+    );
+    
+    if (relationshipType == null || relationshipType.isEmpty) return;
+    
+    // Step 3: Create relationships for all selected notes
+    try {
+      final noteIds = notesToLink.map((note) => note.id).toList();
+      await context.read<AppProvider>().createNoteRelationships(
+        widget.note.id,
+        noteIds,
+        relationshipType,
+      );
+      await _loadRelationships();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              notesToLink.length == 1
+                  ? 'Linked 1 note successfully'
+                  : 'Linked ${notesToLink.length} notes successfully',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error linking notes: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error linking notes: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _removeLinkedNote(String relationshipId) {
@@ -2178,17 +2230,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 }
 
-class _AddLinkedNoteDialog extends StatefulWidget {
-  final Note currentNote;
-  final Function(String noteId, String relationshipType) onLink;
+class _RelationshipTypeSelectionDialog extends StatefulWidget {
+  final int noteCount;
 
-  const _AddLinkedNoteDialog({
-    required this.currentNote,
-    required this.onLink,
+  const _RelationshipTypeSelectionDialog({
+    required this.noteCount,
   });
 
   @override
-  State<_AddLinkedNoteDialog> createState() => _AddLinkedNoteDialogState();
+  State<_RelationshipTypeSelectionDialog> createState() => _RelationshipTypeSelectionDialogState();
 }
 
 class _ReparentSubNoteDialog extends StatefulWidget {
@@ -2420,17 +2470,9 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   }
 }
 
-class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
+class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelectionDialog> {
   String _selectedRelationshipType = RelationshipType.related;
-  Note? _selectedNote;
   final TextEditingController _customTypeController = TextEditingController();
-  List<Note> _availableNotes = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableNotes();
-  }
 
   @override
   void dispose() {
@@ -2438,56 +2480,24 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
     super.dispose();
   }
 
-  Future<void> _loadAvailableNotes() async {
-    final appProvider = context.read<AppProvider>();
-    final allNotes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
-    setState(() {
-      _availableNotes = allNotes;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Link Note'),
+      title: Text('Select Relationship Type'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select a note to link to "${widget.currentNote.title}":',
+              'Select the type of relationship for ${widget.noteCount} note${widget.noteCount > 1 ? 's' : ''}:',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            if (_availableNotes.isEmpty)
-              const Text('No other notes available to link.')
-            else
-              DropdownButtonFormField<Note>(
-                value: _selectedNote,
-                decoration: const InputDecoration(
-                  labelText: 'Select Note',
-                  border: OutlineInputBorder(),
-                ),
-                items: _availableNotes.map((note) => DropdownMenuItem(
-                  value: note,
-                  child: Text(note.title),
-                )).toList(),
-                onChanged: (note) {
-                  setState(() {
-                    _selectedNote = note;
-                  });
-                },
-              ),
-            const SizedBox(height: 16),
-            Text(
-              'Relationship Type:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _selectedRelationshipType,
               decoration: const InputDecoration(
+                labelText: 'Relationship Type',
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
@@ -2526,7 +2536,9 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Custom Relationship Type',
                   border: OutlineInputBorder(),
+                  hintText: 'Enter custom relationship type',
                 ),
+                autofocus: true,
                 onChanged: (value) {
                   setState(() {
                     _selectedRelationshipType = value;
@@ -2543,15 +2555,15 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _selectedNote != null ? () {
+          onPressed: () {
             final relationshipType = _selectedRelationshipType == 'custom' 
                 ? _customTypeController.text.trim()
                 : _selectedRelationshipType;
-            if (relationshipType.isNotEmpty) {
-              widget.onLink(_selectedNote!.id, relationshipType);
+            if (relationshipType.isNotEmpty && relationshipType != 'custom') {
+              Navigator.pop(context, relationshipType);
             }
-          } : null,
-          child: const Text('Link'),
+          },
+          child: Text('Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}'),
         ),
       ],
     );
