@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 class AppDateUtils {
   /// Formats a date string (YYYY-MM-DD or ISO string) to display format (YYYY-MM-DD)
   static String formatDateForDisplay(String? dateString) {
@@ -32,6 +35,22 @@ class AppDateUtils {
       return date.isBefore(DateTime.now());
     } catch (e) {
       return false;
+    }
+  }
+
+  /// Formats a DateTime object to a localized numeric date string (yyyy-mm-dd or mm/dd/yyyy)
+  /// Defaults to mm/dd/yyyy if locale is not supported
+  static String formatDateNumeric(DateTime date, BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    
+    // Use short date pattern based on locale
+    // For Chinese locales, use yyyy-mm-dd format
+    // For other locales (English and default), use mm/dd/yyyy format
+    if (locale.languageCode == 'zh') {
+      return DateFormat('yyyy-MM-dd').format(date);
+    } else {
+      // Default to mm/dd/yyyy for English and other locales
+      return DateFormat('MM/dd/yyyy').format(date);
     }
   }
 }
