@@ -320,15 +320,19 @@ class AIService {
   }
 
   /// AI suggestion for dedup rules
-  static Future<List<DedupRule>> suggestDedupRules(List<String> tagNames) async {
+  static Future<List<DedupRule>> suggestDedupRules(
+    List<String> tagNames, {
+    List<String> protectedTags = const [],
+  }) async {
     return await _withErrorHandling('AI dedup rules suggestion', () async {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug('Starting AI dedup rules suggestion', error: {
         'tagNames': tagNames,
+        'protectedTags': protectedTags,
         'requestId': requestId,
       });
 
-      final prompt = AIPrompts.buildDedupRulesSuggestionPrompt(tagNames);
+      final prompt = AIPrompts.buildDedupRulesSuggestionPrompt(tagNames, protectedTags: protectedTags);
       final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
       
       LoggerService.debug('AI dedup rules suggestion completed', error: {

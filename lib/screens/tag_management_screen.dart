@@ -576,7 +576,16 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
     try {
       final tagNames = _tagsWithUsage.map((t) => t.tag.name).toList();
-      final suggestions = await AIService.suggestDedupRules(tagNames);
+      
+      // Get tags used by filters
+      final appProvider = context.read<AppProvider>();
+      final filterTagSet = <String>{};
+      for (final filter in appProvider.filters) {
+        filterTagSet.addAll(filter.includeTags);
+      }
+      final filterTags = filterTagSet.toList();
+      
+      final suggestions = await AIService.suggestDedupRules(tagNames, protectedTags: filterTags);
       
       if (mounted) {
         setState(() {
