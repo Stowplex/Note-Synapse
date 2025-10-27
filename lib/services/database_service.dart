@@ -1027,7 +1027,7 @@ class DatabaseService {
     }
   }
 
-  // Migrate existing conversation data to new structure
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Migrate existing conversation data to new structure
   static Future<void> _migrateExistingConversationData(Database db) async {
         LoggerService.info('Migrating existing conversation data to new structure');
         
@@ -1424,7 +1424,7 @@ class DatabaseService {
       await insertSubNote(subNote, note.id);
     }
 
-    // Update tags
+    // Update tags: delete old links and create new ones
     await db.delete('note_tags', where: 'noteId = ?', whereArgs: [note.id]);
     for (final tagName in note.tags) {
       await _linkNoteToTag(note.id, tagName);
@@ -1441,6 +1441,7 @@ class DatabaseService {
 
   Future<void> deleteNote(String id) async {
     final db = await database;
+    // CASCADE will handle note_tags deletion automatically
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1486,10 +1487,19 @@ class DatabaseService {
 
   Future<List<Tag>> getAllTags() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'tags',
-      orderBy: 'usageCount DESC, name ASC',
-    );
+    // Use GROUP BY to calculate usage count on the fly
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        t.id,
+        t.name,
+        t.color,
+        t.createdAt,
+        COALESCE(COUNT(nt.noteId), 0) as usageCount
+      FROM tags t
+      LEFT JOIN note_tags nt ON t.id = nt.tagId
+      GROUP BY t.id, t.name, t.color, t.createdAt
+      ORDER BY usageCount DESC, t.name ASC
+    ''');
 
     return List.generate(maps.length, (i) {
       return Tag(
@@ -1497,7 +1507,7 @@ class DatabaseService {
         name: maps[i]['name'],
         color: maps[i]['color'],
         createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        usageCount: maps[i]['usageCount'] ?? 0,
+        usageCount: maps[i]['usageCount'] as int,
       );
     });
   }
@@ -1864,18 +1874,21 @@ class DatabaseService {
       tagId = await insertTag(tag);
     } else {
       tagId = tagMaps.first['id'] as String;
-      // Increment usage count
-      await db.rawUpdate(
-        'UPDATE tags SET usageCount = usageCount + 1 WHERE id = ?',
-        [tagId],
-      );
     }
 
-    // Link note to tag
-    await db.insert('note_tags', {
-      'noteId': noteId,
-      'tagId': tagId,
-    });
+    // Link note to tag (only if not already linked)
+    final existingLink = await db.query(
+      'note_tags',
+      where: 'noteId = ? AND tagId = ?',
+      whereArgs: [noteId, tagId],
+    );
+    
+    if (existingLink.isEmpty) {
+      await db.insert('note_tags', {
+        'noteId': noteId,
+        'tagId': tagId,
+      });
+    }
   }
 
   Future<void> _insertAttachment(String noteId, String filePath, {bool isRelativePath = false}) async {
