@@ -146,8 +146,20 @@ class AIService {
 
       // Model will handle capability limitations gracefully
 
+      // Convert audio file path to PlatformFile
+      final file = File(audioFilePath);
+      final bytes = await file.readAsBytes();
+      final fileName = audioFilePath.split('/').last;
+      
+      final audioFile = PlatformFile(
+        name: fileName,
+        path: audioFilePath,
+        size: bytes.length,
+        bytes: bytes,
+      );
+
       final prompt = AIPrompts.buildAudioTranscriptionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [audioFile], requestId: requestId);
       
       LoggerService.debug('Audio transcription completed', error: {
         'transcriptionLength': response.length,
@@ -170,8 +182,20 @@ class AIService {
 
       // Model will handle capability limitations gracefully
 
+      // Convert audio file path to PlatformFile
+      final file = File(audioFilePath);
+      final bytes = await file.readAsBytes();
+      final fileName = audioFilePath.split('/').last;
+      
+      final audioFile = PlatformFile(
+        name: fileName,
+        path: audioFilePath,
+        size: bytes.length,
+        bytes: bytes,
+      );
+
       final prompt = AIPrompts.buildAudioSummarizationPrompt(context: context);
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [audioFile], requestId: requestId);
       
       LoggerService.debug('Audio summarization completed', error: {
         'summaryLength': response.length,
@@ -225,8 +249,20 @@ class AIService {
 
       // Model will handle capability limitations gracefully
 
+      // Convert image file path to PlatformFile
+      final file = File(imagePath);
+      final bytes = await file.readAsBytes();
+      final fileName = imagePath.split('/').last;
+      
+      final imageFile = PlatformFile(
+        name: fileName,
+        path: imagePath,
+        size: bytes.length,
+        bytes: bytes,
+      );
+
       final prompt = AIPrompts.buildImageContentExtractionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [imageFile], requestId: requestId);
 
       LoggerService.debug('Image content extraction completed', error: {
         'requestId': requestId,
@@ -253,8 +289,20 @@ class AIService {
 
       // Model will handle capability limitations gracefully
 
+      // Convert PDF file path to PlatformFile
+      final file = File(pdfPath);
+      final bytes = await file.readAsBytes();
+      final fileName = pdfPath.split('/').last;
+      
+      final pdfFile = PlatformFile(
+        name: fileName,
+        path: pdfPath,
+        size: bytes.length,
+        bytes: bytes,
+      );
+
       final prompt = AIPrompts.buildPdfContentExtractionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final response = await ModelSelector.instance.generateWithAttachments(prompt, [pdfFile], requestId: requestId);
 
       LoggerService.debug('PDF content extraction completed', error: {
         'requestId': requestId,
