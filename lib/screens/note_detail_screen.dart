@@ -1762,8 +1762,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _addLinkedNote() async {
-    final l10n = AppLocalizations.of(context)!;
-    
     // Step 1: Show multi-note selection dialog
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
@@ -2472,6 +2470,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
 
 class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelectionDialog> {
   String _selectedRelationshipType = RelationshipType.related;
+  bool _isCustomMode = false;
   final TextEditingController _customTypeController = TextEditingController();
 
   @override
@@ -2495,7 +2494,7 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedRelationshipType,
+              value: _isCustomMode ? 'custom' : _selectedRelationshipType,
               decoration: const InputDecoration(
                 labelText: 'Relationship Type',
                 border: OutlineInputBorder(),
@@ -2525,11 +2524,16 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
               ],
               onChanged: (value) {
                 setState(() {
-                  _selectedRelationshipType = value!;
+                  if (value == 'custom') {
+                    _isCustomMode = true;
+                  } else {
+                    _isCustomMode = false;
+                    _selectedRelationshipType = value!;
+                  }
                 });
               },
             ),
-            if (_selectedRelationshipType == 'custom') ...[
+            if (_isCustomMode) ...[
               const SizedBox(height: 16),
               TextField(
                 controller: _customTypeController,
@@ -2539,11 +2543,6 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
                   hintText: 'Enter custom relationship type',
                 ),
                 autofocus: true,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedRelationshipType = value;
-                  });
-                },
               ),
             ],
           ],
@@ -2556,10 +2555,10 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
         ),
         ElevatedButton(
           onPressed: () {
-            final relationshipType = _selectedRelationshipType == 'custom' 
+            final relationshipType = _isCustomMode 
                 ? _customTypeController.text.trim()
                 : _selectedRelationshipType;
-            if (relationshipType.isNotEmpty && relationshipType != 'custom') {
+            if (relationshipType.isNotEmpty) {
               Navigator.pop(context, relationshipType);
             }
           },
