@@ -1876,14 +1876,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _showAddTagDialog(Note currentNote) {
+    // Get a reference to AppProvider before showing the dialog
+    final appProvider = context.read<AppProvider>();
+    
     showDialog(
       context: context,
       builder: (context) => _AddTagDialog(
         currentNote: currentNote,
         onAddTags: (tagNames) async {
           Navigator.pop(context);
+          // Use the saved reference instead of context.read
           for (final tagName in tagNames) {
-            await context.read<AppProvider>().addTagToNote(currentNote.id, tagName);
+            await appProvider.addTagToNote(currentNote.id, tagName);
           }
         },
       ),
@@ -2583,149 +2587,174 @@ class _AddTagDialog extends StatefulWidget {
 }
 
 class _AddTagDialogState extends State<_AddTagDialog> {
-  final TextEditingController _tagController = TextEditingController();
-  Set<String> _selectedExistingTags = {};
-  List<String> _availableTags = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableTags();
-  }
+  final TextEditingController _newTagController = TextEditingController();
+  Set<String> _selectedTags = {};
 
   @override
   void dispose() {
-    _tagController.dispose();
+    _newTagController.dispose();
     super.dispose();
-  }
-
-  void _loadAvailableTags() {
-    final appProvider = context.read<AppProvider>();
-    final allTags = appProvider.getAllAvailableTags();
-    // Filter out tags that are already on this note
-    final availableTags = allTags.where((tag) => !widget.currentNote.tags.contains(tag)).toList();
-    setState(() {
-      _availableTags = availableTags;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add Tags'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add tags to "${widget.currentNote.title}":',
-              style: Theme.of(context).textTheme.titleMedium,
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, child) {
+        final allTags = appProvider.tags.map((tag) => tag.name).toList();
+        final availableTags = allTags.where((tag) => 
+          !_selectedTags.contains(tag) && !widget.currentNote.tags.contains(tag)
+        ).toList();
+        
+        return AlertDialog(
+          title: const Text('Add Tags'),
+          content: SizedBox(
+            width: 400,
+            height: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add tags to "${widget.currentNote.title}":',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Scrollable tags container with constrained height
+                  Container(
+                    height: 300, // Fixed height for scrollable area
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Selected tags
+                          if (_selectedTags.isNotEmpty) ...[
+                            Text(
+                              'Selected tags:',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: _selectedTags.map((tag) {
+                                return Chip(
+                                  label: Text(tag),
+                                  deleteIcon: const Icon(Icons.close, size: 18),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _selectedTags.remove(tag);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          
+                          // Add new tag
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _newTagController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Add new tag',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.add),
+                                    isDense: true,
+                                  ),
+                                  onSubmitted: (value) {
+                                    if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
+                                      setState(() {
+                                        _selectedTags.add(value.trim());
+                                        _newTagController.clear();
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () {
+                                  final value = _newTagController.text.trim();
+                                  if (value.isNotEmpty && !_selectedTags.contains(value)) {
+                                    setState(() {
+                                      _selectedTags.add(value);
+                                      _newTagController.clear();
+                                    });
+                                  }
+                                },
+                                icon: const Icon(Icons.add),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // Available tags to select from
+                          if (availableTags.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Available tags:',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: availableTags.map((tag) {
+                                return ActionChip(
+                                  label: Text(tag),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedTags.add(tag);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _tagController,
-              decoration: const InputDecoration(
-                labelText: 'New Tag',
-                border: OutlineInputBorder(),
-                hintText: 'Enter tag name',
-              ),
-              onChanged: (value) {
-                setState(() {
-                  // Clear existing selections when typing
-                });
-              },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            if (_availableTags.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Select from existing tags:',
-                style: Theme.of(context).textTheme.titleSmall,
+            ElevatedButton(
+              onPressed: _selectedTags.isNotEmpty ? () {
+                widget.onAddTags(_selectedTags.toList());
+              } : null,
+              child: Text(
+                _selectedTags.isNotEmpty 
+                    ? 'Add ${_selectedTags.length} Tag${_selectedTags.length > 1 ? 's' : ''}' 
+                    : 'Add Tags',
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _availableTags.map((tag) => FilterChip(
-                  label: Text(tag),
-                  selected: _selectedExistingTags.contains(tag),
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedExistingTags.add(tag);
-                      } else {
-                        _selectedExistingTags.remove(tag);
-                      }
-                    });
-                  },
-                )).toList(),
-              ),
-            ],
-            if (_selectedExistingTags.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Selected tags:',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _selectedExistingTags.map((tag) => Chip(
-                  label: Text(tag),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () {
-                    setState(() {
-                      _selectedExistingTags.remove(tag);
-                    });
-                  },
-                )).toList(),
-              ),
-            ],
+            ),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _canAddTags() ? () {
-            final List<String> tagsToAdd = [];
-            
-            // Add new tag if entered
-            final newTag = _tagController.text.trim();
-            if (newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag)) {
-              tagsToAdd.add(newTag);
-            }
-            
-            // Add selected existing tags
-            tagsToAdd.addAll(_selectedExistingTags);
-            
-            if (tagsToAdd.isNotEmpty) {
-              widget.onAddTags(tagsToAdd);
-            }
-          } : null,
-          child: Text(_selectedExistingTags.length > 0 || _tagController.text.trim().isNotEmpty 
-              ? 'Add ${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0)} Tag${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0) > 1 ? 's' : ''}' 
-              : 'Add Tag'),
-        ),
-      ],
+        );
+      },
     );
-  }
-
-  bool _canAddTags() {
-    // Check if there are any selected existing tags
-    if (_selectedExistingTags.isNotEmpty) {
-      return true;
-    }
-    
-    // Check if there's a new tag entered that's not already on the note
-    final newTag = _tagController.text.trim();
-    return newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag);
   }
 }
 
