@@ -5,20 +5,21 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
-import '../services/database_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
+import '../models/model_type.dart';
+import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
+import '../widgets/add_note_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -44,6 +45,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   List<Note> _notes = [];
   bool _isLoading = false;
   bool _isSending = false;
+  bool _isAborting = false;
+  String? _currentRequestId;
+  Set<String> _cancelledRequestIds = {};
   List<PlatformFile> _attachedFiles = [];
   
   // MCP support
@@ -139,25 +143,48 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     if (_messageController.text.trim().isEmpty || _isSending) return;
 
     final messageText = _messageController.text.trim();
+    final attachedFiles = List<PlatformFile>.from(_attachedFiles); // Copy attachments before clearing
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     _messageController.clear();
 
     setState(() {
       _isSending = true;
-      _attachedFiles.clear(); // Clear attachments after sending
+      _currentRequestId = requestId;
+      _attachedFiles.clear(); // Clear attachments after copying
     });
 
     try {
-      // Add user message
+      // Save attachment paths for database storage
+      final attachmentPaths = <String>[];
+      for (final file in attachedFiles) {
+        if (file.path != null) {
+          attachmentPaths.add(file.path!);
+        }
+      }
+
+      // Add user message with attachments
       final userMessage = await _conversationService.addUserMessage(
         conversationId: _conversation!.id,
         content: messageText,
+        attachmentPaths: attachmentPaths,
       );
       _messages.add(userMessage);
       setState(() {});
       _scrollToBottom();
 
-      // Generate AI response
-      final aiResponse = await _generateAIResponse(messageText);
+      // Check if this specific request was cancelled before generating AI response
+      if (_cancelledRequestIds.contains(requestId)) {
+        return;
+      }
+
+      // Generate AI response with attachments
+      final aiResponse = await _generateAIResponse(messageText, attachedFiles, requestId);
+      
+      // Check if this specific request was cancelled after AI response
+      if (_cancelledRequestIds.contains(requestId)) {
+        return;
+      }
+      
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
         content: aiResponse,
@@ -168,31 +195,77 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       setState(() {});
       _scrollToBottom();
     } catch (e) {
-      LoggerService.error('Error sending message: $e', error: e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: () {
-                _messageController.text = messageText;
-                _sendMessage();
-              },
+      // Only show error if this request wasn't cancelled
+      if (!_cancelledRequestIds.contains(requestId)) {
+        LoggerService.error('Error sending message: $e', error: e);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error sending message: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () {
+                  _messageController.text = messageText;
+                  _sendMessage();
+                },
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     } finally {
       if (mounted) {
-        setState(() => _isSending = false);
+        setState(() {
+          _isSending = false;
+          _isAborting = false;
+          _currentRequestId = null;
+        });
+        // Clean up the cancelled request ID after a delay to avoid memory leaks
+        Future.delayed(const Duration(minutes: 5), () {
+          _cancelledRequestIds.remove(requestId);
+        });
       }
     }
   }
 
-  Future<String> _generateAIResponse(String userMessage) async {
+  Future<void> _abortRequest() async {
+    if (!_isSending || _currentRequestId == null) return;
+    
+    setState(() {
+      _isAborting = true;
+    });
+    
+    // Mark the current request as cancelled
+    _cancelledRequestIds.add(_currentRequestId!);
+    
+    // Show feedback to user
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cancelling AI request...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Wait a moment for the request to be cancelled
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    setState(() {
+      _isSending = false;
+      _isAborting = false;
+      _currentRequestId = null;
+    });
+  }
+
+  Future<String> _generateAIResponse(String userMessage, List<PlatformFile> attachedFiles, String requestId) async {
     try {
+      // Check if this specific request was cancelled before starting
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Build conversation context for the prompt
       final contextMessages = _messages.map((msg) => {
         'role': msg.type == MessageType.user ? 'user' : 'assistant',
@@ -211,27 +284,47 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
       }
 
+      // Check if this specific request was cancelled before AI generation
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(question);
+        return await _generateWithMcpTools(question, attachedFiles, requestId);
       } else {
         // Use AI service's answerNoteQuestion method which handles note context and attachments
         final response = await AIService.answerNoteQuestion(
           question,
           _notes,
-          attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+          attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
           useOwnKnowledge: true,
         );
+        
+        // Check if this specific request was cancelled after AI response
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
+        
         return response;
       }
     } catch (e) {
+      if (_cancelledRequestIds.contains(requestId)) {
+        // Don't show error for cancelled requests
+        rethrow;
+      }
       LoggerService.error('Error generating AI response: $e', error: e);
       return 'I apologize, but I encountered an error while generating a response. Please try again.';
     }
   }
 
-  Future<String> _generateWithMcpTools(String question) async {
+  Future<String> _generateWithMcpTools(String question, List<PlatformFile> attachedFiles, String requestId) async {
     try {
+      // Check if this specific request was cancelled before starting
+      if (_cancelledRequestIds.contains(requestId)) {
+        throw Exception('Request cancelled by user');
+      }
+
       // Add MCP tool information to prompt
       final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
       final enhancedQuestion = mcpPrompt + question;
@@ -247,8 +340,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       
       final fullPrompt = enhancedQuestion + noteContext;
       
-      // Get call_tool function definition
-      final callToolFunction = McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
+      // Get call_tool function definition based on current model type
+      final currentModelType = ModelSelector.instance.currentModelType;
+      final callToolFunction = currentModelType == ModelType.openaiCompatible
+          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(_mcpToolsByEndpoint)
+          : McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
       
       LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
       
@@ -258,14 +354,24 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       final conversationParts = <String>[];
       
       for (int iteration = 0; iteration < maxIterations; iteration++) {
+        // Check if this specific request was cancelled before each iteration
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
+
         LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
         
         // Call AI with tools
         final response = await ModelSelector.instance.generateWithTools(
           currentPrompt,
-          _attachedFiles,
+          attachedFiles,
           [callToolFunction],
         );
+        
+        // Check if this specific request was cancelled after AI response
+        if (_cancelledRequestIds.contains(requestId)) {
+          throw Exception('Request cancelled by user');
+        }
         
         final textResponse = response['text'] as String?;
         final functionCalls = response['function_calls'] as List?;
@@ -276,8 +382,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           // Execute all function calls
           final toolResults = <String>[];
           for (final functionCall in functionCalls) {
+            // Check if this specific request was cancelled before each tool execution
+            if (_cancelledRequestIds.contains(requestId)) {
+              throw Exception('Request cancelled by user');
+            }
+
             final functionName = functionCall['name'] as String;
             final args = functionCall['args'] as Map<String, dynamic>;
+            
+            LoggerService.debug('Processing function call', error: {
+              'functionName': functionName,
+              'args': args,
+            });
             
             if (functionName == 'call_tool') {
               final parsedArgs = McpToolIntegrationService.parseCallToolArguments(args);
@@ -287,6 +403,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 final params = parsedArgs['params'] as Map<String, dynamic>;
                 
                 LoggerService.info('Executing: $serviceName.$toolName');
+                LoggerService.debug('Tool parameters', error: params);
                 
                 try {
                   final result = await McpToolIntegrationService.executeToolCall(
@@ -302,6 +419,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   LoggerService.error('Tool execution failed: $e');
                   toolResults.add('Tool: $serviceName.$toolName\nError: $e');
                 }
+              } else {
+                LoggerService.error('Failed to parse call_tool arguments', error: {'args': args});
               }
             }
           }
@@ -334,6 +453,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           : conversationParts.join('\n');
           
     } catch (e) {
+      if (_cancelledRequestIds.contains(requestId)) {
+        // Don't show error for cancelled requests
+        rethrow;
+      }
       LoggerService.error('Error in MCP tool calling: $e', error: e);
       return 'I apologize, but I encountered an error while using external tools. Error: $e';
     }
@@ -390,15 +513,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         setState(() {
           _attachedFiles.add(platformFile);
         });
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Photo captured and added as attachment'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -492,9 +606,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             final file = _attachedFiles[index];
             return Container(
               margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
               ),
@@ -509,12 +623,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   Expanded(
                     child: Text(
                       file.name,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 16),
+                    icon: Icon(
+                      Icons.close, 
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    ),
                     onPressed: () => _removeAttachedFile(index),
                     constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                     padding: EdgeInsets.zero,
@@ -529,6 +649,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Widget _buildMcpSelectionSection() {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -558,13 +680,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'MCP Tools',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  Text(
+                    l10n.mcpTools,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    ),
                   ),
-                ),
                 if (_selectedMcpEndpointIds.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -574,7 +696,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${_selectedMcpEndpointIds.length} active',
+                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -631,7 +753,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             if (_mcpToolsByEndpoint.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                '${_mcpToolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools available',
+                l10n.toolsAvailable(_mcpToolsByEndpoint.values.fold<int>(0, (sum, tools) => sum + tools.length)),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   fontStyle: FontStyle.italic,
@@ -646,87 +768,37 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Future<void> _addResponseToNote(String responseContent) async {
     try {
-      // Show a dialog to get the note title
-      final titleController = TextEditingController();
-      final result = await showDialog<String>(
+      // Show the unified add note dialog
+      final createdNotes = await AddNoteDialog.show(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Add to Note'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Enter a title for the new note:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  hintText: 'Note title',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
-                if (title.isNotEmpty) {
-                  Navigator.of(context).pop(title);
-                }
-              },
-              child: const Text('Create Note'),
-            ),
-          ],
-        ),
+        content: responseContent,
+        contextNotes: _notes,
       );
-
-      if (result != null && result.isNotEmpty) {
-        // Create a new note with the AI response content
-        final newNote = Note(
-          id: const Uuid().v4(),
-          title: result,
-          content: responseContent,
-          type: NoteType.note,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          subNotes: [],
-          tags: [],
-          attachmentPaths: [],
-          scheduledAt: null,
-          completeBy: null,
-          status: null,
-          pinned: false,
-          isArchived: false,
-        );
-
-        // Save the note to the database
-        final databaseService = DatabaseService();
-        await databaseService.insertNote(newNote);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Note "${result}" created successfully'),
-              backgroundColor: Colors.green,
-              action: SnackBarAction(
-                label: 'View',
-                onPressed: () {
-                  // Navigate to the note detail screen
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailScreen(note: newNote),
-                    ),
-                  );
-                },
-              ),
+      
+      // If notes were created through AI, show success message with view action
+      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+        final firstNote = createdNotes.first;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              createdNotes.length == 1
+                  ? 'Note "${firstNote.title}" created successfully'
+                  : '${createdNotes.length} notes created successfully',
             ),
-          );
-        }
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                // Navigate to the first created note
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(note: firstNote),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
       }
     } catch (e) {
       LoggerService.error('Error creating note from AI response: $e', error: e);
@@ -921,15 +993,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_conversation == null) {
-      return const Scaffold(
-        body: Center(child: Text('Error loading conversation')),
+      return Scaffold(
+        body: Center(child: Text(l10n.errorLoadingData)),
       );
     }
 
@@ -940,7 +1014,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           IconButton(
             icon: const Icon(Icons.library_books),
             onPressed: _showNoteSelection,
-            tooltip: 'Manage Notes',
+            tooltip: l10n.manageNotes,
           ),
           IconButton(
             icon: const Icon(Icons.account_tree),
@@ -952,7 +1026,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
               );
             },
-            tooltip: 'View Tree',
+            tooltip: l10n.viewTree,
           ),
         ],
       ),
@@ -971,7 +1045,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_notes.length} note${_notes.length == 1 ? '' : 's'} included',
+                        l10n.noteIncluded(_notes.length),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -1009,43 +1083,57 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Type your message...',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            onPressed: _attachFiles,
-                            tooltip: 'Attach files',
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.camera_alt),
-                            onPressed: _captureImage,
-                            tooltip: 'Take photo',
-                          ),
-                        ],
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      enabled: !_isSending || _isAborting,
+                      decoration: InputDecoration(
+                        hintText: _isAborting ? l10n.cancellingRequest : l10n.typeYourMessage,
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.attach_file),
+                              onPressed: _isSending ? null : _attachFiles,
+                              tooltip: l10n.attachFiles,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.camera_alt),
+                              onPressed: _isSending ? null : _captureImage,
+                              tooltip: l10n.takePhotoAttachment,
+                            ),
+                          ],
+                        ),
                       ),
+                      maxLines: null,
+                      onSubmitted: (_) => _isSending ? null : _sendMessage(),
                     ),
-                    maxLines: null,
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
                 const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _isSending ? null : _sendMessage,
-                  icon: _isSending 
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                ),
+                if (_isSending && !_isAborting)
+                  _buildAbortButtonWithSpinner()
+                else if (_isAborting)
+                  IconButton(
+                    onPressed: null,
+                    icon: const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    tooltip: 'Cancelling...',
+                  )
+                else
+                  IconButton(
+                    onPressed: _isSending ? null : _sendMessage,
+                    icon: _isSending 
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                  ),
               ],
             ),
           ),
@@ -1054,7 +1142,60 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     );
   }
 
+  Widget _buildAbortButtonWithSpinner() {
+    final l10n = AppLocalizations.of(context)!;
+    
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Rotating border spinner
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.error.withOpacity(0.3),
+              ),
+            ),
+          ),
+          // Stop button in the center
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: _abortRequest,
+                              icon: const Icon(
+                                Icons.stop,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              tooltip: l10n.cancelAiRequest,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageCard(ConversationMessage message) {
+    final l10n = AppLocalizations.of(context)!;
     final isUser = message.type == MessageType.user;
     
     return Card(
@@ -1075,7 +1216,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isUser ? 'You' : 'AI',
+                  isUser ? l10n.you : l10n.ai,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: isUser 
                         ? Theme.of(context).colorScheme.primary
@@ -1093,7 +1234,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   IconButton(
                     icon: const Icon(Icons.call_split, size: 16),
                     onPressed: () => _forkConversation(message.id),
-                    tooltip: 'Fork conversation',
+                    tooltip: l10n.forkConversation,
                   ),
                 ],
               ],
@@ -1140,14 +1281,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: message.content));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Message copied to clipboard'),
-                          duration: Duration(seconds: 2),
+                        SnackBar(
+                          content: Text(l10n.messageCopiedToClipboard),
+                          duration: const Duration(seconds: 2),
                         ),
                       );
                     },
                     icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy'),
+                    label: Text(l10n.copy),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
@@ -1158,7 +1299,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   OutlinedButton.icon(
                     onPressed: () => _addResponseToNote(message.content),
                     icon: const Icon(Icons.note_add, size: 16),
-                    label: const Text('Add to Note'),
+                    label: Text(l10n.addToNote),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
@@ -1175,6 +1316,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   String _formatTimestamp(DateTime timestamp) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final difference = now.difference(timestamp);
     
@@ -1185,7 +1327,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     } else if (difference.inMinutes > 0) {
       return '${difference.inMinutes}m ago';
     } else {
-      return 'Just now';
+      return l10n.justNow;
     }
   }
 

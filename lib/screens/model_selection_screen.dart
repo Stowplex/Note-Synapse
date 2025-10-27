@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/model_type.dart';
-import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
 import 'model_configuration_screen.dart';
 
@@ -164,7 +163,6 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   Widget _buildModelCard(ModelType modelType) {
     final isSelected = _selectedModel == modelType;
-    final capabilities = _getModelCapabilities(modelType);
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -220,77 +218,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
                   color: Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 12),
-              _buildCapabilitiesChips(capabilities),
-              if (modelType == ModelType.gemini) ...[
-                const SizedBox(height: 12),
-                _buildGeminiInfo(),
-              ],
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCapabilitiesChips(ModelCapabilities capabilities) {
-    final chips = <Widget>[];
-    
-    if (capabilities.supportsImages) {
-      chips.add(_buildCapabilityChip('Images', Icons.image));
-    }
-    if (capabilities.supportsDocuments) {
-      chips.add(_buildCapabilityChip('Documents', Icons.description));
-    }
-    if (capabilities.supportsAudio) {
-      chips.add(_buildCapabilityChip('Audio', Icons.audiotrack));
-    }
-    if (capabilities.supportsVideo) {
-      chips.add(_buildCapabilityChip('Video', Icons.videocam));
-    }
-    
-    if (chips.isEmpty) {
-      chips.add(_buildCapabilityChip('Text Only', Icons.text_fields));
-    }
-    
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: chips,
-    );
-  }
-
-  Widget _buildCapabilityChip(String label, IconData icon) {
-    return Chip(
-      label: Text(label),
-      avatar: Icon(icon, size: 16),
-      backgroundColor: Colors.blue[50],
-      labelStyle: const TextStyle(fontSize: 12),
-    );
-  }
-
-  Widget _buildGeminiInfo() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue[200]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.info, color: Colors.blue[600], size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Supports all capabilities including document understanding',
-              style: TextStyle(
-                color: Colors.blue[700],
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -310,29 +240,6 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
-    }
-  }
-
-  ModelCapabilities _getModelCapabilities(ModelType modelType) {
-    switch (modelType) {
-      case ModelType.gemini:
-        return const ModelCapabilities(
-          maxInputTokens: 1000000,
-          maxOutputTokens: 60000,
-          supportsImages: true,
-          supportsDocuments: true,
-          supportsAudio: true,
-          supportsVideo: true,
-        );
-      case ModelType.openaiCompatible:
-        return const ModelCapabilities(
-          maxInputTokens: 100000,
-          maxOutputTokens: 4000,
-          supportsImages: false,
-          supportsDocuments: false,
-          supportsAudio: false,
-          supportsVideo: false,
-        );
     }
   }
 }

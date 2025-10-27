@@ -22,15 +22,22 @@ IMPORTANT - Math Formula Guidelines:
 
   /// Build prompt for note Q&A with context
   static String buildNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
+    // Check if context is empty (no notes provided)
+    final hasNotes = context.trim().isNotEmpty;
+    
+    final relationshipSection = hasNotes ? '''
+Consider the relationships between the NOTES in the context:
+$relationshipGuidelines
+''' : '';
+
     if (useOwnKnowledge) {
       return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
+Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
 
-Context Notes (including linked notes and their relationships):
-$context
+${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
+${hasNotes ? context : ''}
 
-Please provide a comprehensive answer using both the information in the notes and your own knowledge. Consider:
-$relationshipGuidelines
+Please provide a comprehensive answer using both the information in the notes and your own knowledge.$relationshipSection
 - Your own knowledge to provide additional insights, explanations, or expanded context
 
 $mathFormulaGuidelines
@@ -39,13 +46,12 @@ You may supplement the information from the notes with your own knowledge to pro
 ''';
     } else {
       return '''
-Based on the following notes and their linked relationships, please answer the question: "$question"
+Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
 
-Context Notes (including linked notes and their relationships):
-$context
+${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
+${hasNotes ? context : ''}
 
-Please provide a comprehensive answer based ONLY on the information in the notes and their relationships. Consider:
-$relationshipGuidelines
+Please provide a comprehensive answer based ONLY on the information in the notes${hasNotes ? ' and their relationships' : ''}.$relationshipSection
 
 $mathFormulaGuidelines
 
@@ -148,6 +154,17 @@ Please create the new note(s) in the following JSON format:
   ]
 }
 
+CRITICAL JSON FORMATTING RULES:
+1. Ensure ALL text in "content" and other string fields are properly escaped for valid JSON
+2. For mathematical formulas using LaTeX notation (e.g., \\( E = mc^2 \\)), you MUST double-escape the backslashes in JSON:
+   - Write \\\\( instead of \\(
+   - Write \\\\) instead of \\)
+   - Write \\\\[ instead of \\[
+   - Write \\\\] instead of \\]
+   - Example: "content": "The equation \\\\( E = mc^2 \\\\) shows..."
+3. Also escape other special JSON characters: " (use \\"), \\ (use \\\\), newlines (use \\n), tabs (use \\t)
+4. Test that your JSON is valid - backslash sequences like \\( are INVALID and will cause parsing errors
+
 If creating multiple notes, ensure they are related and useful based on the context and prompt. Consider how the new notes might fit into the existing network of relationships shown in the context. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
 ''';
   }
@@ -199,6 +216,8 @@ Please respond with a JSON array of objects in this format:
   {"leftTag": "old_tag_name", "rightTag": "new_tag_name"},
   {"leftTag": "another_old_tag", "rightTag": "another_new_tag"}
 ]
+
+IMPORTANT: Ensure all tag names are properly escaped for valid JSON (escape special characters like backslashes and quotes).
 
 Only suggest rules that would genuinely improve tag organization. If no meaningful consolidations are possible, return an empty array.
 ''';

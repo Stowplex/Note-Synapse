@@ -376,13 +376,13 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CheckboxListTile(
-                        title: const Text(
-                          'Note Action App',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        title: Text(
+                          l10n.noteActionApp,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: const Text(
-                          'This type of app will operate specifically on pre-selected notes',
-                          style: TextStyle(fontSize: 12),
+                        subtitle: Text(
+                          l10n.noteActionAppSubtitle,
+                          style: const TextStyle(fontSize: 12),
                         ),
                         value: _isNoteActionApp,
                         onChanged: (value) {
@@ -409,19 +409,19 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Image Attachments (Optional)',
+                            l10n.imageAttachmentsOptional,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           IconButton(
                             onPressed: _showImageSourceDialog,
                             icon: const Icon(Icons.add_photo_alternate),
-                            tooltip: 'Add Image',
+                            tooltip: l10n.addImage,
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Attach images to help explain what you want the AI to create',
+                        l10n.imageAttachmentsSubtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.grey[600],
                         ),
@@ -561,7 +561,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
             const SizedBox(height: 32),
             Center(
               child: Text(
-                'No libraries added yet. Click "Add Library" to get started.',
+                l10n.noLibrariesAddedYet,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey[600],
                 ),

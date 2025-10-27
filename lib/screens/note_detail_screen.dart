@@ -452,11 +452,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                     PopupMenuItem(
                       value: 'reparent',
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.move_to_inbox, size: 16),
-                          SizedBox(width: 8),
-                          Text('Reparent'),
+                          const Icon(Icons.move_to_inbox, size: 16),
+                          const SizedBox(width: 8),
+                          Text(l10n.reparentSubNote),
                         ],
                       ),
                     ),
@@ -1107,7 +1107,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       return;
     }
     
-    final updatedNote = widget.note.copyWith(
+    // Get the current note from the provider to preserve any tags that were added
+    final appProvider = context.read<AppProvider>();
+    final currentNote = appProvider.notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
+    final updatedNote = currentNote.copyWith(
       title: _titleController.text.trim().isEmpty ? 'Untitled' : _titleController.text.trim(),
       content: _contentController.text.trim(),
       updatedAt: DateTime.now(),
@@ -1117,13 +1124,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     
     if (!_hasBeenSaved) {
       // First save: Add new note to the database
-      context.read<AppProvider>().addNote(updatedNote);
+      appProvider.addNote(updatedNote);
       setState(() {
         _hasBeenSaved = true; // Mark as saved after first insert
       });
     } else {
       // Subsequent saves: Update existing note
-      context.read<AppProvider>().updateNote(updatedNote);
+      appProvider.updateNote(updatedNote);
     }
     
     setState(() {
@@ -1157,8 +1164,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _convertNoteType() {
-    final newType = widget.note.isTask ? NoteType.note : NoteType.task;
-    final updatedNote = widget.note.copyWith(
+    // Get the current note from the provider to preserve any tags that were added
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
+    final newType = currentNote.isTask ? NoteType.note : NoteType.task;
+    final updatedNote = currentNote.copyWith(
       type: newType,
       updatedAt: DateTime.now(),
     );
@@ -1295,19 +1308,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _openNoteActionApps() {
+    // Get the current note from the provider to include any attachments that were added
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => NoteActionAppSelectionScreen(selectedNotes: [widget.note]),
+        builder: (context) => NoteActionAppSelectionScreen(selectedNotes: [currentNote]),
       ),
     );
   }
 
   void _shareNote() {
+    // Get the current note from the provider to include any attachments that were added
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    
     showDialog(
       context: context,
       builder: (context) => ShareDialog(
-        notes: [widget.note],
-        title: widget.note.title,
+        notes: [currentNote],
+        title: currentNote.title,
       ),
     );
   }

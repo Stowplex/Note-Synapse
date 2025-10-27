@@ -45,12 +45,28 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
   Map<String, bool> _premiumWarnings = {};
+  Map<String, String> _presetApiKeyUrls = {};
+  String? _apiKeyUrl;
 
   @override
   void initState() {
     super.initState();
     _loadExistingConfiguration();
     _loadPresets();
+    
+    // Set default API key URL based on model type
+    _setDefaultApiKeyUrl();
+  }
+  
+  void _setDefaultApiKeyUrl() {
+    switch (widget.modelType) {
+      case ModelType.gemini:
+        _apiKeyUrl = 'https://aistudio.google.com/app/apikey';
+        break;
+      case ModelType.openaiCompatible:
+        _apiKeyUrl = 'https://platform.openai.com/api-keys';
+        break;
+    }
   }
 
   @override
@@ -75,6 +91,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
       List<ModelConfig> presets = [];
       Map<String, bool> premiumWarnings = {};
+      Map<String, String> presetApiKeyUrls = {};
       for (final file in presetFiles) {
         final yamlString = await rootBundle.loadString(file);
         final doc = loadYaml(yamlString);
@@ -84,6 +101,12 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           final displayName = doc['model_display_name'] as String?;
           if (displayName != null) {
             premiumWarnings[displayName] = doc['warn_premium'] as bool? ?? false;
+            
+            // Store API key URL for this preset
+            final apiKeyUrl = doc['api_key_url'] as String?;
+            if (apiKeyUrl != null) {
+              presetApiKeyUrls[displayName] = apiKeyUrl;
+            }
           }
 
           final capabilities = ModelCapabilities(
@@ -130,6 +153,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       setState(() {
         _presets = presets;
         _premiumWarnings = premiumWarnings;
+        _presetApiKeyUrls = presetApiKeyUrls;
       });
     } catch (e) {
       // Handle error loading presets
@@ -166,6 +190,11 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _supportsDocuments = preset.customCapabilitiesObject?.supportsDocuments ?? false;
       _supportsAudio = preset.customCapabilitiesObject?.supportsAudio ?? false;
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
+      
+      // Set API key URL from preset
+      _apiKeyUrl = preset.displayName != null 
+          ? _presetApiKeyUrls[preset.displayName] 
+          : null;
     });
   }
 
@@ -259,18 +288,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Future<void> _openApiKeyUrl() async {
-    String url;
-    switch (widget.modelType) {
-      case ModelType.gemini:
-        url = 'https://aistudio.google.com/app/apikey';
-        break;
-      case ModelType.openaiCompatible:
-        url = 'https://platform.openai.com/api-keys';
-        break;
-    }
-
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    if (_apiKeyUrl == null) return;
+    
+    if (await canLaunchUrl(Uri.parse(_apiKeyUrl!))) {
+      await launchUrl(Uri.parse(_apiKeyUrl!));
     }
   }
 
@@ -421,11 +442,11 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 hintText: l10n.apiKeyHint,
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.key),
-                suffixIcon: IconButton(
+                suffixIcon: _apiKeyUrl != null ? IconButton(
                   icon: const Icon(Icons.open_in_new),
                   onPressed: _openApiKeyUrl,
                   tooltip: l10n.getApiKey,
-                ),
+                ) : null,
               ),
               obscureText: true,
               validator: (value) {

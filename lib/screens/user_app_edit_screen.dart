@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:flutter/services.dart';
+import 'package:re_editor/re_editor.dart';
+import 'package:re_highlight/languages/xml.dart';
+import 'package:re_highlight/languages/javascript.dart';
+import 'package:re_highlight/languages/css.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -27,10 +34,15 @@ class UserAppEditScreen extends StatefulWidget {
 class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _editSuggestionController = TextEditingController();
-  final _codeController = TextEditingController();
+  late final CodeLineEditingController _codeController;
+  late final CodeLineEditingController _viewController; // Read-only controller for viewing
+  late final CodeFindController _findController;
+  late final MobileSelectionToolbarController _mobileToolbarController;
+  late final MobileSelectionToolbarController _viewMobileToolbarController;
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isCodeEditable = false;
+  bool _isSearchVisible = false; // Control search input visibility
   String _originalCode = '';
   List<String> _attachmentPaths = [];
   
@@ -41,10 +53,45 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   List<UserAppLibrary> _modifiedLibraries = [];
   Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
   bool _isLoadingLibraries = false;
+  
+  // Prevent rapid state changes during transitions
+  bool _isTransitioning = false;
 
   @override
   void initState() {
     super.initState();
+    _codeController = CodeLineEditingController.fromText('');
+    _viewController = CodeLineEditingController.fromText('');
+    _findController = CodeFindController(_codeController);
+    _mobileToolbarController = MobileSelectionToolbarController(
+      builder: _buildMobileToolbar,
+    );
+    _viewMobileToolbarController = MobileSelectionToolbarController(
+      builder: _buildViewMobileToolbar,
+    );
+    
+    // Add listener to find input controller to prevent text selection issues
+    // Use addPostFrameCallback to avoid potential issues during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _findController.findInputController.addListener(() {
+          final text = _findController.findInputController.text;
+          final selection = _findController.findInputController.selection;
+          
+          // If all text is selected, move cursor to end
+          if (selection.isValid && selection.start == 0 && selection.end == text.length && text.isNotEmpty) {
+            _findController.findInputController.selection = TextSelection.fromPosition(
+              TextPosition(offset: text.length),
+            );
+          }
+        });
+      }
+    });
+
+    // Note: No need to add listener to code controller as the mobile toolbar
+    // controller already handles selection-based UI updates automatically
+
+    
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
@@ -98,6 +145,11 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       setState(() {
         _originalCode = codeToLoad;
         _codeController.text = codeToLoad;
+        _viewController.text = codeToLoad;
+        // Ensure view controller is properly initialized
+        _viewController.value = CodeLineEditingValue(
+          codeLines: CodeLines.fromText(codeToLoad),
+        );
       });
       
       // Load libraries for the current revision
@@ -107,6 +159,11 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       setState(() {
         _originalCode = '';
         _codeController.text = '';
+        _viewController.text = '';
+        // Ensure view controller is properly initialized
+        _viewController.value = CodeLineEditingValue(
+          codeLines: CodeLines.fromText(''),
+        );
         _currentRevision = null;
       });
     }
@@ -165,8 +222,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
   @override
   void dispose() {
+    // Reset transition flag to prevent any pending operations
+    _isTransitioning = false;
+    
     _editSuggestionController.dispose();
     _codeController.dispose();
+    _viewController.dispose();
+    _findController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -329,13 +391,33 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   }
 
   void _toggleCodeEdit() {
-    setState(() {
-      _isCodeEditable = !_isCodeEditable;
-      if (!_isCodeEditable) {
-        // Reset to original code if canceling edit
-        _codeController.text = _originalCode;
-      }
-    });
+    // Prevent rapid state changes during transitions
+    if (_isTransitioning) return;
+    
+    if (!_isCodeEditable) {
+      // Switching to edit mode - can do immediately
+      setState(() {
+        _isCodeEditable = true;
+      });
+    } else {
+      // Switching to view mode - add delay to allow rendering to complete
+      _isTransitioning = true;
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) {
+          setState(() {
+            _isCodeEditable = false;
+            _isTransitioning = false;
+            // Reset to original code if canceling edit
+            _codeController.text = _originalCode;
+            _viewController.text = _originalCode;
+            // Ensure view controller is properly initialized
+            _viewController.value = CodeLineEditingValue(
+              codeLines: CodeLines.fromText(_originalCode),
+            );
+          });
+        }
+      });
+    }
   }
 
   Future<void> _pickImage() async {
@@ -507,19 +589,424 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     });
   }
 
+  // Toolbar action methods
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (_isSearchVisible) {
+        _findController.findMode();
+      } else {
+        _findController.close();
+      }
+    });
+  }
+
+  void _copySelectedText() {
+    final selection = _codeController.selection;
+    if (!selection.isCollapsed) {
+      // Get the selected text using the proper CodeLineSelection methods
+      final codeLines = _codeController.value.codeLines;
+      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
+      
+      Clipboard.setData(ClipboardData(text: selectedText));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
+      );
+    }
+  }
+
+  String _getSelectedTextFromCodeLines(CodeLines codeLines, CodeLineSelection selection) {
+    if (selection.isCollapsed) return '';
+    
+    final startIndex = selection.startIndex;
+    final endIndex = selection.endIndex;
+    final startOffset = selection.startOffset;
+    final endOffset = selection.endOffset;
+    
+    if (startIndex == endIndex) {
+      // Selection is within a single line
+      return codeLines[startIndex].text.substring(startOffset, endOffset);
+    } else {
+      // Selection spans multiple lines
+      final buffer = StringBuffer();
+      
+      // First line (from startOffset to end)
+      buffer.write(codeLines[startIndex].text.substring(startOffset));
+      
+      // Middle lines (complete lines)
+      for (int i = startIndex + 1; i < endIndex; i++) {
+        buffer.write('\n');
+        buffer.write(codeLines[i].text);
+      }
+      
+      // Last line (from start to endOffset)
+      if (endIndex < codeLines.length) {
+        buffer.write('\n');
+        buffer.write(codeLines[endIndex].text.substring(0, endOffset));
+      }
+      
+      return buffer.toString();
+    }
+  }
+
+
+
+  void _selectAll() {
+    final codeLines = _codeController.value.codeLines;
+    if (codeLines.isNotEmpty) {
+      _codeController.selection = CodeLineSelection(
+        baseIndex: 0,
+        baseOffset: 0,
+        extentIndex: codeLines.length - 1,
+        extentOffset: codeLines.last.length,
+      );
+    }
+  }
+
+  /// Get the appropriate code theme based on the current app theme
+  /// Cached to avoid repeated Theme.of(context) calls during build
+  CodeHighlightTheme? _cachedCodeTheme;
+  Brightness? _lastBrightness;
+  
+  CodeHighlightTheme get _codeTheme {
+    final currentBrightness = Theme.of(context).brightness;
+    
+    // Only recreate theme if brightness has changed
+    if (_cachedCodeTheme == null || _lastBrightness != currentBrightness) {
+      _lastBrightness = currentBrightness;
+      final isDarkMode = currentBrightness == Brightness.dark;
+      
+      _cachedCodeTheme = CodeHighlightTheme(
+        languages: {
+          'html': CodeHighlightThemeMode(
+            mode: langXml, // HTML uses XML highlighting mode
+          ),
+          'javascript': CodeHighlightThemeMode(
+            mode: langJavascript,
+          ),
+          'css': CodeHighlightThemeMode(
+            mode: langCss,
+          ),
+        },
+        theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
+      );
+    }
+    
+    return _cachedCodeTheme!;
+  }
+
+  void _copyViewSelectedText() {
+    final selection = _viewController.selection;
+    if (!selection.isCollapsed) {
+      // Get the selected text using the proper CodeLineSelection methods
+      final codeLines = _viewController.value.codeLines;
+      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
+      
+      Clipboard.setData(ClipboardData(text: selectedText));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
+      );
+    }
+  }
+
+  void _selectAllView() {
+    final codeLines = _viewController.value.codeLines;
+    if (codeLines.isNotEmpty) {
+      _viewController.selection = CodeLineSelection(
+        baseIndex: 0,
+        baseOffset: 0,
+        extentIndex: codeLines.length - 1,
+        extentOffset: codeLines.last.length,
+      );
+    }
+  }
+
+  void _undo() {
+    _codeController.undo();
+  }
+
+  void _redo() {
+    _codeController.redo();
+  }
+
+  bool get _canUndo => _codeController.canUndo;
+  bool get _canRedo => _codeController.canRedo;
+
+  Widget _buildMobileToolbar({
+    required BuildContext context,
+    required TextSelectionToolbarAnchors anchors,
+    required CodeLineEditingController controller,
+    required VoidCallback onDismiss,
+    required VoidCallback onRefresh,
+  }) {
+    final hasSelection = !controller.selection.isCollapsed;
+    
+    return Align(
+      alignment: Alignment.center,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 100, // Increased width to accommodate both buttons
+          height: 40,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Copy button when text is selected
+              if (hasSelection)
+                _buildCompactToolbarButton(
+                  context: context,
+                  icon: Icons.copy,
+                  onPressed: () {
+                    _copySelectedText();
+                    onDismiss();
+                  },
+                ),
+              // Select All button (always visible)
+              _buildCompactToolbarButton(
+                context: context,
+                icon: Icons.select_all,
+                onPressed: () {
+                  _selectAll();
+                  onRefresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewMobileToolbar({
+    required BuildContext context,
+    required TextSelectionToolbarAnchors anchors,
+    required CodeLineEditingController controller,
+    required VoidCallback onDismiss,
+    required VoidCallback onRefresh,
+  }) {
+    final hasSelection = !controller.selection.isCollapsed;
+    
+    return Align(
+      alignment: Alignment.center,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 100, // Same width as edit toolbar
+          height: 40,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Copy button when text is selected
+              if (hasSelection)
+                _buildCompactToolbarButton(
+                  context: context,
+                  icon: Icons.copy,
+                  onPressed: () {
+                    _copyViewSelectedText();
+                    onDismiss();
+                  },
+                ),
+              // Select All button (always visible)
+              _buildCompactToolbarButton(
+                context: context,
+                icon: Icons.select_all,
+                onPressed: () {
+                  _selectAllView();
+                  onRefresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactToolbarButton({
+    required BuildContext context,
+    required IconData icon,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: 40,
+      height: 32,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            icon,
+            size: 16,
+            color: onPressed != null 
+              ? Theme.of(context).textTheme.bodyMedium?.color
+              : Theme.of(context).disabledColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildPermanentToolbar() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Undo button
+          IconButton(
+            icon: const Icon(Icons.undo, size: 18),
+            onPressed: _canUndo ? _undo : null,
+            tooltip: 'Undo',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          // Redo button
+          IconButton(
+            icon: const Icon(Icons.redo, size: 18),
+            onPressed: _canRedo ? _redo : null,
+            tooltip: 'Redo',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const SizedBox(width: 8),
+          // Search toggle button
+          IconButton(
+            icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search, size: 18),
+            onPressed: _toggleSearch,
+            tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _findController.findInputController,
+              focusNode: _findController.findInputFocusNode,
+              decoration: const InputDecoration(
+                hintText: 'Find...',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                _findController.findMode();
+              },
+              onTap: () {
+                // Move cursor to end of text instead of selecting all
+                final text = _findController.findInputController.text;
+                _findController.findInputController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: text.length),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Match counter
+          ValueListenableBuilder<CodeFindValue?>(
+            valueListenable: _findController,
+            builder: (context, value, child) {
+              if (value?.result != null && value!.result!.matches.isNotEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Text(
+                    '${value.result!.index + 1}/${value.result!.matches.length}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_up, size: 16),
+            onPressed: () => _findController.previousMatch(),
+            tooltip: 'Find previous',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+            onPressed: () => _findController.nextMatch(),
+            tooltip: 'Find next',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          IconButton(
+            icon: const Icon(Icons.find_replace, size: 16),
+            onPressed: () => _findController.replaceMode(),
+            tooltip: 'Find and replace',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     
     return Scaffold(
-      resizeToAvoidBottomInset: !_isCodeEditable,
+      resizeToAvoidBottomInset: true, // Always resize to avoid keyboard
       appBar: AppBar(
         title: Text(l10n.editApp),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Basic'),
-            Tab(text: 'Advanced'),
+          tabs: [
+            Tab(text: l10n.basic),
+            Tab(text: l10n.advanced),
           ],
         ),
       ),
@@ -533,6 +1020,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   Widget _buildViewModeLayout(AppLocalizations l10n) {
     return TabBarView(
       controller: _tabController,
+      physics: const NeverScrollableScrollPhysics(), // Disable tab swipe
       children: [
         _buildBasicTab(l10n),
         _buildAdvancedTab(l10n),
@@ -546,32 +1034,39 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         // App Info Card
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.appName,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.app.name,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    l10n.appDescription,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.app.description,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                ],
+          child: SizedBox(
+            width: double.infinity, // Make card expand to full width
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.appName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.app.name,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.appDescription,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.app.description.length > 200 
+                          ? '${widget.app.description.substring(0, 200)}...'
+                          : widget.app.description,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -591,6 +1086,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                       l10n.appCode,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    // Edit button
                     ElevatedButton.icon(
                       onPressed: _toggleCodeEdit,
                       icon: const Icon(Icons.edit, size: 16),
@@ -607,13 +1103,18 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   child: Card(
                     child: Container(
                       padding: const EdgeInsets.all(12.0),
-                      child: SingleChildScrollView(
-                        child: Text(
-                          _codeController.text,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontFamily: 'monospace',
-                          ),
+                      child: CodeEditor(
+                        controller: _viewController,
+                        toolbarController: _viewMobileToolbarController,
+                        readOnly: true, // Make it read-only
+                        showCursorWhenReadOnly: true, // Enable cursor and selection in read-only mode
+                        wordWrap: false, // Disable word wrap for consistency
+                        style: CodeEditorStyle(
+                          codeTheme: _codeTheme,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
                         ),
+                        chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                       ),
                     ),
                   ),
@@ -950,6 +1451,17 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           ),
         ),
         
+        // Permanent toolbar
+        _buildPermanentToolbar(),
+        
+        // Search bar (only visible when search is enabled)
+        if (_isSearchVisible) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: _buildSearchBar(),
+          ),
+        ],
+        
         // Full-screen code editor
         Expanded(
           child: Padding(
@@ -957,18 +1469,17 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             child: Card(
               child: Container(
                 padding: const EdgeInsets.all(12.0),
-                child: TextFormField(
+                child: CodeEditor(
                   controller: _codeController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  findController: _findController,
+                  toolbarController: _mobileToolbarController,
+                  wordWrap: false, // Disable word wrap
+                  style: CodeEditorStyle(
+                    codeTheme: _codeTheme,
                     fontFamily: 'monospace',
+                    fontSize: 12,
                   ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: 'Enter your HTML code here...',
-                  ),
+                  chunkAnalyzer: DefaultCodeChunkAnalyzer(),
                 ),
               ),
             ),
@@ -977,5 +1488,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       ],
     );
   }
+
+
 }
 

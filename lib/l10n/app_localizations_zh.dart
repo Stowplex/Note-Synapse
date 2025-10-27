@@ -538,7 +538,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get extractContent => '提取内容';
 
   @override
-  String get extractingContent => '正在提取内容...';
+  String get extractingContent => '提取内容中...';
 
   @override
   String get contentExtracted => '内容提取成功！';
@@ -584,7 +584,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noteCreatedSuccessfully => '笔记创建成功！';
+  String noteCreatedSuccessfully(Object title) {
+    return '笔记\"$title\"创建成功';
+  }
 
   @override
   String errorCreatingNote(Object error) {
@@ -648,6 +650,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editSubNote => '编辑子笔记';
+
+  @override
+  String get reparentSubNote => '设置父笔记';
 
   @override
   String get deleteSubNote => '删除子笔记';
@@ -1318,31 +1323,31 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get saveCode => 'Save Code';
+  String get saveCode => '保存代码';
 
   @override
-  String get saveCodeDirectly => 'Save Code Directly';
+  String get saveCodeDirectly => '直接保存代码';
 
   @override
-  String get codeSavedSuccessfully => 'Code saved successfully!';
+  String get codeSavedSuccessfully => '代码保存成功！';
 
   @override
   String errorSavingCode(Object error) {
-    return 'Error saving code: $error';
+    return '保存代码时出错：$error';
   }
 
   @override
-  String get editCodeDirectly => 'Edit Code Directly';
+  String get editCodeDirectly => '直接编辑代码';
 
   @override
-  String get editAppName => 'Edit App Name';
+  String get editAppName => '编辑应用名称';
 
   @override
-  String get appNameUpdated => 'App name updated successfully!';
+  String get appNameUpdated => '应用名称更新成功！';
 
   @override
   String errorUpdatingAppName(Object error) {
-    return 'Error updating app name: $error';
+    return '更新应用名称时出错：$error';
   }
 
   @override
@@ -1922,115 +1927,644 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get importBackup => 'Import Backup';
+  String get importBackup => '导入备份';
 
   @override
-  String get importBackupDescription => 'Restore your notes from a backup file';
+  String get importBackupDescription => '从备份文件恢复您的笔记';
 
   @override
-  String get importingBackup => 'Importing Backup...';
+  String get importingBackup => '正在导入备份...';
 
   @override
-  String get importLogs => 'Import Logs';
+  String get importLogs => '导入日志';
 
   @override
-  String get selectBackupFile => 'Select Backup File';
+  String get selectBackupFile => '选择备份文件';
 
   @override
-  String get selectBackupFileDescription =>
-      'Choose a backup zip file to restore from';
+  String get selectBackupFileDescription => '选择要恢复的备份zip文件';
 
   @override
   String importFailed(Object error) {
-    return 'Import failed: $error';
+    return '导入失败：$error';
   }
 
   @override
-  String get invalidBackupFile => 'Invalid backup file format';
+  String get invalidBackupFile => '无效的备份文件格式';
 
   @override
-  String get backupVersionTooNew =>
-      'Backup is from a newer version of the app. Please update the app first.';
+  String get backupVersionTooNew => '备份来自较新版本的应用。请先更新应用。';
 
   @override
-  String get checkpointingDatabase => 'Checkpointing current database...';
+  String get checkpointingDatabase => '检查点当前数据库...';
 
   @override
-  String get copyingDatabaseToStaging =>
-      'Copying database to staging directory...';
+  String get copyingDatabaseToStaging => '复制数据库到暂存目录...';
 
   @override
-  String get extractingBackupFile => 'Extracting backup file...';
+  String get extractingBackupFile => '提取备份文件...';
 
   @override
-  String get validatingBackupDatabase =>
-      'Validating backup database version...';
+  String get validatingBackupDatabase => '验证备份数据库版本...';
 
   @override
-  String get migratingBackupDatabase =>
-      'Migrating backup database to current version...';
+  String get migratingBackupDatabase => '将备份数据库迁移到当前版本...';
 
   @override
-  String get mergingNotes => 'Merging notes...';
+  String get mergingNotes => '合并笔记...';
 
   @override
-  String get mergingSubNotes => 'Merging sub-notes...';
+  String get mergingSubNotes => '合并子笔记...';
 
   @override
-  String get mergingTags => 'Merging tags...';
+  String get mergingTags => '合并标签...';
 
   @override
-  String get mergingRelationships => 'Merging relationships...';
+  String get mergingRelationships => '合并关系...';
 
   @override
-  String get mergingFilters => 'Merging filters...';
+  String get mergingFilters => '合并筛选器...';
 
   @override
-  String get mergingUserApps => 'Merging user apps...';
+  String get mergingUserApps => '合并用户应用...';
 
   @override
-  String get copyingAttachments => 'Copying attachments...';
+  String get copyingAttachments => '复制附件...';
 
   @override
-  String get swappingDatabases => 'Swapping databases...';
+  String get swappingDatabases => '交换数据库...';
 
   @override
-  String get reloadingData => 'Reloading data...';
+  String get reloadingData => '重新加载数据...';
 
   @override
-  String get undoBackup => 'Undo Backup';
+  String get undoBackup => '撤销备份';
 
   @override
-  String get undoBackupDescription => 'Restore the original database';
+  String get undoBackupDescription => '恢复原始数据库';
 
   @override
-  String get undoBackupConfirmation =>
-      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+  String get undoBackupConfirmation => '您确定要撤销备份吗？这将恢复您的原始数据库并丢失自导入以来所做的任何更改。';
 
   @override
-  String get undoBackupCompleted => 'Backup undone successfully!';
+  String get undoBackupCompleted => '备份撤销成功！';
 
   @override
   String errorUndoingBackup(Object error) {
-    return 'Error undoing backup: $error';
+    return '撤销备份时出错：$error';
   }
 
   @override
-  String get backupRestored => 'Backup restored successfully!';
+  String get backupRestored => '备份恢复成功！';
 
   @override
   String errorRestoringBackup(Object error) {
-    return 'Error restoring backup: $error';
+    return '恢复备份时出错：$error';
   }
 
   @override
-  String get cloneApp => 'Clone App';
+  String get cloneApp => '复制应用';
 
   @override
-  String get appClonedSuccessfully => 'App cloned successfully!';
+  String get appClonedSuccessfully => '复制成功!';
 
   @override
   String errorCloningApp(Object error) {
-    return 'Error cloning app: $error';
+    return '复制出错: $error';
   }
+
+  @override
+  String get mcpSettings => 'MCP设置';
+
+  @override
+  String get mcpSettingsSubtitle => '配置模型上下文协议端点';
+
+  @override
+  String errorLoadingEndpoints(Object error) {
+    return '加载端点时出错：$error';
+  }
+
+  @override
+  String get addMcpEndpoint => '添加MCP端点';
+
+  @override
+  String get addMcpEndpointTitle => '添加MCP端点';
+
+  @override
+  String get nameHint => '我的MCP服务器';
+
+  @override
+  String get baseUrl => '基础URL';
+
+  @override
+  String get baseUrlHint =>
+      'https://api.example.com 或 https://server.smithery.ai/@user/server/mcp?api_key=xxx';
+
+  @override
+  String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
+
+  @override
+  String get transportType => '传输类型';
+
+  @override
+  String get bearerTokenOptional => 'Bearer令牌（可选）';
+
+  @override
+  String get bearerTokenHint => '如果认证在URL参数中，请留空';
+
+  @override
+  String get bearerTokenHelperText => '可选：用于基于头的认证';
+
+  @override
+  String get pleaseProvideNameAndUrl => '请提供名称和URL';
+
+  @override
+  String addedEndpoint(Object name) {
+    return '已添加端点：$name';
+  }
+
+  @override
+  String errorAddingEndpoint(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get deleteEndpoint => '删除端点';
+
+  @override
+  String deleteEndpointConfirmation(Object name) {
+    return '您确定要删除\"$name\"吗？这将同时删除缓存的工具。';
+  }
+
+  @override
+  String deletedEndpoint(Object name) {
+    return '已删除端点：$name';
+  }
+
+  @override
+  String errorDeletingEndpoint(Object error) {
+    return '删除端点时出错：$error';
+  }
+
+  @override
+  String refreshedToolsFor(Object name) {
+    return '已刷新$name的工具';
+  }
+
+  @override
+  String errorRefreshingTools(Object error) {
+    return '刷新工具时出错：$error';
+  }
+
+  @override
+  String get tools => '工具';
+
+  @override
+  String toolsFor(Object name) {
+    return '工具 - $name';
+  }
+
+  @override
+  String get fetched => '获取时间';
+
+  @override
+  String toolsCount(Object count) {
+    return '工具：$count';
+  }
+
+  @override
+  String get noToolsAvailable => '没有可用工具';
+
+  @override
+  String noToolsCachedFor(Object name) {
+    return '没有为$name缓存工具。点击刷新以获取工具。';
+  }
+
+  @override
+  String get refreshTools => '刷新工具';
+
+  @override
+  String get viewTools => '查看工具';
+
+  @override
+  String get noMcpEndpointsConfigured => '未配置MCP端点';
+
+  @override
+  String get clickAddMcpEndpointToGetStarted => '点击\"添加MCP端点\"开始';
+
+  @override
+  String get noteActionApp => '笔记操作应用';
+
+  @override
+  String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
+
+  @override
+  String get imageAttachmentsOptional => '图片附件（可选）';
+
+  @override
+  String get imageAttachmentsSubtitle => '附加图片以帮助解释您希望AI创建的内容';
+
+  @override
+  String get addImage => '添加图片';
+
+  @override
+  String get noLibrariesAddedYet => '尚未添加库。点击\"添加库\"开始。';
+
+  @override
+  String get conversation => '对话';
+
+  @override
+  String get newConversation => '新对话';
+
+  @override
+  String get conversationTree => '对话树';
+
+  @override
+  String get conversations => '对话';
+
+  @override
+  String get typeYourMessage => '输入您的消息...';
+
+  @override
+  String get cancellingRequest => '正在取消请求...';
+
+  @override
+  String get takePhotoAttachment => '拍照';
+
+  @override
+  String get mcpTools => 'MCP工具';
+
+  @override
+  String get active => '活动';
+
+  @override
+  String toolsAvailable(Object count) {
+    return '$count个工具可用';
+  }
+
+  @override
+  String get manageNotes => '管理笔记';
+
+  @override
+  String get viewTree => '查看树';
+
+  @override
+  String noteIncluded(Object count) {
+    return '包含$count个笔记';
+  }
+
+  @override
+  String get messageCopiedToClipboard => '消息已复制到剪贴板';
+
+  @override
+  String get addToNote => '添加到笔记';
+
+  @override
+  String get forkConversation => '创建分支对话';
+
+  @override
+  String get forkConversationConfirm => '创建分支对话？';
+
+  @override
+  String get fork => '分支对话';
+
+  @override
+  String get forkedConversationSuccess => '对话分支成功';
+
+  @override
+  String errorForkingConversation(Object error) {
+    return '分支对话时出错：$error';
+  }
+
+  @override
+  String get selectNotesForConversation => '选择对话笔记';
+
+  @override
+  String get addNotesToConversation => '添加笔记';
+
+  @override
+  String get clearAllNotes => '清除全部';
+
+  @override
+  String get notesAndContext => '笔记和上下文';
+
+  @override
+  String get missingNotes => '缺失的笔记';
+
+  @override
+  String get missingNotesMessage => '此对话引用了不再存在的笔记：';
+
+  @override
+  String get missingNotesWillCleanup => '这些引用将被自动清理。';
+
+  @override
+  String get cleanUp => '清理';
+
+  @override
+  String get ok => '确定';
+
+  @override
+  String get refreshTree => '刷新树';
+
+  @override
+  String get noConversationsFound => '未找到对话。开始新对话以查看树。';
+
+  @override
+  String get treeRefreshedSuccessfully => '树刷新成功';
+
+  @override
+  String errorRefreshingTree(Object error) {
+    return '刷新树时出错：$error';
+  }
+
+  @override
+  String get selectInteractionToViewDetails => '选择交互以查看详细信息';
+
+  @override
+  String get deleteInteraction => '删除交互';
+
+  @override
+  String get deleteInteractionConfirm => '您确定要删除此交互及其所有后代吗？此操作无法撤消。';
+
+  @override
+  String get interactionDeletedSuccessfully => '交互删除成功';
+
+  @override
+  String errorDeletingInteraction(Object error) {
+    return '删除交互时出错：$error';
+  }
+
+  @override
+  String get forkFromHere => '从这里分叉';
+
+  @override
+  String get deleteInteractionAction => '删除交互';
+
+  @override
+  String get saveSelectedNodesAsNote => '将选中的节点保存为笔记';
+
+  @override
+  String get createFromSelected => '从选中创建';
+
+  @override
+  String get exitMultiSelect => '退出多选';
+
+  @override
+  String get pleaseSelectNodesFirst => '请先选择节点';
+
+  @override
+  String get interaction => '交互';
+
+  @override
+  String get open => '打开';
+
+  @override
+  String get user => '用户';
+
+  @override
+  String get ai => 'AI';
+
+  @override
+  String get justNow => '刚刚';
+
+  @override
+  String get addNoteDialogTitle => '添加到笔记';
+
+  @override
+  String get addNoteDialogMessage => '您想如何将此内容添加到笔记？';
+
+  @override
+  String get addAsIs => '原样添加';
+
+  @override
+  String get addAsIsDescription => '直接添加内容而不修改';
+
+  @override
+  String get letAICreateNote => '让AI创建笔记';
+
+  @override
+  String get letAICreateNoteDescription => '使用AI总结或转换内容';
+
+  @override
+  String get noteTitle => '笔记标题';
+
+  @override
+  String get enterNoteTitlePrompt => '输入新笔记的标题：';
+
+  @override
+  String get noteTitleHint => '笔记标题';
+
+  @override
+  String multipleNotesCreatedSuccessfully(Object count) {
+    return '$count个笔记创建成功';
+  }
+
+  @override
+  String get aiNoteCreator => 'AI笔记创建器';
+
+  @override
+  String get aiNoteCreatorInstructions =>
+      'AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。';
+
+  @override
+  String get prompt => '提示';
+
+  @override
+  String get promptHint => '描述您希望AI执行的操作...';
+
+  @override
+  String get promptTip =>
+      '提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。';
+
+  @override
+  String additionalContextNotes(Object count) {
+    return '额外上下文笔记（$count）';
+  }
+
+  @override
+  String get addNotes => '添加笔记';
+
+  @override
+  String get noAdditionalNotesSelected => '未选择额外笔记。AI将仅使用对话内容。';
+
+  @override
+  String get proceed => '继续';
+
+  @override
+  String get pleaseEnterPrompt => '请输入提示';
+
+  @override
+  String get view => '查看';
+
+  @override
+  String errorSavingNodes(Object error) {
+    return '保存节点时出错：$error';
+  }
+
+  @override
+  String get cancelAiRequest => '取消AI请求';
+
+  @override
+  String get copy => '复制';
+
+  @override
+  String attachedFiles(Object count) {
+    return '附加文件（$count）';
+  }
+
+  @override
+  String get you => '您';
+
+  @override
+  String get errorLoadingData => '加载数据时出错';
+
+  @override
+  String get retry => '重试';
+
+  @override
+  String get errorProcessingSharedContent => '处理共享内容时出错';
+
+  @override
+  String get whatWouldYouLikeToDo => '您想要做什么？';
+
+  @override
+  String get createNewNoteWithThisContent => '创建包含此内容的新笔记';
+
+  @override
+  String get addThisContentToExistingNote => '将此内容添加到现有笔记';
+
+  @override
+  String get selectNote => '选择笔记...';
+
+  @override
+  String showingNotes(int filteredCount, int totalCount) {
+    return '显示 $filteredCount / $totalCount 条笔记';
+  }
+
+  @override
+  String get noteDetails => '笔记详情';
+
+  @override
+  String get contentPreview => '内容预览';
+
+  @override
+  String get selectedTags => '已选标签：';
+
+  @override
+  String get availableTags => '可用标签：';
+
+  @override
+  String get webContentExtractionNotSupportedLinux => 'Linux不支持网页内容提取。';
+
+  @override
+  String get pleaseUseOtherPlatformsForWebExtraction =>
+      '请使用Android、iOS或Web版本来提取网页内容。';
+
+  @override
+  String get extractWebContent => '提取网页内容';
+
+  @override
+  String get extracting => '提取中...';
+
+  @override
+  String get extractContentUsingAiForBetterResults => '使用AI提取内容以获得更好的结果';
+
+  @override
+  String get extractWithAi => '使用AI提取（较慢）';
+
+  @override
+  String get extractingWithAi => 'AI提取中...';
+
+  @override
+  String get asIs => '原样';
+
+  @override
+  String get loadingWebPage => '加载网页中...';
+
+  @override
+  String get imageDetected => '检测到图片';
+
+  @override
+  String get extractImageContent => '提取图片内容';
+
+  @override
+  String get extractingImageContent => '提取中...';
+
+  @override
+  String get pdfDetected => '检测到PDF';
+
+  @override
+  String get extractPdfContent => '提取PDF内容';
+
+  @override
+  String get extractingPdfContent => '提取中...';
+
+  @override
+  String get sharedImage => '共享图片';
+
+  @override
+  String get pleaseSelectNoteToAppend => '请选择要追加的笔记';
+
+  @override
+  String get contentAppendedSuccessfully => '内容追加成功！';
+
+  @override
+  String get extractingWebContent => '提取网页内容';
+
+  @override
+  String get sharedContentFrom => '共享内容来自';
+
+  @override
+  String get sharedUrl => '共享URL';
+
+  @override
+  String get unknownSource => '未知来源';
+
+  @override
+  String failedToPrepareNote(String error) {
+    return '准备笔记失败：$error';
+  }
+
+  @override
+  String errorExtractingWebContent(String error) {
+    return '提取网页内容时出错：$error';
+  }
+
+  @override
+  String failedToLoadWebPage(String message) {
+    return '加载网页失败：$message';
+  }
+
+  @override
+  String get extractionCancelledByUser => '用户取消提取';
+
+  @override
+  String readabilityExtractionFailed(String error) {
+    return 'Readability提取失败：$error';
+  }
+
+  @override
+  String get failedToExtractContentFromWebPage => '无法从网页提取内容';
+
+  @override
+  String get processingWithAi => '使用AI处理中...';
+
+  @override
+  String get checkingApiKey => '检查API密钥中...';
+
+  @override
+  String errorExtractingImageContent(String error) {
+    return '提取图片内容时出错：$error';
+  }
+
+  @override
+  String errorExtractingPdfContent(String error) {
+    return '提取PDF内容时出错：$error';
+  }
+
+  @override
+  String get unknownImage => '未知图片';
+
+  @override
+  String get unknownPdf => '未知PDF';
 }

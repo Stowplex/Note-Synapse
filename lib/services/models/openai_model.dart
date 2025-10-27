@@ -83,17 +83,16 @@ class OpenAIModel implements AIModel {
       // Add date context like Gemini model
       final todayContext = AIModel.getTodayContext();
       
-      // Build limitation note for unsupported files
-      final limitationNote = _buildLimitationNote(attachedFiles);
-      final enhancedPrompt = prompt + todayContext + limitationNote;
+      // Build message content with attachments and limitation note
+      final messageContent = _buildMessageContent(prompt + todayContext, attachedFiles);
 
       final requestBody = {
         'model': _config!.modelName!,
         'messages': [
-          {'role': 'user', 'content': enhancedPrompt}
+          {'role': 'user', 'content': messageContent}
         ],
-        'temperature': temperature ?? 0.7,
-        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
       return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
@@ -116,16 +115,17 @@ class OpenAIModel implements AIModel {
 
       // Add date context
       final todayContext = AIModel.getTodayContext();
-      final limitationNote = _buildLimitationNote(attachedFiles);
-      final enhancedPrompt = prompt + todayContext + limitationNote;
+      
+      // Build message content with attachments and limitation note
+      final messageContent = _buildMessageContent(prompt + todayContext, attachedFiles);
 
       final requestBody = {
         'model': _config!.modelName!,
         'messages': [
-          {'role': 'user', 'content': enhancedPrompt}
+          {'role': 'user', 'content': messageContent}
         ],
-        'temperature': temperature ?? 0.7,
-        'max_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        'temperature': 1.0, // temperature is not supported by OpenAI, only 1.0 is used.
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
       // Add tools/functions to request body
@@ -145,40 +145,30 @@ class OpenAIModel implements AIModel {
   // Private helper methods
 
 
-  /// Build a limitation note to inform the AI about unsupported features
-  String _buildLimitationNote(List<PlatformFile> attachedFiles) {
+  /// Build message content with attachments in OpenAI format
+  dynamic _buildMessageContent(String prompt, List<PlatformFile> attachedFiles) {
     if (attachedFiles.isEmpty) {
-      return '';
+      return prompt;
     }
 
     final capabilities = _config?.customCapabilitiesObject;
     if (capabilities == null) {
-      LoggerService.debug('OpenAI model: No capabilities configured');
-      return '';
+      LoggerService.debug('OpenAI model: No capabilities configured, sending text only');
+      return prompt;
     }
 
-    LoggerService.debug('OpenAI model capabilities', error: {
-      'supportsImages': capabilities.supportsImages,
-      'supportsDocuments': capabilities.supportsDocuments,
-      'supportsAudio': capabilities.supportsAudio,
-      'supportsVideo': capabilities.supportsVideo,
-      'supportedImageFormats': capabilities.supportedImageFormats,
-      'supportedDocumentFormats': capabilities.supportedDocumentFormats,
-      'supportedAudioFormats': capabilities.supportedAudioFormats,
-      'modelName': _config?.modelName,
-      'displayName': _config?.displayName,
-    });
-
+    final contentParts = <Map<String, dynamic>>[];
     final unsupportedFiles = <String>[];
     final supportedFiles = <String>[];
     final unsupportedByType = <String, List<String>>{};
 
+    // Process each file
     for (final file in attachedFiles) {
       final fileName = file.name;
       final extension = FileTypeUtils.getFileExtension(fileName);
       final category = FileTypeUtils.getFileCategory(extension);
       
-      LoggerService.debug('Processing file', error: {
+      LoggerService.debug('Processing file for attachment', error: {
         'fileName': fileName,
         'extension': extension,
         'category': category,
@@ -186,49 +176,108 @@ class OpenAIModel implements AIModel {
       
       // Check if the model supports this type of content AND the specific file format
       bool isSupported = false;
-      if (category == 'image' && capabilities.supportsImages && capabilities.supportedImageFormats.contains(extension)) {
+      String? attachmentType;
+      
+      if (category == 'image' && capabilities.supportsImages && 
+          capabilities.supportedImageFormats.contains(extension)) {
         isSupported = true;
-      } else if (category == 'document' && capabilities.supportsDocuments && capabilities.supportedDocumentFormats.contains(extension)) {
+        attachmentType = 'image';
+      } else if (category == 'audio' && capabilities.supportsAudio && 
+                 capabilities.supportedAudioFormats.contains(extension)) {
         isSupported = true;
-      } else if (category == 'audio' && capabilities.supportsAudio && capabilities.supportedAudioFormats.contains(extension)) {
-        isSupported = true;
+        attachmentType = 'audio';
+      } else if (category == 'document' && capabilities.supportsDocuments && 
+                 capabilities.supportedDocumentFormats.contains(extension)) {
+        // OpenAI doesn't support document attachments in the same way as images
+        // Documents need to be extracted/processed separately
+        isSupported = false;
       } else if (category == 'video' && capabilities.supportsVideo) {
-        isSupported = true;
+        // OpenAI doesn't support video in the same way as images yet
+        isSupported = false;
       }
       
-      if (isSupported) {
+      if (isSupported && file.bytes != null) {
         supportedFiles.add(fileName);
-        LoggerService.debug('File supported', error: {'fileName': fileName});
+        
+        // Attach file in OpenAI format
+        if (attachmentType == 'image') {
+          final base64Data = base64Encode(file.bytes!);
+          final mimeType = FileTypeUtils.getMimeType(extension);
+          
+          contentParts.add({
+            'type': 'image_url',
+            'image_url': {
+              'url': 'data:$mimeType;base64,$base64Data',
+            }
+          });
+          
+          LoggerService.debug('Image attached', error: {
+            'fileName': fileName,
+            'mimeType': mimeType,
+            'sizeBytes': file.bytes!.length,
+          });
+        } else if (attachmentType == 'audio') {
+          // OpenAI audio format (for models that support it)
+          final base64Data = base64Encode(file.bytes!);
+          final audioFormat = extension.replaceAll('.', '');
+          
+          contentParts.add({
+            'type': 'input_audio',
+            'input_audio': {
+              'data': base64Data,
+              'format': audioFormat,
+            }
+          });
+          
+          LoggerService.debug('Audio attached', error: {
+            'fileName': fileName,
+            'format': audioFormat,
+            'sizeBytes': file.bytes!.length,
+          });
+        }
       } else {
         unsupportedFiles.add(fileName);
         unsupportedByType.putIfAbsent(category, () => []).add(fileName);
-        LoggerService.debug('File unsupported', error: {'fileName': fileName, 'category': category});
+        LoggerService.debug('File unsupported', error: {
+          'fileName': fileName,
+          'category': category,
+          'reason': file.bytes == null ? 'no bytes' : 'unsupported type',
+        });
       }
     }
 
-    // Only add limitation notice if there are unsupported files
-    if (unsupportedFiles.isEmpty) {
-      LoggerService.debug('No unsupported files, no limitation notice needed');
-      return '';
+    // Build limitation note if there are unsupported files
+    String limitationNote = '';
+    if (unsupportedFiles.isNotEmpty) {
+      final buffer = StringBuffer();
+      buffer.writeln('\n\n--- MODEL LIMITATION NOTICE ---');
+      buffer.writeln('Note: This model has limited file processing capabilities.');
+
+      // List unsupported files by category
+      unsupportedByType.forEach((category, files) {
+        buffer.writeln('The following $category files cannot be processed with respect to model limitation: ${files.join(', ')}');
+      });
+
+      if (supportedFiles.isNotEmpty) {
+        buffer.writeln('The following files are available for processing: ${supportedFiles.join(', ')}');
+      }
+
+      buffer.writeln('Please provide your response based on the available information.');
+      buffer.writeln('--- END NOTICE ---');
+      
+      limitationNote = buffer.toString();
     }
 
-    final buffer = StringBuffer();
-    buffer.writeln('\n\n--- MODEL LIMITATION NOTICE ---');
-    buffer.writeln('Note: This model has limited file processing capabilities.');
-
-    // List unsupported files by category
-    unsupportedByType.forEach((category, files) {
-      buffer.writeln('The following $category files cannot be processed with respect to model limitation: ${files.join(', ')}');
-    });
-
-    if (supportedFiles.isNotEmpty) {
-      buffer.writeln('The following files are available for processing: ${supportedFiles.join(', ')}');
+    // If no files were actually attached, return text only
+    if (contentParts.isEmpty) {
+      return prompt + limitationNote;
     }
 
-    buffer.writeln('Please provide your response based on the available information.');
-    buffer.writeln('--- END NOTICE ---');
-
-    return buffer.toString();
+    // Return array format with text and attachments
+    return [
+      {'type': 'text', 'text': prompt + limitationNote},
+      ...contentParts,
+    ];
   }
 
   Future<T> _withErrorHandling<T>(
@@ -409,3 +458,4 @@ class OpenAIModel implements AIModel {
     }
   }
 }
+

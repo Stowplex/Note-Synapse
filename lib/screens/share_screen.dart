@@ -142,7 +142,7 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Error Processing Shared Content',
+              l10n.errorProcessingSharedContent,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
@@ -196,13 +196,13 @@ class _ShareScreenState extends State<ShareScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'What would you like to do?',
+                    l10n.whatWouldYouLikeToDo,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 16),
                   RadioListTile<String>(
                     title: Text(l10n.createNote),
-                    subtitle: Text('Create a new note with this content'),
+                    subtitle: Text(l10n.createNewNoteWithThisContent),
                     value: 'create',
                     groupValue: _action,
                     onChanged: (value) {
@@ -214,7 +214,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   ),
                   RadioListTile<String>(
                     title: Text(l10n.appendToNote),
-                    subtitle: Text('Add this content to an existing note'),
+                    subtitle: Text(l10n.addThisContentToExistingNote),
                     value: 'append',
                     groupValue: _action,
                     onChanged: (value) {
@@ -273,7 +273,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             TextField(
                               controller: _searchController,
                               decoration: InputDecoration(
-                                hintText: 'Search notes...',
+                                hintText: l10n.searchNotes,
                                 prefixIcon: const Icon(Icons.search),
                                 suffixIcon: _searchQuery.isNotEmpty
                                     ? IconButton(
@@ -299,9 +299,9 @@ class _ShareScreenState extends State<ShareScreen> {
                             // Note selection dropdown
                             DropdownButtonFormField<Note>(
                               value: _selectedNote,
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                hintText: 'Select a note...',
+                              decoration: InputDecoration(
+                                border: const OutlineInputBorder(),
+                                hintText: l10n.selectNote,
                                 prefixIcon: Icon(Icons.note),
                               ),
                               items: filteredNotes.map((note) {
@@ -348,7 +348,7 @@ class _ShareScreenState extends State<ShareScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
                                 child: Text(
-                                  'Showing ${filteredNotes.length} of ${notes.length} notes',
+                                  l10n.showingNotes(filteredNotes.length, notes.length),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey[600],
@@ -377,7 +377,7 @@ class _ShareScreenState extends State<ShareScreen> {
                     Row(
                       children: [
                         Text(
-                          'Note Details',
+                          l10n.noteDetails,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         if (_titleController.text != _preparedNote?.title || 
@@ -395,8 +395,8 @@ class _ShareScreenState extends State<ShareScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: _titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Title',
+                      decoration: InputDecoration(
+                        labelText: l10n.title,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.title),
                       ),
@@ -427,7 +427,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Content Preview',
+                      l10n.contentPreview,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
@@ -447,7 +447,7 @@ class _ShareScreenState extends State<ShareScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false),
-                  child: const Text('Cancel'),
+                  child: Text(l10n.cancel),
                 ),
               ),
               const SizedBox(width: 16),
@@ -460,7 +460,7 @@ class _ShareScreenState extends State<ShareScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_action == 'create' ? 'Create Note' : 'Append to Note'),
+                      : Text(_action == 'create' ? l10n.createNote : l10n.appendToNote),
                 ),
               ),
             ],
@@ -500,7 +500,7 @@ class _ShareScreenState extends State<ShareScreen> {
                     // Selected tags
                     if (_selectedTags.isNotEmpty) ...[
                       Text(
-                        'Selected tags:',
+                        l10n.selectedTags,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
@@ -574,7 +574,7 @@ class _ShareScreenState extends State<ShareScreen> {
                     if (availableTags.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        'Available tags:',
+                        l10n.availableTags,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
@@ -614,6 +614,7 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Widget _buildUrlExtractionWidget() {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -627,7 +628,7 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'URL Detected',
+              l10n.urlDetected,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
@@ -654,7 +655,7 @@ class _ShareScreenState extends State<ShareScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Web content extraction is not supported on Linux.',
+                        l10n.webContentExtractionNotSupportedLinux,
                         style: TextStyle(
                           color: Colors.orange[700],
                           fontWeight: FontWeight.bold,
@@ -663,7 +664,7 @@ class _ShareScreenState extends State<ShareScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Please use Android, iOS, or Web to extract web content.',
+                        l10n.pleaseUseOtherPlatformsForWebExtraction,
                         style: TextStyle(
                           color: Colors.orange[600],
                         ),
@@ -689,7 +690,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.web),
-                    label: Text(_isExtracting ? 'Extracting...' : 'Extract Web Content'),
+                    label: Text(_isExtracting ? l10n.extracting : l10n.extractWebContent),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
@@ -699,8 +700,8 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: 'Extract content using AI for better results',
-                    child: ElevatedButton.icon(
+                    message: l10n.extractContentUsingAiForBetterResults,
+                      child: ElevatedButton.icon(
                       onPressed: _isLinux ? null : () => _extractWebContent(true),
                       icon: _isExtracting 
                           ? const SizedBox(
@@ -709,7 +710,7 @@ class _ShareScreenState extends State<ShareScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         backgroundColor: Theme.of(context).colorScheme.secondary,
@@ -723,7 +724,7 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () => _createUrlAsIs(),
-              child: const Text('As-Is'),
+              child: Text(l10n.asIs),
             ),
           ],
         ),
@@ -734,6 +735,8 @@ class _ShareScreenState extends State<ShareScreen> {
   Future<void> _createUrlAsIs() async {
     if (_detectedUrl == null) return;
 
+    final l10n = AppLocalizations.of(context)!;
+
     setState(() {
       _isExtracting = true;
       _error = null;
@@ -743,7 +746,7 @@ class _ShareScreenState extends State<ShareScreen> {
       // Prepare a note with the URL as-is (don't save yet)
       final note = Note(
         id: const Uuid().v4(),
-        title: 'Shared URL',
+        title: l10n.sharedUrl,
         content: _detectedUrl!,
         type: NoteType.note,
         tags: ['shared', 'url'],
@@ -756,8 +759,8 @@ class _ShareScreenState extends State<ShareScreen> {
         _isExtracting = false;
       });
     } catch (e) {
-      setState(() {
-        _error = 'Failed to prepare note: $e';
+    setState(() {
+      _error = l10n.failedToPrepareNote(e.toString());
         _isExtracting = false;
       });
     }
@@ -765,6 +768,8 @@ class _ShareScreenState extends State<ShareScreen> {
 
   Future<void> _extractWebContent(bool useAI) async {
     if (_detectedUrl == null) return;
+
+    final l10n = AppLocalizations.of(context)!;
 
     setState(() {
       _isExtracting = true;
@@ -792,8 +797,8 @@ class _ShareScreenState extends State<ShareScreen> {
         });
       }
     } catch (e) {
-      setState(() {
-        _error = 'Error extracting web content: $e';
+    setState(() {
+      _error = l10n.errorExtractingWebContent(e.toString());
         _isExtracting = false;
       });
     }
@@ -820,6 +825,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
 
   Widget _buildImageExtractionWidget() {
+    final l10n = AppLocalizations.of(context)!;
     final fileName = widget.sharedData['fileName'] as String?;
     
     return Center(
@@ -835,13 +841,13 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Image Detected',
+              l10n.imageDetected,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              fileName ?? 'Unknown image',
+              fileName ?? l10n.unknownImage,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -862,7 +868,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.image),
-                    label: Text(_isExtracting ? 'Extracting...' : 'Extract Image Content'),
+                    label: Text(_isExtracting ? l10n.extracting : l10n.extractImageContent),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
@@ -882,7 +888,7 @@ class _ShareScreenState extends State<ShareScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         backgroundColor: Theme.of(context).colorScheme.secondary,
@@ -896,7 +902,7 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
           ],
         ),
@@ -905,6 +911,7 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Widget _buildPdfExtractionWidget() {
+    final l10n = AppLocalizations.of(context)!;
     final fileName = widget.sharedData['fileName'] as String?;
     
     return Center(
@@ -920,13 +927,13 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'PDF Detected',
+              l10n.pdfDetected,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              fileName ?? 'Unknown PDF',
+              fileName ?? l10n.unknownPdf,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -947,7 +954,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.picture_as_pdf),
-                    label: Text(_isExtracting ? 'Extracting...' : 'Extract PDF Content'),
+                    label: Text(_isExtracting ? l10n.extracting : l10n.extractPdfContent),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
@@ -957,7 +964,7 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: Tooltip(
-                    message: 'Extract content using AI for better results',
+                    message: l10n.extractContentUsingAiForBetterResults,
                     child: ElevatedButton.icon(
                       onPressed: () => _extractPdfContent(true),
                       icon: _isExtracting 
@@ -967,7 +974,7 @@ class _ShareScreenState extends State<ShareScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? 'Extracting with AI...' : 'Extract with AI (Slower)'),
+                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         backgroundColor: Theme.of(context).colorScheme.secondary,
@@ -981,7 +988,7 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
           ],
         ),
@@ -990,6 +997,7 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Future<void> _extractImageContent(bool useAI) async {
+    final l10n = AppLocalizations.of(context)!;
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
     
@@ -1020,9 +1028,9 @@ class _ShareScreenState extends State<ShareScreen> {
         content = 'Image shared from ${fileName ?? 'unknown source'}';
       }
 
-      final note = Note(
+        final note = Note(
         id: const Uuid().v4(),
-        title: 'Shared Image - ${DateTime.now().toString().substring(0, 16)}',
+        title: '${l10n.sharedImage} - ${DateTime.now().toString().substring(0, 16)}',
         content: content,
         type: NoteType.note,
         createdAt: DateTime.now(),
@@ -1042,7 +1050,7 @@ class _ShareScreenState extends State<ShareScreen> {
       _selectedTags.addAll(note.tags);
     } catch (e) {
       setState(() {
-        _error = 'Error extracting image content: $e';
+        _error = l10n.errorExtractingImageContent(e.toString());
         _isExtracting = false;
       });
     }
@@ -1050,6 +1058,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
 
   Future<void> _extractPdfContent(bool useAI) async {
+    final l10n = AppLocalizations.of(context)!;
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
     
@@ -1112,25 +1121,26 @@ class _ShareScreenState extends State<ShareScreen> {
       _selectedTags.addAll(note.tags);
     } catch (e) {
       setState(() {
-        _error = 'Error extracting PDF content: $e';
+        _error = l10n.errorExtractingPdfContent(e.toString());
         _isExtracting = false;
       });
     }
   }
 
   Widget _buildContentPreview() {
+    final l10n = AppLocalizations.of(context)!;
     final note = _preparedNote!;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Title: ${_titleController.text.isNotEmpty ? _titleController.text : note.title}',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Content:',
+            Text(
+              '${l10n.title}: ${_titleController.text.isNotEmpty ? _titleController.text : note.title}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${l10n.content}:',
           style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: 4),
@@ -1149,7 +1159,7 @@ class _ShareScreenState extends State<ShareScreen> {
         if (note.attachmentPaths.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
-            'Attachments:',
+            '${l10n.attachments}:',
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 4),
@@ -1164,7 +1174,7 @@ class _ShareScreenState extends State<ShareScreen> {
         if (_selectedTags.isNotEmpty || note.tags.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
-            'Tags: ${_selectedTags.isNotEmpty ? _selectedTags.join(', ') : note.tags.join(', ')}',
+            '${l10n.tags}: ${_selectedTags.isNotEmpty ? _selectedTags.join(', ') : note.tags.join(', ')}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -1175,9 +1185,11 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Future<void> _handleAction() async {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_action == 'append' && _selectedNote == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a note to append to')),
+        SnackBar(content: Text(l10n.pleaseSelectNoteToAppend)),
       );
       return;
     }
@@ -1198,8 +1210,8 @@ class _ShareScreenState extends State<ShareScreen> {
         await appProvider.addNote(finalNote);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Note created successfully!'),
+            SnackBar(
+              content: Text(l10n.noteCreatedSuccessfully(finalNote.title)),
               backgroundColor: Colors.green,
             ),
           );
@@ -1224,8 +1236,8 @@ class _ShareScreenState extends State<ShareScreen> {
         await appProvider.updateNote(updatedNote);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Content appended successfully!'),
+            SnackBar(
+              content: Text(l10n.contentAppendedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -1268,10 +1280,18 @@ class _WebExtractionDialog extends StatefulWidget {
 
 class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   bool _isLoading = true;
-  String _status = 'Loading web page...';
+  late String _status;
+
+  @override
+  void initState() {
+    super.initState();
+    final l10n = AppLocalizations.of(context)!;
+    _status = l10n.loadingWebPage;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Dialog(
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -1294,7 +1314,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Extracting Web Content',
+                      l10n.extractingWebContent,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                       ),
@@ -1304,7 +1324,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                     onPressed: () {
                       widget.onComplete({
                         'success': false,
-                        'error': 'Extraction cancelled by user',
+                        'error': l10n.extractionCancelledByUser,
                       });
                     },
                     icon: const Icon(Icons.close, color: Colors.white),
@@ -1345,15 +1365,15 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                    // Reject all other schemes (like app://, intent://, etc.)
                    return NavigationActionPolicy.CANCEL;
                  },
-                 onLoadStart: (controller, url) {
-                   setState(() {
-                     _status = 'Loading web page...';
+                onLoadStart: (controller, url) {
+                  setState(() {
+                    _status = l10n.loadingWebPage;
                      _isLoading = true;
                    });
                  },
                 onLoadStop: (controller, url) async {
                   setState(() {
-                    _status = 'Extracting content...';
+                    _status = l10n.extractingContent;
                   });
                   
                   try {
@@ -1387,7 +1407,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                       if (result.containsKey('error')) {
                         widget.onComplete({
                           'success': false,
-                          'error': 'Readability extraction failed: ${result['error']}',
+                          'error': l10n.readabilityExtractionFailed(result['error'].toString()),
                         });
                         return;
                       }
@@ -1398,7 +1418,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                       if (extractedContent == null || extractedContent.isEmpty) {
                         widget.onComplete({
                           'success': false,
-                          'error': 'Failed to extract content from the web page',
+                          'error': l10n.failedToExtractContentFromWebPage,
                         });
                         return;
                       }
@@ -1409,13 +1429,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                       
                       if (widget.useAI) {
                         setState(() {
-                          _status = 'Checking API key...';
+                          _status = l10n.checkingApiKey;
                         });
                         
                         // Let AI service handle API key validation
                         
                         setState(() {
-                          _status = 'Processing with AI...';
+                          _status = l10n.processingWithAi;
                         });
                         
                         // Convert HTML to markdown first
@@ -1465,20 +1485,21 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                     } else {
                       widget.onComplete({
                         'success': false,
-                        'error': 'Failed to extract content from the web page',
+                        'error': l10n.failedToExtractContentFromWebPage,
                       });
                     }
                   } catch (e) {
                     widget.onComplete({
                       'success': false,
-                      'error': 'Failed to extract web content: $e',
+                      'error': l10n.errorExtractingWebContent(e.toString()),
                     });
                   }
                 },
                 onLoadError: (controller, url, code, message) {
+                  final errorMsg = message ?? 'Unknown error';
                   widget.onComplete({
                     'success': false,
-                    'error': 'Failed to load web page: $message',
+                    'error': l10n.failedToLoadWebPage(errorMsg),
                   });
                 },
               ),
