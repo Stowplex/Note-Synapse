@@ -56,11 +56,21 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
 
+  bool _hasInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _initializeConversation();
     _loadMcpEndpoints();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasInitialized) {
+      _hasInitialized = true;
+      _initializeConversation();
+    }
   }
 
   Future<void> _initializeConversation() async {
@@ -83,9 +93,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         }
       } else {
         // Create new conversation
+        final l10n = AppLocalizations.of(context)!;
         final noteIds = widget.initialNoteIds ?? [];
         _conversation = await _conversationService.createConversation(
-          title: 'New Conversation',
+          title: l10n.aiConversation,
           noteIds: noteIds,
         );
         _notes = await _conversationService.getConversationNotes(_conversation!.id);
@@ -1028,6 +1039,25 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             },
             tooltip: l10n.viewTree,
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'new_conversation') {
+                _startNewConversation();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'new_conversation',
+                child: Row(
+                  children: [
+                    const Icon(Icons.chat_bubble_outline, size: 20),
+                    const SizedBox(width: 12),
+                    Text(l10n.newConversation),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -1370,6 +1400,37 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         );
       },
     );
+  }
+
+  Future<void> _startNewConversation() async {
+    try {
+      final l10n = AppLocalizations.of(context)!;
+      // Create a new conversation
+      final newConversation = await _conversationService.createConversation(
+        title: l10n.aiConversation,
+        noteIds: _notes.map((note) => note.id).toList(),
+      );
+
+      // Replace the current route with the new conversation
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => ConversationChatScreen(
+              conversationId: newConversation.id,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating new conversation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override

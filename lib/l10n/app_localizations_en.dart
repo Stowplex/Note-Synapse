@@ -2228,6 +2228,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newConversation => 'New Conversation';
 
   @override
+  String get aiConversation => 'AI Conversation';
+
+  @override
   String get conversationTree => 'Conversation Tree';
 
   @override

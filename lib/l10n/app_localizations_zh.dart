@@ -2177,6 +2177,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newConversation => '新对话';
 
   @override
+  String get aiConversation => 'AI对话';
+
+  @override
   String get conversationTree => '对话树';
 
   @override

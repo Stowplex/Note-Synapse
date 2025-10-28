@@ -682,6 +682,7 @@
   "noLibrariesAddedYet": "No libraries added yet. Click \"Add Library\" to get started.",
   "conversation": "Conversation",
   "newConversation": "New Conversation",
+  "aiConversation": "AI Conversation",
   "conversationTree": "Conversation Tree",
   "conversations": "Conversations",
   "typeYourMessage": "Type your message...",

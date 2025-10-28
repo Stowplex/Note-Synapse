@@ -682,6 +682,7 @@
   "errorRestoringBackup": "恢复备份时出错：{error}",
   "conversation": "对话",
   "newConversation": "新对话",
+  "aiConversation": "AI对话",
   "conversationTree": "对话树",
   "conversations": "对话",
   "typeYourMessage": "输入您的消息...",
