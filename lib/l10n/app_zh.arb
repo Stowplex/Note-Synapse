@@ -188,6 +188,8 @@
   "unpinNote": "取消置顶",
   "archiveNote": "归档笔记",
   "unarchiveNote": "取消归档",
+  "convertToNote": "转换为笔记",
+  "convertToTask": "转换为任务",
   "editNote": "编辑笔记",
   "saveChanges": "保存更改",
   "discardChanges": "丢弃更改",

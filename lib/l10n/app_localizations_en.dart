@@ -621,6 +621,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unarchiveNote => 'Unarchive note';
 
   @override
+  String get convertToNote => 'Convert to Note';
+
+  @override
+  String get convertToTask => 'Convert to Task';
+
+  @override
   String get editNote => 'Edit Note';
 
   @override

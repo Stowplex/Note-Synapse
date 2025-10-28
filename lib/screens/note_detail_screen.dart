@@ -294,7 +294,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       children: [
                         Icon(Icons.note),
                         const SizedBox(width: 8),
-                        Text('Convert to Note'),
+                        Text(l10n.convertToNote),
                       ],
                     ),
                   ),
@@ -305,7 +305,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       children: [
                         Icon(Icons.task),
                         const SizedBox(width: 8),
-                        Text('Convert to Task'),
+                        Text(l10n.convertToTask),
                       ],
                     ),
                   ),

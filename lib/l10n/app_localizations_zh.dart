@@ -614,6 +614,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unarchiveNote => '取消归档';
 
   @override
+  String get convertToNote => '转换为笔记';
+
+  @override
+  String get convertToTask => '转换为任务';
+
+  @override
   String get editNote => '编辑笔记';
 
   @override

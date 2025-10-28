@@ -1232,6 +1232,18 @@ abstract class AppLocalizations {
   /// **'Unarchive note'**
   String get unarchiveNote;
 
+  /// No description provided for @convertToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert to Note'**
+  String get convertToNote;
+
+  /// No description provided for @convertToTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert to Task'**
+  String get convertToTask;
+
   /// No description provided for @editNote.
   ///
   /// In en, this message translates to:
