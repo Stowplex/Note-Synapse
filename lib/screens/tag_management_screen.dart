@@ -54,11 +54,8 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
         ));
       }
 
-      // Sort by usage count descending, then by name
+      // Sort alphabetically by tag name
       tagsWithUsage.sort((a, b) {
-        if (a.usageCount != b.usageCount) {
-          return b.usageCount.compareTo(a.usageCount);
-        }
         return a.tag.name.compareTo(b.tag.name);
       });
 

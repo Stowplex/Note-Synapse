@@ -1487,7 +1487,7 @@ class DatabaseService {
 
   Future<List<Tag>> getAllTags() async {
     final db = await database;
-    // Use GROUP BY to calculate usage count on the fly
+    // Use GROUP BY to calculate usage count on the fly, sorted alphabetically
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT 
         t.id,
@@ -1498,7 +1498,7 @@ class DatabaseService {
       FROM tags t
       LEFT JOIN note_tags nt ON t.id = nt.tagId
       GROUP BY t.id, t.name, t.color, t.createdAt
-      ORDER BY usageCount DESC, t.name ASC
+      ORDER BY t.name ASC
     ''');
 
     return List.generate(maps.length, (i) {
