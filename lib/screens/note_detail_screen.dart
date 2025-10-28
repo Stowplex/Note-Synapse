@@ -2589,6 +2589,7 @@ class _AddTagDialog extends StatefulWidget {
 class _AddTagDialogState extends State<_AddTagDialog> {
   final TextEditingController _newTagController = TextEditingController();
   Set<String> _selectedTags = {};
+  String _tagSearchQuery = '';
 
   @override
   void dispose() {
@@ -2600,9 +2601,13 @@ class _AddTagDialogState extends State<_AddTagDialog> {
   Widget build(BuildContext context) {
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
-        final allTags = appProvider.tags.map((tag) => tag.name).toList();
+        final allTags = appProvider.tags.map((tag) => tag.name).toList()..sort();
+        
+        // Filter available tags based on search query
         final availableTags = allTags.where((tag) => 
-          !_selectedTags.contains(tag) && !widget.currentNote.tags.contains(tag)
+          !_selectedTags.contains(tag) && 
+          !widget.currentNote.tags.contains(tag) &&
+          (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase()))
         ).toList();
         
         return AlertDialog(
@@ -2667,16 +2672,22 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                                 child: TextField(
                                   controller: _newTagController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Add new tag',
+                                    labelText: 'Add new tag or search',
                                     border: OutlineInputBorder(),
                                     prefixIcon: Icon(Icons.add),
                                     isDense: true,
                                   ),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _tagSearchQuery = value;
+                                    });
+                                  },
                                   onSubmitted: (value) {
                                     if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
                                       setState(() {
                                         _selectedTags.add(value.trim());
                                         _newTagController.clear();
+                                        _tagSearchQuery = '';
                                       });
                                     }
                                   },
@@ -2690,6 +2701,7 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                                     setState(() {
                                       _selectedTags.add(value);
                                       _newTagController.clear();
+                                      _tagSearchQuery = '';
                                     });
                                   }
                                 },
