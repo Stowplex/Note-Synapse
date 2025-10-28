@@ -621,6 +621,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unarchiveNote => 'Unarchive note';
 
   @override
+  String get convertToNote => 'Convert to Note';
+
+  @override
+  String get convertToTask => 'Convert to Task';
+
+  @override
   String get editNote => 'Edit Note';
 
   @override
@@ -2226,6 +2232,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get newConversation => 'New Conversation';
+
+  @override
+  String get aiConversation => 'AI Conversation';
+
+  @override
+  String get aiConversationDescription =>
+      'Start a conversation with AI about your notes';
+
+  @override
+  String get startConversation => 'Start Conversation';
 
   @override
   String get conversationTree => 'Conversation Tree';

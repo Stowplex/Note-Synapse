@@ -91,8 +91,8 @@ class _AIActionScreenState extends State<AIActionScreen> {
           const SizedBox(height: 12),
           _buildActionCard(
             icon: Icons.chat,
-            title: 'AI Conversation',
-            description: 'Start a conversation with AI about your notes',
+            title: l10n.aiConversation,
+            description: l10n.aiConversationDescription,
             action: AIInteractionType.aiConversation,
           ),
           const SizedBox(height: 24),
@@ -162,7 +162,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(_selectedAction == AIInteractionType.aiConversation ? 'Start Conversation' : l10n.process),
+                    : Text(_selectedAction == AIInteractionType.aiConversation ? l10n.startConversation : l10n.process),
               ),
             ),
           ],

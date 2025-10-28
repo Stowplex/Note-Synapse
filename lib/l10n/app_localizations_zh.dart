@@ -614,6 +614,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unarchiveNote => '取消归档';
 
   @override
+  String get convertToNote => '转换为笔记';
+
+  @override
+  String get convertToTask => '转换为任务';
+
+  @override
   String get editNote => '编辑笔记';
 
   @override
@@ -2175,6 +2181,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get newConversation => '新对话';
+
+  @override
+  String get aiConversation => 'AI对话';
+
+  @override
+  String get aiConversationDescription => '与AI就您的笔记开始对话';
+
+  @override
+  String get startConversation => '开始对话';
 
   @override
   String get conversationTree => '对话树';

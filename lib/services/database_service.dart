@@ -290,7 +290,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -399,6 +399,10 @@ class DatabaseService {
     19: MigrationStep(
       description: 'Restructure conversation system with message mapping and parent relationships',
       execute: _migrateToVersion19,
+    ),
+    20: MigrationStep(
+      description: 'Fix conversation_messages table schema (remove conversationId if still present)',
+      execute: _migrateToVersion20,
     ),
   };
 
@@ -919,13 +923,111 @@ class DatabaseService {
         // Migrate existing data
         await _migrateExistingConversationData(db);
         
+        // Remove old conversationId column from conversation_messages
+        // SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
+        await db.execute('DROP INDEX IF EXISTS idx_conversation_messages_conversationId');
+        await db.execute('ALTER TABLE conversation_messages RENAME TO conversation_messages_old');
+        await db.execute(_createConversationMessagesTable);
+        await db.execute('''
+          INSERT INTO conversation_messages (id, type, content, timestamp, modelUsed, metadata)
+          SELECT id, type, content, timestamp, modelUsed, metadata FROM conversation_messages_old
+        ''');
+        await db.execute('DROP TABLE conversation_messages_old');
+        
+        // Recreate the timestamp index
+        await db.execute('CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)');
+        
+        // Remove old parentConversationId index if it exists
+        await db.execute('DROP INDEX IF EXISTS idx_conversations_parentConversationId');
+        
         // Clear old tree data to force rebuild
         await db.delete('conversation_tree');
         
         LoggerService.info('Migration to version 19 completed: Restructured conversation system');
   }
 
-  // Migrate existing conversation data to new structure
+  static Future<void> _migrateToVersion20(Database db, {required bool isBackupMigration}) async {
+    LoggerService.info('Starting migration to version 20: Ensuring conversation_messages schema is correct');
+    
+    try {
+      // Check if conversationId column exists by trying to query it
+      final testQuery = await db.rawQuery('PRAGMA table_info(conversation_messages)');
+      final hasConversationId = testQuery.any((col) => col['name'] == 'conversationId');
+      
+      if (hasConversationId) {
+        LoggerService.info('Found conversationId column in conversation_messages, removing it...');
+        
+        // Drop the index if it exists
+        await db.execute('DROP INDEX IF EXISTS idx_conversation_messages_conversationId');
+        
+        // Recreate the table without conversationId
+        await db.execute('ALTER TABLE conversation_messages RENAME TO conversation_messages_old');
+        await db.execute(_createConversationMessagesTable);
+        
+        // Copy data from old table to new table
+        await db.execute('''
+          INSERT INTO conversation_messages (id, type, content, timestamp, modelUsed, metadata)
+          SELECT id, type, content, timestamp, modelUsed, metadata FROM conversation_messages_old
+        ''');
+        
+        // Drop the old table
+        await db.execute('DROP TABLE conversation_messages_old');
+        
+        // Recreate the timestamp index
+        await db.execute('CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)');
+        
+        LoggerService.info('Successfully removed conversationId column from conversation_messages');
+      } else {
+        LoggerService.info('conversation_messages table already has correct schema (no conversationId column)');
+      }
+      
+      // Ensure all required tables and indexes exist
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS conversation_message_mapping(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversationId TEXT NOT NULL,
+            messageId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+            FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+            UNIQUE(conversationId, messageId)
+          )
+        ''');
+      } catch (e) {
+        LoggerService.debug('conversation_message_mapping table already exists');
+      }
+      
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS message_parents(
+            id TEXT PRIMARY KEY,
+            messageId TEXT NOT NULL,
+            parentMessageId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+            FOREIGN KEY (parentMessageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
+            UNIQUE(messageId, parentMessageId)
+          )
+        ''');
+      } catch (e) {
+        LoggerService.debug('message_parents table already exists');
+      }
+      
+      // Ensure indexes exist
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_conversation_message_mapping_conversationId ON conversation_message_mapping(conversationId)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_message_parents_messageId ON message_parents(messageId)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_message_parents_parentMessageId ON message_parents(parentMessageId)');
+      
+      LoggerService.info('Migration to version 20 completed successfully');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 20: $e', error: e);
+      rethrow;
+    }
+  }
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Migrate existing conversation data to new structure
   static Future<void> _migrateExistingConversationData(Database db) async {
         LoggerService.info('Migrating existing conversation data to new structure');
         
@@ -1322,7 +1424,7 @@ class DatabaseService {
       await insertSubNote(subNote, note.id);
     }
 
-    // Update tags
+    // Update tags: delete old links and create new ones
     await db.delete('note_tags', where: 'noteId = ?', whereArgs: [note.id]);
     for (final tagName in note.tags) {
       await _linkNoteToTag(note.id, tagName);
@@ -1339,6 +1441,7 @@ class DatabaseService {
 
   Future<void> deleteNote(String id) async {
     final db = await database;
+    // CASCADE will handle note_tags deletion automatically
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1384,10 +1487,19 @@ class DatabaseService {
 
   Future<List<Tag>> getAllTags() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'tags',
-      orderBy: 'usageCount DESC, name ASC',
-    );
+    // Use GROUP BY to calculate usage count on the fly, sorted alphabetically
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        t.id,
+        t.name,
+        t.color,
+        t.createdAt,
+        COALESCE(COUNT(nt.noteId), 0) as usageCount
+      FROM tags t
+      LEFT JOIN note_tags nt ON t.id = nt.tagId
+      GROUP BY t.id, t.name, t.color, t.createdAt
+      ORDER BY t.name ASC
+    ''');
 
     return List.generate(maps.length, (i) {
       return Tag(
@@ -1395,7 +1507,7 @@ class DatabaseService {
         name: maps[i]['name'],
         color: maps[i]['color'],
         createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        usageCount: maps[i]['usageCount'] ?? 0,
+        usageCount: maps[i]['usageCount'] as int,
       );
     });
   }
@@ -1762,18 +1874,21 @@ class DatabaseService {
       tagId = await insertTag(tag);
     } else {
       tagId = tagMaps.first['id'] as String;
-      // Increment usage count
-      await db.rawUpdate(
-        'UPDATE tags SET usageCount = usageCount + 1 WHERE id = ?',
-        [tagId],
-      );
     }
 
-    // Link note to tag
-    await db.insert('note_tags', {
-      'noteId': noteId,
-      'tagId': tagId,
-    });
+    // Link note to tag (only if not already linked)
+    final existingLink = await db.query(
+      'note_tags',
+      where: 'noteId = ? AND tagId = ?',
+      whereArgs: [noteId, tagId],
+    );
+    
+    if (existingLink.isEmpty) {
+      await db.insert('note_tags', {
+        'noteId': noteId,
+        'tagId': tagId,
+      });
+    }
   }
 
   Future<void> _insertAttachment(String noteId, String filePath, {bool isRelativePath = false}) async {
@@ -2539,8 +2654,9 @@ class DatabaseService {
     final json = message.toJson();
     json['timestamp'] = message.timestamp.millisecondsSinceEpoch;
     json['metadata'] = message.metadata != null ? jsonEncode(message.metadata) : null;
-    // Remove attachmentPaths as it's not in the database schema
+    // Remove attachmentPaths and conversationId as they're not in the database schema
     json.remove('attachmentPaths');
+    json.remove('conversationId');
     
     await db.insert('conversation_messages', json);
     return message.id;
@@ -2557,7 +2673,7 @@ class DatabaseService {
       ORDER BY cm.timestamp ASC
     ''', [conversationId]);
 
-    return maps.map((map) => _mapToConversationMessage(map)).toList();
+    return maps.map((map) => _mapToConversationMessage(map, conversationId)).toList();
   }
 
   Future<ConversationMessage?> getConversationMessage(String id) async {
@@ -2569,7 +2685,20 @@ class DatabaseService {
     );
 
     if (maps.isEmpty) return null;
-    return _mapToConversationMessage(maps.first);
+    
+    // Get the conversationId from the mapping table
+    final mappingResult = await db.query(
+      'conversation_message_mapping',
+      where: 'messageId = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    
+    final conversationId = mappingResult.isNotEmpty 
+        ? mappingResult.first['conversationId'] as String 
+        : '';
+    
+    return _mapToConversationMessage(maps.first, conversationId);
   }
 
   Future<void> updateConversationMessage(ConversationMessage message) async {
@@ -2577,8 +2706,9 @@ class DatabaseService {
     final json = message.toJson();
     json['timestamp'] = message.timestamp.millisecondsSinceEpoch;
     json['metadata'] = message.metadata != null ? jsonEncode(message.metadata) : null;
-    // Remove attachmentPaths as it's not in the database schema
+    // Remove attachmentPaths and conversationId as they're not in the database schema
     json.remove('attachmentPaths');
+    json.remove('conversationId');
     
     await db.update(
       'conversation_messages',
@@ -2855,10 +2985,10 @@ class DatabaseService {
     );
   }
 
-  ConversationMessage _mapToConversationMessage(Map<String, dynamic> map) {
+  ConversationMessage _mapToConversationMessage(Map<String, dynamic> map, String conversationId) {
     return ConversationMessage(
       id: map['id'] as String,
-      conversationId: map['conversationId'] as String,
+      conversationId: conversationId,
       type: MessageType.values.firstWhere(
         (e) => e.toString().split('.').last == map['type'],
         orElse: () => MessageType.user,

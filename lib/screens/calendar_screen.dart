@@ -242,7 +242,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+              AppDateUtils.formatDateNumeric(selectedDate, context),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),

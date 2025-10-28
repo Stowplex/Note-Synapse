@@ -20,6 +20,7 @@ import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import 'note_selection_dialog.dart';
 import '../services/logger_service.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -293,7 +294,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       children: [
                         Icon(Icons.note),
                         const SizedBox(width: 8),
-                        Text('Convert to Note'),
+                        Text(l10n.convertToNote),
                       ],
                     ),
                   ),
@@ -304,7 +305,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       children: [
                         Icon(Icons.task),
                         const SizedBox(width: 8),
-                        Text('Convert to Task'),
+                        Text(l10n.convertToTask),
                       ],
                     ),
                   ),
@@ -1760,22 +1761,71 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }).toList();
   }
 
-  void _addLinkedNote() {
-    showDialog(
+  void _addLinkedNote() async {
+    // Step 1: Show multi-note selection dialog
+    final selectedNotes = await showDialog<List<Note>>(
       context: context,
-      builder: (context) => _AddLinkedNoteDialog(
-        currentNote: widget.note,
-        onLink: (noteId, relationshipType) async {
-          Navigator.pop(context);
-          await context.read<AppProvider>().createNoteRelationships(
-            widget.note.id,
-            [noteId],
-            relationshipType,
-          );
-          await _loadRelationships();
-        },
+      builder: (context) => NoteSelectionDialog(
+        onNotesSelected: (notes) => Navigator.of(context).pop(notes),
       ),
     );
+
+    if (selectedNotes == null || selectedNotes.isEmpty) return;
+    
+    // Filter out the current note if it was somehow selected
+    final notesToLink = selectedNotes.where((note) => note.id != widget.note.id).toList();
+    if (notesToLink.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot link a note to itself')),
+        );
+      }
+      return;
+    }
+    
+    // Step 2: Show relationship type selection dialog
+    final relationshipType = await showDialog<String>(
+      context: context,
+      builder: (context) => _RelationshipTypeSelectionDialog(
+        noteCount: notesToLink.length,
+      ),
+    );
+    
+    if (relationshipType == null || relationshipType.isEmpty) return;
+    
+    // Step 3: Create relationships for all selected notes
+    try {
+      final noteIds = notesToLink.map((note) => note.id).toList();
+      await context.read<AppProvider>().createNoteRelationships(
+        widget.note.id,
+        noteIds,
+        relationshipType,
+      );
+      await _loadRelationships();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              notesToLink.length == 1
+                  ? 'Linked 1 note successfully'
+                  : 'Linked ${notesToLink.length} notes successfully',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error linking notes: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error linking notes: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _removeLinkedNote(String relationshipId) {
@@ -1826,14 +1876,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _showAddTagDialog(Note currentNote) {
+    // Get a reference to AppProvider before showing the dialog
+    final appProvider = context.read<AppProvider>();
+    
     showDialog(
       context: context,
       builder: (context) => _AddTagDialog(
         currentNote: currentNote,
         onAddTags: (tagNames) async {
           Navigator.pop(context);
+          // Use the saved reference instead of context.read
           for (final tagName in tagNames) {
-            await context.read<AppProvider>().addTagToNote(currentNote.id, tagName);
+            await appProvider.addTagToNote(currentNote.id, tagName);
           }
         },
       ),
@@ -2178,17 +2232,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 }
 
-class _AddLinkedNoteDialog extends StatefulWidget {
-  final Note currentNote;
-  final Function(String noteId, String relationshipType) onLink;
+class _RelationshipTypeSelectionDialog extends StatefulWidget {
+  final int noteCount;
 
-  const _AddLinkedNoteDialog({
-    required this.currentNote,
-    required this.onLink,
+  const _RelationshipTypeSelectionDialog({
+    required this.noteCount,
   });
 
   @override
-  State<_AddLinkedNoteDialog> createState() => _AddLinkedNoteDialogState();
+  State<_RelationshipTypeSelectionDialog> createState() => _RelationshipTypeSelectionDialogState();
 }
 
 class _ReparentSubNoteDialog extends StatefulWidget {
@@ -2420,17 +2472,10 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   }
 }
 
-class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
+class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelectionDialog> {
   String _selectedRelationshipType = RelationshipType.related;
-  Note? _selectedNote;
+  bool _isCustomMode = false;
   final TextEditingController _customTypeController = TextEditingController();
-  List<Note> _availableNotes = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableNotes();
-  }
 
   @override
   void dispose() {
@@ -2438,56 +2483,24 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
     super.dispose();
   }
 
-  Future<void> _loadAvailableNotes() async {
-    final appProvider = context.read<AppProvider>();
-    final allNotes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
-    setState(() {
-      _availableNotes = allNotes;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Link Note'),
+      title: Text('Select Relationship Type'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select a note to link to "${widget.currentNote.title}":',
+              'Select the type of relationship for ${widget.noteCount} note${widget.noteCount > 1 ? 's' : ''}:',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            if (_availableNotes.isEmpty)
-              const Text('No other notes available to link.')
-            else
-              DropdownButtonFormField<Note>(
-                value: _selectedNote,
-                decoration: const InputDecoration(
-                  labelText: 'Select Note',
-                  border: OutlineInputBorder(),
-                ),
-                items: _availableNotes.map((note) => DropdownMenuItem(
-                  value: note,
-                  child: Text(note.title),
-                )).toList(),
-                onChanged: (note) {
-                  setState(() {
-                    _selectedNote = note;
-                  });
-                },
-              ),
-            const SizedBox(height: 16),
-            Text(
-              'Relationship Type:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedRelationshipType,
+              value: _isCustomMode ? 'custom' : _selectedRelationshipType,
               decoration: const InputDecoration(
+                labelText: 'Relationship Type',
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
@@ -2515,23 +2528,25 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
               ],
               onChanged: (value) {
                 setState(() {
-                  _selectedRelationshipType = value!;
+                  if (value == 'custom') {
+                    _isCustomMode = true;
+                  } else {
+                    _isCustomMode = false;
+                    _selectedRelationshipType = value!;
+                  }
                 });
               },
             ),
-            if (_selectedRelationshipType == 'custom') ...[
+            if (_isCustomMode) ...[
               const SizedBox(height: 16),
               TextField(
                 controller: _customTypeController,
                 decoration: const InputDecoration(
                   labelText: 'Custom Relationship Type',
                   border: OutlineInputBorder(),
+                  hintText: 'Enter custom relationship type',
                 ),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedRelationshipType = value;
-                  });
-                },
+                autofocus: true,
               ),
             ],
           ],
@@ -2543,15 +2558,15 @@ class _AddLinkedNoteDialogState extends State<_AddLinkedNoteDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _selectedNote != null ? () {
-            final relationshipType = _selectedRelationshipType == 'custom' 
+          onPressed: () {
+            final relationshipType = _isCustomMode 
                 ? _customTypeController.text.trim()
                 : _selectedRelationshipType;
             if (relationshipType.isNotEmpty) {
-              widget.onLink(_selectedNote!.id, relationshipType);
+              Navigator.pop(context, relationshipType);
             }
-          } : null,
-          child: const Text('Link'),
+          },
+          child: Text('Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}'),
         ),
       ],
     );
@@ -2572,149 +2587,186 @@ class _AddTagDialog extends StatefulWidget {
 }
 
 class _AddTagDialogState extends State<_AddTagDialog> {
-  final TextEditingController _tagController = TextEditingController();
-  Set<String> _selectedExistingTags = {};
-  List<String> _availableTags = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableTags();
-  }
+  final TextEditingController _newTagController = TextEditingController();
+  Set<String> _selectedTags = {};
+  String _tagSearchQuery = '';
 
   @override
   void dispose() {
-    _tagController.dispose();
+    _newTagController.dispose();
     super.dispose();
-  }
-
-  void _loadAvailableTags() {
-    final appProvider = context.read<AppProvider>();
-    final allTags = appProvider.getAllAvailableTags();
-    // Filter out tags that are already on this note
-    final availableTags = allTags.where((tag) => !widget.currentNote.tags.contains(tag)).toList();
-    setState(() {
-      _availableTags = availableTags;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add Tags'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add tags to "${widget.currentNote.title}":',
-              style: Theme.of(context).textTheme.titleMedium,
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, child) {
+        final allTags = appProvider.tags.map((tag) => tag.name).toList()..sort();
+        
+        // Filter available tags based on search query
+        final availableTags = allTags.where((tag) => 
+          !_selectedTags.contains(tag) && 
+          !widget.currentNote.tags.contains(tag) &&
+          (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase()))
+        ).toList();
+        
+        return AlertDialog(
+          title: const Text('Add Tags'),
+          content: SizedBox(
+            width: 400,
+            height: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add tags to "${widget.currentNote.title}":',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Scrollable tags container with constrained height
+                  Container(
+                    height: 300, // Fixed height for scrollable area
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Selected tags
+                          if (_selectedTags.isNotEmpty) ...[
+                            Text(
+                              'Selected tags:',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: _selectedTags.map((tag) {
+                                return Chip(
+                                  label: Text(tag),
+                                  deleteIcon: const Icon(Icons.close, size: 18),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _selectedTags.remove(tag);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          
+                          // Add new tag
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _newTagController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Add new tag or search',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.add),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _tagSearchQuery = value;
+                                    });
+                                  },
+                                  onSubmitted: (value) {
+                                    if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
+                                      setState(() {
+                                        _selectedTags.add(value.trim());
+                                        _newTagController.clear();
+                                        _tagSearchQuery = '';
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () {
+                                  final value = _newTagController.text.trim();
+                                  if (value.isNotEmpty && !_selectedTags.contains(value)) {
+                                    setState(() {
+                                      _selectedTags.add(value);
+                                      _newTagController.clear();
+                                      _tagSearchQuery = '';
+                                    });
+                                  }
+                                },
+                                icon: const Icon(Icons.add),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // Available tags to select from
+                          if (availableTags.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Available tags:',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: availableTags.map((tag) {
+                                return ActionChip(
+                                  label: Text(tag),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedTags.add(tag);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _tagController,
-              decoration: const InputDecoration(
-                labelText: 'New Tag',
-                border: OutlineInputBorder(),
-                hintText: 'Enter tag name',
-              ),
-              onChanged: (value) {
-                setState(() {
-                  // Clear existing selections when typing
-                });
-              },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            if (_availableTags.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Select from existing tags:',
-                style: Theme.of(context).textTheme.titleSmall,
+            ElevatedButton(
+              onPressed: _selectedTags.isNotEmpty ? () {
+                widget.onAddTags(_selectedTags.toList());
+              } : null,
+              child: Text(
+                _selectedTags.isNotEmpty 
+                    ? 'Add ${_selectedTags.length} Tag${_selectedTags.length > 1 ? 's' : ''}' 
+                    : 'Add Tags',
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _availableTags.map((tag) => FilterChip(
-                  label: Text(tag),
-                  selected: _selectedExistingTags.contains(tag),
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedExistingTags.add(tag);
-                      } else {
-                        _selectedExistingTags.remove(tag);
-                      }
-                    });
-                  },
-                )).toList(),
-              ),
-            ],
-            if (_selectedExistingTags.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Selected tags:',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _selectedExistingTags.map((tag) => Chip(
-                  label: Text(tag),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () {
-                    setState(() {
-                      _selectedExistingTags.remove(tag);
-                    });
-                  },
-                )).toList(),
-              ),
-            ],
+            ),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _canAddTags() ? () {
-            final List<String> tagsToAdd = [];
-            
-            // Add new tag if entered
-            final newTag = _tagController.text.trim();
-            if (newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag)) {
-              tagsToAdd.add(newTag);
-            }
-            
-            // Add selected existing tags
-            tagsToAdd.addAll(_selectedExistingTags);
-            
-            if (tagsToAdd.isNotEmpty) {
-              widget.onAddTags(tagsToAdd);
-            }
-          } : null,
-          child: Text(_selectedExistingTags.length > 0 || _tagController.text.trim().isNotEmpty 
-              ? 'Add ${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0)} Tag${_selectedExistingTags.length + (_tagController.text.trim().isNotEmpty ? 1 : 0) > 1 ? 's' : ''}' 
-              : 'Add Tag'),
-        ),
-      ],
+        );
+      },
     );
-  }
-
-  bool _canAddTags() {
-    // Check if there are any selected existing tags
-    if (_selectedExistingTags.isNotEmpty) {
-      return true;
-    }
-    
-    // Check if there's a new tag entered that's not already on the note
-    final newTag = _tagController.text.trim();
-    return newTag.isNotEmpty && !widget.currentNote.tags.contains(newTag);
   }
 }
 

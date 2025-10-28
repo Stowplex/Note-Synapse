@@ -37,6 +37,7 @@ class _ShareScreenState extends State<ShareScreen> {
   String _searchQuery = '';
   String? _detectedUrl;
   String? _contentType;
+  String _tagSearchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
@@ -473,8 +474,13 @@ class _ShareScreenState extends State<ShareScreen> {
   Widget _buildTagSelection(AppLocalizations l10n) {
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
-        final allTags = appProvider.tags.map((tag) => tag.name).toList();
-        final availableTags = allTags.where((tag) => !_selectedTags.contains(tag)).toList();
+        final allTags = appProvider.tags.map((tag) => tag.name).toList()..sort();
+        
+        // Filter available tags based on search query
+        final availableTags = allTags.where((tag) => 
+          !_selectedTags.contains(tag) && 
+          (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase()))
+        ).toList();
         
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,16 +539,22 @@ class _ShareScreenState extends State<ShareScreen> {
                           child: TextField(
                             controller: _newTagController,
                             decoration: InputDecoration(
-                              labelText: l10n.addTag,
+                              labelText: '${l10n.addTag} or search',
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.add),
                               isDense: true,
                             ),
+                            onChanged: (value) {
+                              setState(() {
+                                _tagSearchQuery = value;
+                              });
+                            },
                             onSubmitted: (value) {
                               if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
                                 setState(() {
                                   _selectedTags.add(value.trim());
                                   _newTagController.clear();
+                                  _tagSearchQuery = '';
                                   _updatePreparedNoteTags();
                                 });
                               }
@@ -557,6 +569,7 @@ class _ShareScreenState extends State<ShareScreen> {
                               setState(() {
                                 _selectedTags.add(value);
                                 _newTagController.clear();
+                                _tagSearchQuery = '';
                                 _updatePreparedNoteTags();
                               });
                             }
@@ -1496,10 +1509,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   }
                 },
                 onLoadError: (controller, url, code, message) {
-                  final errorMsg = message ?? 'Unknown error';
                   widget.onComplete({
                     'success': false,
-                    'error': l10n.failedToLoadWebPage(errorMsg),
+                    'error': l10n.failedToLoadWebPage(message),
                   });
                 },
               ),

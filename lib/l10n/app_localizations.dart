@@ -1232,6 +1232,18 @@ abstract class AppLocalizations {
   /// **'Unarchive note'**
   String get unarchiveNote;
 
+  /// No description provided for @convertToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert to Note'**
+  String get convertToNote;
+
+  /// No description provided for @convertToTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert to Task'**
+  String get convertToTask;
+
   /// No description provided for @editNote.
   ///
   /// In en, this message translates to:
@@ -4045,6 +4057,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Conversation'**
   String get newConversation;
+
+  /// No description provided for @aiConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Conversation'**
+  String get aiConversation;
+
+  /// No description provided for @aiConversationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation with AI about your notes'**
+  String get aiConversationDescription;
+
+  /// No description provided for @startConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Conversation'**
+  String get startConversation;
 
   /// No description provided for @conversationTree.
   ///

@@ -192,11 +192,21 @@ Format the response in a clear, organized manner that would be useful for note-t
   }
 
   /// Build prompt for dedup rules suggestion
-  static String buildDedupRulesSuggestionPrompt(List<String> tagNames) {
+  static String buildDedupRulesSuggestionPrompt(List<String> tagNames, {List<String> protectedTags = const []}) {
+    final protectedTagsSection = protectedTags.isNotEmpty
+        ? '''
+        
+PROTECTED TAGS (filter tags - must NOT appear as leftTag in any rule):
+${protectedTags.join(', ')}
+
+CRITICAL: These protected tags are used by filters and MUST NOT be replaced. They can only appear as rightTag (the replacement target), never as leftTag (the tag being replaced).
+'''
+        : '';
+    
     return '''
 Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. 
 
-Tags: ${tagNames.join(', ')}
+Tags: ${tagNames.join(', ')}$protectedTagsSection
 
 Please suggest rules in the format "leftTag -> rightTag" where:
 - leftTag is the tag that should be replaced
@@ -210,6 +220,7 @@ Rules to follow:
 5. Focus on consolidating similar tags, typos, or variations
 6. Prefer shorter, more standard tag names
 7. Consider semantic similarity (e.g., "work" and "job" could be consolidated)
+${protectedTags.isNotEmpty ? '8. PROTECTED TAGS must NEVER appear as leftTag - they can only appear as rightTag' : ''}
 
 Please respond with a JSON array of objects in this format:
 [

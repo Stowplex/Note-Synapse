@@ -101,14 +101,47 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     final lines = _currentContent.split('\n');
     final widgets = <Widget>[];
     
-    // Track if we're inside a code block or table
+    // Track if we're inside a code block, LaTeX block, or table
     bool inCodeBlock = false;
+    bool inLatexBlock = false;
     bool inTable = false;
     final List<String> codeBlockLines = [];
+    final List<String> latexBlockLines = [];
     final List<String> tableLines = [];
     
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
+      
+      // Check for LaTeX display math blocks (\[ ... \])
+      if (line.trim() == '\\[') {
+        inLatexBlock = true;
+        latexBlockLines.clear();
+        latexBlockLines.add(line);
+        continue;
+      }
+      
+      if (inLatexBlock) {
+        latexBlockLines.add(line);
+        if (line.trim() == '\\]') {
+          // End of LaTeX block - render the accumulated LaTeX block
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: GptMarkdown(
+                latexBlockLines.join('\n'),
+                style: widget.style,
+                textDirection: widget.textDirection,
+                onLinkTap: widget.onLinkTap,
+                maxLines: widget.maxLines,
+                overflow: widget.overflow,
+              ),
+            ),
+          );
+          latexBlockLines.clear();
+          inLatexBlock = false;
+        }
+        continue;
+      }
       
       // Check for code block markers
       if (line.trim().startsWith('```')) {
@@ -175,6 +208,17 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       if (inTable) {
         // We're inside a table - accumulate lines
         tableLines.add(line);
+        continue;
+      }
+      
+      // Check for horizontal rules (---, ***, or ___)
+      if (_isHorizontalRule(line)) {
+        widgets.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+        );
         continue;
       }
       
@@ -252,6 +296,23 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       }
     }
     
+    // If we ended while still in a LaTeX block, render it
+    if (inLatexBlock && latexBlockLines.isNotEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: GptMarkdown(
+            latexBlockLines.join('\n'),
+            style: widget.style,
+            textDirection: widget.textDirection,
+            onLinkTap: widget.onLinkTap,
+            maxLines: widget.maxLines,
+            overflow: widget.overflow,
+          ),
+        ),
+      );
+    }
+    
     // If we ended while still in a code block, render it
     if (inCodeBlock && codeBlockLines.isNotEmpty) {
       widgets.add(
@@ -312,6 +373,35 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     }
     
     return false;
+  }
+
+  /// Determines if a line is a horizontal rule
+  /// Horizontal rules in markdown can be: ---, ***, or ___
+  /// Must contain at least 3 of the same character (all dashes, all asterisks, or all underscores)
+  bool _isHorizontalRule(String line) {
+    final trimmedLine = line.trim();
+    
+    // Empty lines are not horizontal rules
+    if (trimmedLine.isEmpty) return false;
+    
+    // Check if the line is at least 3 characters and only contains dashes, asterisks, or underscores
+    // And all characters are the same
+    if (trimmedLine.length < 3) return false;
+    
+    // Check if all characters are the same and are one of: -, *, or _
+    final firstChar = trimmedLine[0];
+    if (firstChar != '-' && firstChar != '*' && firstChar != '_') {
+      return false;
+    }
+    
+    // Ensure all characters match the first one
+    for (int i = 1; i < trimmedLine.length; i++) {
+      if (trimmedLine[i] != firstChar) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 }
 
