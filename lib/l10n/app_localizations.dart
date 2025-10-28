@@ -4052,6 +4052,18 @@ abstract class AppLocalizations {
   /// **'AI Conversation'**
   String get aiConversation;
 
+  /// No description provided for @aiConversationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation with AI about your notes'**
+  String get aiConversationDescription;
+
+  /// No description provided for @startConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Conversation'**
+  String get startConversation;
+
   /// No description provided for @conversationTree.
   ///
   /// In en, this message translates to:

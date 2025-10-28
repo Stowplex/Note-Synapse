@@ -2180,6 +2180,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConversation => 'AI对话';
 
   @override
+  String get aiConversationDescription => '与AI就您的笔记开始对话';
+
+  @override
+  String get startConversation => '开始对话';
+
+  @override
   String get conversationTree => '对话树';
 
   @override

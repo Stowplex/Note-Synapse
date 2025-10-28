@@ -2231,6 +2231,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConversation => 'AI Conversation';
 
   @override
+  String get aiConversationDescription =>
+      'Start a conversation with AI about your notes';
+
+  @override
+  String get startConversation => 'Start Conversation';
+
+  @override
   String get conversationTree => 'Conversation Tree';
 
   @override

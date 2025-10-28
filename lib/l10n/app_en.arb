@@ -683,6 +683,8 @@
   "conversation": "Conversation",
   "newConversation": "New Conversation",
   "aiConversation": "AI Conversation",
+  "aiConversationDescription": "Start a conversation with AI about your notes",
+  "startConversation": "Start Conversation",
   "conversationTree": "Conversation Tree",
   "conversations": "Conversations",
   "typeYourMessage": "Type your message...",
