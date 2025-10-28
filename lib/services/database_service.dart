@@ -39,6 +39,9 @@ class DatabaseService {
     initializeDatabaseFactory();
   }
 
+  // Current database version - exported for use by recovery/import operations
+  static const int DATABASE_VERSION = 20;
+
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
       CREATE TABLE notes(
@@ -290,7 +293,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'note_synapse.db');
     return await openDatabase(
       path,
-      version: 20,
+      version: DATABASE_VERSION,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
