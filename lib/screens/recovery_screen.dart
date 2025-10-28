@@ -477,7 +477,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       await backupDb.close();
       
       // Check if backup version is compatible
-      if (backupVersion > 17) { // Current version is 17
+      if (backupVersion > DatabaseService.DATABASE_VERSION) {
         throw Exception(l10n.backupVersionTooNew);
       }
       
@@ -487,7 +487,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 4: Upgrade the backup database to current version
       final migratedBackupDb = await openDatabase(
         backupDbPath,
-        version: 17,
+        version: DatabaseService.DATABASE_VERSION,
         onCreate: (db, version) async {
           // This shouldn't be called since we're opening an existing DB
         },
