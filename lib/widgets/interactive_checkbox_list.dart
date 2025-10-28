@@ -211,6 +211,17 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
         continue;
       }
       
+      // Check for horizontal rules (---, ***, or ___)
+      if (_isHorizontalRule(line)) {
+        widgets.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+        );
+        continue;
+      }
+      
       // Not in a code block - check for checkboxes
       final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
       
@@ -362,6 +373,35 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
     }
     
     return false;
+  }
+
+  /// Determines if a line is a horizontal rule
+  /// Horizontal rules in markdown can be: ---, ***, or ___
+  /// Must contain at least 3 of the same character (all dashes, all asterisks, or all underscores)
+  bool _isHorizontalRule(String line) {
+    final trimmedLine = line.trim();
+    
+    // Empty lines are not horizontal rules
+    if (trimmedLine.isEmpty) return false;
+    
+    // Check if the line is at least 3 characters and only contains dashes, asterisks, or underscores
+    // And all characters are the same
+    if (trimmedLine.length < 3) return false;
+    
+    // Check if all characters are the same and are one of: -, *, or _
+    final firstChar = trimmedLine[0];
+    if (firstChar != '-' && firstChar != '*' && firstChar != '_') {
+      return false;
+    }
+    
+    // Ensure all characters match the first one
+    for (int i = 1; i < trimmedLine.length; i++) {
+      if (trimmedLine[i] != firstChar) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 }
 
