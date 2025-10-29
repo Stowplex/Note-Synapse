@@ -503,10 +503,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       final node = _tree!.nodes[nodeId];
       if (node != null && node.conversationId.isNotEmpty) {
         // Get notes from this conversation
-        final conversation = await _databaseService.getConversation(node.conversationId);
-        if (conversation != null) {
-          allNoteIds.addAll(conversation.noteIds);
-        }
+        final noteIds = await _databaseService.getConversationNoteIds(node.conversationId);
+        allNoteIds.addAll(noteIds);
       }
     }
 

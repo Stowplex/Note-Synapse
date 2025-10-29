@@ -22,6 +22,10 @@ import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'note_selection_dialog.dart';
 import '../services/logger_service.dart';
+import '../services/database_service.dart';
+import '../services/conversation_service.dart';
+import '../models/conversation.dart';
+import 'conversation_chat_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -46,6 +50,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String? _dateValidationError;
   List<Relationship> _relationships = [];
   List<Note> _linkedNotes = [];
+  final DatabaseService _databaseService = DatabaseService();
   
   // Audio recording state
   AudioRecordingService? _audioService;
@@ -86,7 +91,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     // Load relationships
     _loadRelationships();
     
-    // Initialize audio service on all platforms (including Linux)
+      // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
   }
 
@@ -625,6 +630,44 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ),
           ],
+          // Conversation count section
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Text(
+                'Conversations',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              FutureBuilder<int>(
+                future: context.read<AppProvider>().getNoteConversationCount(currentNote.id),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    final count = snapshot.data!;
+                    if (count > 0) {
+                      return TextButton.icon(
+                        onPressed: _showConversationsDialog,
+                        icon: const Icon(Icons.chat, size: 16),
+                        label: Text('$count conversation${count == 1 ? '' : 's'}'),
+                      );
+                    } else {
+                      return Text(
+                        'No conversations',
+                        style: TextStyle(color: Colors.grey[600]),
+                      );
+                    }
+                  } else {
+                    return Text(
+                      'Loading...',
+                      style: TextStyle(color: Colors.grey[600]),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
           const SizedBox(height: 24),
           SelectableText(
             '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
@@ -1140,7 +1183,64 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
 
-  void _deleteNote() {
+  void _deleteNote() async {
+    // Check if there are associated conversations
+    final appProvider = context.read<AppProvider>();
+    final conversationCount = await appProvider.getNoteConversationCount(widget.note.id);
+    
+    if (conversationCount > 0) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete Note'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This note is associated with active conversations.'),
+              const SizedBox(height: 8),
+              Text(
+                'Deleting this note will remove it from $conversationCount conversation${conversationCount == 1 ? '' : 's'}.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Are you sure you want to delete this note?'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showConversationsDialog();
+              },
+              child: const Text('View Conversations'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _confirmDeleteNote();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete Anyway'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _confirmDeleteNote();
+    }
+  }
+
+  void _confirmDeleteNote() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1893,6 +1993,53 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
   }
+
+  void _showConversationsDialog() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      final conversationIds = await appProvider.getNoteConversationIds(widget.note.id);
+      
+      if (conversationIds.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No conversations found for this note')),
+        );
+        return;
+      }
+
+      // Get conversation details with messages
+      final conversations = <Conversation>[];
+      for (final conversationId in conversationIds) {
+        final conversation = await _databaseService.getConversation(conversationId);
+        if (conversation != null) {
+          conversations.add(conversation);
+        }
+      }
+
+      // Sort by updated date (most recent first) - conversations list is guaranteed to have non-null items
+      conversations.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => _NoteConversationsDialog(
+            conversations: conversations,
+            appProvider: appProvider,
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error loading conversations: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading conversations: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
 
   // Audio recording methods
   Future<void> _startRecording() async {
@@ -2766,6 +2913,183 @@ class _AddTagDialogState extends State<_AddTagDialog> {
           ],
         );
       },
+    );
+  }
+}
+
+class _NoteConversationsDialog extends StatelessWidget {
+  final List<Conversation> conversations;
+  final AppProvider appProvider;
+  final ConversationService _conversationService = ConversationService();
+
+  _NoteConversationsDialog({
+    required this.conversations,
+    required this.appProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Dialog(
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.8,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Conversations with this note',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(
+                      Icons.close,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Conversations list
+            Expanded(
+              child: conversations.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No conversations found',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      itemCount: conversations.length,
+                      itemBuilder: (context, index) {
+                        final conversation = conversations[index];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        conversation.title, 
+                                        style: Theme.of(context).textTheme.titleMedium,
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.open_in_new),
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => ConversationChatScreen(conversationId: conversation.id),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete),
+                                          onPressed: () async {
+                                            await appProvider.deleteConversation(conversation.id);
+                                            Navigator.of(context).pop();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                FutureBuilder<ConversationWithMessages?>(
+                                  future: _conversationService.getConversationWithMessages(conversation.id),
+                                  builder: (context, snapshot) {
+                                    if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    final messages = snapshot.data!.messages;
+                                    return Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '${l10n.first}: ${messages.first.content}',
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(width: 1, height: 40, color: Colors.grey),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '${l10n.last}: ${messages.last.content}',
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

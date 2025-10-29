@@ -29,12 +29,18 @@ class ConversationService {
     final conversation = Conversation(
       id: _uuid.v4(),
       title: title,
-      noteIds: noteIds,
+      noteIds: const [], // Will be managed by mapping table
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
     await _databaseService.insertConversation(conversation);
+    
+    // Add note mappings if provided
+    if (noteIds.isNotEmpty) {
+      await addNotesToConversation(conversation.id, noteIds);
+    }
+    
     LoggerService.info('Created new conversation: ${conversation.id}');
     return conversation;
   }
@@ -62,8 +68,14 @@ class ConversationService {
     // Create new conversation
     final forkedConversation = await createConversation(
       title: newTitle,
-      noteIds: originalConversation.noteIds,
+      noteIds: const [], // Will be handled by addNotesToConversation
     );
+    
+    // Copy note mappings from original conversation
+    final originalNoteIds = await _databaseService.getConversationNoteIds(originalConversationId);
+    if (originalNoteIds.isNotEmpty) {
+      await addNotesToConversation(forkedConversation.id, originalNoteIds);
+    }
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
@@ -101,7 +113,8 @@ class ConversationService {
       if (conversation == null) continue;
 
       // Get notes for this conversation
-      final conversationNotes = await _databaseService.getNotesByIds(conversation.noteIds);
+      final noteIds = await _databaseService.getConversationNoteIds(conversationId);
+      final conversationNotes = await _databaseService.getNotesByIds(noteIds);
 
       // Get last message for context preview (to distinguish between conversations)
       final messages = await _databaseService.getConversationMessages(conversationId);
@@ -113,7 +126,7 @@ class ConversationService {
       final context = ConversationContext(
         conversationId: conversationId,
         title: conversation.title,
-        noteIds: conversation.noteIds,
+        noteIds: noteIds,
         notes: conversationNotes,
         initialContext: lastMessage?.content,
         createdAt: conversation.createdAt,
@@ -644,10 +657,8 @@ class ConversationService {
         conversationIds.add(node.conversationId);
         
         // Get notes from this conversation
-        final conversation = await _databaseService.getConversation(node.conversationId);
-        if (conversation != null) {
-          allNoteIds.addAll(conversation.noteIds);
-        }
+        final noteIds = await _databaseService.getConversationNoteIds(node.conversationId);
+        allNoteIds.addAll(noteIds);
       }
     }
 
@@ -708,11 +719,12 @@ class ConversationService {
 
   // Get notes for a conversation
   Future<List<Note>> getConversationNotes(String conversationId) async {
-    final conversation = await _databaseService.getConversation(conversationId);
-    if (conversation == null || conversation.noteIds.isEmpty) return [];
+    // Get note IDs from the mapping table
+    final noteIds = await _databaseService.getConversationNoteIds(conversationId);
+    if (noteIds.isEmpty) return [];
 
     // Efficiently fetch only the notes referenced by this conversation
-    return await _databaseService.getNotesByIds(conversation.noteIds);
+    return await _databaseService.getNotesByIds(noteIds);
   }
 
   // Get notes by a list of IDs
@@ -726,18 +738,23 @@ class ConversationService {
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation == null) return;
 
-    final updatedNoteIds = List<String>.from(conversation.noteIds);
     for (final noteId in noteIds) {
-      if (!updatedNoteIds.contains(noteId)) {
-        updatedNoteIds.add(noteId);
+      // Check if mapping already exists
+      final exists = await _databaseService.conversationNoteMappingExists(
+        conversationId: conversationId,
+        noteId: noteId,
+      );
+      
+      if (!exists) {
+        await _databaseService.insertConversationNoteMapping(
+          conversationId: conversationId,
+          noteId: noteId,
+        );
       }
     }
 
-    final updatedConversation = conversation.copyWith(
-      noteIds: updatedNoteIds,
-      updatedAt: DateTime.now(),
-    );
-
+    // Update conversation timestamp
+    final updatedConversation = conversation.copyWith(updatedAt: DateTime.now());
     await _databaseService.updateConversation(updatedConversation);
     LoggerService.info('Added notes to conversation: $conversationId');
   }
@@ -747,14 +764,15 @@ class ConversationService {
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation == null) return;
 
-    final updatedNoteIds = List<String>.from(conversation.noteIds);
-    updatedNoteIds.removeWhere((id) => noteIds.contains(id));
+    for (final noteId in noteIds) {
+      await _databaseService.deleteConversationNoteMapping(
+        conversationId: conversationId,
+        noteId: noteId,
+      );
+    }
 
-    final updatedConversation = conversation.copyWith(
-      noteIds: updatedNoteIds,
-      updatedAt: DateTime.now(),
-    );
-
+    // Update conversation timestamp
+    final updatedConversation = conversation.copyWith(updatedAt: DateTime.now());
     await _databaseService.updateConversation(updatedConversation);
     LoggerService.info('Removed notes from conversation: $conversationId');
   }

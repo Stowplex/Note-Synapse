@@ -40,7 +40,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 20;
+  static const int DATABASE_VERSION = 21;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -244,6 +244,18 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createConversationNoteMappingTable = '''
+      CREATE TABLE conversation_note_mapping(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversationId TEXT NOT NULL,
+        noteId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+        FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
+        UNIQUE(conversationId, noteId)
+      )
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -266,6 +278,8 @@ class DatabaseService {
     'CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)',
     'CREATE INDEX idx_message_parents_messageId ON message_parents(messageId)',
     'CREATE INDEX idx_message_parents_parentMessageId ON message_parents(parentMessageId)',
+    'CREATE INDEX idx_conversation_note_mapping_conversationId ON conversation_note_mapping(conversationId)',
+    'CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)',
   ];
 
   // For testing, allow creating new instances
@@ -311,6 +325,7 @@ class DatabaseService {
 
     await db.execute(_createConversationMessageMappingTable);
     await db.execute(_createMessageParentsTable);
+    await db.execute(_createConversationNoteMappingTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -328,6 +343,10 @@ class DatabaseService {
     20: MigrationStep(
       description: 'Fix conversation_messages table schema (remove conversationId if still present)',
       execute: _migrateToVersion20,
+    ),
+    21: MigrationStep(
+      description: 'Create conversation_note_mapping table and migrate existing noteIds data',
+      execute: _migrateToVersion21,
     ),
   };
 
@@ -593,6 +612,77 @@ class DatabaseService {
     }
   }
 
+  // Migration to version 21: Create conversation_note_mapping table and migrate data
+  static Future<void> _migrateToVersion21(Database db, {required bool isBackupMigration}) async {
+    LoggerService.info('Starting migration to version 21: Creating conversation_note_mapping table and migrating data');
+    
+    try {
+      // Create the conversation_note_mapping table
+      await db.execute('''
+        CREATE TABLE conversation_note_mapping(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conversationId TEXT NOT NULL,
+          noteId TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+          FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
+          UNIQUE(conversationId, noteId)
+        )
+      ''');
+      
+      // Create indexes
+      await db.execute('CREATE INDEX idx_conversation_note_mapping_conversationId ON conversation_note_mapping(conversationId)');
+      await db.execute('CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)');
+      
+      LoggerService.info('Created conversation_note_mapping table and indexes');
+      
+      // Migrate existing noteIds data to the new mapping table
+      final conversations = await db.query('conversations');
+      int migratedCount = 0;
+      
+      for (final conversation in conversations) {
+        final conversationId = conversation['id'] as String;
+        final noteIdsJson = conversation['noteIds'] as String?;
+        
+        if (noteIdsJson != null && noteIdsJson.isNotEmpty) {
+          try {
+            final noteIds = List<String>.from(jsonDecode(noteIdsJson));
+            final now = DateTime.now().millisecondsSinceEpoch;
+            
+            for (final noteId in noteIds) {
+              // Check if the note still exists before creating the mapping
+              final noteExists = await db.query(
+                'notes',
+                where: 'id = ?',
+                whereArgs: [noteId],
+                limit: 1,
+              );
+              
+              if (noteExists.isNotEmpty) {
+                await db.insert('conversation_note_mapping', {
+                  'conversationId': conversationId,
+                  'noteId': noteId,
+                  'createdAt': now,
+                }, conflictAlgorithm: ConflictAlgorithm.ignore);
+                migratedCount++;
+              } else {
+                LoggerService.warning('Skipping migration for non-existent note: $noteId in conversation: $conversationId');
+              }
+            }
+          } catch (e) {
+            LoggerService.error('Error parsing noteIds for conversation $conversationId: $e');
+          }
+        }
+      }
+      
+      LoggerService.info('Migrated $migratedCount note-conversation mappings');
+      LoggerService.info('Migration to version 21 completed successfully');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 21: $e', error: e);
+      rethrow;
+    }
+  }
+
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     // Migrate existing conversation data to new structure
 
 
@@ -600,21 +690,21 @@ class DatabaseService {
 
   // Validate that all note IDs in a conversation exist
   Future<List<String>> validateConversationNotes(String conversationId) async {
-    final conversation = await getConversation(conversationId);
-    if (conversation == null || conversation.noteIds.isEmpty) return [];
+    final noteIds = await getConversationNoteIds(conversationId);
+    if (noteIds.isEmpty) return [];
     
     final db = await database;
     // Efficiently check which IDs exist using a simple COUNT query
-    final placeholders = List.filled(conversation.noteIds.length, '?').join(',');
+    final placeholders = List.filled(noteIds.length, '?').join(',');
     final result = await db.rawQuery(
       'SELECT id FROM notes WHERE id IN ($placeholders)',
-      conversation.noteIds,
+      noteIds,
     );
     
     final existingNoteIds = result.map((row) => row['id'] as String).toSet();
     
     // Find missing note IDs
-    final missingNoteIds = conversation.noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
+    final missingNoteIds = noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
     
     if (missingNoteIds.isNotEmpty) {
       LoggerService.warning('Conversation $conversationId references missing notes: $missingNoteIds');
@@ -695,14 +785,20 @@ class DatabaseService {
     final conversations = await getAllConversations();
     
     for (final conversation in conversations) {
-      final validNoteIds = conversation.noteIds.where((noteId) => existingNoteIds.contains(noteId)).toList();
+      final currentNoteIds = await getConversationNoteIds(conversation.id);
+      final validNoteIds = currentNoteIds.where((noteId) => existingNoteIds.contains(noteId)).toList();
       
-      if (validNoteIds.length != conversation.noteIds.length) {
+      if (validNoteIds.length != currentNoteIds.length) {
         LoggerService.info('Cleaning up invalid note references for conversation ${conversation.id}');
         
-        // Update conversation with only valid note IDs
-        final updatedConversation = conversation.copyWith(noteIds: validNoteIds);
-        await updateConversation(updatedConversation);
+        // Remove invalid mappings
+        final invalidNoteIds = currentNoteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
+        for (final invalidNoteId in invalidNoteIds) {
+          await deleteConversationNoteMapping(
+            conversationId: conversation.id,
+            noteId: invalidNoteId,
+          );
+        }
       }
     }
   }
@@ -866,6 +962,8 @@ class DatabaseService {
 
   Future<void> deleteNote(String id) async {
     final db = await database;
+    // Delete note-conversation mappings first (foreign key constraints will handle cascade deletion)
+    await deleteNoteConversationMappings(id);
     // CASCADE will handle note_tags deletion automatically
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
@@ -2024,7 +2122,7 @@ class DatabaseService {
     json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
     json['isArchived'] = conversation.isArchived ? 1 : 0;
-    json['noteIds'] = jsonEncode(conversation.noteIds);
+    json['noteIds'] = '[]'; // Always empty, managed by mapping table
     
     await db.insert('conversations', json);
     return conversation.id;
@@ -2069,7 +2167,7 @@ class DatabaseService {
     json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
     json['isArchived'] = conversation.isArchived ? 1 : 0;
-    json['noteIds'] = jsonEncode(conversation.noteIds);
+    json['noteIds'] = '[]'; // Always empty, managed by mapping table
     
     await db.update(
       'conversations',
@@ -2081,6 +2179,8 @@ class DatabaseService {
 
   Future<void> deleteConversation(String id) async {
     final db = await database;
+    // Delete note mappings first (foreign key constraints will handle cascade deletion)
+    await deleteConversationNoteMappings(id);
     await db.delete('conversations', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -2274,6 +2374,9 @@ class DatabaseService {
     
     LoggerService.info('Explicitly deleting conversation: $conversationId');
     
+    // Delete conversation-note mappings first
+    await deleteConversationNoteMappings(conversationId);
+    
     // Get all messages in this conversation
     final messageMappings = await db.query(
       'conversation_message_mapping',
@@ -2340,9 +2443,7 @@ class DatabaseService {
     return Conversation(
       id: map['id'] as String,
       title: map['title'] as String,
-      noteIds: map['noteIds'] != null 
-          ? List<String>.from(jsonDecode(map['noteIds'] as String))
-          : [],
+      noteIds: const [], // Always empty, managed by mapping table
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
       isArchived: (map['isArchived'] ?? 0) == 1,
@@ -2465,6 +2566,104 @@ class DatabaseService {
       whereArgs: [messageId],
     );
     return results.map((r) => r['conversationId'] as String).toList();
+  }
+
+  // Conversation-Note Mapping CRUD methods
+  Future<String> insertConversationNoteMapping({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    final result = await db.insert('conversation_note_mapping', {
+      'conversationId': conversationId,
+      'noteId': noteId,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return result.toString();
+  }
+
+  Future<List<String>> getConversationNoteIds(String conversationId) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+      orderBy: 'createdAt ASC',
+    );
+    return results.map((r) => r['noteId'] as String).toList();
+  }
+
+  Future<List<String>> getNoteConversationIds(String noteId) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+      orderBy: 'createdAt ASC',
+    );
+    return results.map((r) => r['conversationId'] as String).toList();
+  }
+
+  Future<void> deleteConversationNoteMapping({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'conversationId = ? AND noteId = ?',
+      whereArgs: [conversationId, noteId],
+    );
+  }
+
+  Future<void> deleteConversationNoteMappings(String conversationId) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+    );
+  }
+
+  Future<void> deleteNoteConversationMappings(String noteId) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  Future<bool> conversationNoteMappingExists({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'conversationId = ? AND noteId = ?',
+      whereArgs: [conversationId, noteId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  Future<int> getNoteConversationCount(String noteId) async {
+    final db = await database;
+    final results = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM conversation_note_mapping WHERE noteId = ?',
+      [noteId],
+    );
+    return results.first['count'] as int;
+  }
+
+  Future<int> getConversationNoteCount(String conversationId) async {
+    final db = await database;
+    final results = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM conversation_note_mapping WHERE conversationId = ?',
+      [conversationId],
+    );
+    return results.first['count'] as int;
   }
 
 }
