@@ -83,7 +83,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search notes...',
+                  hintText: l10n.searchNotes,
                   prefixIcon: const Icon(Icons.search),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -111,7 +111,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '${_selectedNotes.length} note(s) selected',
+                      l10n.notesSelected(_selectedNotes.length),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -147,8 +147,8 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                           const SizedBox(height: 16),
                           Text(
                             _searchQuery.isEmpty 
-                                ? 'No notes available'
-                                : 'No notes found matching "$_searchQuery"',
+                                ? l10n.noNotesAvailable
+                                : l10n.noNotesFoundMatching(_searchQuery),
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               color: Colors.grey[600],
                             ),
@@ -217,11 +217,11 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text(l10n.cancel),
                   ),
                   ElevatedButton(
                     onPressed: _selectedNotes.isNotEmpty ? _proceedWithSelectedNotes : null,
-                    child: Text('Proceed with ${_selectedNotes.length} note(s)'),
+                    child: Text(l10n.proceedWithNotes(_selectedNotes.length)),
                   ),
                 ],
               ),

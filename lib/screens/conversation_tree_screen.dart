@@ -13,7 +13,9 @@ import '../widgets/add_note_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
-  const ConversationTreeScreen({Key? key}) : super(key: key);
+  final String? activeConversationId;
+  
+  const ConversationTreeScreen({Key? key, this.activeConversationId}) : super(key: key);
 
   @override
   State<ConversationTreeScreen> createState() => _ConversTreeScreenState();
@@ -33,10 +35,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   bool _isMultiSelectMode = false;
   bool _hasRefreshedOnce = false;
   Duration _selectedTimeRange = const Duration(days: 3);
+  String? _highlightedConversationId; // Conversation ID to highlight
 
   @override
   void initState() {
     super.initState();
+    // Set highlighted conversation from widget parameter
+    _highlightedConversationId = widget.activeConversationId;
     _loadTree();
   }
 
@@ -48,7 +53,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _hasRefreshedOnce = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _refreshTree();
+          // Don't clear highlight on automatic refresh when first entering the screen
+          _refreshTree(clearHighlight: false);
         }
       });
     }
@@ -100,8 +106,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
-  Future<void> _refreshTree() async {
-    setState(() => _isLoading = true);
+  Future<void> _refreshTree({bool clearHighlight = true}) async {
+    setState(() {
+      _isLoading = true;
+      // Clear highlighted conversation only when manually refreshed
+      if (clearHighlight) {
+        _highlightedConversationId = null;
+      }
+    });
     
     try {
       _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
@@ -301,18 +313,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           LoggerService.warning('Could not show success SnackBar: $contextError');
         }
         
-        // Navigate to the new conversation
-        await Navigator.of(currentContext).push(
+        // Navigate to the new conversation, replacing the tree view
+        await Navigator.of(currentContext).pushReplacement(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(conversationId: newConversation.id),
           ),
         );
-        
-        // Refresh tree when returning from conversation
-        if (mounted) {
-          LoggerService.info('Refreshing tree after fork');
-          await _refreshTree();
-        }
         }
       }
     } catch (e) {
@@ -352,8 +358,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         _isMultiSelectMode = false;
         });
 
-      // Navigate directly to the new conversation
-        Navigator.of(currentContext).push(
+      // Navigate directly to the new conversation, replacing the tree view
+        Navigator.of(currentContext).pushReplacement(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(
               conversationId: newConversation.id,
@@ -738,6 +744,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     // All non-root nodes are interaction nodes (they represent User-AI message pairs)
     final isInteraction = node.id != 'root';
     final isRoot = node.id == 'root';
+    // Check if this node belongs to the highlighted conversation
+    final isHighlighted = _highlightedConversationId != null && 
+                          node.conversationId == _highlightedConversationId;
 
     return GestureDetector(
       onTap: () {
@@ -765,16 +774,20 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         decoration: BoxDecoration(
           color: isSelected 
               ? Theme.of(context).colorScheme.primaryContainer
-              : isRoot
-                  ? Theme.of(context).colorScheme.surfaceVariant
-                  : Theme.of(context).colorScheme.surface,
+              : isHighlighted
+                  ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2)
+                  : isRoot
+                      ? Theme.of(context).colorScheme.surfaceVariant
+                      : Theme.of(context).colorScheme.surface,
           border: Border.all(
             color: isSelected 
                 ? Theme.of(context).colorScheme.primary
-                : isRoot
-                    ? Theme.of(context).colorScheme.outline
-                    : Theme.of(context).colorScheme.outline.withOpacity(0.3),
-            width: isSelected ? 2 : 1,
+                : isHighlighted
+                    ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                    : isRoot
+                        ? Theme.of(context).colorScheme.outline
+                        : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            width: isSelected ? 2 : (isHighlighted ? 1.5 : 1),
           ),
           borderRadius: BorderRadius.circular(12),
           boxShadow: isSelected ? [
@@ -782,6 +795,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
+            ),
+          ] : isHighlighted ? [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
             ),
           ] : null,
         ),
@@ -963,16 +982,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await Navigator.of(context).push(
+                      await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (context) => ConversationChatScreen(
                             conversationId: conversation.id,
                           ),
                         ),
                       );
-                      if (mounted) {
-                        await _refreshTree();
-                      }
                     },
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(l10n.open, style: const TextStyle(fontSize: 12)),
@@ -1138,16 +1154,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.of(futureContext).push(
+                        await Navigator.of(futureContext).pushReplacement(
                           MaterialPageRoute(
                             builder: (context) => ConversationChatScreen(
                               conversationId: message.conversationId,
                             ),
                           ),
                         );
-                        if (mounted) {
-                          await _refreshTree();
-                        }
                       },
                       icon: const Icon(Icons.chat, size: 14),
                       label: Text(futureL10n.open, style: const TextStyle(fontSize: 12)),

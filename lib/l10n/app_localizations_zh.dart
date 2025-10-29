@@ -2269,6 +2269,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectNotesToAddToContext => '选择要添加到上下文的笔记';
 
   @override
+  String proceedWithNotes(int count) {
+    return '继续 $count 个笔记';
+  }
+
+  @override
+  String notesSelected(int count) {
+    return '已选择 $count 个笔记';
+  }
+
+  @override
+  String noNotesFoundMatching(String query) {
+    return '未找到匹配 \"$query\" 的笔记';
+  }
+
+  @override
   String get notesAndContext => '笔记和上下文';
 
   @override

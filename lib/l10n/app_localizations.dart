@@ -4214,6 +4214,24 @@ abstract class AppLocalizations {
   /// **'Select Notes to add to context'**
   String get selectNotesToAddToContext;
 
+  /// No description provided for @proceedWithNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Proceed with {count} {count, plural, =1{note} other{notes}}'**
+  String proceedWithNotes(int count);
+
+  /// No description provided for @notesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{note} other{notes}} selected'**
+  String notesSelected(int count);
+
+  /// No description provided for @noNotesFoundMatching.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes found matching \"{query}\"'**
+  String noNotesFoundMatching(String query);
+
   /// No description provided for @notesAndContext.
   ///
   /// In en, this message translates to:

@@ -718,6 +718,30 @@
   "selectNotesForConversation": "选择对话笔记",
   "selectNotesForNoteActionApp": "选择笔记操作应用的笔记",
   "selectNotesToAddToContext": "选择要添加到上下文的笔记",
+  "proceedWithNotes": "继续 {count} 个笔记",
+  "@proceedWithNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notesSelected": "已选择 {count} 个笔记",
+  "@notesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noNotesFoundMatching": "未找到匹配 \"{query}\" 的笔记",
+  "@noNotesFoundMatching": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "addNotes": "添加笔记",
   "addNotesToConversation": "添加笔记",
   "clearAllNotes": "清除全部",

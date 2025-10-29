@@ -1066,10 +1066,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           IconButton(
             icon: const Icon(Icons.account_tree),
             onPressed: () {
-              // Navigate to tree view
-              Navigator.of(context).push(
+              // Navigate to tree view, replacing the chat view, passing current conversation ID for highlighting
+              Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
-                  builder: (context) => const ConversationTreeScreen(),
+                  builder: (context) => ConversationTreeScreen(
+                    activeConversationId: _conversation?.id,
+                  ),
                 ),
               );
             },

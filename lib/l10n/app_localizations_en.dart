@@ -2327,6 +2327,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectNotesToAddToContext => 'Select Notes to add to context';
 
   @override
+  String proceedWithNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Proceed with $count $_temp0';
+  }
+
+  @override
+  String notesSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String noNotesFoundMatching(String query) {
+    return 'No notes found matching \"$query\"';
+  }
+
+  @override
   String get notesAndContext => 'Notes and Context';
 
   @override

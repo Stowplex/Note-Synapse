@@ -718,6 +718,30 @@
   "selectNotesForConversation": "Select notes for conversation",
   "selectNotesForNoteActionApp": "Select Notes for Note Action App",
   "selectNotesToAddToContext": "Select Notes to add to context",
+  "proceedWithNotes": "Proceed with {count} {count, plural, =1{note} other{notes}}",
+  "@proceedWithNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notesSelected": "{count} {count, plural, =1{note} other{notes}} selected",
+  "@notesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noNotesFoundMatching": "No notes found matching \"{query}\"",
+  "@noNotesFoundMatching": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "notesAndContext": "Notes and Context",
   "addNotes": "Add Notes",
   "addNotesToConversation": "Add Notes",
