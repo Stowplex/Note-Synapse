@@ -2917,15 +2917,28 @@ class _AddTagDialogState extends State<_AddTagDialog> {
   }
 }
 
-class _NoteConversationsDialog extends StatelessWidget {
+class _NoteConversationsDialog extends StatefulWidget {
   final List<Conversation> conversations;
   final AppProvider appProvider;
-  final ConversationService _conversationService = ConversationService();
 
-  _NoteConversationsDialog({
+  const _NoteConversationsDialog({
     required this.conversations,
     required this.appProvider,
   });
+
+  @override
+  State<_NoteConversationsDialog> createState() => _NoteConversationsDialogState();
+}
+
+class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
+  late List<Conversation> _conversations;
+  final ConversationService _conversationService = ConversationService();
+
+  @override
+  void initState() {
+    super.initState();
+    _conversations = List.from(widget.conversations);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2975,7 +2988,7 @@ class _NoteConversationsDialog extends StatelessWidget {
             
             // Conversations list
             Expanded(
-              child: conversations.isEmpty
+              child: _conversations.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -2997,9 +3010,9 @@ class _NoteConversationsDialog extends StatelessWidget {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      itemCount: conversations.length,
+                      itemCount: _conversations.length,
                       itemBuilder: (context, index) {
-                        final conversation = conversations[index];
+                        final conversation = _conversations[index];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
                           shape: RoundedRectangleBorder(
@@ -3038,10 +3051,7 @@ class _NoteConversationsDialog extends StatelessWidget {
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete),
-                                          onPressed: () async {
-                                            await appProvider.deleteConversation(conversation.id);
-                                            Navigator.of(context).pop();
-                                          },
+                                          onPressed: () => _showDeleteConfirmation(context, conversation, l10n),
                                         ),
                                       ],
                                     ),
@@ -3091,6 +3101,91 @@ class _NoteConversationsDialog extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, Conversation conversation, AppLocalizations l10n) {
+    // Capture AppProvider and ScaffoldMessenger before showing dialog
+    final appProvider = widget.appProvider;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.deleteConversation),
+        content: Text(l10n.confirmDeleteConversation),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _deleteConversation(
+                conversation.id, 
+                l10n, 
+                appProvider, 
+                scaffoldMessenger,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteConversation(
+    String conversationId, 
+    AppLocalizations l10n,
+    AppProvider appProvider,
+    ScaffoldMessengerState scaffoldMessenger,
+  ) async {
+    try {
+      // Perform deletion - this doesn't depend on context
+      await appProvider.deleteConversation(conversationId);
+      
+      // Check if widget is still mounted before updating UI
+      if (!mounted) return;
+      
+      // Remove conversation from local list
+      setState(() {
+        _conversations.removeWhere((c) => c.id == conversationId);
+      });
+      
+      // Show success message
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.conversationDeletedSuccessfully),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      // If no conversations left, close the dialog after a short delay
+      if (_conversations.isEmpty && mounted) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+    } catch (e) {
+      LoggerService.error('Error deleting conversation: $e', error: e);
+      
+      // Check if widget is still mounted before showing error
+      if (!mounted) return;
+      
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorDeletingConversation(e.toString())),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 }
 
