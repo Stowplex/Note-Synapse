@@ -103,13 +103,11 @@ class ConversationService {
       // Get notes for this conversation
       final conversationNotes = await _databaseService.getNotesByIds(conversation.noteIds);
 
-      // Get initial context (first user message)
+      // Get last message for context preview (to distinguish between conversations)
       final messages = await _databaseService.getConversationMessages(conversationId);
-      ConversationMessage? firstUserMessage;
-      try {
-        firstUserMessage = messages.firstWhere((msg) => msg.type == MessageType.user);
-      } catch (e) {
-        firstUserMessage = messages.isNotEmpty ? messages.first : null;
+      ConversationMessage? lastMessage;
+      if (messages.isNotEmpty) {
+        lastMessage = messages.last;
       }
       
       final context = ConversationContext(
@@ -117,7 +115,7 @@ class ConversationService {
         title: conversation.title,
         noteIds: conversation.noteIds,
         notes: conversationNotes,
-        initialContext: firstUserMessage?.content,
+        initialContext: lastMessage?.content,
         createdAt: conversation.createdAt,
         messageCount: messages.length,
       );
