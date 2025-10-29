@@ -2321,13 +2321,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectNotesForConversation => 'Select notes for conversation';
 
   @override
+  String get selectNotesForNoteActionApp => 'Select Notes for Note Action App';
+
+  @override
+  String get selectNotesToAddToContext => 'Select Notes to add to context';
+
+  @override
+  String get notesAndContext => 'Notes and Context';
+
+  @override
+  String get addNotes => 'Add Notes';
+
+  @override
   String get addNotesToConversation => 'Add Notes';
 
   @override
   String get clearAllNotes => 'Clear All';
-
-  @override
-  String get notesAndContext => 'Notes and Context';
 
   @override
   String get missingNotes => 'Missing Notes';
@@ -2486,9 +2495,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String additionalContextNotes(Object count) {
     return 'Additional Context Notes ($count)';
   }
-
-  @override
-  String get addNotes => 'Add Notes';
 
   @override
   String get noAdditionalNotesSelected =>

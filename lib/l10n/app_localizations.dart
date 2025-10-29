@@ -4202,6 +4202,30 @@ abstract class AppLocalizations {
   /// **'Select notes for conversation'**
   String get selectNotesForConversation;
 
+  /// No description provided for @selectNotesForNoteActionApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Notes for Note Action App'**
+  String get selectNotesForNoteActionApp;
+
+  /// No description provided for @selectNotesToAddToContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Notes to add to context'**
+  String get selectNotesToAddToContext;
+
+  /// No description provided for @notesAndContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes and Context'**
+  String get notesAndContext;
+
+  /// No description provided for @addNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Notes'**
+  String get addNotes;
+
   /// No description provided for @addNotesToConversation.
   ///
   /// In en, this message translates to:
@@ -4213,12 +4237,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAllNotes;
-
-  /// No description provided for @notesAndContext.
-  ///
-  /// In en, this message translates to:
-  /// **'Notes and Context'**
-  String get notesAndContext;
 
   /// No description provided for @missingNotes.
   ///
@@ -4489,12 +4507,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Additional Context Notes ({count})'**
   String additionalContextNotes(Object count);
-
-  /// No description provided for @addNotes.
-  ///
-  /// In en, this message translates to:
-  /// **'Add Notes'**
-  String get addNotes;
 
   /// No description provided for @noAdditionalNotesSelected.
   ///

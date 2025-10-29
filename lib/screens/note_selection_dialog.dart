@@ -3,13 +3,16 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_card.dart';
+import '../l10n/app_localizations.dart';
 
 class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
+  final String? title;
 
   const NoteSelectionDialog({
     super.key,
     required this.onNotesSelected,
+    this.title,
   });
 
   @override
@@ -29,6 +32,9 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final dialogTitle = widget.title ?? l10n.selectNotesForNoteActionApp;
+    
     return Dialog(
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -54,7 +60,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Select Notes for Note Action App',
+                      dialogTitle,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onPrimary,
                       ),

@@ -2263,13 +2263,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectNotesForConversation => '选择对话笔记';
 
   @override
+  String get selectNotesForNoteActionApp => '选择笔记操作应用的笔记';
+
+  @override
+  String get selectNotesToAddToContext => '选择要添加到上下文的笔记';
+
+  @override
+  String get notesAndContext => '笔记和上下文';
+
+  @override
+  String get addNotes => '添加笔记';
+
+  @override
   String get addNotesToConversation => '添加笔记';
 
   @override
   String get clearAllNotes => '清除全部';
-
-  @override
-  String get notesAndContext => '笔记和上下文';
 
   @override
   String get missingNotes => '缺失的笔记';
@@ -2417,9 +2426,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String additionalContextNotes(Object count) {
     return '额外上下文笔记（$count）';
   }
-
-  @override
-  String get addNotes => '添加笔记';
 
   @override
   String get noAdditionalNotesSelected => '未选择额外笔记。AI将仅使用对话内容。';

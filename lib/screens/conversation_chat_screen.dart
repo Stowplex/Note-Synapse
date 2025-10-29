@@ -886,10 +886,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _showNoteSelection() async {
+    final l10n = AppLocalizations.of(context)!;
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
       builder: (context) => NoteSelectionDialog(
         onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+        title: l10n.selectNotesToAddToContext,
       ),
     );
 
@@ -905,90 +907,119 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _showNotesAndContext() async {
+    final l10n = AppLocalizations.of(context)!;
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Notes and Context'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Notes section
-              Text(
-                'Notes (${_notes.length})',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _notes.length,
-                  itemBuilder: (context, index) {
-                    final note = _notes[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.note, size: 20),
-                        title: Text(
-                          note.title,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        subtitle: Text(
-                          note.content.length > 100 
-                              ? '${note.content.substring(0, 100)}...'
-                              : note.content,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          onPressed: () => _removeNote(note),
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => NoteDetailScreen(note: note),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, dialogSetState) => AlertDialog(
+          title: Text(l10n.notesAndContext),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Notes section
+                Text(
+                  '${l10n.notes} (${_notes.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Action buttons
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _showNoteSelection();
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _notes.length,
+                    itemBuilder: (context, index) {
+                      final note = _notes[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(Icons.note, size: 20),
+                          title: Text(
+                            note.title,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          subtitle: Text(
+                            note.content.length > 100 
+                                ? '${note.content.substring(0, 100)}...'
+                                : note.content,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () async {
+                              // Optimistically update UI
+                              setState(() {
+                                _notes.removeWhere((n) => n.id == note.id);
+                              });
+                              dialogSetState(() {});
+                              try {
+                                await _conversationService.removeNotesFromConversation(
+                                  _conversation!.id,
+                                  [note.id],
+                                );
+                              } catch (_) {
+                                // If removal fails, refresh from service to reflect truth
+                                final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
+                                if (mounted) {
+                                  setState(() {
+                                    _notes = updatedNotes;
+                                  });
+                                  dialogSetState(() {});
+                                }
+                              }
+                            },
+                          ),
+                          onTap: () {
+                            Navigator.of(dialogContext).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => NoteDetailScreen(note: note),
+                              ),
+                            );
+                          },
+                        ),
+                      );
                     },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Notes'),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _clearAllNotes();
-                    },
-                    icon: const Icon(Icons.clear_all, size: 16),
-                    label: const Text('Clear All'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                // Action buttons
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        _showNoteSelection();
+                      },
+                      icon: const Icon(Icons.add, size: 16),
+                      label: Text(l10n.addNotes),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (_notes.isEmpty) return;
+                        // Optimistic clear
+                        setState(() {
+                          _notes.clear();
+                        });
+                        dialogSetState(() {});
+                        await _clearAllNotes();
+                      },
+                      icon: const Icon(Icons.clear_all, size: 16),
+                      label: Text(l10n.clearAllNotes),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.close),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
