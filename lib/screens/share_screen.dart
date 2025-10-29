@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:html2md/html2md.dart';
+import 'package:http/http.dart' as http;
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -38,6 +39,7 @@ class _ShareScreenState extends State<ShareScreen> {
   String? _detectedUrl;
   String? _contentType;
   String _tagSearchQuery = '';
+  String? _downloadedFilePath; // Track downloaded file path for cleanup
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
@@ -61,11 +63,29 @@ class _ShareScreenState extends State<ShareScreen> {
 
   @override
   void dispose() {
+    // Clean up downloaded file if user doesn't proceed
+    _cleanupDownloadedFile();
     _searchController.dispose();
     _titleController.dispose();
     _tagsController.dispose();
     _newTagController.dispose();
     super.dispose();
+  }
+
+  /// Cleans up downloaded file if it exists and hasn't been added to a note
+  Future<void> _cleanupDownloadedFile() async {
+    if (_downloadedFilePath != null) {
+      try {
+        final absolutePath = await FileUtils.getFullFilePath(_downloadedFilePath!, true);
+        final file = File(absolutePath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+      _downloadedFilePath = null;
+    }
   }
 
   Future<void> _processSharedData() async {
@@ -446,10 +466,14 @@ class _ShareScreenState extends State<ShareScreen> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false),
-                  child: Text(l10n.cancel),
-                ),
+              child: OutlinedButton(
+              onPressed: () async {
+                // Clean up downloaded file on cancel
+                await _cleanupDownloadedFile();
+                Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+              },
+              child: Text(l10n.cancel),
+            ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -795,15 +819,30 @@ class _ShareScreenState extends State<ShareScreen> {
       
       if (result['success'] == true) {
         final note = result['note'] as Note;
-        setState(() {
-          _preparedNote = note;
-          _isExtracting = false;
-        });
+        // Handle downloaded file path
+        if (result['downloadedFilePath'] != null) {
+          _downloadedFilePath = result['downloadedFilePath'] as String;
+          // Add the downloaded file as an attachment
+          final noteWithAttachment = note.copyWith(
+            attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
+          );
+          setState(() {
+            _preparedNote = noteWithAttachment;
+            _isExtracting = false;
+          });
+        } else {
+          setState(() {
+            _preparedNote = note;
+            _isExtracting = false;
+          });
+        }
         // Initialize the text controllers with the extracted note's data
         _titleController.text = note.title;
         _tagsController.text = note.tags.join(', ');
         _selectedTags.addAll(note.tags);
       } else {
+        // Cleanup downloaded file on error
+        await _cleanupDownloadedFile();
         setState(() {
           _error = result['error'] ?? 'Failed to extract web content';
           _isExtracting = false;
@@ -1221,6 +1260,8 @@ class _ShareScreenState extends State<ShareScreen> {
           tags: _selectedTags.isNotEmpty ? _selectedTags.toList() : _preparedNote!.tags,
         );
         await appProvider.addNote(finalNote);
+        // Clear downloaded file path after successful note creation
+        _downloadedFilePath = null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1247,6 +1288,8 @@ class _ShareScreenState extends State<ShareScreen> {
         );
 
         await appProvider.updateNote(updatedNote);
+        // Clear downloaded file path after successful note update
+        _downloadedFilePath = null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1294,17 +1337,169 @@ class _WebExtractionDialog extends StatefulWidget {
 class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   bool _isLoading = true;
   late String _status;
+  String? _downloadedFilePath;
+  bool _isDownloading = false;
 
   @override
   void initState() {
     super.initState();
     final l10n = AppLocalizations.of(context)!;
     _status = l10n.loadingWebPage;
+    _checkAndDownloadFile();
+  }
+
+  /// Checks if the URL is a PDF or static file and downloads it if needed
+  Future<void> _checkAndDownloadFile() async {
+    try {
+      final l10n = AppLocalizations.of(context)!;
+      
+      // First, check the URL extension
+      final uri = Uri.parse(widget.url);
+      final path = uri.path.toLowerCase();
+      final isPdfOrStaticFile = path.endsWith('.pdf') ||
+          path.endsWith('.doc') ||
+          path.endsWith('.docx') ||
+          path.endsWith('.xls') ||
+          path.endsWith('.xlsx') ||
+          path.endsWith('.ppt') ||
+          path.endsWith('.pptx') ||
+          path.endsWith('.zip') ||
+          path.endsWith('.rar') ||
+          path.endsWith('.tar') ||
+          path.endsWith('.gz');
+      
+      if (isPdfOrStaticFile) {
+        // Download the file
+        setState(() {
+          _isDownloading = true;
+          _status = 'Downloading file...';
+        });
+        
+        try {
+          final response = await http.get(Uri.parse(widget.url));
+          
+          if (response.statusCode == 200) {
+            // Get content type from response headers
+            final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+            final isBinaryContent = contentType.startsWith('application/') ||
+                contentType.startsWith('application/pdf') ||
+                contentType.startsWith('application/msword') ||
+                contentType.startsWith('application/vnd.') ||
+                !contentType.startsWith('text/') && !contentType.startsWith('image/');
+            
+            if (isBinaryContent || isPdfOrStaticFile) {
+              // Extract filename from URL or Content-Disposition header
+              String fileName = path.split('/').last;
+              if (fileName.isEmpty || !fileName.contains('.')) {
+                // Try to get filename from Content-Disposition header
+                final contentDisposition = response.headers['content-disposition'];
+                if (contentDisposition != null) {
+                  // Try to extract filename from Content-Disposition header
+                  // Pattern: filename="..." or filename=...
+                  final filenameRegex = RegExp(r'filename\s*=\s*(?:"([^"]+)"|([^;]+))');
+                  final filenameMatch = filenameRegex.firstMatch(contentDisposition);
+                  if (filenameMatch != null) {
+                    final matchedFilename = filenameMatch.group(1) ?? filenameMatch.group(2);
+                    if (matchedFilename != null && matchedFilename.trim().isNotEmpty) {
+                      fileName = matchedFilename.trim();
+                    }
+                  }
+                }
+                
+                // Fallback filename based on content type
+                if (fileName.isEmpty || !fileName.contains('.')) {
+                  if (contentType.contains('pdf')) {
+                    fileName = 'document.pdf';
+                  } else if (contentType.contains('msword') || contentType.contains('wordprocessingml')) {
+                    fileName = 'document.doc';
+                  } else if (contentType.contains('spreadsheetml')) {
+                    fileName = 'document.xls';
+                  } else if (contentType.contains('presentation')) {
+                    fileName = 'document.ppt';
+                  } else {
+                    fileName = 'document.bin';
+                  }
+                }
+              }
+              
+              // Save file to attachment directory
+              final relativePath = await FileUtils.saveFileToPrivateStorage(
+                response.bodyBytes,
+                fileName,
+              );
+              
+              setState(() {
+                _downloadedFilePath = relativePath;
+                _isDownloading = false;
+                _status = 'File downloaded successfully';
+              });
+              
+              // Create a note with the downloaded file as attachment
+              final note = Note(
+                id: const Uuid().v4(),
+                title: fileName,
+                content: 'Downloaded file from ${widget.url}',
+                type: NoteType.note,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                attachmentPaths: [relativePath],
+                tags: ['shared', 'download', 'file'],
+              );
+              
+              // Return the result after a short delay to show success message
+              await Future.delayed(const Duration(milliseconds: 500));
+              
+              widget.onComplete({
+                'success': true,
+                'note': note,
+                'downloadedFilePath': relativePath,
+                'contentType': 'file',
+              });
+              return;
+            }
+          }
+        } catch (e) {
+          // If download fails, fall through to webview
+          setState(() {
+            _isDownloading = false;
+            _status = l10n.loadingWebPage;
+          });
+        }
+      }
+      
+      // If not a static file or download failed, proceed with webview
+      // The webview will be shown in the build method
+    } catch (e) {
+      // Error checking URL, proceed with webview
+      setState(() {
+        _isDownloading = false;
+        _status = AppLocalizations.of(context)!.loadingWebPage;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    
+    // Show downloading status if downloading
+    if (_isDownloading) {
+      return Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(_status),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Dialog(
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -1334,7 +1529,19 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      // Clean up downloaded file if exists
+                      if (_downloadedFilePath != null) {
+                        try {
+                          final absolutePath = await FileUtils.getFullFilePath(_downloadedFilePath!, true);
+                          final file = File(absolutePath);
+                          if (await file.exists()) {
+                            await file.delete();
+                          }
+                        } catch (e) {
+                          // Ignore errors
+                        }
+                      }
                       widget.onComplete({
                         'success': false,
                         'error': l10n.extractionCancelledByUser,
@@ -1518,7 +1725,8 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   allowFileAccess: false,
                   allowContentAccess: false,
                   allowFileAccessFromFileURLs: false,
-              ),
+                ),
+               ),
             ),
           ],
         ),
