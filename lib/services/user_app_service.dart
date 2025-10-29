@@ -504,6 +504,7 @@ The app has access to the following database tables:
    - filePath (TEXT NOT NULL) - File path
    - fileName (TEXT NOT NULL) - File name
    - fileType (TEXT NOT NULL) - File type
+   - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
 6. RELATIONSHIPS table:
@@ -513,18 +514,7 @@ The app has access to the following database tables:
    - type (TEXT NOT NULL) - Relationship type
    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
-7. AI_INTERACTIONS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - type (TEXT NOT NULL) - Interaction type
-   - prompt (TEXT NOT NULL) - User prompt
-   - response (TEXT NOT NULL) - AI response
-   - contextNoteIds (TEXT NOT NULL) - JSON array of context note IDs
-   - transformedNoteId (TEXT) - Transformed note ID
-   - createdNoteIds (TEXT) - JSON array of created note IDs
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - expiresAt (INTEGER NOT NULL) - Expiration timestamp
-
-8. FILTERS table:
+7. FILTERS table:
    - id (TEXT PRIMARY KEY) - Unique identifier
    - name (TEXT NOT NULL) - Filter name
    - includeText (TEXT) - Text to search for
@@ -532,6 +522,88 @@ The app has access to the following database tables:
    - includeArchived (INTEGER NOT NULL DEFAULT 0) - Include archived notes
    - createdAt (INTEGER NOT NULL) - Creation timestamp
    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+8. USER_APPS table:
+   - id (TEXT PRIMARY KEY) - Unique identifier
+   - uuid (TEXT NOT NULL) - App UUID
+   - name (TEXT NOT NULL) - App name
+   - description (TEXT NOT NULL) - App description
+   - steps (TEXT NOT NULL) - App steps
+   - htmlContent (TEXT NOT NULL) - HTML content
+   - appState (TEXT) - App state JSON
+   - type (TEXT NOT NULL DEFAULT 'normal') - App type
+   - selectedRevisionId (TEXT) - Selected revision ID
+   - author (TEXT DEFAULT "") - App author
+   - license (TEXT DEFAULT "") - App license
+   - createdAt (INTEGER NOT NULL) - Creation timestamp
+   - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+9. APP_REVISIONS table:
+   - id (TEXT PRIMARY KEY) - Unique identifier
+   - appId (TEXT NOT NULL) - Parent app ID
+   - revisionNumber (INTEGER NOT NULL) - Revision number
+   - revisionTimestamp (INTEGER NOT NULL) - Revision timestamp
+   - userPrompt (TEXT NOT NULL) - User prompt
+   - aiResponse (TEXT NOT NULL) - AI response
+   - appCode (TEXT NOT NULL) - App code
+   - attachmentPaths (TEXT) - Attachment paths JSON
+
+10. USER_APP_LIBRARIES table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - app_uuid (TEXT NOT NULL) - App UUID
+    - revision_id (INTEGER NOT NULL) - Revision ID
+    - name (TEXT NOT NULL) - Library name
+    - usage_instructions (TEXT) - Usage instructions
+
+11. USER_APP_LIBRARY_DEPENDENCIES table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - original_url (TEXT) - Original URL
+    - local_path (TEXT NOT NULL) - Local path
+    - bytes (BLOB NOT NULL) - File bytes
+    - library_id (INTEGER NOT NULL) - Library ID
+
+12. CONVERSATIONS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - title (TEXT NOT NULL) - Conversation title
+    - noteIds (TEXT NOT NULL DEFAULT '[]') - Associated note IDs JSON
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+    - isArchived (INTEGER NOT NULL DEFAULT 0) - Whether archived
+
+13. CONVERSATION_MESSAGES table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - type (TEXT NOT NULL) - Message type
+    - content (TEXT NOT NULL) - Message content
+    - timestamp (INTEGER NOT NULL) - Message timestamp
+    - modelUsed (TEXT) - AI model used
+    - metadata (TEXT) - Additional metadata JSON
+
+14. CONVERSATION_ATTACHMENTS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - messageId (TEXT NOT NULL) - Parent message ID
+    - filePath (TEXT NOT NULL) - File path
+    - fileName (TEXT NOT NULL) - File name
+    - fileType (TEXT NOT NULL) - File type
+    - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+
+15. CONVERSATION_TREE table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - treeData (TEXT NOT NULL) - Tree data JSON
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+16. CONVERSATION_MESSAGE_MAPPING table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - conversationId (TEXT NOT NULL) - Conversation ID
+    - messageId (TEXT NOT NULL) - Message ID
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+
+17. MESSAGE_PARENTS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - messageId (TEXT NOT NULL) - Message ID
+    - parentMessageId (TEXT NOT NULL) - Parent message ID
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
@@ -1062,6 +1134,7 @@ The app has access to the following database tables:
    - filePath (TEXT NOT NULL) - File path
    - fileName (TEXT NOT NULL) - File name
    - fileType (TEXT NOT NULL) - File type
+   - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
 6. RELATIONSHIPS table:
@@ -1071,18 +1144,7 @@ The app has access to the following database tables:
    - type (TEXT NOT NULL) - Relationship type
    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
-7. AI_INTERACTIONS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - type (TEXT NOT NULL) - Interaction type
-   - prompt (TEXT NOT NULL) - User prompt
-   - response (TEXT NOT NULL) - AI response
-   - contextNoteIds (TEXT NOT NULL) - JSON array of context note IDs
-   - transformedNoteId (TEXT) - Transformed note ID
-   - createdNoteIds (TEXT) - JSON array of created note IDs
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - expiresAt (INTEGER NOT NULL) - Expiration timestamp
-
-8. FILTERS table:
+7. FILTERS table:
    - id (TEXT PRIMARY KEY) - Unique identifier
    - name (TEXT NOT NULL) - Filter name
    - includeText (TEXT) - Text to search for
@@ -1090,6 +1152,88 @@ The app has access to the following database tables:
    - includeArchived (INTEGER NOT NULL DEFAULT 0) - Include archived notes
    - createdAt (INTEGER NOT NULL) - Creation timestamp
    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+8. USER_APPS table:
+   - id (TEXT PRIMARY KEY) - Unique identifier
+   - uuid (TEXT NOT NULL) - App UUID
+   - name (TEXT NOT NULL) - App name
+   - description (TEXT NOT NULL) - App description
+   - steps (TEXT NOT NULL) - App steps
+   - htmlContent (TEXT NOT NULL) - HTML content
+   - appState (TEXT) - App state JSON
+   - type (TEXT NOT NULL DEFAULT 'normal') - App type
+   - selectedRevisionId (TEXT) - Selected revision ID
+   - author (TEXT DEFAULT "") - App author
+   - license (TEXT DEFAULT "") - App license
+   - createdAt (INTEGER NOT NULL) - Creation timestamp
+   - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+9. APP_REVISIONS table:
+   - id (TEXT PRIMARY KEY) - Unique identifier
+   - appId (TEXT NOT NULL) - Parent app ID
+   - revisionNumber (INTEGER NOT NULL) - Revision number
+   - revisionTimestamp (INTEGER NOT NULL) - Revision timestamp
+   - userPrompt (TEXT NOT NULL) - User prompt
+   - aiResponse (TEXT NOT NULL) - AI response
+   - appCode (TEXT NOT NULL) - App code
+   - attachmentPaths (TEXT) - Attachment paths JSON
+
+10. USER_APP_LIBRARIES table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - app_uuid (TEXT NOT NULL) - App UUID
+    - revision_id (INTEGER NOT NULL) - Revision ID
+    - name (TEXT NOT NULL) - Library name
+    - usage_instructions (TEXT) - Usage instructions
+
+11. USER_APP_LIBRARY_DEPENDENCIES table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - original_url (TEXT) - Original URL
+    - local_path (TEXT NOT NULL) - Local path
+    - bytes (BLOB NOT NULL) - File bytes
+    - library_id (INTEGER NOT NULL) - Library ID
+
+12. CONVERSATIONS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - title (TEXT NOT NULL) - Conversation title
+    - noteIds (TEXT NOT NULL DEFAULT '[]') - Associated note IDs JSON
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+    - isArchived (INTEGER NOT NULL DEFAULT 0) - Whether archived
+
+13. CONVERSATION_MESSAGES table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - type (TEXT NOT NULL) - Message type
+    - content (TEXT NOT NULL) - Message content
+    - timestamp (INTEGER NOT NULL) - Message timestamp
+    - modelUsed (TEXT) - AI model used
+    - metadata (TEXT) - Additional metadata JSON
+
+14. CONVERSATION_ATTACHMENTS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - messageId (TEXT NOT NULL) - Parent message ID
+    - filePath (TEXT NOT NULL) - File path
+    - fileName (TEXT NOT NULL) - File name
+    - fileType (TEXT NOT NULL) - File type
+    - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+
+15. CONVERSATION_TREE table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - treeData (TEXT NOT NULL) - Tree data JSON
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+    - updatedAt (INTEGER NOT NULL) - Last update timestamp
+
+16. CONVERSATION_MESSAGE_MAPPING table:
+    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
+    - conversationId (TEXT NOT NULL) - Conversation ID
+    - messageId (TEXT NOT NULL) - Message ID
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
+
+17. MESSAGE_PARENTS table:
+    - id (TEXT PRIMARY KEY) - Unique identifier
+    - messageId (TEXT NOT NULL) - Message ID
+    - parentMessageId (TEXT NOT NULL) - Parent message ID
+    - createdAt (INTEGER NOT NULL) - Creation timestamp
 
 Example SQL queries you can use:
 - SELECT * FROM notes WHERE type = 'task' AND status = 'todo'
