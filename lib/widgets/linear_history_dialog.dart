@@ -53,7 +53,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Expanded(child: Text('Linear Conversation History')),
+          const Expanded(child: Text('Conversations')),
           _buildTimeRangeFilter(),
         ],
       ),
@@ -71,7 +71,34 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(conversation.title, style: Theme.of(context).textTheme.titleMedium),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(child: Text(conversation.title, style: Theme.of(context).textTheme.titleMedium)),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.open_in_new),
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (context) => ConversationChatScreen(conversationId: conversation.id),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: () async {
+                                      await _conversationService.deleteConversation(conversation.id);
+                                      _loadConversations();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           FutureBuilder<ConversationWithMessages?>(
                             future: _conversationService.getConversationWithMessages(conversation.id),
@@ -85,7 +112,8 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                   Expanded(
                                     child: Text(
                                       'First: ${messages.first.content}',
-                                      maxLines: 2,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                      maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -95,37 +123,14 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                   Expanded(
                                     child: Text(
                                       'Last: ${messages.last.content}',
-                                      maxLines: 2,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                      maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
                               );
                             },
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.open_in_new),
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => ConversationChatScreen(conversationId: conversation.id),
-                                    ),
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () async {
-                                  await _conversationService.deleteConversation(conversation.id);
-                                  _loadConversations();
-                                },
-                              ),
-                            ],
                           ),
                         ],
                       ),
