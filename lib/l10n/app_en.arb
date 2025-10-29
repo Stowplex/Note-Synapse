@@ -688,6 +688,16 @@
   "startConversation": "Start Conversation",
   "conversationTree": "Conversation Tree",
   "conversations": "Conversations",
+  "conversationCount": "{count} {count, plural, =1{conversation} other{conversations}}",
+  "@conversationCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noConversations": "No conversations",
+  "conversationsWithThisNote": "Conversations with this note",
   "typeYourMessage": "Type your message...",
   "cancellingRequest": "Cancelling request...",
   "attachFiles": "Attach files",

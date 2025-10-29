@@ -2195,6 +2195,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversations => '对话';
 
   @override
+  String conversationCount(int count) {
+    return '$count个对话';
+  }
+
+  @override
+  String get noConversations => '无对话';
+
+  @override
+  String get conversationsWithThisNote => '此笔记的对话';
+
+  @override
   String get typeYourMessage => '输入您的消息...';
 
   @override

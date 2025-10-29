@@ -688,6 +688,16 @@
   "startConversation": "开始对话",
   "conversationTree": "对话树",
   "conversations": "对话",
+  "conversationCount": "{count}个对话",
+  "@conversationCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noConversations": "无对话",
+  "conversationsWithThisNote": "此笔记的对话",
   "typeYourMessage": "输入您的消息...",
   "cancellingRequest": "正在取消请求...",
   "attachFiles": "附加文件",

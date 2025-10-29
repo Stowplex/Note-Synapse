@@ -4082,6 +4082,24 @@ abstract class AppLocalizations {
   /// **'Conversations'**
   String get conversations;
 
+  /// No description provided for @conversationCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{conversation} other{conversations}}'**
+  String conversationCount(int count);
+
+  /// No description provided for @noConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations'**
+  String get noConversations;
+
+  /// No description provided for @conversationsWithThisNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations with this note'**
+  String get conversationsWithThisNote;
+
   /// No description provided for @typeYourMessage.
   ///
   /// In en, this message translates to:

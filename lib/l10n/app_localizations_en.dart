@@ -2247,6 +2247,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversations => 'Conversations';
 
   @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'conversations',
+      one: 'conversation',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get noConversations => 'No conversations';
+
+  @override
+  String get conversationsWithThisNote => 'Conversations with this note';
+
+  @override
   String get typeYourMessage => 'Type your message...';
 
   @override

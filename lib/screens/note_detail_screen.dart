@@ -635,7 +635,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Row(
             children: [
               Text(
-                'Conversations',
+                l10n.conversations,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -650,11 +650,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       return TextButton.icon(
                         onPressed: _showConversationsDialog,
                         icon: const Icon(Icons.chat, size: 16),
-                        label: Text('$count conversation${count == 1 ? '' : 's'}'),
+                        label: Text(l10n.conversationCount(count)),
                       );
                     } else {
                       return Text(
-                        'No conversations',
+                        l10n.noConversations,
                         style: TextStyle(color: Colors.grey[600]),
                       );
                     }
@@ -2969,7 +2969,7 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Conversations with this note',
+                      l10n.conversationsWithThisNote,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onPrimary,
                       ),
