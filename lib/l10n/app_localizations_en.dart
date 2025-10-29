@@ -2649,4 +2649,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unknownPdf => 'Unknown PDF';
+
+  @override
+  String get oneHourAgo => '1 hour ago';
+
+  @override
+  String get twelveHoursAgo => '12 hours ago';
+
+  @override
+  String get oneDayAgo => '1 day ago';
+
+  @override
+  String get threeDaysAgo => '3 days ago';
+
+  @override
+  String get sevenDaysAgo => '7 days ago';
+
+  @override
+  String get fifteenDaysAgo => '15 days ago';
+
+  @override
+  String get oneMonthAgo => '1 month ago';
+
+  @override
+  String get sixMonthsAgo => '6 months ago';
+
+  @override
+  String get allTime => 'All time';
+
+  @override
+  String get custom => 'Custom';
+
+  @override
+  String get first => 'First';
+
+  @override
+  String get last => 'Last';
 }

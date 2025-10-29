@@ -871,5 +871,18 @@
     }
   },
   "unknownImage": "Unknown image",
-  "unknownPdf": "Unknown PDF"
+      "unknownPdf": "Unknown PDF",
+      "conversations": "Conversations",
+      "oneHourAgo": "1 hour ago",
+      "twelveHoursAgo": "12 hours ago",
+      "oneDayAgo": "1 day ago",
+      "threeDaysAgo": "3 days ago",
+      "sevenDaysAgo": "7 days ago",
+      "fifteenDaysAgo": "15 days ago",
+      "oneMonthAgo": "1 month ago",
+      "sixMonthsAgo": "6 months ago",
+      "allTime": "All time",
+      "custom": "Custom",
+      "first": "First",
+      "last": "Last"
 }

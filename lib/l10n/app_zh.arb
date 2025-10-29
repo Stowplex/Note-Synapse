@@ -871,5 +871,17 @@
     }
   },
   "unknownImage": "未知图片",
-  "unknownPdf": "未知PDF"
-}
+      "unknownPdf": "未知PDF",
+      "conversations": "对话",
+      "oneHourAgo": "1小时前",
+      "twelveHoursAgo": "12小时前",
+      "oneDayAgo": "1天前",
+      "threeDaysAgo": "3天前",
+      "sevenDaysAgo": "7天前",
+      "fifteenDaysAgo": "15天前",
+      "oneMonthAgo": "1个月前",
+      "sixMonthsAgo": "6个月前",
+      "allTime": "所有时间",
+      "custom": "自定义",
+      "first": "第一条",
+      "last": "最后一条"}

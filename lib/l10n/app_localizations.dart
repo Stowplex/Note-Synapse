@@ -4789,6 +4789,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unknown PDF'**
   String get unknownPdf;
+
+  /// No description provided for @oneHourAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 hour ago'**
+  String get oneHourAgo;
+
+  /// No description provided for @twelveHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'12 hours ago'**
+  String get twelveHoursAgo;
+
+  /// No description provided for @oneDayAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day ago'**
+  String get oneDayAgo;
+
+  /// No description provided for @threeDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'3 days ago'**
+  String get threeDaysAgo;
+
+  /// No description provided for @sevenDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days ago'**
+  String get sevenDaysAgo;
+
+  /// No description provided for @fifteenDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'15 days ago'**
+  String get fifteenDaysAgo;
+
+  /// No description provided for @oneMonthAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 month ago'**
+  String get oneMonthAgo;
+
+  /// No description provided for @sixMonthsAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'6 months ago'**
+  String get sixMonthsAgo;
+
+  /// No description provided for @allTime.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get allTime;
+
+  /// No description provided for @custom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get custom;
+
+  /// No description provided for @first.
+  ///
+  /// In en, this message translates to:
+  /// **'First'**
+  String get first;
+
+  /// No description provided for @last.
+  ///
+  /// In en, this message translates to:
+  /// **'Last'**
+  String get last;
 }
 
 class _AppLocalizationsDelegate

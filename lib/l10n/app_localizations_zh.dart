@@ -2582,4 +2582,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unknownPdf => '未知PDF';
+
+  @override
+  String get oneHourAgo => '1小时前';
+
+  @override
+  String get twelveHoursAgo => '12小时前';
+
+  @override
+  String get oneDayAgo => '1天前';
+
+  @override
+  String get threeDaysAgo => '3天前';
+
+  @override
+  String get sevenDaysAgo => '7天前';
+
+  @override
+  String get fifteenDaysAgo => '15天前';
+
+  @override
+  String get oneMonthAgo => '1个月前';
+
+  @override
+  String get sixMonthsAgo => '6个月前';
+
+  @override
+  String get allTime => '所有时间';
+
+  @override
+  String get custom => '自定义';
+
+  @override
+  String get first => '第一条';
+
+  @override
+  String get last => '最后一条';
 }

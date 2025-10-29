@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:note_synapse/l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
 import '../screens/conversation_chat_screen.dart';
@@ -49,13 +50,15 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Expanded(child: Text('Conversations')),
-            _buildTimeRangeFilter(),
+            Expanded(child: Text(l10n.conversations)),
+            _buildTimeRangeFilter(l10n),
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -121,7 +124,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    'First: ${messages.first.content}',
+                                    '${l10n.first}: ${messages.first.content}',
                                     style: Theme.of(context).textTheme.bodySmall,
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
@@ -132,7 +135,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Last: ${messages.last.content}',
+                                    '${l10n.last}: ${messages.last.content}',
                                     style: Theme.of(context).textTheme.bodySmall,
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
@@ -151,7 +154,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
     );
   }
 
-  Widget _buildTimeRangeFilter() {
+  Widget _buildTimeRangeFilter(AppLocalizations l10n) {
     return DropdownButton<Duration>(
       value: _selectedTimeRange,
       onChanged: (Duration? value) {
@@ -163,42 +166,42 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
           });
         }
       },
-      items: const [
+      items: [
         DropdownMenuItem(
-          value: Duration(hours: 1),
-          child: Text('1 hour ago'),
+          value: const Duration(hours: 1),
+          child: Text(l10n.oneHourAgo),
         ),
         DropdownMenuItem(
-          value: Duration(hours: 12),
-          child: Text('12 hours ago'),
+          value: const Duration(hours: 12),
+          child: Text(l10n.twelveHoursAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 1),
-          child: Text('1 day ago'),
+          value: const Duration(days: 1),
+          child: Text(l10n.oneDayAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 3),
-          child: Text('3 days ago'),
+          value: const Duration(days: 3),
+          child: Text(l10n.threeDaysAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 7),
-          child: Text('7 days ago'),
+          value: const Duration(days: 7),
+          child: Text(l10n.sevenDaysAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 15),
-          child: Text('15 days ago'),
+          value: const Duration(days: 15),
+          child: Text(l10n.fifteenDaysAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 30),
-          child: Text('1 month ago'),
+          value: const Duration(days: 30),
+          child: Text(l10n.oneMonthAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 180),
-          child: Text('6 months ago'),
+          value: const Duration(days: 180),
+          child: Text(l10n.sixMonthsAgo),
         ),
         DropdownMenuItem(
-          value: Duration(days: 365 * 10),
-          child: Text('All time'),
+          value: const Duration(days: 365 * 10),
+          child: Text(l10n.allTime),
         ),
       ],
     );
