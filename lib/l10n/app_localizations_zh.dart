@@ -2322,7 +2322,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationDeletedSuccessfully => '会话删除成功';
 
   @override
-  String errorDeletingConversation(Object error) => '删除会话时出错：${error.toString()}';
+  String errorDeletingConversation(Object error) {
+    return '删除会话时出错：$error';
+  }
 
   @override
   String get saveSelectedNodesAsNote => '将选中的节点保存为笔记';

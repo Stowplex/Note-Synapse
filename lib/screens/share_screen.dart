@@ -819,17 +819,27 @@ class _ShareScreenState extends State<ShareScreen> {
       
       if (result['success'] == true) {
         final note = result['note'] as Note;
-        // Handle downloaded file path
+        // Handle downloaded file path - only track it for cleanup, don't add it again if already in note
         if (result['downloadedFilePath'] != null) {
           _downloadedFilePath = result['downloadedFilePath'] as String;
-          // Add the downloaded file as an attachment
-          final noteWithAttachment = note.copyWith(
-            attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
-          );
-          setState(() {
-            _preparedNote = noteWithAttachment;
-            _isExtracting = false;
-          });
+          // Check if the attachment is already in the note's attachmentPaths
+          final attachmentAlreadyInNote = note.attachmentPaths.contains(_downloadedFilePath!);
+          if (!attachmentAlreadyInNote) {
+            // Only add if not already present
+            final noteWithAttachment = note.copyWith(
+              attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
+            );
+            setState(() {
+              _preparedNote = noteWithAttachment;
+              _isExtracting = false;
+            });
+          } else {
+            // Already in note, just use the note as-is
+            setState(() {
+              _preparedNote = note;
+              _isExtracting = false;
+            });
+          }
         } else {
           setState(() {
             _preparedNote = note;
@@ -1343,9 +1353,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   @override
   void initState() {
     super.initState();
-    final l10n = AppLocalizations.of(context)!;
-    _status = l10n.loadingWebPage;
-    _checkAndDownloadFile();
+    _status = 'Loading...';
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_isLoading) {
+      final l10n = AppLocalizations.of(context)!;
+      _status = l10n.loadingWebPage;
+      _checkAndDownloadFile();
+    }
   }
 
   /// Checks if the URL is a PDF or static file and downloads it if needed
@@ -1353,10 +1371,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     try {
       final l10n = AppLocalizations.of(context)!;
       
-      // First, check the URL extension
+      // First, check the URL extension for quick detection
       final uri = Uri.parse(widget.url);
       final path = uri.path.toLowerCase();
-      final isPdfOrStaticFile = path.endsWith('.pdf') ||
+      final hasFileExtension = path.endsWith('.pdf') ||
           path.endsWith('.doc') ||
           path.endsWith('.docx') ||
           path.endsWith('.xls') ||
@@ -1367,6 +1385,39 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           path.endsWith('.rar') ||
           path.endsWith('.tar') ||
           path.endsWith('.gz');
+      
+      // Check content-type header to detect files even if URL has no extension
+      String? detectedContentType;
+      if (!hasFileExtension) {
+        // Make a HEAD request to check content-type without downloading
+        setState(() {
+          _status = 'Checking file type...';
+        });
+        try {
+          final headResponse = await http.head(Uri.parse(widget.url));
+          detectedContentType = headResponse.headers['content-type']?.toLowerCase();
+        } catch (e) {
+          // If HEAD fails, proceed with webview
+        }
+      }
+      
+      // Check if it's a binary/static file based on extension or content-type
+      final contentType = detectedContentType ?? '';
+      final isPdfOrStaticFile = hasFileExtension || 
+          contentType.startsWith('application/pdf') ||
+          contentType.startsWith('application/msword') ||
+          contentType.startsWith('application/vnd.ms-word') ||
+          contentType.startsWith('application/vnd.ms-excel') ||
+          contentType.startsWith('application/vnd.ms-powerpoint') ||
+          contentType.startsWith('application/vnd.openxmlformats') ||
+          contentType.startsWith('application/zip') ||
+          contentType.startsWith('application/x-rar') ||
+          contentType.startsWith('application/x-tar') ||
+          contentType.startsWith('application/gzip') ||
+          (contentType.startsWith('application/') && 
+           !contentType.startsWith('application/json') &&
+           !contentType.startsWith('application/xml') &&
+           !contentType.startsWith('application/javascript'));
       
       if (isPdfOrStaticFile) {
         // Download the file
@@ -1379,13 +1430,25 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           final response = await http.get(Uri.parse(widget.url));
           
           if (response.statusCode == 200) {
-            // Get content type from response headers
-            final contentType = response.headers['content-type']?.toLowerCase() ?? '';
-            final isBinaryContent = contentType.startsWith('application/') ||
-                contentType.startsWith('application/pdf') ||
-                contentType.startsWith('application/msword') ||
-                contentType.startsWith('application/vnd.') ||
-                !contentType.startsWith('text/') && !contentType.startsWith('image/');
+            // Get content type from actual response headers
+            final responseContentType = response.headers['content-type']?.toLowerCase() ?? contentType;
+            final isBinaryContent = responseContentType.startsWith('application/pdf') ||
+                responseContentType.startsWith('application/msword') ||
+                responseContentType.startsWith('application/vnd.ms-word') ||
+                responseContentType.startsWith('application/vnd.ms-excel') ||
+                responseContentType.startsWith('application/vnd.ms-powerpoint') ||
+                responseContentType.startsWith('application/vnd.openxmlformats') ||
+                responseContentType.startsWith('application/zip') ||
+                responseContentType.startsWith('application/x-rar') ||
+                responseContentType.startsWith('application/x-tar') ||
+                responseContentType.startsWith('application/gzip') ||
+                (responseContentType.startsWith('application/') && 
+                 !responseContentType.startsWith('application/json') &&
+                 !responseContentType.startsWith('application/xml') &&
+                 !responseContentType.startsWith('application/javascript')) ||
+                !responseContentType.startsWith('text/') && 
+                !responseContentType.startsWith('image/') &&
+                !responseContentType.startsWith('video/');
             
             if (isBinaryContent || isPdfOrStaticFile) {
               // Extract filename from URL or Content-Disposition header
@@ -1408,13 +1471,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 
                 // Fallback filename based on content type
                 if (fileName.isEmpty || !fileName.contains('.')) {
-                  if (contentType.contains('pdf')) {
+                  if (responseContentType.contains('pdf')) {
                     fileName = 'document.pdf';
-                  } else if (contentType.contains('msword') || contentType.contains('wordprocessingml')) {
+                  } else if (responseContentType.contains('msword') || responseContentType.contains('wordprocessingml')) {
                     fileName = 'document.doc';
-                  } else if (contentType.contains('spreadsheetml')) {
+                  } else if (responseContentType.contains('spreadsheetml')) {
                     fileName = 'document.xls';
-                  } else if (contentType.contains('presentation')) {
+                  } else if (responseContentType.contains('presentation')) {
                     fileName = 'document.ppt';
                   } else {
                     fileName = 'document.bin';
@@ -1471,9 +1534,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       // The webview will be shown in the build method
     } catch (e) {
       // Error checking URL, proceed with webview
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
         _isDownloading = false;
-        _status = AppLocalizations.of(context)!.loadingWebPage;
+        _status = l10n.loadingWebPage;
       });
     }
   }
