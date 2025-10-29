@@ -221,20 +221,23 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
 
-    final l10n = AppLocalizations.of(context)!;
+    // Capture the context and localizations safely before the async operation
+    final currentContext = context;
+    final l10n = AppLocalizations.of(currentContext)!;
+    
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
+      context: currentContext,
+      builder: (dialogContext) => AlertDialog(
         title: Text(l10n.deleteInteraction),
         content: Text(l10n.deleteInteractionConfirm),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               try {
                 if (node.messageId != null) {
                   // Get all message IDs in the subtree using tree traversal
@@ -256,8 +259,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   });
                   // Safe to show SnackBar only if widget is still mounted
                   try {
-                    final l10n = AppLocalizations.of(context)!;
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(currentContext).showSnackBar(
                       SnackBar(
                         content: Text(l10n.interactionDeletedSuccessfully),
                         duration: const Duration(seconds: 2),
@@ -272,11 +274,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                 if (mounted) {
                   // Safe to show SnackBar only if widget is still mounted
                   try {
-                    final l10n = AppLocalizations.of(context)!;
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(currentContext).showSnackBar(
                       SnackBar(
                         content: Text(l10n.errorDeletingInteraction(e.toString())),
-                        backgroundColor: Theme.of(context).colorScheme.error,
+                        backgroundColor: Theme.of(currentContext).colorScheme.error,
                       ),
                     );
                   } catch (contextError) {
@@ -286,8 +287,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
+              foregroundColor: Theme.of(currentContext).colorScheme.onError,
             ),
             child: Text(l10n.delete),
           ),
@@ -299,12 +300,15 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _forkInteraction(ConversationTreeNode node) async {
     if (node.messageId == null) return;
     
+    // Capture the context safely before the async operation
+    final currentContext = context;
+    
     try {
       LoggerService.info('Starting fork from interaction: ${node.id}');
       
       // Use the new fork service with context selection
       final newConversation = await _forkService.forkFromMessage(
-        context: context,
+        context: currentContext,
         forkFromMessageId: node.messageId!,
         suggestedTitle: 'Forked conversation',
       );
@@ -314,8 +318,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         
         if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          final l10n = AppLocalizations.of(currentContext)!;
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.forkedConversationSuccess),
               duration: const Duration(seconds: 2),
@@ -326,7 +330,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         }
         
         // Navigate to the new conversation
-        await Navigator.of(context).push(
+        await Navigator.of(currentContext).push(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(conversationId: newConversation.id),
           ),
@@ -343,11 +347,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error forking interaction: $e', error: e);
       if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          final l10n = AppLocalizations.of(currentContext)!;
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.errorForkingConversation(e.toString())),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
             ),
           );
         } catch (contextError) {
@@ -359,6 +363,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   void _createConversationFromSelected() async {
     if (_selectedNodes.isEmpty) return;
+
+    // Capture the context safely before the async operation
+    final currentContext = context;
 
     try {
       // Create conversation directly with auto-generated title
@@ -374,7 +381,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         });
 
       // Navigate directly to the new conversation
-        Navigator.of(context).push(
+        Navigator.of(currentContext).push(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(
               conversationId: newConversation.id,
@@ -384,8 +391,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       } catch (e) {
       if (mounted) {
         try {
-        final l10n = AppLocalizations.of(context)!;
-        ScaffoldMessenger.of(context).showSnackBar(
+        final l10n = AppLocalizations.of(currentContext)!;
+        ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(content: Text(l10n.errorForkingConversation(e.toString()))),
         );
         } catch (contextError) {
@@ -405,12 +412,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Future<void> _showSaveOptionsDialog() async {
-    final l10n = AppLocalizations.of(context)!;
+    // Capture the context safely before the async operation
+    final currentContext = context;
+    final l10n = AppLocalizations.of(currentContext)!;
     
     if (_selectedNodes.isEmpty) {
       if (mounted) {
         try {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.pleaseSelectNodesFirst),
               duration: const Duration(seconds: 2),
@@ -430,15 +439,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       
       // Show the unified add note dialog
       final createdNotes = await AddNoteDialog.show(
-        context: context,
+        context: currentContext,
         content: conversationContent,
         contextNotes: contextNotes,
       );
       
       // If notes were created, show success message
       if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
-        final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
             content: Text(
               createdNotes.length == 1
@@ -453,11 +461,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error saving nodes as note: $e', error: e);
       if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.errorSavingNodes(e.toString())),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
             ),
           );
         } catch (contextError) {
