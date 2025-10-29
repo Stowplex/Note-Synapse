@@ -2440,6 +2440,22 @@ class DatabaseService {
     return results.map((r) => r['messageId'] as String).toList();
   }
 
+  Future<void> deleteEmptyConversations({required Duration olderThan}) async {
+    final db = await database;
+    final since = DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+    final emptyConversations = await db.rawQuery('''
+      SELECT c.id 
+      FROM conversations c 
+      LEFT JOIN conversation_message_mapping cmm ON c.id = cmm.conversationId 
+      WHERE cmm.conversationId IS NULL AND c.updatedAt < ?
+    ''', [since]);
+    
+    for (final conversation in emptyConversations) {
+      final conversationId = conversation['id'] as String;
+      await db.delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    }
+  }
+
   // Find all conversations that contain a specific message
   Future<List<String>> getConversationsContainingMessage(String messageId) async {
     final db = await database;

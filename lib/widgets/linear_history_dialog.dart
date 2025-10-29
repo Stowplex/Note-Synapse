@@ -4,7 +4,14 @@ import '../services/conversation_service.dart';
 import '../screens/conversation_chat_screen.dart';
 
 class LinearHistoryDialog extends StatefulWidget {
-  const LinearHistoryDialog({Key? key}) : super(key: key);
+  final Duration initialTimeRange;
+  final ValueChanged<Duration> onTimeRangeChanged;
+
+  const LinearHistoryDialog({
+    Key? key,
+    required this.initialTimeRange,
+    required this.onTimeRangeChanged,
+  }) : super(key: key);
 
   @override
   State<LinearHistoryDialog> createState() => _LinearHistoryDialogState();
@@ -13,20 +20,29 @@ class LinearHistoryDialog extends StatefulWidget {
 class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
   final ConversationService _conversationService = ConversationService();
   List<Conversation> _conversations = [];
-  Duration _selectedTimeRange = const Duration(days: 3);
+  late Duration _selectedTimeRange;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _selectedTimeRange = widget.initialTimeRange;
     _loadConversations();
+    _conversationService.deleteEmptyConversations(olderThan: const Duration(days: 1));
   }
 
   Future<void> _loadConversations() async {
     setState(() => _isLoading = true);
     final conversations = await _conversationService.getAllConversations(maxAge: _selectedTimeRange);
+    final List<Conversation> conversationsWithMessages = [];
+    for (final conversation in conversations) {
+      final withMessages = await _conversationService.getConversationWithMessages(conversation.id);
+      if (withMessages != null && withMessages.messages.isNotEmpty) {
+        conversationsWithMessages.add(conversation);
+      }
+    }
     setState(() {
-      _conversations = conversations;
+      _conversations = conversationsWithMessages;
       _isLoading = false;
     });
   }
@@ -34,55 +50,89 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Linear Conversation History'),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Expanded(child: Text('Linear Conversation History')),
+          _buildTimeRangeFilter(),
+        ],
+      ),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTimeRangeFilter(),
-            const SizedBox(height: 16),
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : Expanded(
-                    child: ListView.builder(
-                      itemCount: _conversations.length,
-                      itemBuilder: (context, index) {
-                        final conversation = _conversations[index];
-                        return Card(
-                          child: ListTile(
-                            title: Text(conversation.title),
-                            subtitle: Text('Last updated: ${_getFormattedDuration(DateTime.now().difference(conversation.updatedAt))}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.open_in_new),
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => ConversationChatScreen(conversationId: conversation.id),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () async {
-                                    await _conversationService.deleteConversation(conversation.id);
-                                    _loadConversations();
-                                  },
-                                ),
-                              ],
-                            ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView.builder(
+                itemCount: _conversations.length,
+                itemBuilder: (context, index) {
+                  final conversation = _conversations[index];
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(conversation.title, style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          FutureBuilder<ConversationWithMessages?>(
+                            future: _conversationService.getConversationWithMessages(conversation.id),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              final messages = snapshot.data!.messages;
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'First: ${messages.first.content}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(width: 1, height: 40, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Last: ${messages.last.content}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        );
-                      },
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.open_in_new),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => ConversationChatScreen(conversationId: conversation.id),
+                                    ),
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                onPressed: () async {
+                                  await _conversationService.deleteConversation(conversation.id);
+                                  _loadConversations();
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-          ],
-        ),
+                  );
+                },
+              ),
       ),
       actions: [
         TextButton(
@@ -100,6 +150,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
         if (value != null) {
           setState(() {
             _selectedTimeRange = value;
+            widget.onTimeRangeChanged(_selectedTimeRange);
             _loadConversations();
           });
         }
@@ -143,15 +194,5 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
         ),
       ],
     );
-  }
-
-  String _getFormattedDuration(Duration duration) {
-    if (duration.inHours < 1) {
-      return '${duration.inMinutes}m ago';
-    } else if (duration.inDays < 1) {
-      return '${duration.inHours}h ago';
-    } else {
-      return '${duration.inDays}d ago';
-    }
   }
 }

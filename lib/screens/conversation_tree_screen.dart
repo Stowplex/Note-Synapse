@@ -625,90 +625,26 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Widget _buildTimeRangeFilter(AppLocalizations l10n) {
-    return PopupMenuButton<Duration>(
-      initialValue: _selectedTimeRange,
-      onSelected: (Duration value) {
-        if (value.inDays == -1) {
-          _showLinearHistoryDialog();
-        } else {
-          setState(() {
-            _selectedTimeRange = value;
-            _refreshTree();
-          });
-        }
-      },
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<Duration>>[
-        const PopupMenuItem<Duration>(
-          value: Duration(hours: 1),
-          child: Text('1 hour ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(hours: 12),
-          child: Text('12 hours ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 1),
-          child: Text('1 day ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 3),
-          child: Text('3 days ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 7),
-          child: Text('7 days ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 15),
-          child: Text('15 days ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 30),
-          child: Text('1 month ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 180),
-          child: Text('6 months ago'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: 365 * 10), // All time
-          child: Text('All time'),
-        ),
-        const PopupMenuItem<Duration>(
-          value: Duration(days: -1),
-          child: Text('Custom'),
-        ),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: Row(
-          children: [
-            const Icon(Icons.filter_list),
-            const SizedBox(width: 4),
-            Text(_getFormattedDuration(_selectedTimeRange)),
-          ],
-        ),
-      ),
+    return IconButton(
+      icon: const Icon(Icons.filter_list),
+      onPressed: _showLinearHistoryDialog,
+      tooltip: 'Filter by time',
     );
   }
 
   void _showLinearHistoryDialog() {
     showDialog(
       context: context,
-      builder: (context) => const LinearHistoryDialog(),
+      builder: (context) => LinearHistoryDialog(
+        initialTimeRange: _selectedTimeRange,
+        onTimeRangeChanged: (newTimeRange) {
+          setState(() {
+            _selectedTimeRange = newTimeRange;
+            _refreshTree();
+          });
+        },
+      ),
     );
-  }
-
-  String _getFormattedDuration(Duration duration) {
-    if (duration.inHours == 1) return '1h ago';
-    if (duration.inHours == 12) return '12h ago';
-    if (duration.inDays == 1) return '1d ago';
-    if (duration.inDays == 3) return '3d ago';
-    if (duration.inDays == 7) return '7d ago';
-    if (duration.inDays == 15) return '15d ago';
-    if (duration.inDays == 30) return '1m ago';
-    if (duration.inDays == 180) return '6m ago';
-    return 'All time';
   }
 
   Widget _buildTreeView() {

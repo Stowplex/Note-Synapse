@@ -753,6 +753,10 @@ class ConversationService {
     LoggerService.info('Removed notes from conversation: $conversationId');
   }
 
+  Future<void> deleteEmptyConversations({required Duration olderThan}) async {
+    await _databaseService.deleteEmptyConversations(olderThan: olderThan);
+  }
+
   // Get a specific conversation message
   Future<ConversationMessage?> getConversationMessage(String messageId) async {
     return await _databaseService.getConversationMessage(messageId);
