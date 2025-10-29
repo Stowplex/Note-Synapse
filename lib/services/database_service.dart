@@ -218,14 +218,7 @@ class DatabaseService {
       )
   ''';
 
-  static const String _createConversationTreeTable = '''
-      CREATE TABLE conversation_tree(
-        id TEXT PRIMARY KEY,
-        treeData TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      )
-  ''';
+
 
   static const String _createConversationMessageMappingTable = '''
       CREATE TABLE conversation_message_mapping(
@@ -315,7 +308,7 @@ class DatabaseService {
     await db.execute(_createConversationsTable);
     await db.execute(_createConversationMessagesTable);
     await db.execute(_createConversationAttachmentsTable);
-    await db.execute(_createConversationTreeTable);
+
     await db.execute(_createConversationMessageMappingTable);
     await db.execute(_createMessageParentsTable);
 
@@ -1399,7 +1392,7 @@ class DatabaseService {
     await db.delete('notes');
     await db.delete('tags');
     await db.delete('filters');
-    await db.delete('conversation_tree');
+
     await db.delete('conversation_messages');
     await db.delete('conversation_attachments');
     await db.delete('conversations');
@@ -2037,14 +2030,25 @@ class DatabaseService {
     return conversation.id;
   }
 
-  Future<List<Conversation>> getAllConversations() async {
+  Future<List<Conversation>> getAllConversations({Duration? maxAge}) async {
     final db = await database;
+    String? where;
+    List<dynamic>? whereArgs;
+
+    if (maxAge != null) {
+      final since = DateTime.now().subtract(maxAge).millisecondsSinceEpoch;
+      where = 'updatedAt >= ?';
+      whereArgs = [since];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       'conversations',
-      orderBy: 'createdAt DESC',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'updatedAt DESC',
     );
 
-    return maps.map((map) => _mapToConversation(map)).toList();
+    return maps.map((map) => _mapToConversation(map)).toList().cast<Conversation>();
   }
 
   Future<Conversation?> getConversation(String id) async {
@@ -2105,7 +2109,7 @@ class DatabaseService {
       ORDER BY cm.timestamp ASC
     ''', [conversationId]);
 
-    return maps.map((map) => _mapToConversationMessage(map, conversationId)).toList();
+    return maps.map((map) => _mapToConversationMessage(map, conversationId)).toList().cast<ConversationMessage>();
   }
 
   Future<ConversationMessage?> getConversationMessage(String id) async {
@@ -2329,79 +2333,7 @@ class DatabaseService {
     await db.delete('conversation_attachments', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Conversation Tree CRUD
-  Future<String> insertConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    await db.insert('conversation_tree', json);
-    return tree.id;
-  }
 
-  Future<ConversationTree?> getConversationTree(String id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'conversation_tree',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isEmpty) return null;
-    return _mapToConversationTree(maps.first);
-  }
-
-  Future<void> updateConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    await db.update(
-      'conversation_tree',
-      json,
-      where: 'id = ?',
-      whereArgs: [tree.id],
-    );
-  }
-
-  Future<void> upsertConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    // Try to insert first, if it fails due to unique constraint, update instead
-    try {
-      await db.insert('conversation_tree', json);
-    } catch (e) {
-      if (e.toString().contains('UNIQUE constraint failed')) {
-        await db.update(
-          'conversation_tree',
-          json,
-          where: 'id = ?',
-          whereArgs: [tree.id],
-        );
-      } else {
-        rethrow;
-      }
-    }
-  }
-
-  Future<void> deleteConversationTree(String id) async {
-    final db = await database;
-    await db.delete('conversation_tree', where: 'id = ?', whereArgs: [id]);
-  }
 
   // Helper methods for mapping database results to models
   Conversation _mapToConversation(Map<String, dynamic> map) {
@@ -2435,11 +2367,6 @@ class DatabaseService {
           ? Map<String, dynamic>.from(jsonDecode(map['metadata'] as String))
           : null,
     );
-  }
-
-  ConversationTree _mapToConversationTree(Map<String, dynamic> map) {
-    final treeData = jsonDecode(map['treeData'] as String) as Map<String, dynamic>;
-    return ConversationTree.fromJson(treeData);
   }
 
   // New conversation-message mapping methods

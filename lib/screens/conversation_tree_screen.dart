@@ -10,6 +10,7 @@ import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
+import '../widgets/linear_history_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   const ConversationTreeScreen({Key? key}) : super(key: key);
@@ -31,6 +32,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   ConversationMessage? _selectedMessage;
   bool _isMultiSelectMode = false;
   bool _hasRefreshedOnce = false;
+  Duration _selectedTimeRange = const Duration(days: 3);
 
   @override
   void initState() {
@@ -56,7 +58,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _tree = await _conversationService.refreshConversationTree();
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
       if (_tree == null) {
         if (mounted) {
           try {
@@ -102,7 +104,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _tree = await _conversationService.refreshConversationTree();
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
       if (_tree == null) {
         if (mounted) {
           try {
@@ -180,12 +182,6 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       updatedNodes[nodeId] = updatedNode;
       _tree = _tree!.copyWith(nodes: updatedNodes);
     });
-
-    // Update in database
-    _conversationService.updateTreeNode(
-      nodeId: nodeId,
-      isExpanded: !node.isExpanded,
-    );
   }
 
 
@@ -221,15 +217,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
 
-    // Capture the context and localizations safely before the async operation
     final currentContext = context;
     final l10n = AppLocalizations.of(currentContext)!;
-    
+
     showDialog(
       context: currentContext,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.deleteInteraction),
-        content: Text(l10n.deleteInteractionConfirm),
+        content: Text('What do you want to delete?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -240,57 +235,34 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               Navigator.of(dialogContext).pop();
               try {
                 if (node.messageId != null) {
-                  // Get all message IDs in the subtree using tree traversal
                   final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
-                  LoggerService.info('Deleting ${messageIdsToDelete.length} messages from tree node: ${node.id}');
-                  
-                  // Delete all messages in the subtree efficiently
                   await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
-                } else {
-                  // Fallback: delete the entire conversation
-                  await _conversationService.deleteConversation(node.conversationId);
                 }
-                // Refresh the tree to reflect the deletion
-                _tree = await _conversationService.refreshConversationTree();
-                if (mounted) {
-                  setState(() {
-                    _selectedConversationId = null;
-                    _selectedMessage = null;
-                  });
-                  // Safe to show SnackBar only if widget is still mounted
-                  try {
-                    ScaffoldMessenger.of(currentContext).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.interactionDeletedSuccessfully),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  } catch (contextError) {
-                    LoggerService.warning('Could not show success SnackBar: $contextError');
-                  }
-                }
+                _refreshTree();
               } catch (e) {
                 LoggerService.error('Error deleting interaction: $e', error: e);
-                if (mounted) {
-                  // Safe to show SnackBar only if widget is still mounted
-                  try {
-                    ScaffoldMessenger.of(currentContext).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.errorDeletingInteraction(e.toString())),
-                        backgroundColor: Theme.of(currentContext).colorScheme.error,
-                      ),
-                    );
-                  } catch (contextError) {
-                    LoggerService.warning('Could not show error SnackBar: $contextError');
-                  }
+              }
+            },
+            child: Text('Delete only nodes in this filter'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              try {
+                if (node.messageId != null) {
+                  final messageIdsToDelete = await _conversationService.getAllMessageIdsInSubtree(node.messageId!);
+                  await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
                 }
+                _refreshTree();
+              } catch (e) {
+                LoggerService.error('Error deleting interaction: $e', error: e);
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(currentContext).colorScheme.error,
               foregroundColor: Theme.of(currentContext).colorScheme.onError,
             ),
-            child: Text(l10n.delete),
+            child: Text('Delete this node and all descendants'),
           ),
         ],
       ),
@@ -563,6 +535,17 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
     if (_tree == null) {
       return Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.conversationTree),
+          actions: [
+            _buildTimeRangeFilter(l10n),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshTree,
+              tooltip: l10n.refreshTree,
+            ),
+          ],
+        ),
         body: Center(child: Text(l10n.noConversationsFound)),
       );
     }
@@ -591,6 +574,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               tooltip: l10n.exitMultiSelect,
             ),
           ] else ...[
+            _buildTimeRangeFilter(l10n),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshTree,
@@ -638,6 +622,93 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildTimeRangeFilter(AppLocalizations l10n) {
+    return PopupMenuButton<Duration>(
+      initialValue: _selectedTimeRange,
+      onSelected: (Duration value) {
+        if (value.inDays == -1) {
+          _showLinearHistoryDialog();
+        } else {
+          setState(() {
+            _selectedTimeRange = value;
+            _refreshTree();
+          });
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<Duration>>[
+        const PopupMenuItem<Duration>(
+          value: Duration(hours: 1),
+          child: Text('1 hour ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(hours: 12),
+          child: Text('12 hours ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 1),
+          child: Text('1 day ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 3),
+          child: Text('3 days ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 7),
+          child: Text('7 days ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 15),
+          child: Text('15 days ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 30),
+          child: Text('1 month ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 180),
+          child: Text('6 months ago'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: 365 * 10), // All time
+          child: Text('All time'),
+        ),
+        const PopupMenuItem<Duration>(
+          value: Duration(days: -1),
+          child: Text('Custom'),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Row(
+          children: [
+            const Icon(Icons.filter_list),
+            const SizedBox(width: 4),
+            Text(_getFormattedDuration(_selectedTimeRange)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLinearHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => const LinearHistoryDialog(),
+    );
+  }
+
+  String _getFormattedDuration(Duration duration) {
+    if (duration.inHours == 1) return '1h ago';
+    if (duration.inHours == 12) return '12h ago';
+    if (duration.inDays == 1) return '1d ago';
+    if (duration.inDays == 3) return '3d ago';
+    if (duration.inDays == 7) return '7d ago';
+    if (duration.inDays == 15) return '15d ago';
+    if (duration.inDays == 30) return '1m ago';
+    if (duration.inDays == 180) return '6m ago';
+    return 'All time';
   }
 
   Widget _buildTreeView() {

@@ -301,8 +301,8 @@ class ConversationService {
   }
 
   // Get all conversations
-  Future<List<Conversation>> getAllConversations() async {
-    return await _databaseService.getAllConversations();
+  Future<List<Conversation>> getAllConversations({Duration? maxAge}) async {
+    return await _databaseService.getAllConversations(maxAge: maxAge);
   }
 
   // Get a specific conversation with its messages
@@ -335,23 +335,16 @@ class ConversationService {
 
 
   // Get conversation tree
-  Future<ConversationTree?> getConversationTree() async {
-    // Check if we have a cached tree first
-    final existingTree = await _databaseService.getConversationTree('main_tree');
-    if (existingTree != null) {
-      return existingTree;
-    }
-
-    // Build new tree if none exists
-    final conversations = await _databaseService.getAllConversations();
+  Future<ConversationTree?> getConversationTree({Duration? maxAge}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
   }
 
   // Refresh conversation tree
-  Future<ConversationTree?> refreshConversationTree() async {
-    final conversations = await _databaseService.getAllConversations();
+  Future<ConversationTree?> refreshConversationTree({Duration? maxAge}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
@@ -416,8 +409,6 @@ class ConversationService {
       updatedAt: DateTime.now(),
     );
 
-    // Save tree to database using upsert (insert or update)
-    await _databaseService.upsertConversationTree(tree);
     return tree;
   }
 
@@ -603,33 +594,34 @@ class ConversationService {
     return messageIds.toList();
   }
 
-  // Update conversation tree node
-  Future<void> updateTreeNode({
-    required String nodeId,
-    bool? isExpanded,
-    bool? isSelected,
-  }) async {
-    final tree = await getConversationTree();
-    if (tree == null) return;
+  Future<List<String>> getAllMessageIdsInSubtree(String messageId) async {
+    final db = await _databaseService.database;
+    final messagesToDelete = <String>{};
 
-    final node = tree.nodes[nodeId];
-    if (node == null) return;
+    Future<void> traverseSubtree(String currentMessageId) async {
+      if (messagesToDelete.contains(currentMessageId)) {
+        return; // Already processed
+      }
 
-    final updatedNode = node.copyWith(
-      isExpanded: isExpanded,
-      isSelected: isSelected,
-    );
+      messagesToDelete.add(currentMessageId);
 
-    final updatedNodes = Map<String, ConversationTreeNode>.from(tree.nodes);
-    updatedNodes[nodeId] = updatedNode;
+      final children = await db.query(
+        'message_parents',
+        where: 'parentMessageId = ?',
+        whereArgs: [currentMessageId],
+      );
 
-    final updatedTree = tree.copyWith(
-      nodes: updatedNodes,
-      updatedAt: DateTime.now(),
-    );
+      for (final child in children) {
+        final childId = child['messageId'] as String;
+        await traverseSubtree(childId);
+      }
+    }
 
-    await _databaseService.updateConversationTree(updatedTree);
+    await traverseSubtree(messageId);
+    return messagesToDelete.toList();
   }
+
+
 
   // Create new conversation from selected tree nodes
   Future<Conversation> createConversationFromSelectedNodes({
