@@ -893,11 +893,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       ),
     );
 
-    if (selectedNotes != null) {
+    if (selectedNotes != null && selectedNotes.isNotEmpty) {
       final noteIds = selectedNotes.map((note) => note.id).toList();
       await _conversationService.addNotesToConversation(_conversation!.id, noteIds);
+      // Reload all notes from the conversation to ensure we have the complete list
+      final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
       setState(() {
-        _notes = selectedNotes;
+        _notes = updatedNotes;
       });
     }
   }
