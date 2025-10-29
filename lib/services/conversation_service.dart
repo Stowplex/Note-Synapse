@@ -715,6 +715,12 @@ class ConversationService {
     return await _databaseService.getNotesByIds(conversation.noteIds);
   }
 
+  // Get notes by a list of IDs
+  Future<List<Note>> getNotesByIds(List<String> noteIds) async {
+    if (noteIds.isEmpty) return [];
+    return await _databaseService.getNotesByIds(noteIds);
+  }
+
   // Add notes to a conversation
   Future<void> addNotesToConversation(String conversationId, List<String> noteIds) async {
     final conversation = await _databaseService.getConversation(conversationId);

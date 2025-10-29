@@ -2231,9 +2231,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversation => 'Conversation';
 
   @override
-  String get newConversation => 'New Conversation';
-
-  @override
   String get aiConversation => 'AI Conversation';
 
   @override
@@ -2649,6 +2646,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unknownPdf => 'Unknown PDF';
+
+  @override
+  String get newConversation => 'New Conversation';
 
   @override
   String get oneHourAgo => '1 hour ago';

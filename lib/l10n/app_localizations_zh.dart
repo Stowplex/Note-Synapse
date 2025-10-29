@@ -2180,9 +2180,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversation => '对话';
 
   @override
-  String get newConversation => '新对话';
-
-  @override
   String get aiConversation => 'AI对话';
 
   @override
@@ -2582,6 +2579,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unknownPdf => '未知PDF';
+
+  @override
+  String get newConversation => '新对话';
 
   @override
   String get oneHourAgo => '1小时前';

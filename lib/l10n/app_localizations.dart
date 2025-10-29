@@ -4052,12 +4052,6 @@ abstract class AppLocalizations {
   /// **'Conversation'**
   String get conversation;
 
-  /// No description provided for @newConversation.
-  ///
-  /// In en, this message translates to:
-  /// **'New Conversation'**
-  String get newConversation;
-
   /// No description provided for @aiConversation.
   ///
   /// In en, this message translates to:
@@ -4789,6 +4783,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unknown PDF'**
   String get unknownPdf;
+
+  /// No description provided for @newConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'New Conversation'**
+  String get newConversation;
 
   /// No description provided for @oneHourAgo.
   ///

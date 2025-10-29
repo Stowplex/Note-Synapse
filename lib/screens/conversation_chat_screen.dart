@@ -73,6 +73,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
+
+
   Future<void> _initializeConversation() async {
     setState(() => _isLoading = true);
 
@@ -92,21 +94,22 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           }
         }
       } else {
-        // Create new conversation
-        final l10n = AppLocalizations.of(context)!;
-        final noteIds = widget.initialNoteIds ?? [];
-        _conversation = await _conversationService.createConversation(
-          title: l10n.aiConversation,
-          noteIds: noteIds,
-        );
-        _notes = await _conversationService.getConversationNotes(_conversation!.id);
+        // This is a new conversation, so we'll load any initial notes but not create the
+        // conversation entity until the first message is sent.
+        if (widget.initialNoteIds != null && widget.initialNoteIds!.isNotEmpty) {
+          _notes = await _conversationService.getNotesByIds(widget.initialNoteIds!);
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading conversation: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error initializing conversation: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -151,92 +154,95 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || _isSending) return;
+    if (_messageController.text.isEmpty && _attachedFiles.isEmpty) return;
 
-    final messageText = _messageController.text.trim();
-    final attachedFiles = List<PlatformFile>.from(_attachedFiles); // Copy attachments before clearing
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final content = _messageController.text;
+    final attachments = List<PlatformFile>.from(_attachedFiles);
     _messageController.clear();
-
     setState(() {
+      _attachedFiles.clear();
       _isSending = true;
-      _currentRequestId = requestId;
-      _attachedFiles.clear(); // Clear attachments after copying
     });
 
     try {
-      // Save attachment paths for database storage
-      final attachmentPaths = <String>[];
-      for (final file in attachedFiles) {
-        if (file.path != null) {
-          attachmentPaths.add(file.path!);
-        }
+      // If this is the first message, create the conversation
+      if (_conversation == null) {
+        final l10n = AppLocalizations.of(context)!;
+        final title = content.isNotEmpty ? content : l10n.newConversation;
+        final newConversation = await _conversationService.createConversation(
+          title: title.length > 50 ? '${title.substring(0, 50)}...' : title,
+          noteIds: widget.initialNoteIds ?? [],
+        );
+        if (!mounted) return;
+        setState(() {
+          _conversation = newConversation;
+        });
       }
 
-      // Add user message with attachments
+      // Add the user's message
       final userMessage = await _conversationService.addUserMessage(
         conversationId: _conversation!.id,
-        content: messageText,
-        attachmentPaths: attachmentPaths,
+        content: content,
+        attachmentPaths: attachments.map((f) => f.path!).toList(),
       );
-      _messages.add(userMessage);
-      setState(() {});
+      if (!mounted) return;
+
+      setState(() {
+        _messages.add(userMessage);
+      });
       _scrollToBottom();
 
-      // Check if this specific request was cancelled before generating AI response
+      // Generate AI response
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      _currentRequestId = requestId;
+
+      final aiResponseContent = await _generateAIResponse(content, attachments, requestId);
+
       if (_cancelledRequestIds.contains(requestId)) {
-        return;
+        _cancelledRequestIds.remove(requestId);
+        return; // Stop processing if the request was cancelled
       }
 
-      // Generate AI response with attachments
-      final aiResponse = await _generateAIResponse(messageText, attachedFiles, requestId);
-      
-      // Check if this specific request was cancelled after AI response
-      if (_cancelledRequestIds.contains(requestId)) {
-        return;
-      }
-      
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
-        content: aiResponse,
-        modelUsed: 'gpt-4', // This should come from the AI service
+        content: aiResponseContent,
       );
-      _messages.add(aiMessage);
+      if (!mounted) return;
 
-      setState(() {});
+      setState(() {
+        _messages.add(aiMessage);
+      });
       _scrollToBottom();
+
     } catch (e) {
-      // Only show error if this request wasn't cancelled
-      if (!_cancelledRequestIds.contains(requestId)) {
-        LoggerService.error('Error sending message: $e', error: e);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error sending message: ${e.toString()}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: () {
-                  _messageController.text = messageText;
-                  _sendMessage();
-                },
-              ),
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending message: $e')),
+        );
       }
     } finally {
       if (mounted) {
         setState(() {
           _isSending = false;
-          _isAborting = false;
           _currentRequestId = null;
         });
-        // Clean up the cancelled request ID after a delay to avoid memory leaks
-        Future.delayed(const Duration(minutes: 5), () {
-          _cancelledRequestIds.remove(requestId);
-        });
       }
+    }
+  }
+
+  Future<void> _startNewConversation() async {
+    final l10n = AppLocalizations.of(context)!;
+    final newConversation = await _conversationService.createConversation(
+      title: l10n.newConversation,
+    );
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ConversationChatScreen(
+            conversationId: newConversation.id,
+          ),
+        ),
+      );
     }
   }
 
@@ -1008,19 +1014,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     
     if (_isLoading) {
       return Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.newConversation),
+        ),
         body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_conversation == null) {
-      return Scaffold(
-        body: Center(child: Text(l10n.errorLoadingData)),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_conversation!.title),
+        title: Text(_conversation?.title ?? l10n.newConversation),
         actions: [
           IconButton(
             icon: const Icon(Icons.library_books),
@@ -1046,16 +1049,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'new_conversation',
-                child: Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline, size: 20),
-                    const SizedBox(width: 12),
-                    Text(l10n.newConversation),
-                  ],
+              if (_messages.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'new_conversation',
+                  child: Text(l10n.newConversation),
                 ),
-              ),
             ],
           ),
         ],
@@ -1402,36 +1400,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     );
   }
 
-  Future<void> _startNewConversation() async {
-    try {
-      final l10n = AppLocalizations.of(context)!;
-      // Create a new conversation
-      final newConversation = await _conversationService.createConversation(
-        title: l10n.aiConversation,
-        noteIds: _notes.map((note) => note.id).toList(),
-      );
 
-      // Replace the current route with the new conversation
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => ConversationChatScreen(
-              conversationId: newConversation.id,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating new conversation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   @override
   void dispose() {
