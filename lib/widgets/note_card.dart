@@ -17,6 +17,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback? onArchiveToggle;
   final VoidCallback? onShare;
   final Function(String)? onContentChanged;
+  final bool showAttachmentIndicator;
 
   const NoteCard({
     super.key,
@@ -30,6 +31,7 @@ class NoteCard extends StatelessWidget {
     this.onArchiveToggle,
     this.onShare,
     this.onContentChanged,
+    this.showAttachmentIndicator = true,
   });
 
   @override
@@ -228,7 +230,7 @@ class NoteCard extends StatelessWidget {
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                           ),
-                        if (note.attachmentPaths.isNotEmpty)
+                        if (showAttachmentIndicator && note.attachmentPaths.isNotEmpty)
                           Icon(
                             Icons.attach_file,
                             size: 16,
@@ -266,7 +268,7 @@ class NoteCard extends StatelessWidget {
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
-                            if (note.attachmentPaths.isNotEmpty)
+                            if (showAttachmentIndicator && note.attachmentPaths.isNotEmpty)
                               Icon(
                                 Icons.attach_file,
                                 size: 16,

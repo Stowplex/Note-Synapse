@@ -191,7 +191,8 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                               onAddSubNote: () {}, // Disabled in selection mode
                               onPinToggle: () {}, // Disabled in selection mode
                               onArchiveToggle: () {}, // Disabled in selection mode
-                              onShare: () {}, // Disabled in selection mode
+                              // Do not pass onShare to hide share icon
+                              showAttachmentIndicator: false,
                               onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
                             ),
                           ),
