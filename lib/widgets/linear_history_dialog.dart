@@ -49,102 +49,105 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Expanded(child: Text('Conversations')),
-          _buildTimeRangeFilter(),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: _conversations.length,
-                itemBuilder: (context, index) {
-                  final conversation = _conversations[index];
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(child: Text(conversation.title, style: Theme.of(context).textTheme.titleMedium)),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.open_in_new),
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (context) => ConversationChatScreen(conversationId: conversation.id),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    onPressed: () async {
-                                      await _conversationService.deleteConversation(conversation.id);
-                                      _loadConversations();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          FutureBuilder<ConversationWithMessages?>(
-                            future: _conversationService.getConversationWithMessages(conversation.id),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              final messages = snapshot.data!.messages;
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'First: ${messages.first.content}',
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(width: 1, height: 40, color: Colors.grey),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Last: ${messages.last.content}',
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(child: Text('Conversations')),
+            _buildTimeRangeFilter(),
+          ],
         ),
-      ],
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _conversations.length,
+              itemBuilder: (context, index) {
+                final conversation = _conversations[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(conversation.title, style: Theme.of(context).textTheme.titleMedium)),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.open_in_new),
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => ConversationChatScreen(conversationId: conversation.id),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  onPressed: () async {
+                                    await _conversationService.deleteConversation(conversation.id);
+                                    _loadConversations();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        FutureBuilder<ConversationWithMessages?>(
+                          future: _conversationService.getConversationWithMessages(conversation.id),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            final messages = snapshot.data!.messages;
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'First: ${messages.first.content}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(width: 1, height: 40, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Last: ${messages.last.content}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
