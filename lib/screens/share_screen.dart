@@ -1514,6 +1514,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                     'error': l10n.failedToLoadWebPage(message),
                   });
                 },
+                initialSettings: InAppWebViewSettings(
+                  allowFileAccess: false,
+                  allowContentAccess: false,
+                  allowFileAccessFromFileURLs: false,
               ),
             ),
           ],
