@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
@@ -202,7 +203,11 @@ class OpenAIModel implements AIModel {
         // Attach file in OpenAI format
         if (attachmentType == 'image') {
           final base64Data = base64Encode(file.bytes!);
-          final mimeType = FileTypeUtils.getMimeType(extension);
+          // Use content-based detection if extension is missing, otherwise trust extension
+          final mimeType = FileTypeUtils.getMimeTypeForBytes(
+            Uint8List.fromList(file.bytes!),
+            extension: extension.isEmpty ? null : extension,
+          );
           
           contentParts.add({
             'type': 'image_url',
