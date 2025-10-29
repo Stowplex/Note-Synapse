@@ -2313,6 +2313,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteInteractionAction => '删除交互';
 
   @override
+  String get deleteConversation => '删除会话';
+
+  @override
+  String get confirmDeleteConversation => '您确定要删除此会话吗？此操作无法撤消。';
+
+  @override
+  String get conversationDeletedSuccessfully => '会话删除成功';
+
+  @override
+  String errorDeletingConversation(Object error) => '删除会话时出错：${error.toString()}';
+
+  @override
   String get saveSelectedNodesAsNote => '将选中的节点保存为笔记';
 
   @override

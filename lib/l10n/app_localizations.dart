@@ -4298,6 +4298,30 @@ abstract class AppLocalizations {
   /// **'Delete interaction'**
   String get deleteInteractionAction;
 
+  /// No description provided for @deleteConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Conversation'**
+  String get deleteConversation;
+
+  /// No description provided for @confirmDeleteConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  String get confirmDeleteConversation;
+
+  /// No description provided for @conversationDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation deleted successfully'**
+  String get conversationDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting conversation: {error}'**
+  String errorDeletingConversation(Object error);
+
   /// No description provided for @saveSelectedNodesAsNote.
   ///
   /// In en, this message translates to:

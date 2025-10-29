@@ -2371,6 +2371,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteInteractionAction => 'Delete interaction';
 
   @override
+  String get deleteConversation => 'Delete Conversation';
+
+  @override
+  String get confirmDeleteConversation => 'Are you sure you want to delete this conversation? This action cannot be undone.';
+
+  @override
+  String get conversationDeletedSuccessfully => 'Conversation deleted successfully';
+
+  @override
+  String errorDeletingConversation(Object error) => 'Error deleting conversation: ${error.toString()}';
+
+  @override
   String get saveSelectedNodesAsNote => 'Save selected nodes as note';
 
   @override

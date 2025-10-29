@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:note_synapse/l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
+import '../services/logger_service.dart';
 import '../screens/conversation_chat_screen.dart';
+import '../providers/app_provider.dart';
 
 class LinearHistoryDialog extends StatefulWidget {
   final Duration initialTimeRange;
   final ValueChanged<Duration> onTimeRangeChanged;
+  final VoidCallback? onConversationDeleted;
 
   const LinearHistoryDialog({
     Key? key,
     required this.initialTimeRange,
     required this.onTimeRangeChanged,
+    this.onConversationDeleted,
   }) : super(key: key);
 
   @override
@@ -171,10 +176,7 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                             ),
                                             IconButton(
                                               icon: const Icon(Icons.delete),
-                                              onPressed: () async {
-                                                await _conversationService.deleteConversation(conversation.id);
-                                                _loadConversations();
-                                              },
+                                              onPressed: () => _showDeleteConfirmation(context, conversation, l10n),
                                             ),
                                           ],
                                         ),
@@ -277,5 +279,84 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
         ),
       ],
     );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, Conversation conversation, AppLocalizations l10n) {
+    // Capture AppProvider and ScaffoldMessenger before showing dialog
+    final appProvider = context.read<AppProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.deleteConversation),
+        content: Text(l10n.confirmDeleteConversation),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _deleteConversation(
+                conversation.id, 
+                l10n, 
+                appProvider, 
+                scaffoldMessenger,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteConversation(
+    String conversationId, 
+    AppLocalizations l10n,
+    AppProvider appProvider,
+    ScaffoldMessengerState scaffoldMessenger,
+  ) async {
+    try {
+      // Perform deletion - this doesn't depend on context
+      await appProvider.deleteConversation(conversationId);
+      
+      // Check if widget is still mounted before updating UI
+      if (!mounted) return;
+      
+      // Reload conversations in this dialog
+      _loadConversations();
+      
+      // Notify parent widget that a conversation was deleted
+      if (widget.onConversationDeleted != null) {
+        widget.onConversationDeleted!();
+      }
+      
+      // Show success message
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.conversationDeletedSuccessfully),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      LoggerService.error('Error deleting conversation: $e', error: e);
+      
+      // Check if widget is still mounted before showing error
+      if (!mounted) return;
+      
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorDeletingConversation(e.toString())),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 }

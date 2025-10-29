@@ -641,6 +641,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             _refreshTree();
           });
         },
+        onConversationDeleted: () {
+          // Refresh the tree when a conversation is deleted
+          _refreshTree();
+        },
       ),
     );
   }
