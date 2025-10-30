@@ -4933,6 +4933,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last'**
   String get last;
+
+  /// No description provided for @deleteInteractionWhatToDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'What do you want to delete?'**
+  String get deleteInteractionWhatToDelete;
+
+  /// No description provided for @deleteOnlyNodesInFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete only nodes in this filter'**
+  String get deleteOnlyNodesInFilter;
+
+  /// No description provided for @deleteNodeAndDescendants.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this node and all descendants'**
+  String get deleteNodeAndDescendants;
 }
 
 class _AppLocalizationsDelegate

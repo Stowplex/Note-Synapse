@@ -2664,4 +2664,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get last => '最后一条';
+
+  @override
+  String get deleteInteractionWhatToDelete => '您想要删除什么？';
+
+  @override
+  String get deleteOnlyNodesInFilter => '仅删除此筛选器中的节点';
+
+  @override
+  String get deleteNodeAndDescendants => '删除此节点及其所有后代';
 }

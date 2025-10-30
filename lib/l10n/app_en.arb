@@ -925,5 +925,8 @@
       "allTime": "All time",
       "custom": "Custom",
       "first": "First",
-      "last": "Last"
+      "last": "Last",
+      "deleteInteractionWhatToDelete": "What do you want to delete?",
+      "deleteOnlyNodesInFilter": "Delete only nodes in this filter",
+      "deleteNodeAndDescendants": "Delete this node and all descendants"
 }

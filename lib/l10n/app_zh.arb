@@ -925,4 +925,8 @@
       "allTime": "所有时间",
       "custom": "自定义",
       "first": "第一条",
-      "last": "最后一条"}
+      "last": "最后一条",
+      "deleteInteractionWhatToDelete": "您想要删除什么？",
+      "deleteOnlyNodesInFilter": "仅删除此筛选器中的节点",
+      "deleteNodeAndDescendants": "删除此节点及其所有后代"
+}

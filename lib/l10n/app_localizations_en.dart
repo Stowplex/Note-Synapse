@@ -2751,4 +2751,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get last => 'Last';
+
+  @override
+  String get deleteInteractionWhatToDelete => 'What do you want to delete?';
+
+  @override
+  String get deleteOnlyNodesInFilter => 'Delete only nodes in this filter';
+
+  @override
+  String get deleteNodeAndDescendants => 'Delete this node and all descendants';
 }

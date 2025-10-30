@@ -230,54 +230,56 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     if (_tree == null) return;
 
     final currentContext = context;
-    final l10n = AppLocalizations.of(currentContext)!;
 
     showDialog(
       context: currentContext,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.deleteInteraction),
-        content: Text('What do you want to delete?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.cancel),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              try {
-                if (node.messageId != null) {
-                  final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
-                  await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
-                }
-                _refreshTree();
-              } catch (e) {
-                LoggerService.error('Error deleting interaction: $e', error: e);
-              }
-            },
-            child: Text('Delete only nodes in this filter'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              try {
-                if (node.messageId != null) {
-                  final messageIdsToDelete = await _conversationService.getAllMessageIdsInSubtree(node.messageId!);
-                  await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
-                }
-                _refreshTree();
-              } catch (e) {
-                LoggerService.error('Error deleting interaction: $e', error: e);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(currentContext).colorScheme.error,
-              foregroundColor: Theme.of(currentContext).colorScheme.onError,
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext)!;
+        return AlertDialog(
+          title: Text(dialogL10n.deleteInteraction),
+          content: Text(dialogL10n.deleteInteractionWhatToDelete),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(dialogL10n.cancel),
             ),
-            child: Text('Delete this node and all descendants'),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  if (node.messageId != null) {
+                    final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
+                    await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
+                  }
+                  _refreshTree();
+                } catch (e) {
+                  LoggerService.error('Error deleting interaction: $e', error: e);
+                }
+              },
+              child: Text(dialogL10n.deleteOnlyNodesInFilter),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  if (node.messageId != null) {
+                    final messageIdsToDelete = await _conversationService.getAllMessageIdsInSubtree(node.messageId!);
+                    await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
+                  }
+                  _refreshTree();
+                } catch (e) {
+                  LoggerService.error('Error deleting interaction: $e', error: e);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(currentContext).colorScheme.error,
+                foregroundColor: Theme.of(currentContext).colorScheme.onError,
+              ),
+              child: Text(dialogL10n.deleteNodeAndDescendants),
+            ),
+          ],
+        );
+      },
     );
   }
 
