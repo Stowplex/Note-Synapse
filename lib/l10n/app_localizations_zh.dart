@@ -2180,9 +2180,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversation => '对话';
 
   @override
-  String get newConversation => '新对话';
-
-  @override
   String get aiConversation => 'AI对话';
 
   @override
@@ -2196,6 +2193,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversations => '对话';
+
+  @override
+  String conversationCount(int count) {
+    return '$count个对话';
+  }
+
+  @override
+  String get noConversations => '无对话';
+
+  @override
+  String get conversationsWithThisNote => '此笔记的对话';
 
   @override
   String get typeYourMessage => '输入您的消息...';
@@ -2255,13 +2263,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectNotesForConversation => '选择对话笔记';
 
   @override
+  String get selectNotesForNoteActionApp => '选择笔记操作应用的笔记';
+
+  @override
+  String get selectNotesToAddToContext => '选择要添加到上下文的笔记';
+
+  @override
+  String proceedWithNotes(int count) {
+    return '继续 $count 个笔记';
+  }
+
+  @override
+  String notesSelected(int count) {
+    return '已选择 $count 个笔记';
+  }
+
+  @override
+  String noNotesFoundMatching(String query) {
+    return '未找到匹配 \"$query\" 的笔记';
+  }
+
+  @override
+  String get notesAndContext => '笔记和上下文';
+
+  @override
+  String get addNotes => '添加笔记';
+
+  @override
   String get addNotesToConversation => '添加笔记';
 
   @override
   String get clearAllNotes => '清除全部';
-
-  @override
-  String get notesAndContext => '笔记和上下文';
 
   @override
   String get missingNotes => '缺失的笔记';
@@ -2314,6 +2346,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteInteractionAction => '删除交互';
+
+  @override
+  String get deleteConversation => '删除会话';
+
+  @override
+  String get confirmDeleteConversation => '您确定要删除此会话吗？此操作无法撤消。';
+
+  @override
+  String get conversationDeletedSuccessfully => '会话删除成功';
+
+  @override
+  String errorDeletingConversation(Object error) {
+    return '删除会话时出错：$error';
+  }
 
   @override
   String get saveSelectedNodesAsNote => '将选中的节点保存为笔记';
@@ -2395,9 +2441,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String additionalContextNotes(Object count) {
     return '额外上下文笔记（$count）';
   }
-
-  @override
-  String get addNotes => '添加笔记';
 
   @override
   String get noAdditionalNotesSelected => '未选择额外笔记。AI将仅使用对话内容。';
@@ -2582,4 +2625,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unknownPdf => '未知PDF';
+
+  @override
+  String get newConversation => '新对话';
+
+  @override
+  String get oneHourAgo => '1小时前';
+
+  @override
+  String get twelveHoursAgo => '12小时前';
+
+  @override
+  String get oneDayAgo => '1天前';
+
+  @override
+  String get threeDaysAgo => '3天前';
+
+  @override
+  String get sevenDaysAgo => '7天前';
+
+  @override
+  String get fifteenDaysAgo => '15天前';
+
+  @override
+  String get oneMonthAgo => '1个月前';
+
+  @override
+  String get sixMonthsAgo => '6个月前';
+
+  @override
+  String get allTime => '所有时间';
+
+  @override
+  String get custom => '自定义';
+
+  @override
+  String get first => '第一条';
+
+  @override
+  String get last => '最后一条';
+
+  @override
+  String get deleteInteractionWhatToDelete => '您想要删除什么？';
+
+  @override
+  String get deleteOnlyNodesInFilter => '仅删除此筛选器中的节点';
+
+  @override
+  String get deleteNodeAndDescendants => '删除此节点及其所有后代';
 }

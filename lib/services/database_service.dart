@@ -40,7 +40,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 20;
+  static const int DATABASE_VERSION = 21;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -218,14 +218,7 @@ class DatabaseService {
       )
   ''';
 
-  static const String _createConversationTreeTable = '''
-      CREATE TABLE conversation_tree(
-        id TEXT PRIMARY KEY,
-        treeData TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      )
-  ''';
+
 
   static const String _createConversationMessageMappingTable = '''
       CREATE TABLE conversation_message_mapping(
@@ -251,6 +244,18 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createConversationNoteMappingTable = '''
+      CREATE TABLE conversation_note_mapping(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversationId TEXT NOT NULL,
+        noteId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+        FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
+        UNIQUE(conversationId, noteId)
+      )
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -273,6 +278,8 @@ class DatabaseService {
     'CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)',
     'CREATE INDEX idx_message_parents_messageId ON message_parents(messageId)',
     'CREATE INDEX idx_message_parents_parentMessageId ON message_parents(parentMessageId)',
+    'CREATE INDEX idx_conversation_note_mapping_conversationId ON conversation_note_mapping(conversationId)',
+    'CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)',
   ];
 
   // For testing, allow creating new instances
@@ -315,9 +322,10 @@ class DatabaseService {
     await db.execute(_createConversationsTable);
     await db.execute(_createConversationMessagesTable);
     await db.execute(_createConversationAttachmentsTable);
-    await db.execute(_createConversationTreeTable);
+
     await db.execute(_createConversationMessageMappingTable);
     await db.execute(_createMessageParentsTable);
+    await db.execute(_createConversationNoteMappingTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -330,82 +338,15 @@ class DatabaseService {
   }
 
   // Migration configuration structure
+  // All clients are now on version 20 or later, so only keep version 20 migration for edge cases
   static const Map<int, MigrationStep> _migrationSteps = {
-    2: MigrationStep(
-      description: 'Remove dueDate column and add scheduledAt, completeBy columns',
-      execute: _migrateToVersion2,
-    ),
-    3: MigrationStep(
-      description: 'Add pinned column',
-      execute: _migrateToVersion3,
-    ),
-    4: MigrationStep(
-      description: 'Add isArchived column',
-      execute: _migrateToVersion4,
-    ),
-    5: MigrationStep(
-      description: 'Ensure isArchived column exists',
-      execute: _migrateToVersion5,
-    ),
-    6: MigrationStep(
-      description: 'Add filters table',
-      execute: _migrateToVersion6,
-    ),
-    7: MigrationStep(
-      description: 'Add user_apps table',
-      execute: _migrateToVersion7,
-    ),
-    8: MigrationStep(
-      description: 'Add type column to user_apps table',
-      execute: _migrateToVersion8,
-    ),
-    9: MigrationStep(
-      description: 'Add selectedRevisionId column and app_revisions table',
-      execute: _migrateToVersion9,
-    ),
-    10: MigrationStep(
-      description: 'Add attachmentPaths column to user_apps table',
-      execute: _migrateToVersion10,
-    ),
-    11: MigrationStep(
-      description: 'Move attachmentPaths from user_apps to app_revisions',
-      execute: _migrateToVersion11,
-    ),
-    12: MigrationStep(
-      description: 'Remove AI interactions table',
-      execute: _migrateToVersion12,
-    ),
-    13: MigrationStep(
-      description: 'Fix string timestamps in filters table',
-      execute: _migrateToVersion13,
-    ),
-    14: MigrationStep(
-      description: 'Add UUID column to user_apps table',
-      execute: _migrateToVersion14,
-    ),
-    15: MigrationStep(
-      description: 'Add user app libraries and dependencies tables',
-      execute: _migrateToVersion15,
-    ),
-    16: MigrationStep(
-      description: 'Add author and license fields to user_apps table',
-      execute: _migrateToVersion16,
-    ),
-    17: MigrationStep(
-      description: 'Add isRelativePath column to attachments table',
-      execute: _migrateToVersion17,
-    ),
-    18: MigrationStep(
-      description: 'Add conversation tables for AI chat functionality',
-      execute: _migrateToVersion18,
-    ),
-    19: MigrationStep(
-      description: 'Restructure conversation system with message mapping and parent relationships',
-      execute: _migrateToVersion19,
-    ),
     20: MigrationStep(
       description: 'Fix conversation_messages table schema (remove conversationId if still present)',
       execute: _migrateToVersion20,
+    ),
+    21: MigrationStep(
+      description: 'Create conversation_note_mapping table and migrate existing noteIds data',
+      execute: _migrateToVersion21,
     ),
   };
 
@@ -590,365 +531,6 @@ class DatabaseService {
   }
 
   // Individual migration methods
-  static Future<void> _migrateToVersion2(Database db, {required bool isBackupMigration}) async {
-      try {
-        // Check if dueDate column exists
-        final columns = await db.rawQuery("PRAGMA table_info(notes)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (columnNames.contains('dueDate')) {
-          // Create a new table with the updated schema
-          await db.execute('''
-            CREATE TABLE notes_new(
-              id TEXT PRIMARY KEY,
-              title TEXT NOT NULL,
-              content TEXT NOT NULL,
-              type TEXT NOT NULL,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL,
-              scheduledAt TEXT,
-              completeBy TEXT,
-              status TEXT,
-              completionPercentage REAL
-            )
-          ''');
-          
-          // Copy data from old table to new table, migrating dueDate to completeBy
-          await db.execute('''
-            INSERT INTO notes_new (id, title, content, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage)
-            SELECT id, title, content, type, createdAt, updatedAt, NULL, dueDate, status, completionPercentage
-            FROM notes
-          ''');
-          
-          // Drop old table and rename new table
-          await db.execute('DROP TABLE notes');
-          await db.execute('ALTER TABLE notes_new RENAME TO notes');
-          
-          // Recreate indexes
-          await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
-          await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
-          await db.execute('CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)');
-          await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
-        }
-      } catch (e) {
-      LoggerService.error('Migration to version 2 failed: $e', error: e);
-      rethrow; // Let the error handling system deal with it
-    }
-  }
-
-  static Future<void> _migrateToVersion3(Database db, {required bool isBackupMigration}) async {
-      try {
-        await db.execute('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
-        await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
-      } catch (e) {
-        LoggerService.error('Migration to version 3 failed: $e', error: e);
-      rethrow;
-    }
-  }
-
-  static Future<void> _migrateToVersion4(Database db, {required bool isBackupMigration}) async {
-      try {
-        await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
-        await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
-      } catch (e) {
-        LoggerService.error('Migration to version 4 failed: $e', error: e);
-      rethrow;
-    }
-  }
-
-  static Future<void> _migrateToVersion5(Database db, {required bool isBackupMigration}) async {
-      try {
-        // Check if isArchived column exists
-        final columns = await db.rawQuery("PRAGMA table_info(notes)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('isArchived')) {
-          await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
-          await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
-        }
-      } catch (e) {
-        LoggerService.error('Migration to version 5 failed: $e', error: e);
-      rethrow;
-    }
-  }
-
-  static Future<void> _migrateToVersion6(Database db, {required bool isBackupMigration}) async {
-    try {
-      await db.execute(_createFiltersTable);
-    } catch (e) {
-      LoggerService.error('Migration to version 6 failed: $e', error: e);
-      rethrow;
-    }
-  }
-
-  static Future<void> _migrateToVersion7(Database db, {required bool isBackupMigration}) async {
-    try {
-      // Check if user_apps table already exists
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'");
-      if (tables.isEmpty) {
-        // Create user_apps table without uuid, author, license columns (will be added in later migrations)
-        await db.execute('''
-          CREATE TABLE user_apps(
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            steps TEXT NOT NULL,
-            htmlContent TEXT NOT NULL,
-            appState TEXT,
-            createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL
-          )
-        ''');
-      }
-    } catch (e) {
-      LoggerService.error('Migration to version 7 failed: $e', error: e);
-      rethrow;
-    }
-  }
-
-  static Future<void> _migrateToVersion8(Database db, {required bool isBackupMigration}) async {
-        // Check if type column exists in user_apps table
-        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('type')) {
-          await db.execute('ALTER TABLE user_apps ADD COLUMN type TEXT NOT NULL DEFAULT "normal"');
-    }
-  }
-
-  static Future<void> _migrateToVersion9(Database db, {required bool isBackupMigration}) async {
-    // Add selectedRevisionId column to user_apps table
-    final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
-    final columnNames = columns.map((col) => col['name'] as String).toList();
-    
-    if (!columnNames.contains('selectedRevisionId')) {
-      await db.execute('ALTER TABLE user_apps ADD COLUMN selectedRevisionId TEXT');
-    }
-    
-    // Create app_revisions table (without attachmentPaths column - will be added in later migration)
-    await db.execute('''
-      CREATE TABLE app_revisions(
-        id TEXT PRIMARY KEY,
-        appId TEXT NOT NULL,
-        revisionNumber INTEGER NOT NULL,
-        revisionTimestamp INTEGER NOT NULL,
-        userPrompt TEXT NOT NULL,
-        aiResponse TEXT NOT NULL,
-        appCode TEXT NOT NULL,
-        FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
-      )
-    ''');
-    
-    // Migrate existing apps to have initial revisions
-    await DatabaseService._migrateExistingAppsToRevisions(db);
-  }
-    
-  static Future<void> _migrateToVersion10(Database db, {required bool isBackupMigration}) async {
-        // Check if attachmentPaths column exists in user_apps table
-        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('attachmentPaths')) {
-          await db.execute('ALTER TABLE user_apps ADD COLUMN attachmentPaths TEXT');
-      }
-    }
-    
-  static Future<void> _migrateToVersion11(Database db, {required bool isBackupMigration}) async {
-        // Add attachmentPaths column to app_revisions table
-        final columns = await db.rawQuery("PRAGMA table_info(app_revisions)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('attachmentPaths')) {
-          await db.execute('ALTER TABLE app_revisions ADD COLUMN attachmentPaths TEXT');
-        }
-        
-        // Remove attachmentPaths column from user_apps table if it exists
-        final userAppColumns = await db.rawQuery("PRAGMA table_info(user_apps)");
-        final userAppColumnNames = userAppColumns.map((col) => col['name'] as String).toList();
-        
-        if (userAppColumnNames.contains('attachmentPaths')) {
-          // SQLite doesn't support DROP COLUMN, so we need to recreate the table
-          await db.execute('''
-            CREATE TABLE user_apps_new(
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              description TEXT NOT NULL,
-              steps TEXT NOT NULL,
-              htmlContent TEXT NOT NULL,
-              appState TEXT,
-              type TEXT NOT NULL DEFAULT 'normal',
-              selectedRevisionId TEXT,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL
-            )
-          ''');
-          
-          await db.execute('''
-            INSERT INTO user_apps_new 
-            SELECT id, name, description, steps, htmlContent, appState, type, selectedRevisionId, createdAt, updatedAt 
-            FROM user_apps
-          ''');
-          
-          await db.execute('DROP TABLE user_apps');
-          await db.execute('ALTER TABLE user_apps_new RENAME TO user_apps');
-      }
-    }
-    
-  static Future<void> _migrateToVersion12(Database db, {required bool isBackupMigration}) async {
-        // Check if ai_interactions table exists and drop it
-        final tables = await db.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_interactions'"
-        );
-        
-        if (tables.isNotEmpty) {
-          await db.execute('DROP TABLE IF EXISTS ai_interactions');
-          LoggerService.info('Dropped ai_interactions table');
-      }
-    }
-    
-  static Future<void> _migrateToVersion13(Database db, {required bool isBackupMigration}) async {
-        // Check if filters table exists
-        final tables = await db.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='filters'"
-        );
-        
-        if (tables.isNotEmpty) {
-          // Find records with string timestamps and fix them
-          final corruptedRecords = await db.rawQuery(
-            "SELECT id, createdAt, updatedAt FROM filters WHERE typeof(createdAt) = 'text' OR typeof(updatedAt) = 'text'"
-          );
-          
-          if (corruptedRecords.isNotEmpty) {
-            LoggerService.warning('Found ${corruptedRecords.length} filter records with string timestamps, fixing...');
-            
-            for (final record in corruptedRecords) {
-              final id = record['id'] as String;
-              final now = DateTime.now().millisecondsSinceEpoch;
-              
-              // Update with current timestamp as fallback
-              await db.execute(
-                'UPDATE filters SET createdAt = ?, updatedAt = ? WHERE id = ?',
-                [now, now, id]
-              );
-            }
-            
-            LoggerService.info('Fixed ${corruptedRecords.length} filter records with corrupted timestamps');
-          }
-      }
-    }
-    
-  static Future<void> _migrateToVersion14(Database db, {required bool isBackupMigration}) async {
-        // Check if uuid column exists in user_apps table
-        final columns = await db.rawQuery("PRAGMA table_info(user_apps)");
-        final columnNames = columns.map((col) => col['name'] as String).toList();
-        
-        if (!columnNames.contains('uuid')) {
-          // Add uuid column
-          await db.execute('ALTER TABLE user_apps ADD COLUMN uuid TEXT');
-          
-          // Generate UUIDs for existing records that have null uuid
-      if (isBackupMigration) {
-        // Simplified UUID generation for backup migration
-        final apps = await db.query('user_apps', where: 'uuid IS NULL');
-        for (final app in apps) {
-          final uuid = DateTime.now().millisecondsSinceEpoch.toString();
-          await db.update('user_apps', {'uuid': uuid}, where: 'id = ?', whereArgs: [app['id']]);
-        }
-      } else {
-        // Use proper UUID generation for main migration
-        await DatabaseService._migrateUserAppsWithUuid(db);
-      }
-    }
-  }
-
-  static Future<void> _migrateToVersion15(Database db, {required bool isBackupMigration}) async {
-    // Create User App Libraries table
-    await db.execute(_createUserAppLibrariesTable);
-
-    // Create User App Library Dependencies table
-    await db.execute(_createUserAppLibraryDependenciesTable);
-    
-    // Create indexes for better performance
-    await db.execute('CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)');
-    await db.execute('CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)');
-    await db.execute('CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)');
-    await db.execute('CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)');
-    
-    LoggerService.info('Migration to version 15 completed: Added user app libraries and dependencies tables');
-  }
-    
-  static Future<void> _migrateToVersion16(Database db, {required bool isBackupMigration}) async {
-        // Add author and license columns to user_apps table
-        await db.execute('ALTER TABLE user_apps ADD COLUMN author TEXT DEFAULT ""');
-        await db.execute('ALTER TABLE user_apps ADD COLUMN license TEXT DEFAULT ""');
-        
-        LoggerService.info('Migration to version 16 completed: Added author and license fields to user_apps table');
-    }
-    
-  static Future<void> _migrateToVersion17(Database db, {required bool isBackupMigration}) async {
-        // Add isRelativePath column to attachments table
-        await db.execute('ALTER TABLE attachments ADD COLUMN isRelativePath INTEGER NOT NULL DEFAULT 0');
-        
-        LoggerService.info('Migration to version 17 completed: Added isRelativePath column to attachments table');
-  }
-
-  static Future<void> _migrateToVersion18(Database db, {required bool isBackupMigration}) async {
-        // Create conversation tables
-        await db.execute(_createConversationsTable);
-        await db.execute(_createConversationMessagesTable);
-        await db.execute(_createConversationAttachmentsTable);
-        await db.execute(_createConversationTreeTable);
-        
-        // Create indexes for conversation tables
-        await db.execute('CREATE INDEX idx_conversations_parentConversationId ON conversations(parentConversationId)');
-        await db.execute('CREATE INDEX idx_conversations_createdAt ON conversations(createdAt)');
-        await db.execute('CREATE INDEX idx_conversations_isArchived ON conversations(isArchived)');
-        await db.execute('CREATE INDEX idx_conversation_messages_conversationId ON conversation_messages(conversationId)');
-        await db.execute('CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)');
-        await db.execute('CREATE INDEX idx_conversation_attachments_messageId ON conversation_attachments(messageId)');
-        
-        LoggerService.info('Migration to version 18 completed: Added conversation tables for AI chat functionality');
-  }
-
-  static Future<void> _migrateToVersion19(Database db, {required bool isBackupMigration}) async {
-        LoggerService.info('Starting migration to version 19: Restructuring conversation system');
-        
-        // Create new tables
-        await db.execute(_createConversationMessageMappingTable);
-        await db.execute(_createMessageParentsTable);
-        
-        // Create indexes for new tables
-        await db.execute('CREATE INDEX idx_conversation_message_mapping_conversationId ON conversation_message_mapping(conversationId)');
-        await db.execute('CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)');
-        await db.execute('CREATE INDEX idx_message_parents_messageId ON message_parents(messageId)');
-        await db.execute('CREATE INDEX idx_message_parents_parentMessageId ON message_parents(parentMessageId)');
-        
-        // Migrate existing data
-        await _migrateExistingConversationData(db);
-        
-        // Remove old conversationId column from conversation_messages
-        // SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
-        await db.execute('DROP INDEX IF EXISTS idx_conversation_messages_conversationId');
-        await db.execute('ALTER TABLE conversation_messages RENAME TO conversation_messages_old');
-        await db.execute(_createConversationMessagesTable);
-        await db.execute('''
-          INSERT INTO conversation_messages (id, type, content, timestamp, modelUsed, metadata)
-          SELECT id, type, content, timestamp, modelUsed, metadata FROM conversation_messages_old
-        ''');
-        await db.execute('DROP TABLE conversation_messages_old');
-        
-        // Recreate the timestamp index
-        await db.execute('CREATE INDEX idx_conversation_messages_timestamp ON conversation_messages(timestamp)');
-        
-        // Remove old parentConversationId index if it exists
-        await db.execute('DROP INDEX IF EXISTS idx_conversations_parentConversationId');
-        
-        // Clear old tree data to force rebuild
-        await db.delete('conversation_tree');
-        
-        LoggerService.info('Migration to version 19 completed: Restructured conversation system');
-  }
-
   static Future<void> _migrateToVersion20(Database db, {required bool isBackupMigration}) async {
     LoggerService.info('Starting migration to version 20: Ensuring conversation_messages schema is correct');
     
@@ -1030,154 +612,108 @@ class DatabaseService {
     }
   }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Migrate existing conversation data to new structure
-  static Future<void> _migrateExistingConversationData(Database db) async {
-        LoggerService.info('Migrating existing conversation data to new structure');
+  // Migration to version 21: Create conversation_note_mapping table and migrate data
+  static Future<void> _migrateToVersion21(Database db, {required bool isBackupMigration}) async {
+    LoggerService.info('Starting migration to version 21: Creating conversation_note_mapping table and migrating data');
+    
+    try {
+      // Create the conversation_note_mapping table
+      await db.execute('''
+        CREATE TABLE conversation_note_mapping(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conversationId TEXT NOT NULL,
+          noteId TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+          FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
+          UNIQUE(conversationId, noteId)
+        )
+      ''');
+      
+      // Create indexes
+      await db.execute('CREATE INDEX idx_conversation_note_mapping_conversationId ON conversation_note_mapping(conversationId)');
+      await db.execute('CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)');
+      
+      LoggerService.info('Created conversation_note_mapping table and indexes');
+      
+      // Migrate existing noteIds data to the new mapping table
+      final conversations = await db.query('conversations');
+      int migratedCount = 0;
+      
+      for (final conversation in conversations) {
+        final conversationId = conversation['id'] as String;
+        final noteIdsJson = conversation['noteIds'] as String?;
         
-        // Get all existing conversations
-        final conversations = await db.query('conversations');
-        LoggerService.info('Found ${conversations.length} conversations to migrate');
-        
-        for (final conversation in conversations) {
-          final conversationId = conversation['id'] as String;
-          
-          // Get messages for this conversation
-          final messages = await db.query(
-            'conversation_messages',
-            where: 'conversationId = ?',
-            whereArgs: [conversationId],
-            orderBy: 'timestamp ASC',
-          );
-          
-          LoggerService.info('Migrating conversation $conversationId with ${messages.length} messages');
-          
-          // Create message mappings and parent relationships
-          String? previousMessageId;
-          for (int i = 0; i < messages.length; i++) {
-            final message = messages[i];
-            final messageId = message['id'] as String;
+        if (noteIdsJson != null && noteIdsJson.isNotEmpty) {
+          try {
+            final noteIds = List<String>.from(jsonDecode(noteIdsJson));
+            final now = DateTime.now().millisecondsSinceEpoch;
             
-            // Create conversation-message mapping
-            await db.insert('conversation_message_mapping', {
-              'conversationId': conversationId,
-              'messageId': messageId,
-              'createdAt': DateTime.now().millisecondsSinceEpoch,
-            });
-            
-            // Create parent relationship (except for first message)
-            if (previousMessageId != null) {
-              await db.insert('message_parents', {
-                'id': '${messageId}_${previousMessageId}',
-                'messageId': messageId,
-                'parentMessageId': previousMessageId,
-                'createdAt': DateTime.now().millisecondsSinceEpoch,
-              });
+            for (final noteId in noteIds) {
+              // Check if the note still exists before creating the mapping
+              final noteExists = await db.query(
+                'notes',
+                where: 'id = ?',
+                whereArgs: [noteId],
+                limit: 1,
+              );
+              
+              if (noteExists.isNotEmpty) {
+                await db.insert('conversation_note_mapping', {
+                  'conversationId': conversationId,
+                  'noteId': noteId,
+                  'createdAt': now,
+                }, conflictAlgorithm: ConflictAlgorithm.ignore);
+                migratedCount++;
+              } else {
+                LoggerService.warning('Skipping migration for non-existent note: $noteId in conversation: $conversationId');
+              }
             }
-            
-            previousMessageId = messageId;
+          } catch (e) {
+            LoggerService.error('Error parsing noteIds for conversation $conversationId: $e');
           }
         }
-        
-        LoggerService.info('Completed migration of existing conversation data');
+      }
+      
+      LoggerService.info('Migrated $migratedCount note-conversation mappings');
+      LoggerService.info('Migration to version 21 completed successfully');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 21: $e', error: e);
+      rethrow;
+    }
   }
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Migrate existing conversation data to new structure
 
 
   // Migration helper method to create initial revisions for existing apps
-  static Future<void> _migrateExistingAppsToRevisions(Database db) async {
-    try {
-      LoggerService.info('Starting migration of existing apps to revisions...');
-      
-      // Get all existing apps
-      final apps = await db.query('user_apps');
-      LoggerService.info('Found ${apps.length} existing apps to migrate');
-      
-      for (final appMap in apps) {
-        final appId = appMap['id'] as String;
-        final appName = appMap['name'] as String;
-        final htmlContent = appMap['htmlContent'] as String;
-        
-        // Check if this app already has revisions
-        final existingRevisions = await db.query(
-          'app_revisions',
-          where: 'appId = ?',
-          whereArgs: [appId],
-        );
-        
-        if (existingRevisions.isNotEmpty) {
-          LoggerService.debug('App $appId already has revisions, skipping...');
-          continue;
-        }
-        
-        // Create initial revision for this app
-        final revisionId = '${appId}_rev_1';
-        final revisionTimestamp = DateTime.now().millisecondsSinceEpoch;
-        
-        final revisionData = {
-          'id': revisionId,
-          'appId': appId,
-          'revisionNumber': 1,
-          'revisionTimestamp': revisionTimestamp,
-          'userPrompt': 'Initial app creation',
-          'aiResponse': 'This is the initial version of the app created during migration.',
-          'appCode': htmlContent,
-        };
-        
-        // Insert the revision
-        await db.insert('app_revisions', revisionData);
-        
-        // Update the app to set the selected revision
-        await db.update(
-          'user_apps',
-          {'selectedRevisionId': revisionId},
-          where: 'id = ?',
-          whereArgs: [appId],
-        );
-        
-        LoggerService.debug('Created initial revision for app: $appName (ID: $appId)');
-      }
-      
-      LoggerService.info('Migration of existing apps to revisions completed successfully');
-    } catch (e) {
-      LoggerService.error('Error during migration of existing apps to revisions: $e', error: e);
-      // Don't rethrow - this is a migration helper, we don't want to break the entire migration
+
+  // Validate that all note IDs in a conversation exist
+  Future<List<String>> validateConversationNotes(String conversationId) async {
+    final noteIds = await getConversationNoteIds(conversationId);
+    if (noteIds.isEmpty) return [];
+    
+    final db = await database;
+    // Efficiently check which IDs exist using a simple COUNT query
+    final placeholders = List.filled(noteIds.length, '?').join(',');
+    final result = await db.rawQuery(
+      'SELECT id FROM notes WHERE id IN ($placeholders)',
+      noteIds,
+    );
+    
+    final existingNoteIds = result.map((row) => row['id'] as String).toSet();
+    
+    // Find missing note IDs
+    final missingNoteIds = noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
+    
+    if (missingNoteIds.isNotEmpty) {
+      LoggerService.warning('Conversation $conversationId references missing notes: $missingNoteIds');
     }
+    
+    return missingNoteIds;
   }
 
-  // Migration helper method to add UUIDs to existing user apps
-  static Future<void> _migrateUserAppsWithUuid(Database db) async {
-    try {
-      LoggerService.info('Starting migration of user apps with UUID...');
-      
-      // Get all existing apps that don't have a UUID
-      final apps = await db.query('user_apps', where: 'uuid IS NULL');
-      LoggerService.info('Found ${apps.length} user apps without UUID to migrate');
-      
-      for (final appMap in apps) {
-        final appId = appMap['id'] as String;
-        final appName = appMap['name'] as String;
-        
-        // Generate a new UUID
-        final uuid = const Uuid().v4();
-        
-        // Update the app with the new UUID
-        await db.update(
-          'user_apps',
-          {'uuid': uuid},
-          where: 'id = ?',
-          whereArgs: [appId],
-        );
-        
-        LoggerService.debug('Added UUID $uuid to app: $appName (ID: $appId)');
-      }
-      
-      LoggerService.info('Migration of user apps with UUID completed successfully');
-    } catch (e) {
-      LoggerService.error('Error during migration of user apps with UUID: $e', error: e);
-      // Don't rethrow - this is a migration helper, we don't want to break the entire migration
-    }
-  }
-
-  // Notes CRUD
+  // Insert a new note into the database
   Future<String> insertNote(Note note) async {
     final db = await database;
     final json = note.toJson();
@@ -1213,6 +749,7 @@ class DatabaseService {
     return note.id;
   }
 
+  // Get all notes from the database
   Future<List<Note>> getAllNotes() async {
     final db = await database;
     LoggerService.info('Querying notes table...');
@@ -1239,31 +776,6 @@ class DatabaseService {
     return notes;
   }
 
-  // Validate that all note IDs in a conversation exist
-  Future<List<String>> validateConversationNotes(String conversationId) async {
-    final conversation = await getConversation(conversationId);
-    if (conversation == null || conversation.noteIds.isEmpty) return [];
-    
-    final db = await database;
-    // Efficiently check which IDs exist using a simple COUNT query
-    final placeholders = List.filled(conversation.noteIds.length, '?').join(',');
-    final result = await db.rawQuery(
-      'SELECT id FROM notes WHERE id IN ($placeholders)',
-      conversation.noteIds,
-    );
-    
-    final existingNoteIds = result.map((row) => row['id'] as String).toSet();
-    
-    // Find missing note IDs
-    final missingNoteIds = conversation.noteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
-    
-    if (missingNoteIds.isNotEmpty) {
-      LoggerService.warning('Conversation $conversationId references missing notes: $missingNoteIds');
-    }
-    
-    return missingNoteIds;
-  }
-
   // Clean up invalid note references from conversations
   Future<void> cleanupInvalidNoteReferences() async {
     final allNotes = await getAllNotes();
@@ -1273,14 +785,20 @@ class DatabaseService {
     final conversations = await getAllConversations();
     
     for (final conversation in conversations) {
-      final validNoteIds = conversation.noteIds.where((noteId) => existingNoteIds.contains(noteId)).toList();
+      final currentNoteIds = await getConversationNoteIds(conversation.id);
+      final validNoteIds = currentNoteIds.where((noteId) => existingNoteIds.contains(noteId)).toList();
       
-      if (validNoteIds.length != conversation.noteIds.length) {
+      if (validNoteIds.length != currentNoteIds.length) {
         LoggerService.info('Cleaning up invalid note references for conversation ${conversation.id}');
         
-        // Update conversation with only valid note IDs
-        final updatedConversation = conversation.copyWith(noteIds: validNoteIds);
-        await updateConversation(updatedConversation);
+        // Remove invalid mappings
+        final invalidNoteIds = currentNoteIds.where((noteId) => !existingNoteIds.contains(noteId)).toList();
+        for (final invalidNoteId in invalidNoteIds) {
+          await deleteConversationNoteMapping(
+            conversationId: conversation.id,
+            noteId: invalidNoteId,
+          );
+        }
       }
     }
   }
@@ -1444,6 +962,8 @@ class DatabaseService {
 
   Future<void> deleteNote(String id) async {
     final db = await database;
+    // Delete note-conversation mappings first (foreign key constraints will handle cascade deletion)
+    await deleteNoteConversationMappings(id);
     // CASCADE will handle note_tags deletion automatically
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
@@ -1970,7 +1490,7 @@ class DatabaseService {
     await db.delete('notes');
     await db.delete('tags');
     await db.delete('filters');
-    await db.delete('conversation_tree');
+
     await db.delete('conversation_messages');
     await db.delete('conversation_attachments');
     await db.delete('conversations');
@@ -2602,20 +2122,31 @@ class DatabaseService {
     json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
     json['isArchived'] = conversation.isArchived ? 1 : 0;
-    json['noteIds'] = jsonEncode(conversation.noteIds);
+    json['noteIds'] = '[]'; // Always empty, managed by mapping table
     
     await db.insert('conversations', json);
     return conversation.id;
   }
 
-  Future<List<Conversation>> getAllConversations() async {
+  Future<List<Conversation>> getAllConversations({Duration? maxAge}) async {
     final db = await database;
+    String? where;
+    List<dynamic>? whereArgs;
+
+    if (maxAge != null) {
+      final since = DateTime.now().subtract(maxAge).millisecondsSinceEpoch;
+      where = 'updatedAt >= ?';
+      whereArgs = [since];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       'conversations',
-      orderBy: 'createdAt DESC',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'updatedAt DESC',
     );
 
-    return maps.map((map) => _mapToConversation(map)).toList();
+    return maps.map((map) => _mapToConversation(map)).toList().cast<Conversation>();
   }
 
   Future<Conversation?> getConversation(String id) async {
@@ -2636,7 +2167,7 @@ class DatabaseService {
     json['createdAt'] = conversation.createdAt.millisecondsSinceEpoch;
     json['updatedAt'] = conversation.updatedAt.millisecondsSinceEpoch;
     json['isArchived'] = conversation.isArchived ? 1 : 0;
-    json['noteIds'] = jsonEncode(conversation.noteIds);
+    json['noteIds'] = '[]'; // Always empty, managed by mapping table
     
     await db.update(
       'conversations',
@@ -2648,6 +2179,8 @@ class DatabaseService {
 
   Future<void> deleteConversation(String id) async {
     final db = await database;
+    // Delete note mappings first (foreign key constraints will handle cascade deletion)
+    await deleteConversationNoteMappings(id);
     await db.delete('conversations', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -2676,7 +2209,7 @@ class DatabaseService {
       ORDER BY cm.timestamp ASC
     ''', [conversationId]);
 
-    return maps.map((map) => _mapToConversationMessage(map, conversationId)).toList();
+    return maps.map((map) => _mapToConversationMessage(map, conversationId)).toList().cast<ConversationMessage>();
   }
 
   Future<ConversationMessage?> getConversationMessage(String id) async {
@@ -2841,6 +2374,9 @@ class DatabaseService {
     
     LoggerService.info('Explicitly deleting conversation: $conversationId');
     
+    // Delete conversation-note mappings first
+    await deleteConversationNoteMappings(conversationId);
+    
     // Get all messages in this conversation
     final messageMappings = await db.query(
       'conversation_message_mapping',
@@ -2900,88 +2436,14 @@ class DatabaseService {
     await db.delete('conversation_attachments', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Conversation Tree CRUD
-  Future<String> insertConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    await db.insert('conversation_tree', json);
-    return tree.id;
-  }
 
-  Future<ConversationTree?> getConversationTree(String id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'conversation_tree',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isEmpty) return null;
-    return _mapToConversationTree(maps.first);
-  }
-
-  Future<void> updateConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    await db.update(
-      'conversation_tree',
-      json,
-      where: 'id = ?',
-      whereArgs: [tree.id],
-    );
-  }
-
-  Future<void> upsertConversationTree(ConversationTree tree) async {
-    final db = await database;
-    final json = {
-      'id': tree.id,
-      'treeData': jsonEncode(tree.toJson()),
-      'createdAt': tree.createdAt.millisecondsSinceEpoch,
-      'updatedAt': tree.updatedAt.millisecondsSinceEpoch,
-    };
-    
-    // Try to insert first, if it fails due to unique constraint, update instead
-    try {
-      await db.insert('conversation_tree', json);
-    } catch (e) {
-      if (e.toString().contains('UNIQUE constraint failed')) {
-        await db.update(
-          'conversation_tree',
-          json,
-          where: 'id = ?',
-          whereArgs: [tree.id],
-        );
-      } else {
-        rethrow;
-      }
-    }
-  }
-
-  Future<void> deleteConversationTree(String id) async {
-    final db = await database;
-    await db.delete('conversation_tree', where: 'id = ?', whereArgs: [id]);
-  }
 
   // Helper methods for mapping database results to models
   Conversation _mapToConversation(Map<String, dynamic> map) {
     return Conversation(
       id: map['id'] as String,
       title: map['title'] as String,
-      noteIds: map['noteIds'] != null 
-          ? List<String>.from(jsonDecode(map['noteIds'] as String))
-          : [],
+      noteIds: const [], // Always empty, managed by mapping table
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
       isArchived: (map['isArchived'] ?? 0) == 1,
@@ -3006,11 +2468,6 @@ class DatabaseService {
           ? Map<String, dynamic>.from(jsonDecode(map['metadata'] as String))
           : null,
     );
-  }
-
-  ConversationTree _mapToConversationTree(Map<String, dynamic> map) {
-    final treeData = jsonDecode(map['treeData'] as String) as Map<String, dynamic>;
-    return ConversationTree.fromJson(treeData);
   }
 
   // New conversation-message mapping methods
@@ -3084,6 +2541,22 @@ class DatabaseService {
     return results.map((r) => r['messageId'] as String).toList();
   }
 
+  Future<void> deleteEmptyConversations({required Duration olderThan}) async {
+    final db = await database;
+    final since = DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+    final emptyConversations = await db.rawQuery('''
+      SELECT c.id 
+      FROM conversations c 
+      LEFT JOIN conversation_message_mapping cmm ON c.id = cmm.conversationId 
+      WHERE cmm.conversationId IS NULL AND c.updatedAt < ?
+    ''', [since]);
+    
+    for (final conversation in emptyConversations) {
+      final conversationId = conversation['id'] as String;
+      await db.delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    }
+  }
+
   // Find all conversations that contain a specific message
   Future<List<String>> getConversationsContainingMessage(String messageId) async {
     final db = await database;
@@ -3093,6 +2566,104 @@ class DatabaseService {
       whereArgs: [messageId],
     );
     return results.map((r) => r['conversationId'] as String).toList();
+  }
+
+  // Conversation-Note Mapping CRUD methods
+  Future<String> insertConversationNoteMapping({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    final result = await db.insert('conversation_note_mapping', {
+      'conversationId': conversationId,
+      'noteId': noteId,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return result.toString();
+  }
+
+  Future<List<String>> getConversationNoteIds(String conversationId) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+      orderBy: 'createdAt ASC',
+    );
+    return results.map((r) => r['noteId'] as String).toList();
+  }
+
+  Future<List<String>> getNoteConversationIds(String noteId) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+      orderBy: 'createdAt ASC',
+    );
+    return results.map((r) => r['conversationId'] as String).toList();
+  }
+
+  Future<void> deleteConversationNoteMapping({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'conversationId = ? AND noteId = ?',
+      whereArgs: [conversationId, noteId],
+    );
+  }
+
+  Future<void> deleteConversationNoteMappings(String conversationId) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'conversationId = ?',
+      whereArgs: [conversationId],
+    );
+  }
+
+  Future<void> deleteNoteConversationMappings(String noteId) async {
+    final db = await database;
+    await db.delete(
+      'conversation_note_mapping',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  Future<bool> conversationNoteMappingExists({
+    required String conversationId,
+    required String noteId,
+  }) async {
+    final db = await database;
+    final results = await db.query(
+      'conversation_note_mapping',
+      where: 'conversationId = ? AND noteId = ?',
+      whereArgs: [conversationId, noteId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  Future<int> getNoteConversationCount(String noteId) async {
+    final db = await database;
+    final results = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM conversation_note_mapping WHERE noteId = ?',
+      [noteId],
+    );
+    return results.first['count'] as int;
+  }
+
+  Future<int> getConversationNoteCount(String conversationId) async {
+    final db = await database;
+    final results = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM conversation_note_mapping WHERE conversationId = ?',
+      [conversationId],
+    );
+    return results.first['count'] as int;
   }
 
 }

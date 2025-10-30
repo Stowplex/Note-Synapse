@@ -683,12 +683,21 @@
   "backupRestored": "备份恢复成功！",
   "errorRestoringBackup": "恢复备份时出错：{error}",
   "conversation": "对话",
-  "newConversation": "新对话",
-  "aiConversation": "AI对话",
+    "aiConversation": "AI对话",
   "aiConversationDescription": "与AI就您的笔记开始对话",
   "startConversation": "开始对话",
   "conversationTree": "对话树",
   "conversations": "对话",
+  "conversationCount": "{count}个对话",
+  "@conversationCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noConversations": "无对话",
+  "conversationsWithThisNote": "此笔记的对话",
   "typeYourMessage": "输入您的消息...",
   "cancellingRequest": "正在取消请求...",
   "attachFiles": "附加文件",
@@ -707,6 +716,33 @@
   "forkedConversationSuccess": "对话分支成功",
   "errorForkingConversation": "分支对话时出错：{error}",
   "selectNotesForConversation": "选择对话笔记",
+  "selectNotesForNoteActionApp": "选择笔记操作应用的笔记",
+  "selectNotesToAddToContext": "选择要添加到上下文的笔记",
+  "proceedWithNotes": "继续 {count} 个笔记",
+  "@proceedWithNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notesSelected": "已选择 {count} 个笔记",
+  "@notesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noNotesFoundMatching": "未找到匹配 \"{query}\" 的笔记",
+  "@noNotesFoundMatching": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "addNotes": "添加笔记",
   "addNotesToConversation": "添加笔记",
   "clearAllNotes": "清除全部",
   "notesAndContext": "笔记和上下文",
@@ -727,6 +763,10 @@
   "errorDeletingInteraction": "删除交互时出错：{error}",
   "forkFromHere": "从这里分叉",
   "deleteInteractionAction": "删除交互",
+  "deleteConversation": "删除会话",
+  "confirmDeleteConversation": "您确定要删除此会话吗？此操作无法撤消。",
+  "conversationDeletedSuccessfully": "会话删除成功",
+  "errorDeletingConversation": "删除会话时出错：{error}",
   "saveSelectedNodesAsNote": "将选中的节点保存为笔记",
   "createFromSelected": "从选中创建",
   "exitMultiSelect": "退出多选",
@@ -871,5 +911,22 @@
     }
   },
   "unknownImage": "未知图片",
-  "unknownPdf": "未知PDF"
+      "unknownPdf": "未知PDF",
+    "newConversation": "新对话",
+      "conversations": "对话",
+      "oneHourAgo": "1小时前",
+      "twelveHoursAgo": "12小时前",
+      "oneDayAgo": "1天前",
+      "threeDaysAgo": "3天前",
+      "sevenDaysAgo": "7天前",
+      "fifteenDaysAgo": "15天前",
+      "oneMonthAgo": "1个月前",
+      "sixMonthsAgo": "6个月前",
+      "allTime": "所有时间",
+      "custom": "自定义",
+      "first": "第一条",
+      "last": "最后一条",
+      "deleteInteractionWhatToDelete": "您想要删除什么？",
+      "deleteOnlyNodesInFilter": "仅删除此筛选器中的节点",
+      "deleteNodeAndDescendants": "删除此节点及其所有后代"
 }

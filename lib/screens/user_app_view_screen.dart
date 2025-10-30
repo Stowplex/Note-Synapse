@@ -19,6 +19,7 @@ import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'user_app_edit_screen.dart';
+import 'note_detail_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
   final UserApp app;
@@ -973,6 +974,32 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             const result = await window.flutter_inappwebview.callHandler('saveNotes', notes);
             return result;
           },
+          
+          /**
+           * Open a note natively on the platform
+           * @param {string} noteId - ID of the note to open
+           * @param {boolean} [replaceWindow=false] - If true, replaces the current view with the note view
+           * @returns {Promise<{success: boolean, error?: string}>}
+           * 
+           * @example
+           * // Open note in new view
+           * const result = await Synapse.openNote('note-id-123');
+           * 
+           * @example
+           * // Replace current view with note view
+           * const result = await Synapse.openNote('note-id-123', true);
+           */
+          openNote: async (noteId, replaceWindow = false) => {
+            if (typeof noteId !== 'string' || noteId.trim() === '') {
+              throw new Error('Parameter validation failed: noteId must be a non-empty string');
+            }
+            if (typeof replaceWindow !== 'boolean') {
+              throw new Error('Parameter validation failed: replaceWindow must be a boolean');
+            }
+            
+            const result = await window.flutter_inappwebview.callHandler('openNote', noteId, replaceWindow);
+            return result;
+          },
           Notes: $notesJson
         };
       ''',
@@ -1230,6 +1257,57 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error('[Synapse.saveNotes] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    // Add openNote handler
+    controller.addJavaScriptHandler(
+      handlerName: 'openNote',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final noteId = args[0] as String;
+          final replaceWindow = args.length > 1 ? (args[1] as bool? ?? false) : false;
+          
+          LoggerService.debug('[Synapse.openNote] Called with noteId: $noteId, replaceWindow: $replaceWindow');
+          
+          // Get the note from database
+          final databaseService = DatabaseService();
+          final note = await databaseService.getNote(noteId);
+          
+          if (note == null) {
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.warning('[Synapse.openNote] Note not found: $noteId after ${duration.inMilliseconds}ms');
+            return {'success': false, 'error': 'Note not found: $noteId'};
+          }
+          
+          // Navigate to note detail screen
+          // Use postFrameCallback to ensure navigation happens after the handler returns
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (replaceWindow) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: note),
+                ),
+              );
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: note),
+                ),
+              );
+            }
+          });
+          
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug('[Synapse.openNote] Success - Opening note: ${note.title} in ${duration.inMilliseconds}ms');
+          
+          return {'success': true};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error('[Synapse.openNote] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },

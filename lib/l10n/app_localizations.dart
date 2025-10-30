@@ -4052,12 +4052,6 @@ abstract class AppLocalizations {
   /// **'Conversation'**
   String get conversation;
 
-  /// No description provided for @newConversation.
-  ///
-  /// In en, this message translates to:
-  /// **'New Conversation'**
-  String get newConversation;
-
   /// No description provided for @aiConversation.
   ///
   /// In en, this message translates to:
@@ -4087,6 +4081,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Conversations'**
   String get conversations;
+
+  /// No description provided for @conversationCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{conversation} other{conversations}}'**
+  String conversationCount(int count);
+
+  /// No description provided for @noConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations'**
+  String get noConversations;
+
+  /// No description provided for @conversationsWithThisNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations with this note'**
+  String get conversationsWithThisNote;
 
   /// No description provided for @typeYourMessage.
   ///
@@ -4190,6 +4202,48 @@ abstract class AppLocalizations {
   /// **'Select notes for conversation'**
   String get selectNotesForConversation;
 
+  /// No description provided for @selectNotesForNoteActionApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Notes for Note Action App'**
+  String get selectNotesForNoteActionApp;
+
+  /// No description provided for @selectNotesToAddToContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Notes to add to context'**
+  String get selectNotesToAddToContext;
+
+  /// No description provided for @proceedWithNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Proceed with {count} {count, plural, =1{note} other{notes}}'**
+  String proceedWithNotes(int count);
+
+  /// No description provided for @notesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{note} other{notes}} selected'**
+  String notesSelected(int count);
+
+  /// No description provided for @noNotesFoundMatching.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes found matching \"{query}\"'**
+  String noNotesFoundMatching(String query);
+
+  /// No description provided for @notesAndContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes and Context'**
+  String get notesAndContext;
+
+  /// No description provided for @addNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Notes'**
+  String get addNotes;
+
   /// No description provided for @addNotesToConversation.
   ///
   /// In en, this message translates to:
@@ -4201,12 +4255,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAllNotes;
-
-  /// No description provided for @notesAndContext.
-  ///
-  /// In en, this message translates to:
-  /// **'Notes and Context'**
-  String get notesAndContext;
 
   /// No description provided for @missingNotes.
   ///
@@ -4303,6 +4351,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete interaction'**
   String get deleteInteractionAction;
+
+  /// No description provided for @deleteConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Conversation'**
+  String get deleteConversation;
+
+  /// No description provided for @confirmDeleteConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  String get confirmDeleteConversation;
+
+  /// No description provided for @conversationDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation deleted successfully'**
+  String get conversationDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting conversation: {error}'**
+  String errorDeletingConversation(Object error);
 
   /// No description provided for @saveSelectedNodesAsNote.
   ///
@@ -4453,12 +4525,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Additional Context Notes ({count})'**
   String additionalContextNotes(Object count);
-
-  /// No description provided for @addNotes.
-  ///
-  /// In en, this message translates to:
-  /// **'Add Notes'**
-  String get addNotes;
 
   /// No description provided for @noAdditionalNotesSelected.
   ///
@@ -4789,6 +4855,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unknown PDF'**
   String get unknownPdf;
+
+  /// No description provided for @newConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'New Conversation'**
+  String get newConversation;
+
+  /// No description provided for @oneHourAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 hour ago'**
+  String get oneHourAgo;
+
+  /// No description provided for @twelveHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'12 hours ago'**
+  String get twelveHoursAgo;
+
+  /// No description provided for @oneDayAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day ago'**
+  String get oneDayAgo;
+
+  /// No description provided for @threeDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'3 days ago'**
+  String get threeDaysAgo;
+
+  /// No description provided for @sevenDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days ago'**
+  String get sevenDaysAgo;
+
+  /// No description provided for @fifteenDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'15 days ago'**
+  String get fifteenDaysAgo;
+
+  /// No description provided for @oneMonthAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'1 month ago'**
+  String get oneMonthAgo;
+
+  /// No description provided for @sixMonthsAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'6 months ago'**
+  String get sixMonthsAgo;
+
+  /// No description provided for @allTime.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get allTime;
+
+  /// No description provided for @custom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get custom;
+
+  /// No description provided for @first.
+  ///
+  /// In en, this message translates to:
+  /// **'First'**
+  String get first;
+
+  /// No description provided for @last.
+  ///
+  /// In en, this message translates to:
+  /// **'Last'**
+  String get last;
+
+  /// No description provided for @deleteInteractionWhatToDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'What do you want to delete?'**
+  String get deleteInteractionWhatToDelete;
+
+  /// No description provided for @deleteOnlyNodesInFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete only nodes in this filter'**
+  String get deleteOnlyNodesInFilter;
+
+  /// No description provided for @deleteNodeAndDescendants.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this node and all descendants'**
+  String get deleteNodeAndDescendants;
 }
 
 class _AppLocalizationsDelegate

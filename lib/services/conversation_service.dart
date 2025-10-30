@@ -29,12 +29,18 @@ class ConversationService {
     final conversation = Conversation(
       id: _uuid.v4(),
       title: title,
-      noteIds: noteIds,
+      noteIds: const [], // Will be managed by mapping table
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
     await _databaseService.insertConversation(conversation);
+    
+    // Add note mappings if provided
+    if (noteIds.isNotEmpty) {
+      await addNotesToConversation(conversation.id, noteIds);
+    }
+    
     LoggerService.info('Created new conversation: ${conversation.id}');
     return conversation;
   }
@@ -62,8 +68,14 @@ class ConversationService {
     // Create new conversation
     final forkedConversation = await createConversation(
       title: newTitle,
-      noteIds: originalConversation.noteIds,
+      noteIds: const [], // Will be handled by addNotesToConversation
     );
+    
+    // Copy note mappings from original conversation
+    final originalNoteIds = await _databaseService.getConversationNoteIds(originalConversationId);
+    if (originalNoteIds.isNotEmpty) {
+      await addNotesToConversation(forkedConversation.id, originalNoteIds);
+    }
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
@@ -101,23 +113,22 @@ class ConversationService {
       if (conversation == null) continue;
 
       // Get notes for this conversation
-      final conversationNotes = await _databaseService.getNotesByIds(conversation.noteIds);
+      final noteIds = await _databaseService.getConversationNoteIds(conversationId);
+      final conversationNotes = await _databaseService.getNotesByIds(noteIds);
 
-      // Get initial context (first user message)
+      // Get last message for context preview (to distinguish between conversations)
       final messages = await _databaseService.getConversationMessages(conversationId);
-      ConversationMessage? firstUserMessage;
-      try {
-        firstUserMessage = messages.firstWhere((msg) => msg.type == MessageType.user);
-      } catch (e) {
-        firstUserMessage = messages.isNotEmpty ? messages.first : null;
+      ConversationMessage? lastMessage;
+      if (messages.isNotEmpty) {
+        lastMessage = messages.last;
       }
       
       final context = ConversationContext(
         conversationId: conversationId,
         title: conversation.title,
-        noteIds: conversation.noteIds,
+        noteIds: noteIds,
         notes: conversationNotes,
-        initialContext: firstUserMessage?.content,
+        initialContext: lastMessage?.content,
         createdAt: conversation.createdAt,
         messageCount: messages.length,
       );
@@ -303,8 +314,8 @@ class ConversationService {
   }
 
   // Get all conversations
-  Future<List<Conversation>> getAllConversations() async {
-    return await _databaseService.getAllConversations();
+  Future<List<Conversation>> getAllConversations({Duration? maxAge}) async {
+    return await _databaseService.getAllConversations(maxAge: maxAge);
   }
 
   // Get a specific conversation with its messages
@@ -337,23 +348,16 @@ class ConversationService {
 
 
   // Get conversation tree
-  Future<ConversationTree?> getConversationTree() async {
-    // Check if we have a cached tree first
-    final existingTree = await _databaseService.getConversationTree('main_tree');
-    if (existingTree != null) {
-      return existingTree;
-    }
-
-    // Build new tree if none exists
-    final conversations = await _databaseService.getAllConversations();
+  Future<ConversationTree?> getConversationTree({Duration? maxAge}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
   }
 
   // Refresh conversation tree
-  Future<ConversationTree?> refreshConversationTree() async {
-    final conversations = await _databaseService.getAllConversations();
+  Future<ConversationTree?> refreshConversationTree({Duration? maxAge}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
@@ -418,8 +422,6 @@ class ConversationService {
       updatedAt: DateTime.now(),
     );
 
-    // Save tree to database using upsert (insert or update)
-    await _databaseService.upsertConversationTree(tree);
     return tree;
   }
 
@@ -605,33 +607,34 @@ class ConversationService {
     return messageIds.toList();
   }
 
-  // Update conversation tree node
-  Future<void> updateTreeNode({
-    required String nodeId,
-    bool? isExpanded,
-    bool? isSelected,
-  }) async {
-    final tree = await getConversationTree();
-    if (tree == null) return;
+  Future<List<String>> getAllMessageIdsInSubtree(String messageId) async {
+    final db = await _databaseService.database;
+    final messagesToDelete = <String>{};
 
-    final node = tree.nodes[nodeId];
-    if (node == null) return;
+    Future<void> traverseSubtree(String currentMessageId) async {
+      if (messagesToDelete.contains(currentMessageId)) {
+        return; // Already processed
+      }
 
-    final updatedNode = node.copyWith(
-      isExpanded: isExpanded,
-      isSelected: isSelected,
-    );
+      messagesToDelete.add(currentMessageId);
 
-    final updatedNodes = Map<String, ConversationTreeNode>.from(tree.nodes);
-    updatedNodes[nodeId] = updatedNode;
+      final children = await db.query(
+        'message_parents',
+        where: 'parentMessageId = ?',
+        whereArgs: [currentMessageId],
+      );
 
-    final updatedTree = tree.copyWith(
-      nodes: updatedNodes,
-      updatedAt: DateTime.now(),
-    );
+      for (final child in children) {
+        final childId = child['messageId'] as String;
+        await traverseSubtree(childId);
+      }
+    }
 
-    await _databaseService.updateConversationTree(updatedTree);
+    await traverseSubtree(messageId);
+    return messagesToDelete.toList();
   }
+
+
 
   // Create new conversation from selected tree nodes
   Future<Conversation> createConversationFromSelectedNodes({
@@ -654,10 +657,8 @@ class ConversationService {
         conversationIds.add(node.conversationId);
         
         // Get notes from this conversation
-        final conversation = await _databaseService.getConversation(node.conversationId);
-        if (conversation != null) {
-          allNoteIds.addAll(conversation.noteIds);
-        }
+        final noteIds = await _databaseService.getConversationNoteIds(node.conversationId);
+        allNoteIds.addAll(noteIds);
       }
     }
 
@@ -718,11 +719,18 @@ class ConversationService {
 
   // Get notes for a conversation
   Future<List<Note>> getConversationNotes(String conversationId) async {
-    final conversation = await _databaseService.getConversation(conversationId);
-    if (conversation == null || conversation.noteIds.isEmpty) return [];
+    // Get note IDs from the mapping table
+    final noteIds = await _databaseService.getConversationNoteIds(conversationId);
+    if (noteIds.isEmpty) return [];
 
     // Efficiently fetch only the notes referenced by this conversation
-    return await _databaseService.getNotesByIds(conversation.noteIds);
+    return await _databaseService.getNotesByIds(noteIds);
+  }
+
+  // Get notes by a list of IDs
+  Future<List<Note>> getNotesByIds(List<String> noteIds) async {
+    if (noteIds.isEmpty) return [];
+    return await _databaseService.getNotesByIds(noteIds);
   }
 
   // Add notes to a conversation
@@ -730,18 +738,23 @@ class ConversationService {
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation == null) return;
 
-    final updatedNoteIds = List<String>.from(conversation.noteIds);
     for (final noteId in noteIds) {
-      if (!updatedNoteIds.contains(noteId)) {
-        updatedNoteIds.add(noteId);
+      // Check if mapping already exists
+      final exists = await _databaseService.conversationNoteMappingExists(
+        conversationId: conversationId,
+        noteId: noteId,
+      );
+      
+      if (!exists) {
+        await _databaseService.insertConversationNoteMapping(
+          conversationId: conversationId,
+          noteId: noteId,
+        );
       }
     }
 
-    final updatedConversation = conversation.copyWith(
-      noteIds: updatedNoteIds,
-      updatedAt: DateTime.now(),
-    );
-
+    // Update conversation timestamp
+    final updatedConversation = conversation.copyWith(updatedAt: DateTime.now());
     await _databaseService.updateConversation(updatedConversation);
     LoggerService.info('Added notes to conversation: $conversationId');
   }
@@ -751,16 +764,21 @@ class ConversationService {
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation == null) return;
 
-    final updatedNoteIds = List<String>.from(conversation.noteIds);
-    updatedNoteIds.removeWhere((id) => noteIds.contains(id));
+    for (final noteId in noteIds) {
+      await _databaseService.deleteConversationNoteMapping(
+        conversationId: conversationId,
+        noteId: noteId,
+      );
+    }
 
-    final updatedConversation = conversation.copyWith(
-      noteIds: updatedNoteIds,
-      updatedAt: DateTime.now(),
-    );
-
+    // Update conversation timestamp
+    final updatedConversation = conversation.copyWith(updatedAt: DateTime.now());
     await _databaseService.updateConversation(updatedConversation);
     LoggerService.info('Removed notes from conversation: $conversationId');
+  }
+
+  Future<void> deleteEmptyConversations({required Duration olderThan}) async {
+    await _databaseService.deleteEmptyConversations(olderThan: olderThan);
   }
 
   // Get a specific conversation message

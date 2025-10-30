@@ -2231,9 +2231,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversation => 'Conversation';
 
   @override
-  String get newConversation => 'New Conversation';
-
-  @override
   String get aiConversation => 'AI Conversation';
 
   @override
@@ -2248,6 +2245,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get conversations => 'Conversations';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'conversations',
+      one: 'conversation',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get noConversations => 'No conversations';
+
+  @override
+  String get conversationsWithThisNote => 'Conversations with this note';
 
   @override
   String get typeYourMessage => 'Type your message...';
@@ -2307,13 +2321,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectNotesForConversation => 'Select notes for conversation';
 
   @override
+  String get selectNotesForNoteActionApp => 'Select Notes for Note Action App';
+
+  @override
+  String get selectNotesToAddToContext => 'Select Notes to add to context';
+
+  @override
+  String proceedWithNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Proceed with $count $_temp0';
+  }
+
+  @override
+  String notesSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String noNotesFoundMatching(String query) {
+    return 'No notes found matching \"$query\"';
+  }
+
+  @override
+  String get notesAndContext => 'Notes and Context';
+
+  @override
+  String get addNotes => 'Add Notes';
+
+  @override
   String get addNotesToConversation => 'Add Notes';
 
   @override
   String get clearAllNotes => 'Clear All';
-
-  @override
-  String get notesAndContext => 'Notes and Context';
 
   @override
   String get missingNotes => 'Missing Notes';
@@ -2372,6 +2422,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteInteractionAction => 'Delete interaction';
+
+  @override
+  String get deleteConversation => 'Delete Conversation';
+
+  @override
+  String get confirmDeleteConversation =>
+      'Are you sure you want to delete this conversation? This action cannot be undone.';
+
+  @override
+  String get conversationDeletedSuccessfully =>
+      'Conversation deleted successfully';
+
+  @override
+  String errorDeletingConversation(Object error) {
+    return 'Error deleting conversation: $error';
+  }
 
   @override
   String get saveSelectedNodesAsNote => 'Save selected nodes as note';
@@ -2456,9 +2522,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String additionalContextNotes(Object count) {
     return 'Additional Context Notes ($count)';
   }
-
-  @override
-  String get addNotes => 'Add Notes';
 
   @override
   String get noAdditionalNotesSelected =>
@@ -2649,4 +2712,52 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unknownPdf => 'Unknown PDF';
+
+  @override
+  String get newConversation => 'New Conversation';
+
+  @override
+  String get oneHourAgo => '1 hour ago';
+
+  @override
+  String get twelveHoursAgo => '12 hours ago';
+
+  @override
+  String get oneDayAgo => '1 day ago';
+
+  @override
+  String get threeDaysAgo => '3 days ago';
+
+  @override
+  String get sevenDaysAgo => '7 days ago';
+
+  @override
+  String get fifteenDaysAgo => '15 days ago';
+
+  @override
+  String get oneMonthAgo => '1 month ago';
+
+  @override
+  String get sixMonthsAgo => '6 months ago';
+
+  @override
+  String get allTime => 'All time';
+
+  @override
+  String get custom => 'Custom';
+
+  @override
+  String get first => 'First';
+
+  @override
+  String get last => 'Last';
+
+  @override
+  String get deleteInteractionWhatToDelete => 'What do you want to delete?';
+
+  @override
+  String get deleteOnlyNodesInFilter => 'Delete only nodes in this filter';
+
+  @override
+  String get deleteNodeAndDescendants => 'Delete this node and all descendants';
 }

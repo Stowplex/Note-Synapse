@@ -1,5 +1,4 @@
 import 'package:json_annotation/json_annotation.dart';
-import 'conversation.dart';
 import 'note.dart';
 
 part 'conversation_context.g.dart';
@@ -30,11 +29,11 @@ class ConversationContext {
   // Generate a summary for display in selection dialog
   String get displaySummary {
     final noteNames = notes.map((n) => n.title).join(', ');
-    final contextPreview = initialContext != null 
-        ? 'Context: ${initialContext!.length > 100 ? '${initialContext!.substring(0, 100)}...' : initialContext!}'
-        : 'No initial context';
+    final lastMessagePreview = initialContext != null 
+        ? 'Last message: ${initialContext!.length > 100 ? '${initialContext!.substring(0, 100)}...' : initialContext!}'
+        : 'No messages';
     
-    return 'Notes: $noteNames\n$contextPreview\nMessages: $messageCount';
+    return 'Notes: $noteNames\n$lastMessagePreview\nMessages: $messageCount';
   }
 
   // Check if this context conflicts with another

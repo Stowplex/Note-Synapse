@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
@@ -158,7 +159,12 @@ class GeminiModel implements AIModel {
         if (file.bytes != null) {
           final base64Data = base64Encode(file.bytes!);
           final extension = FileTypeUtils.getFileExtension(file.name);
-          final mimeType = FileTypeUtils.getMimeType(extension);
+          // Always use content-based detection (more reliable than extension)
+          // Content detection will validate extension if provided
+          final mimeType = FileTypeUtils.getMimeTypeForBytes(
+            Uint8List.fromList(file.bytes!),
+            extension: extension.isEmpty ? null : extension,
+          );
 
           parts.add({
             'inline_data': {

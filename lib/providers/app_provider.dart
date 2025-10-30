@@ -12,11 +12,13 @@ import '../models/model_config.dart';
 import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
+import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
+  final ConversationService _conversationService = ConversationService();
 
   List<Note> _notes = [];
   List<Tag> _tags = [];
@@ -1170,5 +1172,38 @@ class AppProvider extends ChangeNotifier {
 
   bool isWebViewSupported() {
     return UserAppService.isWebViewSupported();
+  }
+
+  // Conversation management methods
+  Future<void> deleteConversation(String conversationId) async {
+    try {
+      await _conversationService.deleteConversation(conversationId);
+      notifyListeners(); // Notify listeners that conversation was deleted
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<int> getNoteConversationCount(String noteId) async {
+    try {
+      return await _databaseService.getNoteConversationCount(noteId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<List<String>> getNoteConversationIds(String noteId) async {
+    try {
+      return await _databaseService.getNoteConversationIds(noteId);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
 }

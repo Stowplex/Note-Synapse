@@ -146,7 +146,7 @@ class _ForkContextSelectionDialogState extends State<ForkContextSelectionDialog>
           onPressed: _selectedContext != null && _titleController.text.trim().isNotEmpty
               ? () {
                   widget.onConfirm(_selectedContext, _titleController.text.trim());
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(true); // Return true to indicate fork was confirmed
                 }
               : null,
           child: const Text('Create Fork'),

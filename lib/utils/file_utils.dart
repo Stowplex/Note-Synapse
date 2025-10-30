@@ -80,9 +80,9 @@ class FileUtils {
     return attachmentsDir;
   }
 
-  /// Generates a unique filename with UUID prefix to avoid name clashes
+  /// Generates a unique filename with UUID appended to avoid name clashes
   /// [originalFileName] - The original filename
-  /// Returns a unique filename with UUID prefix
+  /// Returns a unique filename with UUID appended before the extension
   static String generateUniqueFileName(String originalFileName) {
     const uuid = Uuid();
     final uniqueId = uuid.v4();
@@ -91,7 +91,8 @@ class FileUtils {
     final fileExtension = originalFileName.contains('.') ? '.${originalFileName.split('.').last}' : '';
     final baseFileName = originalFileName.contains('.') ? originalFileName.substring(0, originalFileName.lastIndexOf('.')) : originalFileName;
     
-    // Create unique filename with UUID prefix
+    // Create unique filename with UUID appended before extension
+    // Format: basefilename_uuid.extension (e.g., document_abc123.pdf)
     return '${baseFileName}_$uniqueId$fileExtension';
   }
 

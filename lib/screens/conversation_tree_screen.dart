@@ -10,9 +10,12 @@ import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
+import '../widgets/linear_history_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
-  const ConversationTreeScreen({Key? key}) : super(key: key);
+  final String? activeConversationId;
+  
+  const ConversationTreeScreen({Key? key, this.activeConversationId}) : super(key: key);
 
   @override
   State<ConversationTreeScreen> createState() => _ConversTreeScreenState();
@@ -31,10 +34,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   ConversationMessage? _selectedMessage;
   bool _isMultiSelectMode = false;
   bool _hasRefreshedOnce = false;
+  Duration _selectedTimeRange = const Duration(days: 3);
+  String? _highlightedConversationId; // Conversation ID to highlight
 
   @override
   void initState() {
     super.initState();
+    // Set highlighted conversation from widget parameter
+    _highlightedConversationId = widget.activeConversationId;
     _loadTree();
   }
 
@@ -46,7 +53,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _hasRefreshedOnce = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _refreshTree();
+          // Don't clear highlight on automatic refresh when first entering the screen
+          _refreshTree(clearHighlight: false);
         }
       });
     }
@@ -56,7 +64,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _tree = await _conversationService.refreshConversationTree();
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
       if (_tree == null) {
         if (mounted) {
           try {
@@ -98,11 +106,17 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
-  Future<void> _refreshTree() async {
-    setState(() => _isLoading = true);
+  Future<void> _refreshTree({bool clearHighlight = true}) async {
+    setState(() {
+      _isLoading = true;
+      // Clear highlighted conversation only when manually refreshed
+      if (clearHighlight) {
+        _highlightedConversationId = null;
+      }
+    });
     
     try {
-      _tree = await _conversationService.refreshConversationTree();
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
       if (_tree == null) {
         if (mounted) {
           try {
@@ -180,12 +194,6 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       updatedNodes[nodeId] = updatedNode;
       _tree = _tree!.copyWith(nodes: updatedNodes);
     });
-
-    // Update in database
-    _conversationService.updateTreeNode(
-      nodeId: nodeId,
-      isExpanded: !node.isExpanded,
-    );
   }
 
 
@@ -221,90 +229,72 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void _deleteInteraction(ConversationTreeNode node) {
     if (_tree == null) return;
 
-    final l10n = AppLocalizations.of(context)!;
+    final currentContext = context;
+
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.deleteInteraction),
-        content: Text(l10n.deleteInteractionConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                if (node.messageId != null) {
-                  // Get all message IDs in the subtree using tree traversal
-                  final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
-                  LoggerService.info('Deleting ${messageIdsToDelete.length} messages from tree node: ${node.id}');
-                  
-                  // Delete all messages in the subtree efficiently
-                  await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
-                } else {
-                  // Fallback: delete the entire conversation
-                  await _conversationService.deleteConversation(node.conversationId);
-                }
-                // Refresh the tree to reflect the deletion
-                _tree = await _conversationService.refreshConversationTree();
-                if (mounted) {
-                  setState(() {
-                    _selectedConversationId = null;
-                    _selectedMessage = null;
-                  });
-                  // Safe to show SnackBar only if widget is still mounted
-                  try {
-                    final l10n = AppLocalizations.of(context)!;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.interactionDeletedSuccessfully),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  } catch (contextError) {
-                    LoggerService.warning('Could not show success SnackBar: $contextError');
-                  }
-                }
-              } catch (e) {
-                LoggerService.error('Error deleting interaction: $e', error: e);
-                if (mounted) {
-                  // Safe to show SnackBar only if widget is still mounted
-                  try {
-                    final l10n = AppLocalizations.of(context)!;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.errorDeletingInteraction(e.toString())),
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                    );
-                  } catch (contextError) {
-                    LoggerService.warning('Could not show error SnackBar: $contextError');
-                  }
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
+      context: currentContext,
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext)!;
+        return AlertDialog(
+          title: Text(dialogL10n.deleteInteraction),
+          content: Text(dialogL10n.deleteInteractionWhatToDelete),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(dialogL10n.cancel),
             ),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  if (node.messageId != null) {
+                    final messageIdsToDelete = await _conversationService.getMessageIdsFromTreeNode(node);
+                    await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
+                  }
+                  _refreshTree();
+                } catch (e) {
+                  LoggerService.error('Error deleting interaction: $e', error: e);
+                }
+              },
+              child: Text(dialogL10n.deleteOnlyNodesInFilter),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  if (node.messageId != null) {
+                    final messageIdsToDelete = await _conversationService.getAllMessageIdsInSubtree(node.messageId!);
+                    await _conversationService.deleteMessagesFromTreeNodes(messageIdsToDelete);
+                  }
+                  _refreshTree();
+                } catch (e) {
+                  LoggerService.error('Error deleting interaction: $e', error: e);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(currentContext).colorScheme.error,
+                foregroundColor: Theme.of(currentContext).colorScheme.onError,
+              ),
+              child: Text(dialogL10n.deleteNodeAndDescendants),
+            ),
+          ],
+        );
+      },
     );
   }
 
   void _forkInteraction(ConversationTreeNode node) async {
     if (node.messageId == null) return;
     
+    // Capture the context safely before the async operation
+    final currentContext = context;
+    
     try {
       LoggerService.info('Starting fork from interaction: ${node.id}');
       
       // Use the new fork service with context selection
       final newConversation = await _forkService.forkFromMessage(
-        context: context,
+        context: currentContext,
         forkFromMessageId: node.messageId!,
         suggestedTitle: 'Forked conversation',
       );
@@ -314,8 +304,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         
         if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          final l10n = AppLocalizations.of(currentContext)!;
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.forkedConversationSuccess),
               duration: const Duration(seconds: 2),
@@ -325,29 +315,23 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           LoggerService.warning('Could not show success SnackBar: $contextError');
         }
         
-        // Navigate to the new conversation
-        await Navigator.of(context).push(
+        // Navigate to the new conversation, replacing the tree view
+        await Navigator.of(currentContext).pushReplacement(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(conversationId: newConversation.id),
           ),
         );
-        
-        // Refresh tree when returning from conversation
-        if (mounted) {
-          LoggerService.info('Refreshing tree after fork');
-          await _refreshTree();
-        }
         }
       }
     } catch (e) {
       LoggerService.error('Error forking interaction: $e', error: e);
       if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          final l10n = AppLocalizations.of(currentContext)!;
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.errorForkingConversation(e.toString())),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
             ),
           );
         } catch (contextError) {
@@ -359,6 +343,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
   void _createConversationFromSelected() async {
     if (_selectedNodes.isEmpty) return;
+
+    // Capture the context safely before the async operation
+    final currentContext = context;
 
     try {
       // Create conversation directly with auto-generated title
@@ -373,8 +360,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         _isMultiSelectMode = false;
         });
 
-      // Navigate directly to the new conversation
-        Navigator.of(context).push(
+      // Navigate directly to the new conversation, replacing the tree view
+        Navigator.of(currentContext).pushReplacement(
           MaterialPageRoute(
             builder: (context) => ConversationChatScreen(
               conversationId: newConversation.id,
@@ -384,8 +371,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       } catch (e) {
       if (mounted) {
         try {
-        final l10n = AppLocalizations.of(context)!;
-        ScaffoldMessenger.of(context).showSnackBar(
+        final l10n = AppLocalizations.of(currentContext)!;
+        ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(content: Text(l10n.errorForkingConversation(e.toString()))),
         );
         } catch (contextError) {
@@ -405,12 +392,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   }
 
   Future<void> _showSaveOptionsDialog() async {
-    final l10n = AppLocalizations.of(context)!;
+    // Capture the context safely before the async operation
+    final currentContext = context;
+    final l10n = AppLocalizations.of(currentContext)!;
     
     if (_selectedNodes.isEmpty) {
       if (mounted) {
         try {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.pleaseSelectNodesFirst),
               duration: const Duration(seconds: 2),
@@ -430,15 +419,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       
       // Show the unified add note dialog
       final createdNotes = await AddNoteDialog.show(
-        context: context,
+        context: currentContext,
         content: conversationContent,
         contextNotes: contextNotes,
       );
       
       // If notes were created, show success message
       if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
-        final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
             content: Text(
               createdNotes.length == 1
@@ -453,11 +441,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       LoggerService.error('Error saving nodes as note: $e', error: e);
       if (mounted) {
         try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.errorSavingNodes(e.toString())),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
             ),
           );
         } catch (contextError) {
@@ -524,10 +511,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       final node = _tree!.nodes[nodeId];
       if (node != null && node.conversationId.isNotEmpty) {
         // Get notes from this conversation
-        final conversation = await _databaseService.getConversation(node.conversationId);
-        if (conversation != null) {
-          allNoteIds.addAll(conversation.noteIds);
-        }
+        final noteIds = await _databaseService.getConversationNoteIds(node.conversationId);
+        allNoteIds.addAll(noteIds);
       }
     }
 
@@ -556,6 +541,17 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
     if (_tree == null) {
       return Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.conversationTree),
+          actions: [
+            _buildTimeRangeFilter(l10n),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshTree,
+              tooltip: l10n.refreshTree,
+            ),
+          ],
+        ),
         body: Center(child: Text(l10n.noConversationsFound)),
       );
     }
@@ -584,6 +580,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               tooltip: l10n.exitMultiSelect,
             ),
           ] else ...[
+            _buildTimeRangeFilter(l10n),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshTree,
@@ -629,6 +626,33 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTimeRangeFilter(AppLocalizations l10n) {
+    return IconButton(
+      icon: const Icon(Icons.filter_list),
+      onPressed: _showLinearHistoryDialog,
+      tooltip: 'Filter by time',
+    );
+  }
+
+  void _showLinearHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => LinearHistoryDialog(
+        initialTimeRange: _selectedTimeRange,
+        onTimeRangeChanged: (newTimeRange) {
+          setState(() {
+            _selectedTimeRange = newTimeRange;
+            _refreshTree();
+          });
+        },
+        onConversationDeleted: () {
+          // Refresh the tree when a conversation is deleted
+          _refreshTree();
+        },
       ),
     );
   }
@@ -722,6 +746,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     // All non-root nodes are interaction nodes (they represent User-AI message pairs)
     final isInteraction = node.id != 'root';
     final isRoot = node.id == 'root';
+    // Check if this node belongs to the highlighted conversation
+    final isHighlighted = _highlightedConversationId != null && 
+                          node.conversationId == _highlightedConversationId;
 
     return GestureDetector(
       onTap: () {
@@ -749,16 +776,20 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         decoration: BoxDecoration(
           color: isSelected 
               ? Theme.of(context).colorScheme.primaryContainer
-              : isRoot
-                  ? Theme.of(context).colorScheme.surfaceVariant
-                  : Theme.of(context).colorScheme.surface,
+              : isHighlighted
+                  ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2)
+                  : isRoot
+                      ? Theme.of(context).colorScheme.surfaceVariant
+                      : Theme.of(context).colorScheme.surface,
           border: Border.all(
             color: isSelected 
                 ? Theme.of(context).colorScheme.primary
-                : isRoot
-                    ? Theme.of(context).colorScheme.outline
-                    : Theme.of(context).colorScheme.outline.withOpacity(0.3),
-            width: isSelected ? 2 : 1,
+                : isHighlighted
+                    ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                    : isRoot
+                        ? Theme.of(context).colorScheme.outline
+                        : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            width: isSelected ? 2 : (isHighlighted ? 1.5 : 1),
           ),
           borderRadius: BorderRadius.circular(12),
           boxShadow: isSelected ? [
@@ -766,6 +797,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
+            ),
+          ] : isHighlighted ? [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
             ),
           ] : null,
         ),
@@ -947,16 +984,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await Navigator.of(context).push(
+                      await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (context) => ConversationChatScreen(
                             conversationId: conversation.id,
                           ),
                         ),
                       );
-                      if (mounted) {
-                        await _refreshTree();
-                      }
                     },
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(l10n.open, style: const TextStyle(fontSize: 12)),
@@ -1122,16 +1156,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.of(futureContext).push(
+                        await Navigator.of(futureContext).pushReplacement(
                           MaterialPageRoute(
                             builder: (context) => ConversationChatScreen(
                               conversationId: message.conversationId,
                             ),
                           ),
                         );
-                        if (mounted) {
-                          await _refreshTree();
-                        }
                       },
                       icon: const Icon(Icons.chat, size: 14),
                       label: Text(futureL10n.open, style: const TextStyle(fontSize: 12)),

@@ -73,6 +73,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
+
+
   Future<void> _initializeConversation() async {
     setState(() => _isLoading = true);
 
@@ -92,21 +94,22 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           }
         }
       } else {
-        // Create new conversation
-        final l10n = AppLocalizations.of(context)!;
-        final noteIds = widget.initialNoteIds ?? [];
-        _conversation = await _conversationService.createConversation(
-          title: l10n.aiConversation,
-          noteIds: noteIds,
-        );
-        _notes = await _conversationService.getConversationNotes(_conversation!.id);
+        // This is a new conversation, so we'll load any initial notes but not create the
+        // conversation entity until the first message is sent.
+        if (widget.initialNoteIds != null && widget.initialNoteIds!.isNotEmpty) {
+          _notes = await _conversationService.getNotesByIds(widget.initialNoteIds!);
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading conversation: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error initializing conversation: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -151,92 +154,95 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || _isSending) return;
+    if (_messageController.text.isEmpty && _attachedFiles.isEmpty) return;
 
-    final messageText = _messageController.text.trim();
-    final attachedFiles = List<PlatformFile>.from(_attachedFiles); // Copy attachments before clearing
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final content = _messageController.text;
+    final attachments = List<PlatformFile>.from(_attachedFiles);
     _messageController.clear();
-
     setState(() {
+      _attachedFiles.clear();
       _isSending = true;
-      _currentRequestId = requestId;
-      _attachedFiles.clear(); // Clear attachments after copying
     });
 
     try {
-      // Save attachment paths for database storage
-      final attachmentPaths = <String>[];
-      for (final file in attachedFiles) {
-        if (file.path != null) {
-          attachmentPaths.add(file.path!);
-        }
+      // If this is the first message, create the conversation
+      if (_conversation == null) {
+        final l10n = AppLocalizations.of(context)!;
+        final title = content.isNotEmpty ? content : l10n.newConversation;
+        final newConversation = await _conversationService.createConversation(
+          title: title.length > 50 ? '${title.substring(0, 50)}...' : title,
+          noteIds: widget.initialNoteIds ?? [],
+        );
+        if (!mounted) return;
+        setState(() {
+          _conversation = newConversation;
+        });
       }
 
-      // Add user message with attachments
+      // Add the user's message
       final userMessage = await _conversationService.addUserMessage(
         conversationId: _conversation!.id,
-        content: messageText,
-        attachmentPaths: attachmentPaths,
+        content: content,
+        attachmentPaths: attachments.map((f) => f.path!).toList(),
       );
-      _messages.add(userMessage);
-      setState(() {});
+      if (!mounted) return;
+
+      setState(() {
+        _messages.add(userMessage);
+      });
       _scrollToBottom();
 
-      // Check if this specific request was cancelled before generating AI response
+      // Generate AI response
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      _currentRequestId = requestId;
+
+      final aiResponseContent = await _generateAIResponse(content, attachments, requestId);
+
       if (_cancelledRequestIds.contains(requestId)) {
-        return;
+        _cancelledRequestIds.remove(requestId);
+        return; // Stop processing if the request was cancelled
       }
 
-      // Generate AI response with attachments
-      final aiResponse = await _generateAIResponse(messageText, attachedFiles, requestId);
-      
-      // Check if this specific request was cancelled after AI response
-      if (_cancelledRequestIds.contains(requestId)) {
-        return;
-      }
-      
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
-        content: aiResponse,
-        modelUsed: 'gpt-4', // This should come from the AI service
+        content: aiResponseContent,
       );
-      _messages.add(aiMessage);
+      if (!mounted) return;
 
-      setState(() {});
+      setState(() {
+        _messages.add(aiMessage);
+      });
       _scrollToBottom();
+
     } catch (e) {
-      // Only show error if this request wasn't cancelled
-      if (!_cancelledRequestIds.contains(requestId)) {
-        LoggerService.error('Error sending message: $e', error: e);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error sending message: ${e.toString()}'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: () {
-                  _messageController.text = messageText;
-                  _sendMessage();
-                },
-              ),
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending message: $e')),
+        );
       }
     } finally {
       if (mounted) {
         setState(() {
           _isSending = false;
-          _isAborting = false;
           _currentRequestId = null;
         });
-        // Clean up the cancelled request ID after a delay to avoid memory leaks
-        Future.delayed(const Duration(minutes: 5), () {
-          _cancelledRequestIds.remove(requestId);
-        });
       }
+    }
+  }
+
+  Future<void> _startNewConversation() async {
+    final l10n = AppLocalizations.of(context)!;
+    final newConversation = await _conversationService.createConversation(
+      title: l10n.newConversation,
+    );
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ConversationChatScreen(
+            conversationId: newConversation.id,
+          ),
+        ),
+      );
     }
   }
 
@@ -880,107 +886,140 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   }
 
   Future<void> _showNoteSelection() async {
+    final l10n = AppLocalizations.of(context)!;
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
       builder: (context) => NoteSelectionDialog(
         onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+        title: l10n.selectNotesToAddToContext,
       ),
     );
 
-    if (selectedNotes != null) {
+    if (selectedNotes != null && selectedNotes.isNotEmpty) {
       final noteIds = selectedNotes.map((note) => note.id).toList();
       await _conversationService.addNotesToConversation(_conversation!.id, noteIds);
+      // Reload all notes from the conversation to ensure we have the complete list
+      final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
       setState(() {
-        _notes = selectedNotes;
+        _notes = updatedNotes;
       });
     }
   }
 
   Future<void> _showNotesAndContext() async {
+    final l10n = AppLocalizations.of(context)!;
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Notes and Context'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Notes section
-              Text(
-                'Notes (${_notes.length})',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _notes.length,
-                  itemBuilder: (context, index) {
-                    final note = _notes[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.note, size: 20),
-                        title: Text(
-                          note.title,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        subtitle: Text(
-                          note.content.length > 100 
-                              ? '${note.content.substring(0, 100)}...'
-                              : note.content,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          onPressed: () => _removeNote(note),
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => NoteDetailScreen(note: note),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, dialogSetState) => AlertDialog(
+          title: Text(l10n.notesAndContext),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Notes section
+                Text(
+                  '${l10n.notes} (${_notes.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Action buttons
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _showNoteSelection();
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _notes.length,
+                    itemBuilder: (context, index) {
+                      final note = _notes[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(Icons.note, size: 20),
+                          title: Text(
+                            note.title,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          subtitle: Text(
+                            note.content.length > 100 
+                                ? '${note.content.substring(0, 100)}...'
+                                : note.content,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () async {
+                              // Optimistically update UI
+                              setState(() {
+                                _notes.removeWhere((n) => n.id == note.id);
+                              });
+                              dialogSetState(() {});
+                              try {
+                                await _conversationService.removeNotesFromConversation(
+                                  _conversation!.id,
+                                  [note.id],
+                                );
+                              } catch (_) {
+                                // If removal fails, refresh from service to reflect truth
+                                final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
+                                if (mounted) {
+                                  setState(() {
+                                    _notes = updatedNotes;
+                                  });
+                                  dialogSetState(() {});
+                                }
+                              }
+                            },
+                          ),
+                          onTap: () {
+                            Navigator.of(dialogContext).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => NoteDetailScreen(note: note),
+                              ),
+                            );
+                          },
+                        ),
+                      );
                     },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Notes'),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _clearAllNotes();
-                    },
-                    icon: const Icon(Icons.clear_all, size: 16),
-                    label: const Text('Clear All'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                // Action buttons
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        _showNoteSelection();
+                      },
+                      icon: const Icon(Icons.add, size: 16),
+                      label: Text(l10n.addNotes),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (_notes.isEmpty) return;
+                        // Optimistic clear
+                        setState(() {
+                          _notes.clear();
+                        });
+                        dialogSetState(() {});
+                        await _clearAllNotes();
+                      },
+                      icon: const Icon(Icons.clear_all, size: 16),
+                      label: Text(l10n.clearAllNotes),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.close),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
@@ -1008,19 +1047,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     
     if (_isLoading) {
       return Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.newConversation),
+        ),
         body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_conversation == null) {
-      return Scaffold(
-        body: Center(child: Text(l10n.errorLoadingData)),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_conversation!.title),
+        title: Text(_conversation?.title ?? l10n.newConversation),
         actions: [
           IconButton(
             icon: const Icon(Icons.library_books),
@@ -1030,10 +1066,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           IconButton(
             icon: const Icon(Icons.account_tree),
             onPressed: () {
-              // Navigate to tree view
-              Navigator.of(context).push(
+              // Navigate to tree view, replacing the chat view, passing current conversation ID for highlighting
+              Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
-                  builder: (context) => const ConversationTreeScreen(),
+                  builder: (context) => ConversationTreeScreen(
+                    activeConversationId: _conversation?.id,
+                  ),
                 ),
               );
             },
@@ -1046,16 +1084,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'new_conversation',
-                child: Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline, size: 20),
-                    const SizedBox(width: 12),
-                    Text(l10n.newConversation),
-                  ],
+              if (_messages.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'new_conversation',
+                  child: Text(l10n.newConversation),
                 ),
-              ),
             ],
           ),
         ],
@@ -1402,36 +1435,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     );
   }
 
-  Future<void> _startNewConversation() async {
-    try {
-      final l10n = AppLocalizations.of(context)!;
-      // Create a new conversation
-      final newConversation = await _conversationService.createConversation(
-        title: l10n.aiConversation,
-        noteIds: _notes.map((note) => note.id).toList(),
-      );
 
-      // Replace the current route with the new conversation
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => ConversationChatScreen(
-              conversationId: newConversation.id,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating new conversation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   @override
   void dispose() {
