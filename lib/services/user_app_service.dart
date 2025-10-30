@@ -634,7 +634,13 @@ IMPORTANT - REQUIREMENTS:
      Response format: {success: boolean, response?: string, error?: string}
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
-     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
+     Response format: 
+        {
+            success: boolean,   // Whether this operation was succesful
+            data?: string,      // Optional, present when successful. base64 encoded string of the raw binary data of the attachment. e.g. /9j/4AAQ...
+            mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
+            error?: string      // Optional, present when failed. The error message.
+        }
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -913,7 +919,13 @@ IMPORTANT - REQUIREMENTS:
      Response format: {success: boolean, response?: string, error?: string}
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
-     Response format: {success: boolean, data?: string, mimeType?: string, error?: string}
+     Response format:
+        {
+            success: boolean,   // Whether this operation was succesful
+            data?: string,      // Optional, present when successful. base64 encoded string of the raw binary data of the attachment. e.g. /9j/4AAQ...
+            mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
+            error?: string      // Optional, present when failed. The error message.
+        }
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
