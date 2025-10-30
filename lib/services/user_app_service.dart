@@ -664,6 +664,11 @@ IMPORTANT - REQUIREMENTS:
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
      Response format: {success: boolean, savedCount?: number, error?: string}
+   - Synapse.openNote(noteId: string, replaceWindow: bool = false) - Open a note natively on the platform
+     Param format: 
+       - noteId: a string of the note ID to open
+       - replaceWindow: optional boolean (default: false). If true, replaces the current view with the note view. If false, pushes the note view on top.
+     Response format: {success: boolean, error?: string}
 
    CORRECT saveNotes Usage Examples:
    ```javascript
@@ -783,6 +788,25 @@ IMPORTANT - REQUIREMENTS:
          data: attachmentResult.data
        }]
      });
+   }
+   ```
+
+   CORRECT openNote Usage Examples:
+   ```javascript
+   // Open note in a new view (push)
+   const result1 = await Synapse.openNote('note-id-123');
+   if (result1.success) {
+     console.log('Note opened successfully');
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Replace current view with note view
+   const result2 = await Synapse.openNote('note-id-123', true);
+   if (result2.success) {
+     console.log('Note opened and replaced current view');
+   } else {
+     console.error('Error:', result2.error);
    }
    ```
 
@@ -949,6 +973,11 @@ IMPORTANT - REQUIREMENTS:
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
      Response format: {success: boolean, savedCount?: number, error?: string}
+   - Synapse.openNote(noteId: string, replaceWindow: bool = false) - Open a note natively on the platform
+     Param format: 
+       - noteId: a string of the note ID to open
+       - replaceWindow: optional boolean (default: false). If true, replaces the current view with the note view. If false, pushes the note view on top.
+     Response format: {success: boolean, error?: string}
 
    CORRECT saveNotes Usage Examples:
    ```javascript
@@ -1068,6 +1097,25 @@ IMPORTANT - REQUIREMENTS:
          data: attachmentResult.data
        }]
      });
+   }
+   ```
+
+   CORRECT openNote Usage Examples:
+   ```javascript
+   // Open note in a new view (push)
+   const result1 = await Synapse.openNote('note-id-123');
+   if (result1.success) {
+     console.log('Note opened successfully');
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Replace current view with note view
+   const result2 = await Synapse.openNote('note-id-123', true);
+   if (result2.success) {
+     console.log('Note opened and replaced current view');
+   } else {
+     console.error('Error:', result2.error);
    }
    ```
 
