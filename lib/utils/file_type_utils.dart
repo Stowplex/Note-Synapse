@@ -287,6 +287,51 @@ class FileTypeUtils {
     }
   }
 
+  /// Get a preferred file extension (without dot) for a given MIME type
+  /// Falls back to 'bin' for unknown or generic types
+  static String getExtensionForMime(String mimeType) {
+    final type = mimeType.toLowerCase();
+    if (type.startsWith('image/jpeg')) return 'jpg';
+    if (type.startsWith('image/png')) return 'png';
+    if (type.startsWith('image/gif')) return 'gif';
+    if (type.startsWith('image/webp')) return 'webp';
+    if (type.startsWith('image/bmp')) return 'bmp';
+    if (type.startsWith('image/svg+xml')) return 'svg';
+
+    if (type.startsWith('application/pdf')) return 'pdf';
+    if (type.startsWith('text/plain')) return 'txt';
+    if (type.startsWith('application/msword')) return 'doc';
+    if (type.startsWith('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) return 'docx';
+    if (type.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) return 'xlsx';
+    if (type.startsWith('application/vnd.openxmlformats-officedocument.presentationml.presentation')) return 'pptx';
+    if (type.startsWith('application/rtf')) return 'rtf';
+    if (type.startsWith('application/vnd.oasis.opendocument.text')) return 'odt';
+
+    if (type.startsWith('video/mp4')) return 'mp4';
+    if (type.startsWith('video/x-msvideo')) return 'avi';
+    if (type.startsWith('video/quicktime')) return 'mov';
+    if (type.startsWith('video/x-ms-wmv')) return 'wmv';
+    if (type.startsWith('video/x-flv')) return 'flv';
+    if (type.startsWith('video/webm')) return 'webm';
+
+    if (type.startsWith('audio/mpeg')) return 'mp3';
+    if (type.startsWith('audio/wav')) return 'wav';
+    if (type.startsWith('audio/aac')) return 'aac';
+    if (type.startsWith('audio/mp4')) return 'm4a';
+    if (type.startsWith('audio/ogg')) return 'ogg';
+    if (type.startsWith('audio/flac')) return 'flac';
+
+    if (type.startsWith('application/zip')) return 'zip';
+    if (type.startsWith('application/x-rar')) return 'rar';
+    if (type.startsWith('application/x-tar')) return 'tar';
+    if (type.startsWith('application/gzip')) return 'gz';
+
+    // Generic binary
+    if (type == 'application/octet-stream') return 'bin';
+
+    return 'bin';
+  }
+
   /// Get file category based on extension
   static String getFileCategory(String extension) {
     final ext = extension.toLowerCase();

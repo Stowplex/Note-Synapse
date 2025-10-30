@@ -1326,17 +1326,25 @@ class DatabaseService {
     final isAbsolutePath = attachmentPath.startsWith('/');
     
     if (isAbsolutePath) {
-      // Convert absolute path to relative path for database lookup
+      // Case 1: Absolute path - try both relative and absolute variants
+      // 1a) Try relative path variant (like existing behavior)
       final fileName = attachmentPath.split('/').last;
       final relativePath = 'attachments/$fileName';
-      
-      final List<Map<String, dynamic>> maps = await db.query(
+
+      final List<Map<String, dynamic>> rel = await db.query(
         'attachments',
         where: 'filePath = ?',
         whereArgs: [relativePath],
       );
-      
-      return maps.isNotEmpty;
+      if (rel.isNotEmpty) return true;
+
+      // 1b) Try absolute path as-is with isRelativePath = 0
+      final List<Map<String, dynamic>> abs = await db.query(
+        'attachments',
+        where: 'filePath = ? AND isRelativePath = 0',
+        whereArgs: [attachmentPath],
+      );
+      return abs.isNotEmpty;
     } else {
       // Path is already relative, search directly
       final List<Map<String, dynamic>> maps = await db.query(
