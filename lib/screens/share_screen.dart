@@ -14,6 +14,7 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -1484,7 +1485,27 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   }
                 }
               }
-              
+
+              // Determine the most reliable MIME type from response header or bytes
+              final currentExt = FileTypeUtils.getFileExtension(fileName);
+              String effectiveMime = responseContentType;
+              if (effectiveMime.isEmpty || effectiveMime.startsWith('application/octet-stream')) {
+                // Try to detect from content if header is missing/generic
+                effectiveMime = FileTypeUtils.getMimeTypeForBytes(
+                  response.bodyBytes,
+                  extension: currentExt.isEmpty ? null : currentExt,
+                );
+              }
+              // Correct or add extension if needed
+              final expectedExt = FileTypeUtils.getExtensionForMime(effectiveMime);
+              if (currentExt.isEmpty && expectedExt.isNotEmpty) {
+                fileName = '$fileName.${expectedExt}';
+              } else if (currentExt.isNotEmpty && expectedExt.isNotEmpty && expectedExt != 'bin' && currentExt != expectedExt) {
+                // Replace the existing extension with the expected one
+                final base = fileName.substring(0, fileName.lastIndexOf('.'));
+                fileName = '$base.${expectedExt}';
+              }
+
               // Save file to attachment directory
               final relativePath = await FileUtils.saveFileToPrivateStorage(
                 response.bodyBytes,
