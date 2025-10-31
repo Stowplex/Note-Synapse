@@ -415,7 +415,7 @@ You may supplement the information from the notes with your own knowledge to pro
       LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
       
       // Tool calling loop - max 5 iterations to prevent infinite loops
-      const maxIterations = 5;
+      const maxIterations = 10;
       List<Map<String, dynamic>> currentMessages = List.from(messagesWithMcp);
       final conversationParts = <String>[];
       

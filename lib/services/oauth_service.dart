@@ -117,20 +117,28 @@ class OAuthService {
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
     final completer = Completer<Map<String, dynamic>>();
+    bool callbackReceived = false;
+    
     // Wait for first callback
     server.listen((HttpRequest request) async {
       try {
-        if (request.uri.path == '/callback') {
+        if (request.uri.path == '/callback' && !callbackReceived) {
+          callbackReceived = true;
           final code = request.uri.queryParameters['code'];
           final returnedState = request.uri.queryParameters['state'];
+          
+          // Send response immediately
           request.response.statusCode = 200;
           request.response.headers.contentType = ContentType.html;
           request.response.write('<html><body>You can close this window.</body></html>');
           await request.response.close();
-          await server.close(force: true);
 
           if (code == null || returnedState != state) {
-            throw Exception('Invalid authorization response');
+            await server.close(force: true);
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('Invalid authorization response: missing code or state mismatch'));
+            }
+            return;
           }
 
           final tokenBody = {
@@ -147,28 +155,66 @@ class OAuthService {
           }
 
           try {
+            LoggerService.debug('OAuthService: Exchanging code for token at ${config.tokenEndpoint}');
             final tokenResp = await http.post(
               Uri.parse(config.tokenEndpoint),
               headers: {'Content-Type': 'application/x-www-form-urlencoded'},
               body: tokenBody,
             );
+            // Close server after token exchange completes (success or failure)
+            await server.close(force: true);
+            
             if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
-              completer.complete(jsonDecode(tokenResp.body) as Map<String, dynamic>);
+              final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+              if (!completer.isCompleted) {
+                completer.complete(tokenData);
+              }
             } else {
-              completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+              if (!completer.isCompleted) {
+                completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+              }
             }
           } catch (e) {
-            completer.completeError(Exception('Network error contacting token endpoint: $e'));
+            await server.close(force: true);
+            LoggerService.error('OAuthService: Token exchange error: $e');
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('Network error contacting token endpoint: $e'));
+            }
           }
+        } else {
+          // Handle non-callback or duplicate requests
+          request.response.statusCode = 404;
+          await request.response.close();
         }
       } catch (e) {
         LoggerService.error('OAuthService: authorization flow error: $e');
-        if (!completer.isCompleted) completer.completeError(e);
+        try {
+          await server.close(force: true);
+        } catch (_) {}
+        if (!completer.isCompleted) {
+          completer.completeError(e);
+        }
+      }
+    }).onError((error, stackTrace) {
+      LoggerService.error('OAuthService: Server listen error: $error');
+      try {
+        server.close(force: true);
+      } catch (_) {}
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('OAuth callback server error: $error'));
       }
     });
 
-    final result = await completer.future.timeout(const Duration(minutes: 5));
-    return result;
+    try {
+      final result = await completer.future.timeout(const Duration(minutes: 5));
+      return result;
+    } catch (e) {
+      // Ensure server is closed on timeout or other errors
+      try {
+        await server.close(force: true);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   static String _codeVerifier() {

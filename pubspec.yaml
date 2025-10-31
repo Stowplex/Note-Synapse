@@ -45,6 +45,7 @@ dependencies:
   
   # HTTP requests
   http: ^1.1.0
+  crypto: ^3.0.3
   
   # Image handling
   image_picker: ^1.0.4
