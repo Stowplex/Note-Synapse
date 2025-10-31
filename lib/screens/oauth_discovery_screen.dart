@@ -163,9 +163,9 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
     }
 
     try {
-      final scope = _challengeScope?.isNotEmpty == true
-          ? _challengeScope
-          : (_recommendedScope?.isNotEmpty == true ? _recommendedScope : null);
+      String? scope = _challengeScope?.trim().isNotEmpty == true
+          ? _challengeScope?.trim()
+          : (_recommendedScope?.trim().isNotEmpty == true ? _recommendedScope?.trim() : null);
       final creds = await OAuthService.registerClient(
         registrationEndpoint: registrationEndpoint,
         clientName: 'NoteSynapse',
@@ -193,9 +193,12 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
   void _apply() {
     final summary = _summary;
     if (summary == null) return;
-    final defaultScope = _challengeScope?.isNotEmpty == true
-        ? _challengeScope
-        : (_recommendedScope?.isNotEmpty == true ? _recommendedScope : null);
+    String? defaultScope = _challengeScope?.trim().isNotEmpty == true
+        ? _challengeScope?.trim()
+        : (_recommendedScope?.trim().isNotEmpty == true ? _recommendedScope?.trim() : null);
+    if (defaultScope != null && defaultScope.isEmpty) {
+      defaultScope = null;
+    }
 
     Navigator.pop(
       context,

@@ -120,14 +120,14 @@ class OAuthConfig {
     required this.tokenEndpoint,
     required this.clientId,
     this.clientSecret,
-    required this.scope,
+    required String scope,
     this.usePkce = true,
     this.discoveryUrl,
     required this.redirectUri,
     this.issuer,
     this.resourceMetadataUrl,
     this.authorizationServerMetadataUrl,
-  });
+  }) : scope = scope.trim();
 
   factory OAuthConfig.fromJson(Map<String, dynamic> json) {
     return OAuthConfig(
@@ -135,7 +135,7 @@ class OAuthConfig {
       tokenEndpoint: json['tokenEndpoint'] as String,
       clientId: json['clientId'] as String,
       clientSecret: json['clientSecret'] as String?,
-      scope: json['scope'] as String? ?? '',
+      scope: (json['scope'] as String? ?? '').trim(),
       usePkce: json['usePkce'] as bool? ?? true,
       discoveryUrl: json['discoveryUrl'] as String?,
       redirectUri: json['redirectUri'] as String? ?? 'http://127.0.0.1:51791/callback',

@@ -367,19 +367,20 @@ class OAuthService {
     Map<String, dynamic>? resourceMetadata,
     Map<String, dynamic>? authorizationMetadata,
   ) {
-    if (scopeHint != null && scopeHint.isNotEmpty) {
-      return scopeHint;
+    final hint = scopeHint?.trim();
+    if (hint != null && hint.isNotEmpty) {
+      return hint;
     }
     final resourceScopes = resourceMetadata?['scopes_supported'];
     if (resourceScopes is List) {
-      final scopes = resourceScopes.whereType<String>().toList();
+      final scopes = resourceScopes.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
       if (scopes.isNotEmpty) {
         return scopes.join(' ');
       }
     }
     final authScopes = authorizationMetadata?['scopes_supported'];
     if (authScopes is List) {
-      final scopes = authScopes.whereType<String>().toList();
+      final scopes = authScopes.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
       if (scopes.isNotEmpty) {
         return scopes.join(' ');
       }
@@ -462,11 +463,14 @@ class OAuthService {
       'response_type': 'code',
       'client_id': config.clientId,
       'redirect_uri': redirectUri,
-      'scope': config.scope,
       'state': state,
       if (config.usePkce && codeChallenge != null) 'code_challenge': codeChallenge,
       if (config.usePkce && codeChallenge != null) 'code_challenge_method': 'S256',
     };
+    final trimmedScope = config.scope.trim();
+    if (trimmedScope.isNotEmpty) {
+      authParams['scope'] = trimmedScope;
+    }
     final authUri = Uri.parse(config.authorizationEndpoint).replace(queryParameters: authParams);
 
     LoggerService.debug('OAuthService: Launching auth at: $authUri');
