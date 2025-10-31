@@ -50,12 +50,16 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     }
   }
 
-  Future<void> _showAddEndpointDialog() async {
+  Future<void> _showAddEndpointDialog({McpEndpoint? endpoint}) async {
     final l10n = AppLocalizations.of(context)!;
-    final nameController = TextEditingController();
-    final baseUrlController = TextEditingController();
+    final isEditing = endpoint != null;
+    
+    // Pre-populate if editing
+    final nameController = TextEditingController(text: endpoint?.name ?? '');
+    final baseUrlController = TextEditingController(text: endpoint?.baseUrl ?? '');
     final bearerTokenController = TextEditingController();
     bool obscureToken = true;
+    
     // OAuth fields
     final authEndpointController = TextEditingController();
     final tokenEndpointController = TextEditingController();
@@ -64,15 +68,46 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     final scopeController = TextEditingController();
     bool usePkce = true;
     Map<String, dynamic>? oauthTokenResponse; // captured after Login
-    int selectedCredTab = 0; // 0 Token, 1 OAuth
-    McpTransportType selectedTransport = McpTransportType.streamableHttp;
+    int selectedCredTab = endpoint?.authType == McpAuthType.oauth ? 1 : 0; // 0 Token, 1 OAuth
+    McpTransportType selectedTransport = endpoint?.transportType ?? McpTransportType.streamableHttp;
     OAuthDiscoveryResultData? discoveryResult;
+    
+    // Load existing values if editing
+    if (isEditing) {
+      if (endpoint.authType == McpAuthType.token) {
+        final token = await McpService.getBearerToken(endpoint.id);
+        if (token != null) {
+          bearerTokenController.text = token;
+        }
+      } else if (endpoint.authType == McpAuthType.oauth && endpoint.oauth != null) {
+        final oauth = endpoint.oauth!;
+        authEndpointController.text = oauth.authorizationEndpoint;
+        tokenEndpointController.text = oauth.tokenEndpoint;
+        clientIdController.text = oauth.clientId;
+        clientSecretController.text = oauth.clientSecret ?? '';
+        scopeController.text = oauth.scope;
+        usePkce = oauth.usePkce;
+        // Reconstruct discovery result if metadata URLs exist
+        if (oauth.resourceMetadataUrl != null || oauth.authorizationServerMetadataUrl != null) {
+          discoveryResult = OAuthDiscoveryResultData(
+            authorizationEndpoint: oauth.authorizationEndpoint,
+            tokenEndpoint: oauth.tokenEndpoint,
+            clientId: oauth.clientId,
+            clientSecret: oauth.clientSecret,
+            defaultScope: oauth.scope,
+            issuer: oauth.issuer,
+            resourceMetadataUrl: oauth.resourceMetadataUrl,
+            authorizationServerMetadataUrl: oauth.authorizationServerMetadataUrl,
+          );
+        }
+      }
+    }
 
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(l10n.addMcpEndpointTitle),
+          title: Text(isEditing ? 'Edit MCP Endpoint' : l10n.addMcpEndpointTitle),
           content: SizedBox(
             width: 560,
             child: SingleChildScrollView(
@@ -340,68 +375,118 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                 }
 
                 try {
-                  // Add endpoint
-                  McpEndpoint created;
-                  if (selectedCredTab == 1) {
-                    final oauthConfig = OAuthConfig(
-                      authorizationEndpoint: authEndpointController.text.trim(),
-                      tokenEndpoint: tokenEndpointController.text.trim(),
-                      clientId: clientIdController.text.trim(),
-                      clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
-                      scope: scopeController.text.trim(),
-                      usePkce: usePkce,
-                      discoveryUrl: discoveryResult?.resourceMetadataUrl ?? discoveryResult?.authorizationServerMetadataUrl,
-                      redirectUri: 'http://127.0.0.1:51791/callback',
-                      issuer: discoveryResult?.issuer,
-                      resourceMetadataUrl: discoveryResult?.resourceMetadataUrl,
-                      authorizationServerMetadataUrl: discoveryResult?.authorizationServerMetadataUrl,
-                    );
-                    created = await McpService.addEndpoint(
-                      name: name,
-                      baseUrl: baseUrl,
-                      transportType: selectedTransport,
-                      authType: McpAuthType.oauth,
-                      oauthConfig: oauthConfig,
-                    );
-                    if (oauthTokenResponse != null) {
-                      final manager = OAuthTokenManager(endpointId: created.id, config: oauthConfig);
-                      await manager.saveTokens(oauthTokenResponse!);
+                  if (isEditing) {
+                    // Update existing endpoint
+                    if (selectedCredTab == 1) {
+                      final oauthConfig = OAuthConfig(
+                        authorizationEndpoint: authEndpointController.text.trim(),
+                        tokenEndpoint: tokenEndpointController.text.trim(),
+                        clientId: clientIdController.text.trim(),
+                        clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
+                        scope: scopeController.text.trim(),
+                        usePkce: usePkce,
+                        discoveryUrl: discoveryResult?.resourceMetadataUrl ?? discoveryResult?.authorizationServerMetadataUrl,
+                        redirectUri: 'http://127.0.0.1:51791/callback',
+                        issuer: discoveryResult?.issuer,
+                        resourceMetadataUrl: discoveryResult?.resourceMetadataUrl,
+                        authorizationServerMetadataUrl: discoveryResult?.authorizationServerMetadataUrl,
+                      );
+                      await McpService.updateEndpoint(
+                        id: endpoint.id,
+                        name: name,
+                        baseUrl: baseUrl,
+                        transportType: selectedTransport,
+                        authType: McpAuthType.oauth,
+                        oauthConfig: oauthConfig,
+                      );
+                      if (oauthTokenResponse != null) {
+                        final manager = OAuthTokenManager(endpointId: endpoint.id, config: oauthConfig);
+                        await manager.saveTokens(oauthTokenResponse!);
+                      }
+                    } else {
+                      await McpService.updateEndpoint(
+                        id: endpoint.id,
+                        name: name,
+                        baseUrl: baseUrl,
+                        transportType: selectedTransport,
+                        authType: McpAuthType.token,
+                        bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
+                      );
+                    }
+                    
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Updated endpoint: $name'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
                     }
                   } else {
-                    created = await McpService.addEndpoint(
-                    name: name,
-                    baseUrl: baseUrl,
-                    transportType: selectedTransport,
-                      authType: McpAuthType.token,
-                    bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
-                  );
-                  }
+                    // Add new endpoint
+                    McpEndpoint created;
+                    if (selectedCredTab == 1) {
+                      final oauthConfig = OAuthConfig(
+                        authorizationEndpoint: authEndpointController.text.trim(),
+                        tokenEndpoint: tokenEndpointController.text.trim(),
+                        clientId: clientIdController.text.trim(),
+                        clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
+                        scope: scopeController.text.trim(),
+                        usePkce: usePkce,
+                        discoveryUrl: discoveryResult?.resourceMetadataUrl ?? discoveryResult?.authorizationServerMetadataUrl,
+                        redirectUri: 'http://127.0.0.1:51791/callback',
+                        issuer: discoveryResult?.issuer,
+                        resourceMetadataUrl: discoveryResult?.resourceMetadataUrl,
+                        authorizationServerMetadataUrl: discoveryResult?.authorizationServerMetadataUrl,
+                      );
+                      created = await McpService.addEndpoint(
+                        name: name,
+                        baseUrl: baseUrl,
+                        transportType: selectedTransport,
+                        authType: McpAuthType.oauth,
+                        oauthConfig: oauthConfig,
+                      );
+                      if (oauthTokenResponse != null) {
+                        final manager = OAuthTokenManager(endpointId: created.id, config: oauthConfig);
+                        await manager.saveTokens(oauthTokenResponse!);
+                      }
+                    } else {
+                      created = await McpService.addEndpoint(
+                        name: name,
+                        baseUrl: baseUrl,
+                        transportType: selectedTransport,
+                        authType: McpAuthType.token,
+                        bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
+                      );
+                    }
 
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.addedEndpoint(name)),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(l10n.addedEndpoint(name)),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
                   }
 
                   // Reload endpoints
                   _loadEndpoints();
                 } catch (e) {
-                  LoggerService.error('Error adding endpoint: $e');
+                  LoggerService.error('Error ${isEditing ? "updating" : "adding"} endpoint: $e');
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(l10n.errorAddingEndpoint(e)),
+                        content: Text(isEditing ? 'Error updating endpoint: $e' : l10n.errorAddingEndpoint(e)),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
                 }
               },
-              child: Text(l10n.create),
+              child: Text(isEditing ? 'Save' : l10n.create),
             ),
           ],
         ),
@@ -687,9 +772,37 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                     ),
                                   ],
                                 ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () => _deleteEndpoint(endpoint),
+                                trailing: PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                      _showAddEndpointDialog(endpoint: endpoint);
+                                    } else if (value == 'delete') {
+                                      _deleteEndpoint(endpoint);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.edit, size: 20),
+                                          const SizedBox(width: 8),
+                                          Text(l10n.edit),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.delete, size: 20, color: Colors.red),
+                                          const SizedBox(width: 8),
+                                          Text(l10n.delete, style: const TextStyle(color: Colors.red)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               Padding(
