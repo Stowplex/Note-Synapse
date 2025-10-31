@@ -20,6 +20,7 @@ import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
+import 'note_action_app_selection_screen.dart';
 import '../widgets/add_note_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
@@ -1437,8 +1438,21 @@ You may supplement the information from the notes with your own knowledge to pro
               ),
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  // Bottom-left subtle note action app icon button
+                  IconButton(
+                    icon: Icon(
+                      Icons.apps_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    tooltip: 'Run Note Action App',
+                    onPressed: () => _openNoteActionAppsForContent(message.content),
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
+                  const Spacer(),
+                  // Existing right-side actions
                   OutlinedButton.icon(
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: message.content));
@@ -1472,6 +1486,31 @@ You may supplement the information from the notes with your own knowledge to pro
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openNoteActionAppsForContent(String content) {
+    final now = DateTime.now();
+    // Create a temporary Note object (not saved to DB)
+    final tempNote = Note(
+      id: 'temp_${now.millisecondsSinceEpoch}',
+      title: content.trim().isEmpty
+          ? 'AI Message'
+          : (content.trim().split('\n').first.length > 60
+              ? content.trim().split('\n').first.substring(0, 60)
+              : content.trim().split('\n').first),
+      content: content,
+      type: NoteType.note,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NoteActionAppSelectionScreen(
+          selectedNotes: [tempNote],
         ),
       ),
     );
