@@ -115,6 +115,31 @@ class ModelSelector {
     );
   }
 
+  /// Generate text using messages array (for conversations)
+  Future<String> generateWithMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    if (_currentModel == null) {
+      throw Exception('No model is currently selected. Please select a model first.');
+    }
+
+    return await _currentModel!.generateWithMessages(
+      messages,
+      attachedFiles,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
   Future<Map<String, dynamic>> generateWithTools(
     String prompt,
     List<PlatformFile> attachedFiles,
@@ -131,6 +156,32 @@ class ModelSelector {
 
     return await _currentModel!.generateWithTools(
       prompt,
+      attachedFiles,
+      tools,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    if (_currentModel == null) {
+      throw Exception('No model is currently selected. Please select a model first.');
+    }
+
+    return await _currentModel!.generateWithToolsAndMessages(
+      messages,
       attachedFiles,
       tools,
       temperature: temperature,

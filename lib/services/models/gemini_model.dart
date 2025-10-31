@@ -77,6 +77,39 @@ class GeminiModel implements AIModel {
   }
 
   @override
+  Future<String> generateWithMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with messages', () async {
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final apiKey = await _validateApiKey(requestId: actualRequestId);
+
+      final generationConfig = {
+        'temperature': temperature ?? 0.1,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+      };
+
+      // Convert messages array to Gemini format
+      final requestBody = _buildRequestBodyFromMessages(
+        messages,
+        attachedFiles,
+        generationConfig: generationConfig,
+      );
+
+      return await _makeRequest(apiKey, requestBody, requestId: actualRequestId);
+    });
+  }
+
+  @override
   Future<Map<String, dynamic>> generateWithTools(
     String prompt,
     List<PlatformFile> attachedFiles,
@@ -108,6 +141,162 @@ class GeminiModel implements AIModel {
         requestId: actualRequestId,
       );
     });
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with tools and messages', () async {
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final apiKey = await _validateApiKey(requestId: actualRequestId);
+
+      final generationConfig = {
+        'temperature': temperature ?? 0.1,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+      };
+
+      // Convert messages array to Gemini format
+      final requestBody = _buildRequestBodyFromMessages(
+        messages,
+        attachedFiles,
+        generationConfig: generationConfig,
+      );
+
+      // Add tools to request body
+      if (tools.isNotEmpty) {
+        requestBody['tools'] = [
+          {'function_declarations': tools}
+        ];
+      }
+
+      // Make request and get raw response
+      return await _makeRequestWithRawResponse(
+        apiKey,
+        requestBody,
+        requestId: actualRequestId,
+      );
+    });
+  }
+
+  /// Build request body from messages array
+  /// Gemini uses a different format: contents array where each content has parts
+  /// System messages are passed in a separate systemInstruction field
+  /// Gemini expects alternating user and model messages
+  Map<String, dynamic> _buildRequestBodyFromMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles, {
+    Map<String, dynamic>? generationConfig,
+  }) {
+    final todayContext = AIModel.getTodayContext();
+    final contents = <Map<String, dynamic>>[];
+    String? systemInstruction;
+    
+    // Extract system messages and combine them for systemInstruction
+    final systemMessages = <String>[];
+    final conversationMessages = <Map<String, dynamic>>[];
+    
+    for (final msg in messages) {
+      final role = msg['role'] as String;
+      final content = msg['content'] as String;
+      
+      if (role == 'system') {
+        systemMessages.add(content);
+      } else {
+        conversationMessages.add(msg);
+      }
+    }
+    
+    if (systemMessages.isNotEmpty) {
+      systemInstruction = systemMessages.join('\n\n');
+    }
+    
+    // Convert messages to Gemini format
+    // Gemini expects alternating user and model (assistant) messages
+    for (int i = 0; i < conversationMessages.length; i++) {
+      final msg = conversationMessages[i];
+      final role = msg['role'] as String;
+      final content = msg['content'] as String;
+      
+      if (role == 'assistant') {
+        // Add assistant response as model's turn
+        contents.add({
+          'role': 'model',
+          'parts': [{'text': content}]
+        });
+      } else if (role == 'user') {
+        // Determine if this is the last user message (where we attach files)
+        final isLastUserMessage = i == conversationMessages.length - 1 || 
+            (i < conversationMessages.length - 1 && conversationMessages[i + 1]['role'] != 'user');
+        
+        // Build parts for this user message
+        final parts = <Map<String, dynamic>>[];
+        
+        // Add today's context to last user message
+        String messageText = content;
+        if (isLastUserMessage) {
+          messageText = messageText + todayContext;
+        }
+        
+        parts.add({'text': messageText});
+        
+        // Add file attachments to the last user message
+        if (isLastUserMessage && attachedFiles.isNotEmpty) {
+          for (final file in attachedFiles) {
+            if (file.bytes != null) {
+              final base64Data = base64Encode(file.bytes!);
+              final extension = FileTypeUtils.getFileExtension(file.name);
+              final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                file.bytes!,
+                extension: extension.isEmpty ? null : extension,
+              );
+              
+              parts.add({
+                'inline_data': {
+                  'mime_type': mimeType,
+                  'data': base64Data,
+                }
+              });
+            }
+          }
+        }
+        
+        contents.add({
+          'role': 'user',
+          'parts': parts
+        });
+      }
+    }
+    
+    final requestBody = <String, dynamic>{
+      'contents': contents,
+      'generationConfig': generationConfig ??
+          {
+            'temperature': 0.1,
+            'topK': 32,
+            'topP': 1,
+            'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
+          },
+    };
+    
+    // Add systemInstruction if we have system messages
+    if (systemInstruction != null && systemInstruction.isNotEmpty) {
+      requestBody['systemInstruction'] = {
+        'parts': [{'text': systemInstruction}]
+      };
+    }
+    
+    return requestBody;
   }
 
 

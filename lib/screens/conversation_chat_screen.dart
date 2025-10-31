@@ -11,6 +11,7 @@ import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
+import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
@@ -283,23 +284,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         throw Exception('Request cancelled by user');
       }
 
-      // Build conversation context for the prompt
-      final contextMessages = _messages.map((msg) => {
-        'role': msg.type == MessageType.user ? 'user' : 'assistant',
-        'content': msg.content,
-      }).toList();
-
-      // Build conversation history string
-      String conversationHistory = '';
-      for (final msg in contextMessages) {
-        conversationHistory += '${msg['role']}: ${msg['content']}\n';
+      // Build messages array with system, user, and assistant roles
+      final messages = <Map<String, dynamic>>[];
+      
+      // Build system message with note context
+      final systemContent = await _buildSystemMessage(_notes);
+      if (systemContent.isNotEmpty) {
+        messages.add({
+          'role': 'system',
+          'content': systemContent,
+        });
       }
-
-      // Create a comprehensive question that includes conversation context
-      String question = userMessage;
-      if (conversationHistory.isNotEmpty) {
-        question = 'Conversation context:\n$conversationHistory\n\nCurrent question: $userMessage';
+      
+      // Add conversation history (excluding the current message which will be added below)
+      for (final msg in _messages) {
+        messages.add({
+          'role': msg.type == MessageType.user ? 'user' : 'assistant',
+          'content': msg.content,
+        });
       }
+      
+      // Add the current user message
+      messages.add({
+        'role': 'user',
+        'content': userMessage,
+      });
 
       // Check if this specific request was cancelled before AI generation
       if (_cancelledRequestIds.contains(requestId)) {
@@ -308,11 +317,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(question, attachedFiles, requestId);
+        return await _generateWithMcpTools(messages, attachedFiles, requestId);
       } else {
         // Use AI service's answerNoteQuestion method which handles note context and attachments
-        final response = await AIService.answerNoteQuestion(
-          question,
+        final response = await AIService.answerNoteQuestionWithMessages(
+          messages,
           _notes,
           attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
           useOwnKnowledge: true,
@@ -335,27 +344,72 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
-  Future<String> _generateWithMcpTools(String question, List<PlatformFile> attachedFiles, String requestId) async {
+  Future<String> _buildSystemMessage(List<Note> notes) async {
+    if (notes.isEmpty) {
+      return '''You are a helpful assistant that can answer questions and help with tasks.
+
+${AIPrompts.mathFormulaGuidelines}
+
+''';
+    }
+    
+    // Build note context for system message
+    final contextText = await AIService.buildContextFromNotes(notes);
+    
+    // Build system message from context (without a specific question)
+    return '''You are a helpful assistant that can answer questions and help with tasks.
+
+Based on the following notes and their linked relationships, please answer user questions.
+
+Context Notes (including linked notes and their relationships):
+$contextText
+
+Please provide comprehensive answers using both the information in the notes and your own knowledge.
+Consider the relationships between the NOTES in the context:
+- The hierarchical structure shown (indented linked notes)
+- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
+- How linked notes might provide additional context or clarification
+- The direction of relationships (→ for outgoing, ← for incoming)
+
+${AIPrompts.mathFormulaGuidelines}
+
+You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
+''';
+  }
+
+  Future<String> _generateWithMcpTools(List<Map<String, dynamic>> messages, List<PlatformFile> attachedFiles, String requestId) async {
     try {
       // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
         throw Exception('Request cancelled by user');
       }
 
-      // Add MCP tool information to prompt
+      // Add MCP tool information to system message if present, otherwise create one
       final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
-      final enhancedQuestion = mcpPrompt + question;
+      final messagesWithMcp = <Map<String, dynamic>>[];
       
-      // Build context from notes
-      String noteContext = '';
-      if (_notes.isNotEmpty) {
-        noteContext = '\n\n=== CONTEXT FROM NOTES ===\n';
-        for (final note in _notes) {
-          noteContext += '\nNote: ${note.title}\n${note.content}\n';
+      // Find or create system message
+      bool hasSystemMessage = false;
+      for (final msg in messages) {
+        if (msg['role'] == 'system') {
+          // Append MCP prompt to existing system message
+          messagesWithMcp.add({
+            'role': 'system',
+            'content': '${msg['content']}\n\n$mcpPrompt',
+          });
+          hasSystemMessage = true;
+        } else {
+          messagesWithMcp.add(msg);
         }
       }
       
-      final fullPrompt = enhancedQuestion + noteContext;
+      // If no system message exists, add one with MCP prompt
+      if (!hasSystemMessage) {
+        messagesWithMcp.insert(0, {
+          'role': 'system',
+          'content': mcpPrompt,
+        });
+      }
       
       // Get call_tool function definition based on current model type
       final currentModelType = ModelSelector.instance.currentModelType;
@@ -367,7 +421,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       
       // Tool calling loop - max 5 iterations to prevent infinite loops
       const maxIterations = 5;
-      String currentPrompt = fullPrompt;
+      List<Map<String, dynamic>> currentMessages = List.from(messagesWithMcp);
       final conversationParts = <String>[];
       
       for (int iteration = 0; iteration < maxIterations; iteration++) {
@@ -379,8 +433,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
         
         // Call AI with tools
-        final response = await ModelSelector.instance.generateWithTools(
-          currentPrompt,
+        final response = await ModelSelector.instance.generateWithToolsAndMessages(
+          currentMessages,
           attachedFiles,
           [callToolFunction],
         );
@@ -444,8 +498,58 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           
           // If we have tool results, continue the conversation with them
           if (toolResults.isNotEmpty) {
-            final toolResultsText = toolResults.join('\n\n');
-            currentPrompt = 'Previous tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response to the user.';
+            // Add assistant response with function call
+            currentMessages = List.from(currentMessages);
+            
+            // Add tool results - format depends on model type
+            final currentModelType = ModelSelector.instance.currentModelType;
+            if (currentModelType == ModelType.openaiCompatible) {
+              // OpenAI format: assistant message with tool_calls, then tool messages with results
+              // Store function calls with their results for proper ID mapping
+              final toolCallsWithResults = <Map<String, dynamic>>[];
+              for (int i = 0; i < functionCalls.length && i < toolResults.length; i++) {
+                final functionCall = functionCalls[i];
+                final functionName = functionCall['name'] as String;
+                final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}_${functionName}_$i';
+                
+                toolCallsWithResults.add({
+                  'id': toolCallId,
+                  'function_call': functionCall,
+                  'result': toolResults[i],
+                });
+              }
+              
+              // Add assistant message with tool calls
+              currentMessages.add({
+                'role': 'assistant',
+                'content': textResponse ?? '',
+                'function_calls': functionCalls,
+                'tool_calls_with_results': toolCallsWithResults, // Store for ID mapping
+              });
+              
+              // Add tool result messages
+              for (final toolCallWithResult in toolCallsWithResults) {
+                currentMessages.add({
+                  'role': 'tool',
+                  'tool_call_id': toolCallWithResult['id'],
+                  'name': toolCallWithResult['function_call']['name'],
+                  'content': toolCallWithResult['result'],
+                });
+              }
+            } else {
+              // Gemini format: tool results are included differently
+              // For Gemini, we add tool results as a continuation in the user role
+              currentMessages.add({
+                'role': 'assistant',
+                'content': textResponse ?? '',
+                'function_calls': functionCalls,
+              });
+              final toolResultsText = toolResults.join('\n\n');
+              currentMessages.add({
+                'role': 'user',
+                'content': 'Tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response.',
+              });
+            }
             continue; // Go to next iteration
           }
         }

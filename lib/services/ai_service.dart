@@ -54,6 +54,44 @@ class AIService {
     });
   }
 
+  /// Note Q&A with messages array (for conversations)
+  static Future<String> answerNoteQuestionWithMessages(
+    List<Map<String, dynamic>> messages,
+    List<Note> contextNotes, {
+    List<PlatformFile>? attachedFiles,
+    bool useOwnKnowledge = false,
+  }) async {
+    return await _withErrorHandling('note Q&A with messages', () async {
+      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      LoggerService.debug('Starting note Q&A with messages request', error: {
+        'messagesCount': messages.length,
+        'contextNotesCount': contextNotes.length,
+        'attachedFilesCount': attachedFiles?.length ?? 0,
+        'requestId': requestId,
+      });
+
+      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
+
+      LoggerService.debug('Note Q&A with messages prepared', error: {
+        'totalAttachedFiles': allAttachedFiles.length,
+        'requestId': requestId,
+      });
+
+      // Model will handle capability limitations gracefully
+
+      return await ModelSelector.instance.generateWithMessages(
+        messages,
+        allAttachedFiles,
+        requestId: requestId,
+      );
+    });
+  }
+
+  /// Expose buildContextFromNotes as a public static method
+  static Future<String> buildContextFromNotes(List<Note> notes) async {
+    return await _buildContextFromNotes(notes);
+  }
+
   /// Note transformation
   static Future<String> transformNote(
     Note note,

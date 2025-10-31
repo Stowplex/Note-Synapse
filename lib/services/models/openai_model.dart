@@ -85,9 +85,11 @@ class OpenAIModel implements AIModel {
       final todayContext = AIModel.getTodayContext();
       
       // Build message content with attachments and limitation note
-      final messageContent = _buildMessageContent(prompt + todayContext, attachedFiles);
+      final contentResult = _buildMessageContentWithFiles(prompt + todayContext, attachedFiles);
+      final messageContent = contentResult['content'] as dynamic;
+      final fileInputs = contentResult['fileInputs'] as List<Map<String, dynamic>>;
 
-      final requestBody = {
+      final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
         'messages': [
           {'role': 'user', 'content': messageContent}
@@ -95,6 +97,74 @@ class OpenAIModel implements AIModel {
         'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
         'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
+
+      // Add file_input parameter if we have documents and model supports it
+      if (fileInputs.isNotEmpty) {
+        requestBody['file_input'] = fileInputs;
+      }
+
+      return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
+    });
+  }
+
+  @override
+  Future<String> generateWithMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with messages', () async {
+      await initialize(config: _config);
+
+      // Extract file inputs from the last user message if it has attachments
+      final fileInputs = <Map<String, dynamic>>[];
+      
+      // Convert messages array to OpenAI format
+      final openaiMessages = await _convertMessagesToOpenAIFormat(messages, attachedFiles);
+      
+      // Collect file inputs from documents in attached files
+      if (attachedFiles.isNotEmpty) {
+        final capabilities = _config?.customCapabilitiesObject;
+        if (capabilities != null && capabilities.supportsDocuments) {
+          for (final file in attachedFiles) {
+            final fileName = file.name;
+            final extension = FileTypeUtils.getFileExtension(fileName);
+            final category = FileTypeUtils.getFileCategory(extension);
+            
+            if (category == 'document' && 
+                capabilities.supportedDocumentFormats.contains(extension) &&
+                file.bytes != null) {
+              final base64Data = base64Encode(file.bytes!);
+              final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                Uint8List.fromList(file.bytes!),
+                extension: extension.isEmpty ? null : extension,
+              );
+              
+              fileInputs.add({
+                'data': base64Data,
+                'mime_type': mimeType,
+                'filename': fileName,
+              });
+            }
+          }
+        }
+      }
+
+      final requestBody = <String, dynamic>{
+        'model': _config!.modelName!,
+        'messages': openaiMessages,
+        'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
+
+      // Add file_input parameter if we have documents
+      if (fileInputs.isNotEmpty) {
+        requestBody['file_input'] = fileInputs;
+      }
 
       return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
     });
@@ -142,26 +212,196 @@ class OpenAIModel implements AIModel {
     });
   }
 
+  @override
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('generation with tools and messages', () async {
+      await initialize(config: _config);
+
+      // Extract file inputs from documents in attached files
+      final fileInputs = <Map<String, dynamic>>[];
+      if (attachedFiles.isNotEmpty) {
+        final capabilities = _config?.customCapabilitiesObject;
+        if (capabilities != null && capabilities.supportsDocuments) {
+          for (final file in attachedFiles) {
+            final fileName = file.name;
+            final extension = FileTypeUtils.getFileExtension(fileName);
+            final category = FileTypeUtils.getFileCategory(extension);
+            
+            if (category == 'document' && 
+                capabilities.supportedDocumentFormats.contains(extension) &&
+                file.bytes != null) {
+              final base64Data = base64Encode(file.bytes!);
+              final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                Uint8List.fromList(file.bytes!),
+                extension: extension.isEmpty ? null : extension,
+              );
+              
+              fileInputs.add({
+                'data': base64Data,
+                'mime_type': mimeType,
+                'filename': fileName,
+              });
+            }
+          }
+        }
+      }
+
+      // Convert messages array to OpenAI format
+      final openaiMessages = await _convertMessagesToOpenAIFormat(messages, attachedFiles);
+
+      final requestBody = <String, dynamic>{
+        'model': _config!.modelName!,
+        'messages': openaiMessages,
+        'temperature': 1.0, // temperature is not supported by OpenAI, only 1.0 is used.
+        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
+
+      // Add file_input parameter if we have documents
+      if (fileInputs.isNotEmpty) {
+        requestBody['file_input'] = fileInputs;
+      }
+
+      // Add tools/functions to request body
+      if (tools.isNotEmpty) {
+        requestBody['functions'] = tools;
+        requestBody['function_call'] = 'auto';
+      }
+
+      return await _makeOpenAiRequestWithTools(
+        requestBody,
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      );
+    });
+  }
+
+  /// Convert messages array to OpenAI format
+  /// Handles system, user, and assistant roles
+  /// Attachments are added to the last user message
+  Future<List<Map<String, dynamic>>> _convertMessagesToOpenAIFormat(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+  ) async {
+    final openaiMessages = <Map<String, dynamic>>[];
+    final todayContext = AIModel.getTodayContext();
+    
+    for (int i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      final role = msg['role'] as String;
+      final content = msg['content'] as String;
+      
+      // Determine if this is the last user message (where we attach files)
+      final isLastUserMessage = role == 'user' && 
+          (i == messages.length - 1 || 
+           (i < messages.length - 1 && messages[i + 1]['role'] != 'user'));
+      
+      if (role == 'system') {
+        // System messages are supported by OpenAI
+        openaiMessages.add({
+          'role': 'system',
+          'content': content + todayContext,
+        });
+      } else if (role == 'user') {
+        // Add attachments to the last user message
+        if (isLastUserMessage && attachedFiles.isNotEmpty) {
+          final contentResult = _buildMessageContentWithFiles(content + todayContext, attachedFiles);
+          final messageContent = contentResult['content'] as dynamic;
+          openaiMessages.add({
+            'role': 'user',
+            'content': messageContent,
+          });
+          // Note: fileInputs from contentResult would need to be handled at request body level
+          // This is a limitation - we can't pass file_input per message in this conversion method
+          // For now, we rely on the caller to handle file_input at the request level
+        } else {
+          openaiMessages.add({
+            'role': 'user',
+            'content': content + (isLastUserMessage ? todayContext : ''),
+          });
+        }
+      } else if (role == 'assistant') {
+        // Assistant messages are supported by OpenAI
+        // Check if this assistant message has tool calls with results (for ID mapping)
+        final toolCallsWithResults = msg['tool_calls_with_results'] as List?;
+        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
+          // Use the stored tool call IDs from the conversation
+          openaiMessages.add({
+            'role': 'assistant',
+            'content': content,
+            'tool_calls': toolCallsWithResults.map((tcwr) {
+              final fc = tcwr['function_call'] as Map<String, dynamic>;
+              return {
+                'id': tcwr['id'] as String,
+                'type': 'function',
+                'function': {
+                  'name': fc['name'] as String,
+                  'arguments': jsonEncode(fc['args'] ?? {}),
+                }
+              };
+            }).toList(),
+          });
+        } else {
+          // Regular assistant message
+          openaiMessages.add({
+            'role': 'assistant',
+            'content': content,
+          });
+        }
+      } else if (role == 'tool') {
+        // Tool role is for function call results in OpenAI
+        // Must include tool_call_id to match the assistant's tool_call
+        final toolCallId = msg['tool_call_id'] as String?;
+        if (toolCallId != null) {
+          openaiMessages.add({
+            'role': 'tool',
+            'tool_call_id': toolCallId,
+            'content': content,
+          });
+        } else {
+          // Fallback if tool_call_id is missing
+          LoggerService.warning('Tool message missing tool_call_id, skipping');
+        }
+      }
+    }
+    
+    return openaiMessages;
+  }
+
 
   // Private helper methods
 
 
   /// Build message content with attachments in OpenAI format
-  dynamic _buildMessageContent(String prompt, List<PlatformFile> attachedFiles) {
+  /// Returns a tuple: (content, fileInputs) where fileInputs are documents for file_input parameter
+  Map<String, dynamic> _buildMessageContentWithFiles(String prompt, List<PlatformFile> attachedFiles) {
+    final result = <String, dynamic>{
+      'content': prompt,
+      'fileInputs': <Map<String, dynamic>>[],
+    };
+    
     if (attachedFiles.isEmpty) {
-      return prompt;
+      return result;
     }
 
     final capabilities = _config?.customCapabilitiesObject;
     if (capabilities == null) {
       LoggerService.debug('OpenAI model: No capabilities configured, sending text only');
-      return prompt;
+      return result;
     }
 
     final contentParts = <Map<String, dynamic>>[];
     final unsupportedFiles = <String>[];
     final supportedFiles = <String>[];
     final unsupportedByType = <String, List<String>>{};
+    final documentFiles = <Map<String, dynamic>>[];
 
     // Process each file
     for (final file in attachedFiles) {
@@ -189,9 +429,9 @@ class OpenAIModel implements AIModel {
         attachmentType = 'audio';
       } else if (category == 'document' && capabilities.supportsDocuments && 
                  capabilities.supportedDocumentFormats.contains(extension)) {
-        // OpenAI doesn't support document attachments in the same way as images
-        // Documents need to be extracted/processed separately
-        isSupported = false;
+        // OpenAI supports document understanding via file_input parameter
+        isSupported = true;
+        attachmentType = 'document';
       } else if (category == 'video' && capabilities.supportsVideo) {
         // OpenAI doesn't support video in the same way as images yet
         isSupported = false;
@@ -239,6 +479,25 @@ class OpenAIModel implements AIModel {
             'format': audioFormat,
             'sizeBytes': file.bytes!.length,
           });
+        } else if (attachmentType == 'document') {
+          // OpenAI document format via file_input parameter (top-level, not in content)
+          final base64Data = base64Encode(file.bytes!);
+          final mimeType = FileTypeUtils.getMimeTypeForBytes(
+            Uint8List.fromList(file.bytes!),
+            extension: extension.isEmpty ? null : extension,
+          );
+          
+          documentFiles.add({
+            'data': base64Data,
+            'mime_type': mimeType,
+            'filename': fileName,
+          });
+          
+          LoggerService.debug('Document attached for file_input', error: {
+            'fileName': fileName,
+            'mimeType': mimeType,
+            'sizeBytes': file.bytes!.length,
+          });
         }
       } else {
         unsupportedFiles.add(fileName);
@@ -273,16 +532,26 @@ class OpenAIModel implements AIModel {
       limitationNote = buffer.toString();
     }
 
-    // If no files were actually attached, return text only
-    if (contentParts.isEmpty) {
-      return prompt + limitationNote;
+    // Build final content
+    dynamic finalContent;
+    if (contentParts.isEmpty && documentFiles.isEmpty) {
+      finalContent = prompt + limitationNote;
+    } else {
+      finalContent = [
+        {'type': 'text', 'text': prompt + limitationNote},
+        ...contentParts,
+      ];
     }
 
-    // Return array format with text and attachments
-    return [
-      {'type': 'text', 'text': prompt + limitationNote},
-      ...contentParts,
-    ];
+    result['content'] = finalContent;
+    result['fileInputs'] = documentFiles;
+    return result;
+  }
+
+  /// Build message content with attachments in OpenAI format (backward compatibility)
+  dynamic _buildMessageContent(String prompt, List<PlatformFile> attachedFiles) {
+    final result = _buildMessageContentWithFiles(prompt, attachedFiles);
+    return result['content'];
   }
 
   Future<T> _withErrorHandling<T>(
