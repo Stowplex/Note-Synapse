@@ -221,6 +221,15 @@ class GeminiModel implements AIModel {
       systemInstruction = systemMessages.join('\n\n');
     }
     
+    // Find the index of the last user message first
+    int lastUserMessageIndex = -1;
+    for (int i = conversationMessages.length - 1; i >= 0; i--) {
+      if (conversationMessages[i]['role'] == 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+    
     // Convert messages to Gemini format
     // Gemini expects alternating user and model (assistant) messages
     for (int i = 0; i < conversationMessages.length; i++) {
@@ -235,14 +244,13 @@ class GeminiModel implements AIModel {
           'parts': [{'text': content}]
         });
       } else if (role == 'user') {
-        // Determine if this is the last user message (where we attach files)
-        final isLastUserMessage = i == conversationMessages.length - 1 || 
-            (i < conversationMessages.length - 1 && conversationMessages[i + 1]['role'] != 'user');
+        // Determine if this is the last user message (where we attach files and add todayContext)
+        final isLastUserMessage = i == lastUserMessageIndex;
         
         // Build parts for this user message
         final parts = <Map<String, dynamic>>[];
         
-        // Add today's context to last user message
+        // Add today's context to last user message only
         String messageText = content;
         if (isLastUserMessage) {
           messageText = messageText + todayContext;

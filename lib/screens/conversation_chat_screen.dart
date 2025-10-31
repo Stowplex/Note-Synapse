@@ -296,19 +296,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         });
       }
       
-      // Add conversation history (excluding the current message which will be added below)
+      // Add conversation history (_messages already includes the current user message)
+      // since it was added to _messages before calling _generateAIResponse
       for (final msg in _messages) {
         messages.add({
           'role': msg.type == MessageType.user ? 'user' : 'assistant',
           'content': msg.content,
         });
       }
-      
-      // Add the current user message
-      messages.add({
-        'role': 'user',
-        'content': userMessage,
-      });
 
       // Check if this specific request was cancelled before AI generation
       if (_cancelledRequestIds.contains(requestId)) {
