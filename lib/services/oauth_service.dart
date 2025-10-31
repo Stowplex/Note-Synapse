@@ -558,6 +558,10 @@ class OAuthService {
         handled = true;
         await respond(request, '<html><body>You can close this window.</body></html>');
 
+        // Wait a moment for app to return to foreground and network stack to stabilize
+        LoggerService.debug('OAuthService: Callback received, waiting for app foreground before token exchange...');
+        await Future.delayed(const Duration(milliseconds: 800));
+
         final tokenBody = <String, String>{
           'grant_type': 'authorization_code',
           'code': code,
@@ -579,20 +583,37 @@ class OAuthService {
             body: tokenBody,
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           );
+          
+          LoggerService.debug('OAuthService: Token exchange response status: ${tokenResp.statusCode}');
+          
           if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
             final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+            final hasAccessToken = tokenData.containsKey('access_token');
+            final hasRefreshToken = tokenData.containsKey('refresh_token');
+            LoggerService.info(
+              'OAuthService: Token exchange succeeded. Has access_token: $hasAccessToken, Has refresh_token: $hasRefreshToken',
+            );
             if (!completer.isCompleted) {
               completer.complete(tokenData);
+            } else {
+              LoggerService.warning('OAuthService: Completer already completed, ignoring successful token response');
             }
           } else {
+            LoggerService.error(
+              'OAuthService: Token exchange failed with status ${tokenResp.statusCode}. Body: ${tokenResp.body}',
+            );
             if (!completer.isCompleted) {
               completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+            } else {
+              LoggerService.warning('OAuthService: Completer already completed, ignoring failed token response');
             }
           }
         } catch (e) {
           LoggerService.error('OAuthService: Token exchange error: $e');
           if (!completer.isCompleted) {
             completer.completeError(Exception('Network error contacting token endpoint: $e'));
+          } else {
+            LoggerService.warning('OAuthService: Completer already completed, ignoring token exchange error');
           }
         } finally {
           await ensureClosed();
@@ -620,6 +641,21 @@ class OAuthService {
     }
   }
 
+  static bool _isDnsFailure(dynamic error) {
+    if (error is SocketException) {
+      return error.message.contains('Failed host lookup') || 
+             error.message.contains('Name or service not known') ||
+             error.osError?.errorCode == 7; // errno = 7 is "No address associated with hostname"
+    }
+    if (error is http.ClientException) {
+      final msg = error.toString().toLowerCase();
+      return msg.contains('failed host lookup') || 
+             msg.contains('no address associated with hostname') ||
+             (error.uri != null && error.toString().contains('SocketException'));
+    }
+    return false;
+  }
+
   static Future<http.Response> _postWithRetry({
     required Uri uri,
     required Map<String, String> body,
@@ -628,45 +664,118 @@ class OAuthService {
     Duration initialDelay = const Duration(milliseconds: 300),
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    final client = http.Client();
-    try {
-      var attempt = 0;
-      Duration _delayForAttempt(int attemptCount) {
-        final baseMs = initialDelay.inMilliseconds;
-        final delayMs = (baseMs * attemptCount).clamp(200, 4000);
-        return Duration(milliseconds: delayMs.round());
+    // Give Android DNS a brief moment to stabilize (already waited before calling this)
+    await Future.delayed(const Duration(milliseconds: 200));
+    
+    var attempt = 0;
+    Duration _delayForAttempt(int attemptCount, bool isDns) {
+      if (isDns) {
+        // DNS failures need longer delays - Android network stack needs time
+        final baseMs = 1000;
+        final delayMs = (baseMs * attemptCount).clamp(1000, 5000);
+        return Duration(milliseconds: delayMs);
       }
-      while (true) {
-        try {
-          return await client
-              .post(uri, headers: headers, body: body)
-              .timeout(timeout);
-        } on SocketException catch (e) {
-          attempt++;
-          if (attempt >= maxAttempts) rethrow;
-          LoggerService.warning(
-            'OAuthService: Token request network error (attempt $attempt/$maxAttempts): $e. Retrying...',
-          );
-          await Future.delayed(_delayForAttempt(attempt));
-        } on TimeoutException catch (e) {
-          attempt++;
-          if (attempt >= maxAttempts) rethrow;
-          LoggerService.warning(
-            'OAuthService: Token request timeout (attempt $attempt/$maxAttempts): $e. Retrying...',
-          );
-          await Future.delayed(_delayForAttempt(attempt));
-        } on http.ClientException catch (e) {
-          attempt++;
-          if (attempt >= maxAttempts) rethrow;
-          LoggerService.warning(
-            'OAuthService: Token request client error (attempt $attempt/$maxAttempts): $e. Retrying...',
-          );
-          await Future.delayed(_delayForAttempt(attempt));
-        }
-      }
-    } finally {
-      client.close();
+      final baseMs = initialDelay.inMilliseconds;
+      final delayMs = (baseMs * attemptCount).clamp(200, 2000);
+      return Duration(milliseconds: delayMs.round());
     }
+
+    Exception? lastError;
+    while (attempt < maxAttempts) {
+      http.Client? client;
+      try {
+        attempt++;
+        client = http.Client();
+        LoggerService.debug('OAuthService: Token request attempt $attempt/$maxAttempts to ${uri.toString()}');
+        
+        final response = await client
+            .post(uri, headers: headers, body: body)
+            .timeout(timeout);
+        
+        LoggerService.info(
+          'OAuthService: Token request attempt $attempt succeeded with status ${response.statusCode}',
+        );
+        
+        // Close client on success
+        client.close();
+        return response;
+      } on SocketException catch (e) {
+        final isDns = _isDnsFailure(e);
+        lastError = e;
+        if (attempt >= maxAttempts) {
+          if (client != null) {
+            try {
+              client.close();
+            } catch (_) {}
+          }
+          rethrow;
+        }
+        LoggerService.warning(
+          'OAuthService: Token request ${isDns ? "DNS" : "network"} error (attempt $attempt/$maxAttempts): $e. Retrying...',
+        );
+        if (client != null) {
+          try {
+            client.close();
+          } catch (_) {}
+        }
+        await Future.delayed(_delayForAttempt(attempt, isDns));
+      } on TimeoutException catch (e) {
+        lastError = e;
+        if (attempt >= maxAttempts) {
+          if (client != null) {
+            try {
+              client.close();
+            } catch (_) {}
+          }
+          rethrow;
+        }
+        LoggerService.warning(
+          'OAuthService: Token request timeout (attempt $attempt/$maxAttempts): $e. Retrying...',
+        );
+        if (client != null) {
+          try {
+            client.close();
+          } catch (_) {}
+        }
+        await Future.delayed(_delayForAttempt(attempt, false));
+      } on http.ClientException catch (e) {
+        final isDns = _isDnsFailure(e);
+        lastError = e;
+        if (attempt >= maxAttempts) {
+          if (client != null) {
+            try {
+              client.close();
+            } catch (_) {}
+          }
+          rethrow;
+        }
+        LoggerService.warning(
+          'OAuthService: Token request ${isDns ? "DNS" : "client"} error (attempt $attempt/$maxAttempts): $e. Retrying...',
+        );
+        if (client != null) {
+          try {
+            client.close();
+          } catch (_) {}
+        }
+        await Future.delayed(_delayForAttempt(attempt, isDns));
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+        if (client != null) {
+          try {
+            client.close();
+          } catch (_) {}
+        }
+        if (attempt >= maxAttempts) {
+          rethrow;
+        }
+        LoggerService.warning(
+          'OAuthService: Token request unexpected error (attempt $attempt/$maxAttempts): $e. Retrying...',
+        );
+        await Future.delayed(_delayForAttempt(attempt, false));
+      }
+    }
+    
+    throw lastError ?? Exception('Token request failed after $maxAttempts attempts');
   }
 
   static String _codeVerifier() {
