@@ -164,6 +164,7 @@ flutter:
     - assets/scripts/bootstrap.min.css
     - assets/scripts/highlight.min.js
     - assets/scripts/highlight.min.css
+    - assets/scripts/mermaid.min.js
     - assets/model_presets/
 
   # Internationalization
