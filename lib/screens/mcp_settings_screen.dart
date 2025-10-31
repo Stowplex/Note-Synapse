@@ -3,6 +3,9 @@ import '../models/mcp_endpoint.dart';
 import '../services/mcp_service.dart';
 import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
+import 'oauth_discovery_screen.dart';
+import '../services/oauth_service.dart';
+import '../services/oauth_token_manager.dart';
 
 class McpSettingsScreen extends StatefulWidget {
   const McpSettingsScreen({super.key});
@@ -53,6 +56,15 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     final baseUrlController = TextEditingController();
     final bearerTokenController = TextEditingController();
     bool obscureToken = true;
+    // OAuth fields
+    final authEndpointController = TextEditingController();
+    final tokenEndpointController = TextEditingController();
+    final clientIdController = TextEditingController();
+    final clientSecretController = TextEditingController();
+    final scopeController = TextEditingController();
+    bool usePkce = true;
+    Map<String, dynamic>? oauthTokenResponse; // captured after Login
+    int selectedCredTab = 0; // 0 Token, 1 OAuth
     McpTransportType selectedTransport = McpTransportType.streamableHttp;
 
     await showDialog(
@@ -107,25 +119,174 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                   },
                 )),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: bearerTokenController,
-                  decoration: InputDecoration(
-                    labelText: l10n.bearerTokenOptional,
-                    hintText: l10n.bearerTokenHint,
-                    border: const OutlineInputBorder(),
-                    helperText: l10n.bearerTokenHelperText,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureToken ? Icons.visibility : Icons.visibility_off,
+                DefaultTabController(
+                  length: 2,
+                  initialIndex: selectedCredTab,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const TabBar(
+                        tabs: [
+                          Tab(text: 'Token'),
+                          Tab(text: 'OAuth'),
+                        ],
                       ),
-                      onPressed: () {
-                        setState(() {
-                          obscureToken = !obscureToken;
-                        });
-                      },
-                    ),
+                      SizedBox(
+                        height: 280,
+                        child: TabBarView(
+                          children: [
+                            // Token tab
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: TextField(
+                                controller: bearerTokenController,
+                                decoration: InputDecoration(
+                                  labelText: l10n.bearerTokenOptional,
+                                  hintText: l10n.bearerTokenHint,
+                                  border: const OutlineInputBorder(),
+                                  helperText: l10n.bearerTokenHelperText,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      obscureToken ? Icons.visibility : Icons.visibility_off,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        obscureToken = !obscureToken;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                obscureText: obscureToken,
+                              ),
+                            ),
+                            // OAuth tab
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        ElevatedButton.icon(
+                                          onPressed: () async {
+                                            final base = baseUrlController.text.trim();
+                                            final result = await Navigator.push<OAuthDiscoveryResultData>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => OAuthDiscoveryScreen(baseUrl: base.isEmpty ? 'https://example.com' : base),
+                                              ),
+                                            );
+                                            if (result != null) {
+                                              setState(() {
+                                                authEndpointController.text = result.authorizationEndpoint;
+                                                tokenEndpointController.text = result.tokenEndpoint;
+                                                if (result.clientId != null) clientIdController.text = result.clientId!;
+                                                if (result.clientSecret != null) clientSecretController.text = result.clientSecret!;
+                                                if (result.defaultScope != null) scopeController.text = result.defaultScope!;
+                                              });
+                                            }
+                                          },
+                                          icon: const Icon(Icons.auto_fix_high),
+                                          label: const Text('Auto Configure'),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        OutlinedButton.icon(
+                                          onPressed: () async {
+                                            // Kick off login flow
+                                            try {
+                                              final oauthConfig = OAuthConfig(
+                                                authorizationEndpoint: authEndpointController.text.trim(),
+                                                tokenEndpoint: tokenEndpointController.text.trim(),
+                                                clientId: clientIdController.text.trim(),
+                                                clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
+                                                scope: scopeController.text.trim(),
+                                                usePkce: usePkce,
+                                                discoveryUrl: null,
+                                                redirectUri: 'http://127.0.0.1:51791/callback',
+                                              );
+                                              final tokenJson = await OAuthService.authorizationCodeFlow(
+                                                config: oauthConfig,
+                                                state: DateTime.now().millisecondsSinceEpoch.toString(),
+                                              );
+                                              setState(() { oauthTokenResponse = tokenJson; });
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('OAuth login successful')),
+                                                );
+                                              }
+                                            } catch (e) {
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text('OAuth login failed: $e'), backgroundColor: Colors.red),
+                                                );
+                                              }
+                                            }
+                                          },
+                                          icon: const Icon(Icons.login),
+                                          label: const Text('Login'),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: authEndpointController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Authorization Endpoint',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: tokenEndpointController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Token Endpoint',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: clientIdController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Client ID',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: clientSecretController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Client Secret (optional for PKCE)',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: scopeController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Scope',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    CheckboxListTile(
+                                      value: usePkce,
+                                      onChanged: (v) { setState(() { usePkce = v ?? true; }); },
+                                      title: const Text('Use PKCE (no client secret)'),
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    if (oauthTokenResponse != null)
+                                      const Text('Logged in: token captured', style: TextStyle(color: Colors.green)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  obscureText: obscureToken,
                 ),
               ],
             ),
@@ -153,12 +314,38 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
                 try {
                   // Add endpoint
-                  await McpService.addEndpoint(
-                    name: name,
-                    baseUrl: baseUrl,
-                    transportType: selectedTransport,
-                    bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
-                  );
+                  McpEndpoint created;
+                  if ((DefaultTabController.of(context).index) == 1) {
+                    final oauthConfig = OAuthConfig(
+                      authorizationEndpoint: authEndpointController.text.trim(),
+                      tokenEndpoint: tokenEndpointController.text.trim(),
+                      clientId: clientIdController.text.trim(),
+                      clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
+                      scope: scopeController.text.trim(),
+                      usePkce: usePkce,
+                      discoveryUrl: null,
+                      redirectUri: 'http://127.0.0.1:51791/callback',
+                    );
+                    created = await McpService.addEndpoint(
+                      name: name,
+                      baseUrl: baseUrl,
+                      transportType: selectedTransport,
+                      authType: McpAuthType.oauth,
+                      oauthConfig: oauthConfig,
+                    );
+                    if (oauthTokenResponse != null) {
+                      final manager = OAuthTokenManager(endpointId: created.id, config: oauthConfig);
+                      await manager.saveTokens(oauthTokenResponse!);
+                    }
+                  } else {
+                    created = await McpService.addEndpoint(
+                      name: name,
+                      baseUrl: baseUrl,
+                      transportType: selectedTransport,
+                      authType: McpAuthType.token,
+                      bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
+                    );
+                  }
 
                   if (context.mounted) {
                     Navigator.pop(context);

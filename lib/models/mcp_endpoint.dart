@@ -21,6 +21,8 @@ class McpEndpoint {
   final String name;
   final String baseUrl;
   final McpTransportType transportType;
+  final McpAuthType authType;
+  final OAuthConfig? oauth;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -29,6 +31,8 @@ class McpEndpoint {
     required this.name,
     required this.baseUrl,
     this.transportType = McpTransportType.streamableHttp,
+    this.authType = McpAuthType.token,
+    this.oauth,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -44,6 +48,15 @@ class McpEndpoint {
               orElse: () => McpTransportType.streamableHttp,
             )
           : McpTransportType.streamableHttp,
+      authType: json['authType'] != null
+          ? McpAuthType.values.firstWhere(
+              (e) => e.name == json['authType'],
+              orElse: () => McpAuthType.token,
+            )
+          : McpAuthType.token,
+      oauth: json['oauth'] != null
+          ? OAuthConfig.fromJson(json['oauth'] as Map<String, dynamic>)
+          : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -55,6 +68,8 @@ class McpEndpoint {
       'name': name,
       'baseUrl': baseUrl,
       'transportType': transportType.name,
+      'authType': authType.name,
+      if (oauth != null) 'oauth': oauth!.toJson(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -65,6 +80,8 @@ class McpEndpoint {
     String? name,
     String? baseUrl,
     McpTransportType? transportType,
+    McpAuthType? authType,
+    OAuthConfig? oauth,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -73,9 +90,63 @@ class McpEndpoint {
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
       transportType: transportType ?? this.transportType,
+      authType: authType ?? this.authType,
+      oauth: oauth ?? this.oauth,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+}
+
+/// Authentication type for MCP endpoints
+enum McpAuthType { token, oauth }
+
+/// OAuth 2.0 configuration for an MCP endpoint
+class OAuthConfig {
+  final String authorizationEndpoint;
+  final String tokenEndpoint;
+  final String clientId;
+  final String? clientSecret; // optional when using PKCE
+  final String scope;
+  final bool usePkce;
+  final String? discoveryUrl; // metadata URL used for auto-config
+  final String redirectUri; // we standardize on localhost redirect
+
+  OAuthConfig({
+    required this.authorizationEndpoint,
+    required this.tokenEndpoint,
+    required this.clientId,
+    this.clientSecret,
+    required this.scope,
+    this.usePkce = true,
+    this.discoveryUrl,
+    required this.redirectUri,
+  });
+
+  factory OAuthConfig.fromJson(Map<String, dynamic> json) {
+    return OAuthConfig(
+      authorizationEndpoint: json['authorizationEndpoint'] as String,
+      tokenEndpoint: json['tokenEndpoint'] as String,
+      clientId: json['clientId'] as String,
+      clientSecret: json['clientSecret'] as String?,
+      scope: json['scope'] as String? ?? '',
+      usePkce: json['usePkce'] as bool? ?? true,
+      discoveryUrl: json['discoveryUrl'] as String?,
+      redirectUri: json['redirectUri'] as String? ?? 'http://127.0.0.1:51791/callback',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'authorizationEndpoint': authorizationEndpoint,
+      'tokenEndpoint': tokenEndpoint,
+      'clientId': clientId,
+      if (clientSecret != null) 'clientSecret': clientSecret,
+      'scope': scope,
+      'usePkce': usePkce,
+      if (discoveryUrl != null) 'discoveryUrl': discoveryUrl,
+      'redirectUri': redirectUri,
+    };
   }
 }
 
