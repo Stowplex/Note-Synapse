@@ -72,8 +72,10 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(l10n.addMcpEndpointTitle),
-          content: SingleChildScrollView(
-            child: Column(
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -119,176 +121,182 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                   },
                 )),
                 const SizedBox(height: 16),
-                DefaultTabController(
-                  length: 2,
-                  initialIndex: selectedCredTab,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const TabBar(
-                        tabs: [
-                          Tab(text: 'Token'),
-                          Tab(text: 'OAuth'),
-                        ],
-                      ),
-                      SizedBox(
-                        height: 280,
-                        child: TabBarView(
-                          children: [
-                            // Token tab
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: TextField(
-                                controller: bearerTokenController,
-                                decoration: InputDecoration(
-                                  labelText: l10n.bearerTokenOptional,
-                                  hintText: l10n.bearerTokenHint,
-                                  border: const OutlineInputBorder(),
-                                  helperText: l10n.bearerTokenHelperText,
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      obscureToken ? Icons.visibility : Icons.visibility_off,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        obscureToken = !obscureToken;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                obscureText: obscureToken,
-                              ),
-                            ),
-                            // OAuth tab
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        ElevatedButton.icon(
-                                          onPressed: () async {
-                                            final base = baseUrlController.text.trim();
-                                            final result = await Navigator.push<OAuthDiscoveryResultData>(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => OAuthDiscoveryScreen(baseUrl: base.isEmpty ? 'https://example.com' : base),
-                                              ),
-                                            );
-                                            if (result != null) {
-                                              setState(() {
-                                                authEndpointController.text = result.authorizationEndpoint;
-                                                tokenEndpointController.text = result.tokenEndpoint;
-                                                if (result.clientId != null) clientIdController.text = result.clientId!;
-                                                if (result.clientSecret != null) clientSecretController.text = result.clientSecret!;
-                                                if (result.defaultScope != null) scopeController.text = result.defaultScope!;
-                                              });
-                                            }
-                                          },
-                                          icon: const Icon(Icons.auto_fix_high),
-                                          label: const Text('Auto Configure'),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        OutlinedButton.icon(
-                                          onPressed: () async {
-                                            // Kick off login flow
-                                            try {
-                                              final oauthConfig = OAuthConfig(
-                                                authorizationEndpoint: authEndpointController.text.trim(),
-                                                tokenEndpoint: tokenEndpointController.text.trim(),
-                                                clientId: clientIdController.text.trim(),
-                                                clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
-                                                scope: scopeController.text.trim(),
-                                                usePkce: usePkce,
-                                                discoveryUrl: null,
-                                                redirectUri: 'http://127.0.0.1:51791/callback',
-                                              );
-                                              final tokenJson = await OAuthService.authorizationCodeFlow(
-                                                config: oauthConfig,
-                                                state: DateTime.now().millisecondsSinceEpoch.toString(),
-                                              );
-                                              setState(() { oauthTokenResponse = tokenJson; });
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('OAuth login successful')),
-                                                );
-                                              }
-                                            } catch (e) {
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(content: Text('OAuth login failed: $e'), backgroundColor: Colors.red),
-                                                );
-                                              }
-                                            }
-                                          },
-                                          icon: const Icon(Icons.login),
-                                          label: const Text('Login'),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: authEndpointController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Authorization Endpoint',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: tokenEndpointController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Token Endpoint',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: clientIdController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Client ID',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: clientSecretController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Client Secret (optional for PKCE)',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: scopeController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Scope',
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    CheckboxListTile(
-                                      value: usePkce,
-                                      onChanged: (v) { setState(() { usePkce = v ?? true; }); },
-                                      title: const Text('Use PKCE (no client secret)'),
-                                      controlAffinity: ListTileControlAffinity.leading,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    if (oauthTokenResponse != null)
-                                      const Text('Logged in: token captured', style: TextStyle(color: Colors.green)),
-                                  ],
-                                ),
-                              ),
-                            ),
+                SizedBox(
+                  height: 328, // TabBar (~48) + TabBarView (280)
+                  child: DefaultTabController(
+                    length: 2,
+                    initialIndex: selectedCredTab,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const TabBar(
+                          tabs: [
+                            Tab(text: 'Token'),
+                            Tab(text: 'OAuth'),
                           ],
                         ),
-                      ),
+                        Expanded(
+                          child: TabBarView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: [
+                              // Token tab
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: TextField(
+                                  controller: bearerTokenController,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.bearerTokenOptional,
+                                    hintText: l10n.bearerTokenHint,
+                                    border: const OutlineInputBorder(),
+                                    helperText: l10n.bearerTokenHelperText,
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        obscureToken ? Icons.visibility : Icons.visibility_off,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          obscureToken = !obscureToken;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  obscureText: obscureToken,
+                                ),
+                              ),
+                              // OAuth tab
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                  Row(
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final base = baseUrlController.text.trim();
+                                          final result = await Navigator.push<OAuthDiscoveryResultData>(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => OAuthDiscoveryScreen(baseUrl: base.isEmpty ? 'https://example.com' : base),
+                                            ),
+                                          );
+                                          if (result != null) {
+                                            setState(() {
+                                              authEndpointController.text = result.authorizationEndpoint;
+                                              tokenEndpointController.text = result.tokenEndpoint;
+                                              if (result.clientId != null) clientIdController.text = result.clientId!;
+                                              if (result.clientSecret != null) clientSecretController.text = result.clientSecret!;
+                                              if (result.defaultScope != null) scopeController.text = result.defaultScope!;
+                                            });
+                                          }
+                                        },
+                                        icon: const Icon(Icons.auto_fix_high),
+                                        label: const Text('Auto Configure'),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          // Kick off login flow
+                                          try {
+                                            final oauthConfig = OAuthConfig(
+                                              authorizationEndpoint: authEndpointController.text.trim(),
+                                              tokenEndpoint: tokenEndpointController.text.trim(),
+                                              clientId: clientIdController.text.trim(),
+                                              clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
+                                              scope: scopeController.text.trim(),
+                                              usePkce: usePkce,
+                                              discoveryUrl: null,
+                                              redirectUri: 'http://127.0.0.1:51791/callback',
+                                            );
+                                            final tokenJson = await OAuthService.authorizationCodeFlow(
+                                              config: oauthConfig,
+                                              state: DateTime.now().millisecondsSinceEpoch.toString(),
+                                            );
+                                            setState(() { oauthTokenResponse = tokenJson; });
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('OAuth login successful')),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('OAuth login failed: $e'), backgroundColor: Colors.red),
+                                              );
+                                            }
+                                          }
+                                        },
+                                        icon: const Icon(Icons.login),
+                                        label: const Text('Login'),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: authEndpointController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Authorization Endpoint',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: tokenEndpointController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Token Endpoint',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: clientIdController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Client ID',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: clientSecretController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Client Secret (optional for PKCE)',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: scopeController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Scope',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  CheckboxListTile(
+                                    value: usePkce,
+                                    onChanged: (v) { setState(() { usePkce = v ?? true; }); },
+                                    title: const Text('Use PKCE (no client secret)'),
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  if (oauthTokenResponse != null)
+                                    const Text('Logged in: token captured', style: TextStyle(color: Colors.green)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
+                  ),
                   ),
                 ),
               ],
+              ),
             ),
           ),
           actions: [
