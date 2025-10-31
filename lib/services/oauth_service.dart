@@ -89,14 +89,15 @@ class OAuthService {
     final codeChallenge = config.usePkce && verifier != null ? _codeChallenge(verifier) : null;
 
     // Use localhost redirect server
-    // Prefer fixed port for compatibility with pre-registered redirect URIs
+    // Use fixed port for compatibility with pre-registered redirect URI
+    // If binding fails, surface a clear error instead of falling back,
+    // otherwise the redirect URI would mismatch the registered one.
+    final int port = 51791;
     HttpServer server;
-    int port = 51791;
     try {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-    } catch (_) {
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      port = server.port;
+    } catch (e) {
+      throw Exception('Unable to bind local redirect server on 127.0.0.1:$port. Ensure the port is free.');
     }
     final redirectUri = 'http://127.0.0.1:$port/callback';
 
@@ -112,6 +113,7 @@ class OAuthService {
     };
     final authUri = Uri.parse(config.authorizationEndpoint).replace(queryParameters: authParams);
 
+    LoggerService.debug('OAuthService: Launching auth at: $authUri');
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
     final completer = Completer<Map<String, dynamic>>();
@@ -144,15 +146,19 @@ class OAuthService {
             tokenBody['code_verifier'] = verifier;
           }
 
-          final tokenResp = await http.post(
-            Uri.parse(config.tokenEndpoint),
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: tokenBody,
-          );
-          if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
-            completer.complete(jsonDecode(tokenResp.body) as Map<String, dynamic>);
-          } else {
-            completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode})'));
+          try {
+            final tokenResp = await http.post(
+              Uri.parse(config.tokenEndpoint),
+              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+              body: tokenBody,
+            );
+            if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
+              completer.complete(jsonDecode(tokenResp.body) as Map<String, dynamic>);
+            } else {
+              completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+            }
+          } catch (e) {
+            completer.completeError(Exception('Network error contacting token endpoint: $e'));
           }
         }
       } catch (e) {

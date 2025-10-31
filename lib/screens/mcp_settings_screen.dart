@@ -130,8 +130,13 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const TabBar(
-                          tabs: [
+                        TabBar(
+                          onTap: (index) {
+                            setState(() {
+                              selectedCredTab = index;
+                            });
+                          },
+                          tabs: const [
                             Tab(text: 'Token'),
                             Tab(text: 'OAuth'),
                           ],
@@ -323,7 +328,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                 try {
                   // Add endpoint
                   McpEndpoint created;
-                  if ((DefaultTabController.of(context).index) == 1) {
+                  if (selectedCredTab == 1) {
                     final oauthConfig = OAuthConfig(
                       authorizationEndpoint: authEndpointController.text.trim(),
                       tokenEndpoint: tokenEndpointController.text.trim(),
