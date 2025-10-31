@@ -1447,7 +1447,7 @@ You may supplement the information from the notes with your own knowledge to pro
                       color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                     ),
                     tooltip: 'Run Note Action App',
-                    onPressed: () => _openNoteActionAppsForContent(message.content),
+                    onPressed: () => _openNoteActionAppsForContent(message),
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     padding: EdgeInsets.zero,
                   ),
@@ -1491,11 +1491,12 @@ You may supplement the information from the notes with your own knowledge to pro
     );
   }
 
-  void _openNoteActionAppsForContent(String content) {
+  void _openNoteActionAppsForContent(ConversationMessage message) {
+    final content = message.content;
     final now = DateTime.now();
     // Create a temporary Note object (not saved to DB)
     final tempNote = Note(
-      id: 'temp_${now.millisecondsSinceEpoch}',
+      id: 'msg:${message.id}',
       title: content.trim().isEmpty
           ? 'AI Message'
           : (content.trim().split('\n').first.length > 60
