@@ -572,11 +572,12 @@ class OAuthService {
         }
 
         try {
-          LoggerService.debug('OAuthService: Exchanging code for token at ${config.tokenEndpoint}');
-          final tokenResp = await http.post(
-            Uri.parse(config.tokenEndpoint),
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          final tokenUri = Uri.parse(config.tokenEndpoint);
+          LoggerService.debug('OAuthService: Exchanging code for token at ${tokenUri.toString()}');
+          final tokenResp = await _postWithRetry(
+            uri: tokenUri,
             body: tokenBody,
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           );
           if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
             final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
@@ -616,6 +617,55 @@ class OAuthService {
       return result;
     } finally {
       await ensureClosed();
+    }
+  }
+
+  static Future<http.Response> _postWithRetry({
+    required Uri uri,
+    required Map<String, String> body,
+    Map<String, String>? headers,
+    int maxAttempts = 3,
+    Duration initialDelay = const Duration(milliseconds: 300),
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final client = http.Client();
+    try {
+      var attempt = 0;
+      Duration _delayForAttempt(int attemptCount) {
+        final baseMs = initialDelay.inMilliseconds;
+        final delayMs = (baseMs * attemptCount).clamp(200, 4000);
+        return Duration(milliseconds: delayMs.round());
+      }
+      while (true) {
+        try {
+          return await client
+              .post(uri, headers: headers, body: body)
+              .timeout(timeout);
+        } on SocketException catch (e) {
+          attempt++;
+          if (attempt >= maxAttempts) rethrow;
+          LoggerService.warning(
+            'OAuthService: Token request network error (attempt $attempt/$maxAttempts): $e. Retrying...',
+          );
+          await Future.delayed(_delayForAttempt(attempt));
+        } on TimeoutException catch (e) {
+          attempt++;
+          if (attempt >= maxAttempts) rethrow;
+          LoggerService.warning(
+            'OAuthService: Token request timeout (attempt $attempt/$maxAttempts): $e. Retrying...',
+          );
+          await Future.delayed(_delayForAttempt(attempt));
+        } on http.ClientException catch (e) {
+          attempt++;
+          if (attempt >= maxAttempts) rethrow;
+          LoggerService.warning(
+            'OAuthService: Token request client error (attempt $attempt/$maxAttempts): $e. Retrying...',
+          );
+          await Future.delayed(_delayForAttempt(attempt));
+        }
+      }
+    } finally {
+      client.close();
     }
   }
 

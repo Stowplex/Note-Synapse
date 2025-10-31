@@ -76,7 +76,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
           content: SizedBox(
             width: 560,
             child: SingleChildScrollView(
-              child: Column(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -150,24 +150,24 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 12),
                                 child: TextField(
-                                  controller: bearerTokenController,
-                                  decoration: InputDecoration(
-                                    labelText: l10n.bearerTokenOptional,
-                                    hintText: l10n.bearerTokenHint,
-                                    border: const OutlineInputBorder(),
-                                    helperText: l10n.bearerTokenHelperText,
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        obscureToken ? Icons.visibility : Icons.visibility_off,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          obscureToken = !obscureToken;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                  obscureText: obscureToken,
+                  controller: bearerTokenController,
+                  decoration: InputDecoration(
+                    labelText: l10n.bearerTokenOptional,
+                    hintText: l10n.bearerTokenHint,
+                    border: const OutlineInputBorder(),
+                    helperText: l10n.bearerTokenHelperText,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscureToken ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          obscureToken = !obscureToken;
+                        });
+                      },
+                    ),
+                  ),
+                  obscureText: obscureToken,
                                 ),
                               ),
                               // OAuth tab
@@ -369,12 +369,12 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     }
                   } else {
                     created = await McpService.addEndpoint(
-                      name: name,
-                      baseUrl: baseUrl,
-                      transportType: selectedTransport,
+                    name: name,
+                    baseUrl: baseUrl,
+                    transportType: selectedTransport,
                       authType: McpAuthType.token,
-                      bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
-                    );
+                    bearerToken: bearerToken.isNotEmpty ? bearerToken : null,
+                  );
                   }
 
                   if (context.mounted) {
