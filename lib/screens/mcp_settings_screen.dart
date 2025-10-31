@@ -66,6 +66,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     Map<String, dynamic>? oauthTokenResponse; // captured after Login
     int selectedCredTab = 0; // 0 Token, 1 OAuth
     McpTransportType selectedTransport = McpTransportType.streamableHttp;
+    OAuthDiscoveryResultData? discoveryResult;
 
     await showDialog(
       context: context,
@@ -185,16 +186,26 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                           final result = await Navigator.push<OAuthDiscoveryResultData>(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (_) => OAuthDiscoveryScreen(baseUrl: base.isEmpty ? 'https://example.com' : base),
+                                              builder: (_) => OAuthDiscoveryScreen(
+                                                baseUrl: base.isEmpty ? 'https://example.com' : base,
+                                                usePkce: usePkce,
+                                              ),
                                             ),
                                           );
                                           if (result != null) {
                                             setState(() {
+                                              discoveryResult = result;
                                               authEndpointController.text = result.authorizationEndpoint;
                                               tokenEndpointController.text = result.tokenEndpoint;
-                                              if (result.clientId != null) clientIdController.text = result.clientId!;
-                                              if (result.clientSecret != null) clientSecretController.text = result.clientSecret!;
-                                              if (result.defaultScope != null) scopeController.text = result.defaultScope!;
+                                              if (result.clientId != null) {
+                                                clientIdController.text = result.clientId!;
+                                              }
+                                              if (result.clientSecret != null) {
+                                                clientSecretController.text = result.clientSecret!;
+                                              }
+                                              if (result.defaultScope != null && result.defaultScope!.isNotEmpty) {
+                                                scopeController.text = result.defaultScope!;
+                                              }
                                             });
                                           }
                                         },
@@ -213,8 +224,11 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                               clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
                                               scope: scopeController.text.trim(),
                                               usePkce: usePkce,
-                                              discoveryUrl: null,
+                                              discoveryUrl: discoveryResult?.resourceMetadataUrl ?? discoveryResult?.authorizationServerMetadataUrl,
                                               redirectUri: 'http://127.0.0.1:51791/callback',
+                                              issuer: discoveryResult?.issuer,
+                                              resourceMetadataUrl: discoveryResult?.resourceMetadataUrl,
+                                              authorizationServerMetadataUrl: discoveryResult?.authorizationServerMetadataUrl,
                                             );
                                             final tokenJson = await OAuthService.authorizationCodeFlow(
                                               config: oauthConfig,
@@ -336,8 +350,11 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                       clientSecret: clientSecretController.text.trim().isEmpty ? null : clientSecretController.text.trim(),
                       scope: scopeController.text.trim(),
                       usePkce: usePkce,
-                      discoveryUrl: null,
+                      discoveryUrl: discoveryResult?.resourceMetadataUrl ?? discoveryResult?.authorizationServerMetadataUrl,
                       redirectUri: 'http://127.0.0.1:51791/callback',
+                      issuer: discoveryResult?.issuer,
+                      resourceMetadataUrl: discoveryResult?.resourceMetadataUrl,
+                      authorizationServerMetadataUrl: discoveryResult?.authorizationServerMetadataUrl,
                     );
                     created = await McpService.addEndpoint(
                       name: name,

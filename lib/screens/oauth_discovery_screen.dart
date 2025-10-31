@@ -9,7 +9,15 @@ class OAuthDiscoveryResultData {
   final String? clientId;
   final String? clientSecret;
   final String? defaultScope;
-  final String metadataUrl;
+  final String? issuer;
+  final String? resourceMetadataUrl;
+  final String? authorizationServerMetadataUrl;
+  final Map<String, dynamic>? resourceMetadata;
+  final Map<String, dynamic>? authorizationServerMetadata;
+  final String? selectedAuthorizationServer;
+  final List<String>? availableAuthorizationServers;
+  final String? scopeFromChallenge;
+  final String? recommendedScope;
 
   OAuthDiscoveryResultData({
     required this.authorizationEndpoint,
@@ -17,7 +25,15 @@ class OAuthDiscoveryResultData {
     this.clientId,
     this.clientSecret,
     this.defaultScope,
-    required this.metadataUrl,
+    this.issuer,
+    this.resourceMetadataUrl,
+    this.authorizationServerMetadataUrl,
+    this.resourceMetadata,
+    this.authorizationServerMetadata,
+    this.selectedAuthorizationServer,
+    this.availableAuthorizationServers,
+    this.scopeFromChallenge,
+    this.recommendedScope,
   });
 }
 
@@ -33,74 +49,206 @@ class OAuthDiscoveryScreen extends StatefulWidget {
 
 class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
   final _metaController = TextEditingController();
-  Map<String, dynamic>? _json;
+
   bool _loading = false;
   String? _error;
+
+  OAuthDiscoverySummary? _summary;
+  Map<String, dynamic>? _resourceMetadata;
+  Map<String, dynamic>? _authorizationMetadata;
+  String? _resourceMetadataUrl;
+  String? _authorizationMetadataUrl;
+  String? _selectedAuthorizationServer;
+  String? _clientId;
+  String? _clientSecret;
+  String? _challengeScope;
+  String? _recommendedScope;
 
   @override
   void initState() {
     super.initState();
-    _metaController.text = _defaultMetadataUrl(widget.baseUrl);
+    _metaController.text = '';
   }
 
-  String _defaultMetadataUrl(String base) {
-    final uri = Uri.parse(base);
-    final wellKnown = uri.replace(path: '${uri.path.endsWith('/') ? uri.path.substring(0, uri.path.length - 1) : uri.path}/.well-known/oauth-authorization-server');
-    return wellKnown.toString();
-  }
+  Future<void> _discover({String? preferredServer}) async {
+    final input = _metaController.text.trim();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
-  Future<void> _run() async {
-    setState(() { _loading = true; _error = null; });
     try {
-      final meta = await OAuthService.fetchMetadata(_metaController.text.trim());
-      setState(() { _json = meta; _loading = false; });
+      var summary = await OAuthService.performDiscovery(
+        baseUrl: widget.baseUrl,
+        metadataUrl: input.isEmpty ? null : input,
+        preferredAuthorizationServer: preferredServer ?? _selectedAuthorizationServer,
+      );
+
+      final requiresSelection = summary.availableAuthorizationServers.length > 1 &&
+          (preferredServer == null || preferredServer.isEmpty) &&
+          (_selectedAuthorizationServer == null ||
+              !summary.availableAuthorizationServers.contains(_selectedAuthorizationServer));
+
+      if (requiresSelection) {
+        final choice = await _promptAuthorizationServer(
+          summary.availableAuthorizationServers,
+          summary.selectedAuthorizationServer,
+        );
+        if (choice != null && choice.isNotEmpty && choice != summary.selectedAuthorizationServer) {
+          summary = await OAuthService.performDiscovery(
+            baseUrl: widget.baseUrl,
+            metadataUrl: input.isEmpty ? null : input,
+            preferredAuthorizationServer: choice,
+          );
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _resourceMetadata = summary.resourceMetadata;
+        _authorizationMetadata = summary.authorizationServerMetadata;
+        _resourceMetadataUrl = summary.resourceMetadataUrl;
+        _authorizationMetadataUrl = summary.authorizationServerMetadataUrl;
+        _selectedAuthorizationServer = summary.selectedAuthorizationServer;
+        _challengeScope = summary.scopeFromChallenge;
+        _recommendedScope = summary.recommendedScope;
+        _error = null;
+      });
     } catch (e) {
       LoggerService.error('OAuth discovery failed: $e');
-      setState(() { _loading = false; _error = '$e'; });
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
+  }
+
+  Future<String?> _promptAuthorizationServer(List<String> servers, String? current) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Select Authorization Server'),
+        children: [
+          for (final server in servers)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, server),
+              child: Text(server, style: const TextStyle(fontSize: 14)),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, current),
+            child: const Text('Keep current selection'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _register() async {
-    if (_json == null) return;
+    final summary = _summary;
+    if (summary == null) return;
+    final registrationEndpoint = summary.authorizationServerMetadata?['registration_endpoint'] as String?;
+    if (registrationEndpoint == null || registrationEndpoint.isEmpty) {
+      setState(() {
+        _error = 'Authorization server metadata does not advertise dynamic client registration.';
+      });
+      return;
+    }
+
     try {
-      final parsed = OAuthService.parseMetadata(_json!);
-      if (parsed.registrationEndpoint == null) return;
+      final scope = _challengeScope?.isNotEmpty == true
+          ? _challengeScope
+          : (_recommendedScope?.isNotEmpty == true ? _recommendedScope : null);
       final creds = await OAuthService.registerClient(
-        registrationEndpoint: parsed.registrationEndpoint!,
+        registrationEndpoint: registrationEndpoint,
         clientName: 'NoteSynapse',
         redirectUri: 'http://127.0.0.1:51791/callback',
         usePkce: widget.usePkce,
+        scope: scope,
       );
-      final scope = parsed.scopesSupported?.join(' ');
-      if (mounted) {
-        Navigator.pop(context, OAuthDiscoveryResultData(
-          authorizationEndpoint: parsed.authorizationEndpoint,
-          tokenEndpoint: parsed.tokenEndpoint,
-          clientId: creds['client_id'],
-          clientSecret: creds['client_secret'],
-          defaultScope: scope,
-          metadataUrl: _metaController.text.trim(),
-        ));
-      }
+      if (!mounted) return;
+      setState(() {
+        _clientId = creds['client_id'];
+        _clientSecret = creds['client_secret'];
+        _error = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Client registered successfully.')),
+      );
     } catch (e) {
-      setState(() { _error = '$e'; });
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+      });
     }
   }
 
-  void _useWithoutRegistration() {
-    if (_json == null) return;
-    final parsed = OAuthService.parseMetadata(_json!);
-    final scope = parsed.scopesSupported?.join(' ');
-    Navigator.pop(context, OAuthDiscoveryResultData(
-      authorizationEndpoint: parsed.authorizationEndpoint,
-      tokenEndpoint: parsed.tokenEndpoint,
-      defaultScope: scope,
-      metadataUrl: _metaController.text.trim(),
-    ));
+  void _apply() {
+    final summary = _summary;
+    if (summary == null) return;
+    final defaultScope = _challengeScope?.isNotEmpty == true
+        ? _challengeScope
+        : (_recommendedScope?.isNotEmpty == true ? _recommendedScope : null);
+
+    Navigator.pop(
+      context,
+      OAuthDiscoveryResultData(
+        authorizationEndpoint: summary.authorizationEndpoint,
+        tokenEndpoint: summary.tokenEndpoint,
+        clientId: _clientId,
+        clientSecret: _clientSecret,
+        defaultScope: defaultScope,
+        issuer: summary.issuer,
+        resourceMetadataUrl: summary.resourceMetadataUrl,
+        authorizationServerMetadataUrl: summary.authorizationServerMetadataUrl,
+        resourceMetadata: summary.resourceMetadata,
+        authorizationServerMetadata: summary.authorizationServerMetadata,
+        selectedAuthorizationServer: summary.selectedAuthorizationServer,
+        availableAuthorizationServers: summary.availableAuthorizationServers,
+        scopeFromChallenge: _challengeScope,
+        recommendedScope: _recommendedScope,
+      ),
+    );
+  }
+
+  Widget _buildMetadataSection(String title, Map<String, dynamic> json, {String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              if (subtitle != null && subtitle.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: Colors.grey)),
+              ],
+              const SizedBox(height: 8),
+              SelectableText(
+                const JsonEncoder.withIndent('  ').convert(json),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final summary = _summary;
     return Scaffold(
       appBar: AppBar(title: const Text('OAuth Discovery')),
       body: Padding(
@@ -111,41 +259,128 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
             TextField(
               controller: _metaController,
               decoration: const InputDecoration(
-                labelText: 'Metadata URL',
+                labelText: 'Metadata URL (optional)',
+                hintText: 'Leave blank to auto-detect using RFC 9728',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                ElevatedButton(onPressed: _loading ? null : _run, child: const Text('Run')),
+                ElevatedButton(
+                  onPressed: _loading ? null : () => _discover(),
+                  child: const Text('Discover'),
+                ),
                 const SizedBox(width: 12),
-                if (_json != null)
-                  OutlinedButton(onPressed: _useWithoutRegistration, child: const Text('Use')),
+                if (summary != null)
+                  OutlinedButton(
+                    onPressed: _loading ? null : _apply,
+                    child: const Text('Apply'),
+                  ),
                 const SizedBox(width: 12),
-                if (_json != null && (_json!['registration_endpoint'] != null || _json!['registrationEndpoint'] != null))
-                  ElevatedButton(onPressed: _loading ? null : _register, child: const Text('Register')),
+                if (summary?.authorizationServerMetadata?['registration_endpoint'] != null)
+                  ElevatedButton(
+                    onPressed: _loading ? null : _register,
+                    child: const Text('Register Client'),
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
+            if (_loading) const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: LinearProgressIndicator(),
+            ),
             if (_error != null)
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(_error!, style: const TextStyle(color: Colors.red)),
+              ),
+            const SizedBox(height: 12),
             Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : SingleChildScrollView(
-                        child: Text(
-                          _json == null ? 'No result yet' : const JsonEncoder.withIndent('  ').convert(_json),
-                          style: const TextStyle(fontFamily: 'monospace'),
+              child: ListView(
+                children: [
+                  if (summary != null)
+                    Card(
+                      elevation: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Authorization Endpoint:\n${summary.authorizationEndpoint}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Token Endpoint:\n${summary.tokenEndpoint}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            if (summary.issuer != null) ...[
+                              const SizedBox(height: 8),
+                              Text('Issuer: ${summary.issuer}', style: const TextStyle(fontSize: 13)),
+                            ],
+                            if (summary.availableAuthorizationServers.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  const Text('Authorization server:', style: TextStyle(fontSize: 13)),
+                                  const SizedBox(width: 12),
+                                  DropdownButton<String>(
+                                    value: summary.availableAuthorizationServers.contains(_selectedAuthorizationServer)
+                                        ? _selectedAuthorizationServer
+                                        : (summary.availableAuthorizationServers.contains(summary.selectedAuthorizationServer)
+                                            ? summary.selectedAuthorizationServer
+                                            : null),
+                                    items: summary.availableAuthorizationServers
+                                        .map((server) => DropdownMenuItem(
+                                              value: server,
+                                              child: Text(server, overflow: TextOverflow.ellipsis),
+                                            ))
+                                        .toList(),
+                                    onChanged: _loading
+                                        ? null
+                                        : (value) {
+                                            if (value == null) return;
+                                            setState(() {
+                                              _selectedAuthorizationServer = value;
+                                            });
+                                            _discover(preferredServer: value);
+                                          },
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (_challengeScope != null && _challengeScope!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text('Scope challenge: $_challengeScope', style: const TextStyle(fontSize: 13)),
+                            ],
+                            if (_recommendedScope != null && _recommendedScope!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text('Recommended scope: $_recommendedScope', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                            ],
+                            if (_clientId != null) ...[
+                              const SizedBox(height: 12),
+                              Text('Registered client ID: $_clientId', style: const TextStyle(fontSize: 13)),
+                              if (_clientSecret != null)
+                                Text('Client secret: $_clientSecret', style: const TextStyle(fontSize: 13)),
+                            ],
+                          ],
                         ),
                       ),
+                    ),
+                  if (_resourceMetadata != null)
+                    _buildMetadataSection(
+                      'Protected Resource Metadata',
+                      _resourceMetadata!,
+                      subtitle: _resourceMetadataUrl,
+                    ),
+                  if (_authorizationMetadata != null)
+                    _buildMetadataSection(
+                      'Authorization Server Metadata',
+                      _authorizationMetadata!,
+                      subtitle: _authorizationMetadataUrl,
+                    ),
+                ],
               ),
             ),
           ],

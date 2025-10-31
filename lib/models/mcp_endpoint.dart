@@ -111,6 +111,9 @@ class OAuthConfig {
   final bool usePkce;
   final String? discoveryUrl; // metadata URL used for auto-config
   final String redirectUri; // we standardize on localhost redirect
+  final String? issuer;
+  final String? resourceMetadataUrl;
+  final String? authorizationServerMetadataUrl;
 
   OAuthConfig({
     required this.authorizationEndpoint,
@@ -121,6 +124,9 @@ class OAuthConfig {
     this.usePkce = true,
     this.discoveryUrl,
     required this.redirectUri,
+    this.issuer,
+    this.resourceMetadataUrl,
+    this.authorizationServerMetadataUrl,
   });
 
   factory OAuthConfig.fromJson(Map<String, dynamic> json) {
@@ -133,6 +139,9 @@ class OAuthConfig {
       usePkce: json['usePkce'] as bool? ?? true,
       discoveryUrl: json['discoveryUrl'] as String?,
       redirectUri: json['redirectUri'] as String? ?? 'http://127.0.0.1:51791/callback',
+      issuer: json['issuer'] as String?,
+      resourceMetadataUrl: json['resourceMetadataUrl'] as String?,
+      authorizationServerMetadataUrl: json['authorizationServerMetadataUrl'] as String?,
     );
   }
 
@@ -146,6 +155,10 @@ class OAuthConfig {
       'usePkce': usePkce,
       if (discoveryUrl != null) 'discoveryUrl': discoveryUrl,
       'redirectUri': redirectUri,
+      if (issuer != null) 'issuer': issuer,
+      if (resourceMetadataUrl != null) 'resourceMetadataUrl': resourceMetadataUrl,
+      if (authorizationServerMetadataUrl != null)
+        'authorizationServerMetadataUrl': authorizationServerMetadataUrl,
     };
   }
 }

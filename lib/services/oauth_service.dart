@@ -8,45 +8,404 @@ import 'package:crypto/crypto.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
 
-class OAuthDiscoveryResult {
-  final String authorizationEndpoint;
-  final String tokenEndpoint;
-  final String? registrationEndpoint;
-  final List<String>? scopesSupported;
+class ResourceDiscoveryResult {
+  ResourceDiscoveryResult({
+    required this.metadataUrl,
+    required this.metadata,
+    required this.authorizationServers,
+    required this.scopeHint,
+    required this.isAuthorizationMetadata,
+    this.authorizationMetadata,
+    this.authorizationMetadataUrl,
+    this.issuer,
+  });
 
-  OAuthDiscoveryResult({
+  final String? metadataUrl;
+  final Map<String, dynamic>? metadata;
+  final List<String> authorizationServers;
+  final String? scopeHint;
+  final bool isAuthorizationMetadata;
+  final Map<String, dynamic>? authorizationMetadata;
+  final String? authorizationMetadataUrl;
+  final String? issuer;
+}
+
+class AuthorizationServerMetadataResult {
+  AuthorizationServerMetadataResult({
+    required this.issuer,
+    required this.metadataUrl,
+    required this.metadata,
+  });
+
+  final String issuer;
+  final String metadataUrl;
+  final Map<String, dynamic> metadata;
+}
+
+class OAuthDiscoverySummary {
+  OAuthDiscoverySummary({
     required this.authorizationEndpoint,
     required this.tokenEndpoint,
     this.registrationEndpoint,
-    this.scopesSupported,
+    this.issuer,
+    this.resourceMetadataUrl,
+    this.resourceMetadata,
+    required this.availableAuthorizationServers,
+    this.selectedAuthorizationServer,
+    this.authorizationServerMetadataUrl,
+    this.authorizationServerMetadata,
+    this.scopeFromChallenge,
+    this.recommendedScope,
   });
+
+  final String authorizationEndpoint;
+  final String tokenEndpoint;
+  final String? registrationEndpoint;
+  final String? issuer;
+  final String? resourceMetadataUrl;
+  final Map<String, dynamic>? resourceMetadata;
+  final List<String> availableAuthorizationServers;
+  final String? selectedAuthorizationServer;
+  final String? authorizationServerMetadataUrl;
+  final Map<String, dynamic>? authorizationServerMetadata;
+  final String? scopeFromChallenge;
+  final String? recommendedScope;
 }
 
 class OAuthService {
-  static Future<Map<String, dynamic>> fetchMetadata(String metadataUrl) async {
-    final uri = Uri.parse(metadataUrl);
-    final response = await http.get(uri);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+  /// Perform full discovery workflow combining protected resource metadata and
+  /// authorization server metadata resolution. Implements RFC 9728 + RFC 8414.
+  static Future<OAuthDiscoverySummary> performDiscovery({
+    required String baseUrl,
+    String? metadataUrl,
+    String? preferredAuthorizationServer,
+  }) async {
+    final baseUri = Uri.parse(baseUrl);
+    final resourceResult = await _discoverResourceMetadata(
+      baseUri: baseUri,
+      metadataOverride: metadataUrl,
+    );
+
+    Map<String, dynamic>? resourceMetadata = resourceResult.metadata;
+    final resourceMetadataUrl = resourceResult.metadataUrl;
+    final scopeHint = resourceResult.scopeHint;
+    final availableServers = List<String>.from(resourceResult.authorizationServers);
+
+    Map<String, dynamic>? authorizationMetadata;
+    String? authorizationMetadataUrl;
+    String? issuer = resourceResult.issuer;
+    String? selectedServer = preferredAuthorizationServer;
+
+    if (resourceResult.isAuthorizationMetadata) {
+      authorizationMetadata = resourceResult.authorizationMetadata;
+      authorizationMetadataUrl = resourceResult.authorizationMetadataUrl;
+      issuer = authorizationMetadata?['issuer'] as String? ?? issuer;
+      selectedServer = issuer;
+    } else {
+      if (selectedServer == null || selectedServer.isEmpty) {
+        if (availableServers.isNotEmpty) {
+          selectedServer = availableServers.first;
+        }
+      }
+
+      if (selectedServer == null || selectedServer.isEmpty) {
+        final origin = Uri(
+          scheme: baseUri.scheme,
+          host: baseUri.host,
+          port: baseUri.hasPort ? baseUri.port : null,
+        );
+        selectedServer = origin.toString();
+      }
+
+      final authResult = await discoverAuthorizationServerMetadata(issuer: selectedServer);
+      authorizationMetadata = authResult.metadata;
+      authorizationMetadataUrl = authResult.metadataUrl;
+      issuer = authResult.issuer;
+      selectedServer = authResult.issuer;
     }
-    throw Exception('Metadata request failed (${response.statusCode})');
+
+    if (authorizationMetadata == null) {
+      throw Exception('Failed to resolve authorization server metadata.');
+    }
+
+    final authorizationEndpoint = authorizationMetadata['authorization_endpoint'] as String?;
+    final tokenEndpoint = authorizationMetadata['token_endpoint'] as String?;
+    if (authorizationEndpoint == null || tokenEndpoint == null) {
+      throw Exception('Authorization server metadata missing required endpoints.');
+    }
+
+    final registrationEndpoint = authorizationMetadata['registration_endpoint'] as String?;
+    final recommendedScope = _determineScope(scopeHint, resourceMetadata, authorizationMetadata);
+
+    return OAuthDiscoverySummary(
+      authorizationEndpoint: authorizationEndpoint,
+      tokenEndpoint: tokenEndpoint,
+      registrationEndpoint: registrationEndpoint,
+      issuer: issuer,
+      resourceMetadataUrl: resourceMetadataUrl,
+      resourceMetadata: resourceMetadata,
+      availableAuthorizationServers: availableServers,
+      selectedAuthorizationServer: selectedServer,
+      authorizationServerMetadataUrl: authorizationMetadataUrl,
+      authorizationServerMetadata: authorizationMetadata,
+      scopeFromChallenge: scopeHint,
+      recommendedScope: recommendedScope,
+    );
   }
 
-  static OAuthDiscoveryResult parseMetadata(Map<String, dynamic> json) {
-    // Support both OAuth AS discovery and OIDC well-known
-    final auth = (json['authorization_endpoint'] ?? json['authorizationEndpoint']) as String?;
-    final token = (json['token_endpoint'] ?? json['tokenEndpoint']) as String?;
-    final registration = (json['registration_endpoint'] ?? json['registrationEndpoint']) as String?;
-    final scopes = (json['scopes_supported'] as List?)?.cast<String>();
-    if (auth == null || token == null) {
-      throw Exception('Invalid metadata: missing endpoints');
+  static Future<ResourceDiscoveryResult> _discoverResourceMetadata({
+    required Uri baseUri,
+    String? metadataOverride,
+  }) async {
+    String? metadataUrl;
+    Map<String, dynamic>? metadata;
+    final servers = <String>{};
+    String? scopeHint;
+    bool isAuthorizationMetadata = false;
+    Map<String, dynamic>? authorizationMetadata;
+    String? authorizationMetadataUrl;
+    String? issuer;
+
+    if (metadataOverride != null && metadataOverride.trim().isNotEmpty) {
+      final resolved = _resolveUri(baseUri, metadataOverride.trim());
+      final json = await _fetchJsonIfSuccessful(resolved);
+      if (json == null) {
+        throw Exception('Failed to fetch metadata from ${resolved.toString()}');
+      }
+      if (_looksLikeAuthorizationMetadata(json)) {
+        isAuthorizationMetadata = true;
+        authorizationMetadata = json;
+        authorizationMetadataUrl = resolved.toString();
+        issuer = json['issuer'] as String? ?? resolved.toString();
+      } else if (_looksLikeResourceMetadata(json)) {
+        metadataUrl = resolved.toString();
+        metadata = json;
+        issuer = json['issuer'] as String?;
+        servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, resolved));
+      } else {
+        throw Exception('Metadata at ${resolved.toString()} is not recognized as protected resource or authorization server metadata.');
+      }
+
+      return ResourceDiscoveryResult(
+        metadataUrl: metadataUrl,
+        metadata: metadata,
+        authorizationServers: servers.toList(),
+        scopeHint: scopeHint,
+        isAuthorizationMetadata: isAuthorizationMetadata,
+        authorizationMetadata: authorizationMetadata,
+        authorizationMetadataUrl: authorizationMetadataUrl,
+        issuer: issuer,
+      );
     }
-    return OAuthDiscoveryResult(
-      authorizationEndpoint: auth,
-      tokenEndpoint: token,
-      registrationEndpoint: registration,
-      scopesSupported: scopes,
+
+    // Step 1: 401 challenge with WWW-Authenticate
+    try {
+      final response = await http.get(baseUri);
+      if (response.statusCode == 401) {
+        final header = response.headers['www-authenticate'];
+        final metadataUri = _extractResourceMetadataUri(header, baseUri);
+        scopeHint = _extractScopeFromHeader(header);
+        if (metadataUri != null) {
+          final json = await _fetchJsonIfSuccessful(metadataUri);
+          if (json != null && _looksLikeResourceMetadata(json)) {
+            metadataUrl = metadataUri.toString();
+            metadata = json;
+            issuer = json['issuer'] as String?;
+            servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, metadataUri));
+          }
+        }
+      }
+    } catch (e) {
+      LoggerService.warning('OAuthService: Failed initial resource metadata request: $e');
+    }
+
+    // Step 2: Well-known URIs if not already resolved
+    if (metadata == null) {
+      for (final candidate in _resourceMetadataCandidates(baseUri)) {
+        final json = await _fetchJsonIfSuccessful(candidate);
+        if (json != null && _looksLikeResourceMetadata(json)) {
+          metadataUrl = candidate.toString();
+          metadata = json;
+          issuer = json['issuer'] as String?;
+          servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, candidate));
+          break;
+        }
+      }
+    }
+
+    return ResourceDiscoveryResult(
+      metadataUrl: metadataUrl,
+      metadata: metadata,
+      authorizationServers: servers.toList(),
+      scopeHint: scopeHint,
+      isAuthorizationMetadata: isAuthorizationMetadata,
+      authorizationMetadata: authorizationMetadata,
+      authorizationMetadataUrl: authorizationMetadataUrl,
+      issuer: issuer,
     );
+  }
+
+  static Future<AuthorizationServerMetadataResult> discoverAuthorizationServerMetadata({
+    required String issuer,
+  }) async {
+    final issuerUri = Uri.parse(issuer);
+    for (final candidate in _authorizationMetadataCandidates(issuerUri)) {
+      final json = await _fetchJsonIfSuccessful(candidate);
+      if (json != null && _looksLikeAuthorizationMetadata(json)) {
+        final resolvedIssuer = json['issuer'] as String? ?? issuer;
+        return AuthorizationServerMetadataResult(
+          issuer: resolvedIssuer,
+          metadataUrl: candidate.toString(),
+          metadata: json,
+        );
+      }
+    }
+    throw Exception('Unable to resolve authorization server metadata for issuer $issuer');
+  }
+
+  static List<Uri> _resourceMetadataCandidates(Uri baseUri) {
+    final candidates = <Uri>[];
+    final trimmedPath = baseUri.path.replaceAll(RegExp(r'^/+|/+$'), '');
+    if (trimmedPath.isNotEmpty) {
+      candidates.add(Uri(
+        scheme: baseUri.scheme,
+        host: baseUri.host,
+        port: baseUri.hasPort ? baseUri.port : null,
+        path: '/.well-known/oauth-protected-resource/$trimmedPath',
+      ));
+    }
+    candidates.add(Uri(
+      scheme: baseUri.scheme,
+      host: baseUri.host,
+      port: baseUri.hasPort ? baseUri.port : null,
+      path: '/.well-known/oauth-protected-resource',
+    ));
+    return candidates;
+  }
+
+  static List<Uri> _authorizationMetadataCandidates(Uri issuerUri) {
+    final candidates = <Uri>[];
+    final base = Uri(
+      scheme: issuerUri.scheme,
+      host: issuerUri.host,
+      port: issuerUri.hasPort ? issuerUri.port : null,
+    );
+    final trimmedPath = issuerUri.path.replaceAll(RegExp(r'^/+|/+$'), '');
+
+    if (trimmedPath.isNotEmpty) {
+      candidates.add(base.replace(path: '/.well-known/oauth-authorization-server/$trimmedPath'));
+      candidates.add(base.replace(path: '/.well-known/openid-configuration/$trimmedPath'));
+
+      final normalized = issuerUri.path.endsWith('/')
+          ? issuerUri.path.substring(0, issuerUri.path.length - 1)
+          : issuerUri.path;
+      final withPrefix = normalized.startsWith('/') ? normalized : '/$normalized';
+      final appended = '$withPrefix/.well-known/openid-configuration';
+      candidates.add(issuerUri.replace(path: appended, query: null, fragment: null));
+    } else {
+      candidates.add(base.replace(path: '/.well-known/oauth-authorization-server'));
+      candidates.add(base.replace(path: '/.well-known/openid-configuration'));
+    }
+    return candidates;
+  }
+
+  static Uri _resolveUri(Uri baseUri, String value) {
+    final candidate = Uri.parse(value);
+    if (candidate.hasScheme) {
+      return candidate;
+    }
+    return baseUri.resolve(value);
+  }
+
+  static bool _looksLikeAuthorizationMetadata(Map<String, dynamic> json) {
+    return (json['authorization_endpoint'] ?? json['authorizationEndpoint']) != null &&
+        (json['token_endpoint'] ?? json['tokenEndpoint']) != null;
+  }
+
+  static bool _looksLikeResourceMetadata(Map<String, dynamic> json) {
+    return json['authorization_servers'] is List;
+  }
+
+  static Iterable<String> _extractAuthorizationServers(
+    dynamic value,
+    Uri baseUri,
+    Uri metadataUri,
+  ) {
+    if (value is! List) return const <String>[];
+    final results = <String>{};
+    for (final entry in value) {
+      if (entry is! String || entry.isEmpty) continue;
+      try {
+        final parsed = Uri.parse(entry);
+        final resolved = parsed.hasScheme ? parsed : metadataUri.resolve(entry);
+        if (resolved.hasScheme) {
+          results.add(resolved.toString());
+        }
+      } catch (_) {
+        // Ignore invalid URIs
+      }
+    }
+    return results;
+  }
+
+  static String? _extractScopeFromHeader(String? header) {
+    if (header == null) return null;
+    final match = RegExp(r'scope="([^"]+)"', caseSensitive: false).firstMatch(header);
+    return match?.group(1);
+  }
+
+  static Uri? _extractResourceMetadataUri(String? header, Uri baseUri) {
+    if (header == null) return null;
+    final match = RegExp(r'resource_metadata="([^"]+)"', caseSensitive: false).firstMatch(header);
+    final value = match?.group(1);
+    if (value == null || value.isEmpty) return null;
+    return _resolveUri(baseUri, value);
+  }
+
+  static String? _determineScope(
+    String? scopeHint,
+    Map<String, dynamic>? resourceMetadata,
+    Map<String, dynamic>? authorizationMetadata,
+  ) {
+    if (scopeHint != null && scopeHint.isNotEmpty) {
+      return scopeHint;
+    }
+    final resourceScopes = resourceMetadata?['scopes_supported'];
+    if (resourceScopes is List) {
+      final scopes = resourceScopes.whereType<String>().toList();
+      if (scopes.isNotEmpty) {
+        return scopes.join(' ');
+      }
+    }
+    final authScopes = authorizationMetadata?['scopes_supported'];
+    if (authScopes is List) {
+      final scopes = authScopes.whereType<String>().toList();
+      if (scopes.isNotEmpty) {
+        return scopes.join(' ');
+      }
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> _fetchJsonIfSuccessful(Uri uri) async {
+    try {
+      final response = await http.get(uri, headers: {'Accept': 'application/json'});
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      LoggerService.warning('OAuthService: Failed to fetch ${uri.toString()}: $e');
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>> fetchMetadata(String metadataUrl) async {
+    final uri = Uri.parse(metadataUrl);
+    final json = await _fetchJsonIfSuccessful(uri);
+    if (json == null) {
+      throw Exception('Metadata request failed for $metadataUrl');
+    }
+    return json;
   }
 
   /// Registers a dynamic client (RFC 7591) and returns the client credentials
@@ -55,6 +414,7 @@ class OAuthService {
     required String clientName,
     required String redirectUri,
     bool usePkce = true,
+    String? scope,
   }) async {
     final metadata = {
       'client_name': clientName,
@@ -62,6 +422,7 @@ class OAuthService {
       'grant_types': ['authorization_code', 'refresh_token'],
       'response_types': ['code'],
       'token_endpoint_auth_method': usePkce ? 'none' : 'client_secret_basic',
+      if (scope != null && scope.isNotEmpty) 'scope': scope,
     };
 
     final response = await http.post(
@@ -88,12 +449,8 @@ class OAuthService {
     final verifier = config.usePkce ? _codeVerifier() : null;
     final codeChallenge = config.usePkce && verifier != null ? _codeChallenge(verifier) : null;
 
-    // Use localhost redirect server
-    // Use fixed port for compatibility with pre-registered redirect URI
-    // If binding fails, surface a clear error instead of falling back,
-    // otherwise the redirect URI would mismatch the registered one.
-    final int port = 51791;
-    HttpServer server;
+    const port = 51791;
+    late HttpServer server;
     try {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     } catch (e) {
@@ -101,8 +458,7 @@ class OAuthService {
     }
     final redirectUri = 'http://127.0.0.1:$port/callback';
 
-    // Build auth URL
-    final authParams = {
+    final authParams = <String, String>{
       'response_type': 'code',
       'client_id': config.clientId,
       'redirect_uri': redirectUri,
@@ -117,89 +473,135 @@ class OAuthService {
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
     final completer = Completer<Map<String, dynamic>>();
-    bool callbackReceived = false;
-    
-    // Wait for first callback
-    server.listen((HttpRequest request) async {
-      try {
-        if (request.uri.path == '/callback' && !callbackReceived) {
-          callbackReceived = true;
-          final code = request.uri.queryParameters['code'];
-          final returnedState = request.uri.queryParameters['state'];
-          
-          // Send response immediately
-          request.response.statusCode = 200;
-          request.response.headers.contentType = ContentType.html;
-          request.response.write('<html><body>You can close this window.</body></html>');
-          await request.response.close();
+    bool handled = false;
+    late StreamSubscription<HttpRequest> subscription;
+    Future<void>? closingFuture;
 
-          if (code == null || returnedState != state) {
-            await server.close(force: true);
-            if (!completer.isCompleted) {
-              completer.completeError(Exception('Invalid authorization response: missing code or state mismatch'));
-            }
-            return;
-          }
-
-          final tokenBody = {
-            'grant_type': 'authorization_code',
-            'code': code,
-            'client_id': config.clientId,
-            'redirect_uri': redirectUri,
-          };
-          if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
-            tokenBody['client_secret'] = config.clientSecret!;
-          }
-          if (config.usePkce && verifier != null) {
-            tokenBody['code_verifier'] = verifier;
-          }
-
-          try {
-            LoggerService.debug('OAuthService: Exchanging code for token at ${config.tokenEndpoint}');
-            final tokenResp = await http.post(
-              Uri.parse(config.tokenEndpoint),
-              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-              body: tokenBody,
-            );
-            // Close server after token exchange completes (success or failure)
-            await server.close(force: true);
-            
-            if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
-              final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
-              if (!completer.isCompleted) {
-                completer.complete(tokenData);
-              }
-            } else {
-              if (!completer.isCompleted) {
-                completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
-              }
-            }
-          } catch (e) {
-            await server.close(force: true);
-            LoggerService.error('OAuthService: Token exchange error: $e');
-            if (!completer.isCompleted) {
-              completer.completeError(Exception('Network error contacting token endpoint: $e'));
-            }
-          }
-        } else {
-          // Handle non-callback or duplicate requests
-          request.response.statusCode = 404;
-          await request.response.close();
-        }
-      } catch (e) {
-        LoggerService.error('OAuthService: authorization flow error: $e');
+    Future<void> ensureClosed() {
+      closingFuture ??= () async {
         try {
           await server.close(force: true);
         } catch (_) {}
+        try {
+          await subscription.cancel();
+        } catch (_) {}
+      }();
+      return closingFuture!;
+    }
+
+    Future<void> respond(HttpRequest request, String body) async {
+      request.response.statusCode = 200;
+      request.response.headers.contentType = ContentType.html;
+      request.response.write(body);
+      await request.response.close();
+    }
+
+    subscription = server.listen((HttpRequest request) async {
+      try {
+        if (handled || request.uri.path != '/callback') {
+          request.response.statusCode = 404;
+          await request.response.close();
+          return;
+        }
+
+        final params = Map<String, String>.from(request.uri.queryParameters);
+        if (request.method.toUpperCase() == 'POST') {
+          final contentType = request.headers.contentType;
+          if (contentType == null || contentType.mimeType == 'application/x-www-form-urlencoded' ||
+              contentType.mimeType == 'text/plain') {
+            final body = await utf8.decoder.bind(request).join();
+            if (body.isNotEmpty) {
+              params.addAll(Uri.splitQueryString(body));
+            }
+          }
+        }
+
+        LoggerService.debug('OAuthService: Received callback with params: $params');
+
+        final errorParam = params['error'];
+        final errorDescription = params['error_description'] ?? params['errorDescription'];
+        if (errorParam != null) {
+          await respond(request,
+              '<html><body>Authentication failed: $errorParam${errorDescription != null ? ' - $errorDescription' : ''}. You can close this window.</body></html>');
+          await ensureClosed();
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}'));
+          }
+          return;
+        }
+
+        final code = params['code'];
+        if (code == null || code.isEmpty) {
+          await respond(request,
+              '<html><body>Authentication response missing authorization code. You can close this window.</body></html>');
+          await ensureClosed();
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Authorization response missing code'));
+          }
+          return;
+        }
+
+        final returnedState = params['state'];
+        if (returnedState != null && returnedState != state) {
+          await respond(request, '<html><body>State parameter mismatch. You can close this window.</body></html>');
+          await ensureClosed();
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Authorization response state mismatch'));
+          }
+          return;
+        }
+
+        handled = true;
+        await respond(request, '<html><body>You can close this window.</body></html>');
+
+        final tokenBody = <String, String>{
+          'grant_type': 'authorization_code',
+          'code': code,
+          'client_id': config.clientId,
+          'redirect_uri': redirectUri,
+        };
+        if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
+          tokenBody['client_secret'] = config.clientSecret!;
+        }
+        if (config.usePkce && verifier != null) {
+          tokenBody['code_verifier'] = verifier;
+        }
+
+        try {
+          LoggerService.debug('OAuthService: Exchanging code for token at ${config.tokenEndpoint}');
+          final tokenResp = await http.post(
+            Uri.parse(config.tokenEndpoint),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: tokenBody,
+          );
+          if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
+            final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+            if (!completer.isCompleted) {
+              completer.complete(tokenData);
+            }
+          } else {
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+            }
+          }
+        } catch (e) {
+          LoggerService.error('OAuthService: Token exchange error: $e');
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Network error contacting token endpoint: $e'));
+          }
+        } finally {
+          await ensureClosed();
+        }
+      } catch (e) {
+        LoggerService.error('OAuthService: authorization flow error: $e');
+        await ensureClosed();
         if (!completer.isCompleted) {
           completer.completeError(e);
         }
       }
-    }).onError((error, stackTrace) {
+    }, onError: (Object error, StackTrace stackTrace) async {
       LoggerService.error('OAuthService: Server listen error: $error');
-      try {
-        server.close(force: true);
-      } catch (_) {}
+      await ensureClosed();
       if (!completer.isCompleted) {
         completer.completeError(Exception('OAuth callback server error: $error'));
       }
@@ -208,12 +610,8 @@ class OAuthService {
     try {
       final result = await completer.future.timeout(const Duration(minutes: 5));
       return result;
-    } catch (e) {
-      // Ensure server is closed on timeout or other errors
-      try {
-        await server.close(force: true);
-      } catch (_) {}
-      rethrow;
+    } finally {
+      await ensureClosed();
     }
   }
 
