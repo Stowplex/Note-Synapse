@@ -498,49 +498,49 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       _addImportLog(l10n.mergingNotes);
-      _updateImportProgress(0.3);
+      _updateImportProgress(0.06);
       
-      // Step 5: Merge the notes table
+      // Step 1: Merge the notes table
       await _mergeNotes(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.mergingSubNotes);
-      _updateImportProgress(0.4);
+      _updateImportProgress(0.12);
       
-      // Step 6: Insert all subnotes
+      // Step 2: Insert all subnotes
       await _mergeSubNotes(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.mergingTags);
-      _updateImportProgress(0.5);
+      _updateImportProgress(0.18);
       
-      // Step 7: Insert all tags
+      // Step 3: Insert all tags
       await _mergeTags(stagingDb, migratedBackupDb);
       
       _addImportLog('Merging note-tag relationships...');
-      _updateImportProgress(0.52);
+      _updateImportProgress(0.24);
       
-      // Step 7.5: Merge note_tags table
+      // Step 4: Merge note_tags table
       await _mergeNoteTags(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.mergingRelationships);
-      _updateImportProgress(0.6);
+      _updateImportProgress(0.30);
       
-      // Step 8: Insert all relationships
+      // Step 5: Insert all relationships
       await _mergeRelationships(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.mergingFilters);
-      _updateImportProgress(0.7);
+      _updateImportProgress(0.36);
       
-      // Step 9: Insert all unique filters
+      // Step 6: Insert all unique filters
       await _mergeFilters(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.mergingUserApps);
-      _updateImportProgress(0.8);
+      _updateImportProgress(0.42);
       
-      // Step 10: Merge user apps
+      // Step 7: Merge user apps
       await _mergeUserApps(stagingDb, migratedBackupDb);
       
       _addImportLog(l10n.copyingAttachments);
-      _updateImportProgress(0.9);
+      _updateImportProgress(0.48);
       
       // Copy attachments
       final attachmentsDir = Directory('${extractDir.path}/attachments');
@@ -550,23 +550,60 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       }
       
       _addImportLog('Merging attachments...');
+      _updateImportProgress(0.54);
       
-      // Step 11: Merge attachments table
+      // Step 8: Merge attachments table
       await _mergeAttachments(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging conversations...');
+      _updateImportProgress(0.60);
+      
+      // Step 9: Insert all conversations that are not already in the db (by id)
+      await _mergeConversations(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging conversation messages...');
+      _updateImportProgress(0.66);
+      
+      // Step 10: Insert all conversation messages that are not already in the db (by message id)
+      await _mergeConversationMessages(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging conversation attachments...');
+      _updateImportProgress(0.72);
+      
+      // Step 11: Insert all conversation attachments that are not already in db (by id)
+      await _mergeConversationAttachments(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging conversation-message mappings...');
+      _updateImportProgress(0.78);
+      
+      // Step 12: Insert all unique conversation - message mappings by (conversationId, messageId)
+      await _mergeConversationMessageMappings(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging message parents...');
+      _updateImportProgress(0.84);
+      
+      // Step 13: Insert all unique message parents (unique by messageId, parentMessageId)
+      await _mergeMessageParents(stagingDb, migratedBackupDb);
+      
+      _addImportLog('Merging conversation-note mappings...');
+      _updateImportProgress(0.90);
+      
+      // Step 14: Insert all conversation note mapping unique by (noteId, conversationId)
+      await _mergeConversationNoteMappings(stagingDb, migratedBackupDb);
       
       await migratedBackupDb.close();
       await stagingDb.close();
       
       _addImportLog(l10n.swappingDatabases);
-      _updateImportProgress(0.95);
+      _updateImportProgress(0.94);
       
-      // Copy staging DB to app's DB directory
+      // Step 16: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
       
       _addImportLog(l10n.reloadingData);
       _updateImportProgress(1.0);
       
-      // Reload data in the app
+      // Step 17: Reload data in the app
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
@@ -943,6 +980,124 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         
         // Insert attachment if it doesn't exist
         await stagingDb.insert('attachments', newAttachment);
+      }
+    }
+  }
+
+  Future<void> _mergeConversations(Database stagingDb, Database backupDb) async {
+    final backupConversations = await backupDb.query('conversations');
+    
+    for (final conversation in backupConversations) {
+      // Check if conversation exists in staging by id
+      final existingConversations = await stagingDb.query(
+        'conversations',
+        where: 'id = ?',
+        whereArgs: [conversation['id']],
+      );
+      
+      if (existingConversations.isEmpty) {
+        // Insert new conversation
+        await stagingDb.insert('conversations', conversation);
+      }
+    }
+  }
+
+  Future<void> _mergeConversationMessages(Database stagingDb, Database backupDb) async {
+    final backupMessages = await backupDb.query('conversation_messages');
+    
+    for (final message in backupMessages) {
+      // Check if message exists in staging by id
+      final existingMessages = await stagingDb.query(
+        'conversation_messages',
+        where: 'id = ?',
+        whereArgs: [message['id']],
+      );
+      
+      if (existingMessages.isEmpty) {
+        // Insert new message
+        await stagingDb.insert('conversation_messages', message);
+      }
+    }
+  }
+
+  Future<void> _mergeConversationAttachments(Database stagingDb, Database backupDb) async {
+    final backupAttachments = await backupDb.query('conversation_attachments');
+    
+    for (final attachment in backupAttachments) {
+      // Check if attachment exists in staging by id
+      final existingAttachments = await stagingDb.query(
+        'conversation_attachments',
+        where: 'id = ?',
+        whereArgs: [attachment['id']],
+      );
+      
+      if (existingAttachments.isEmpty) {
+        // Insert new attachment
+        await stagingDb.insert('conversation_attachments', attachment);
+      }
+    }
+  }
+
+  Future<void> _mergeConversationMessageMappings(Database stagingDb, Database backupDb) async {
+    final backupMappings = await backupDb.query('conversation_message_mapping');
+    
+    for (final mapping in backupMappings) {
+      // Check if mapping exists in staging (unique by conversationId, messageId)
+      final existingMappings = await stagingDb.query(
+        'conversation_message_mapping',
+        where: 'conversationId = ? AND messageId = ?',
+        whereArgs: [mapping['conversationId'], mapping['messageId']],
+      );
+      
+      if (existingMappings.isEmpty) {
+        // Insert new mapping (without id if it's auto-increment)
+        final newMapping = Map<String, dynamic>.from(mapping);
+        // Remove id if it's auto-increment to let SQLite generate a new one
+        if (newMapping.containsKey('id') && mapping['id'] is int) {
+          newMapping.remove('id');
+        }
+        await stagingDb.insert('conversation_message_mapping', newMapping);
+      }
+    }
+  }
+
+  Future<void> _mergeMessageParents(Database stagingDb, Database backupDb) async {
+    final backupParents = await backupDb.query('message_parents');
+    
+    for (final parent in backupParents) {
+      // Check if parent relationship exists in staging (unique by messageId, parentMessageId)
+      final existingParents = await stagingDb.query(
+        'message_parents',
+        where: 'messageId = ? AND parentMessageId = ?',
+        whereArgs: [parent['messageId'], parent['parentMessageId']],
+      );
+      
+      if (existingParents.isEmpty) {
+        // Insert new parent relationship (id is TEXT PRIMARY KEY, so keep it)
+        await stagingDb.insert('message_parents', parent);
+      }
+    }
+  }
+
+  Future<void> _mergeConversationNoteMappings(Database stagingDb, Database backupDb) async {
+    final backupMappings = await backupDb.query('conversation_note_mapping');
+    
+    for (final mapping in backupMappings) {
+      // Check if mapping exists in staging (unique by conversationId, noteId)
+      final existingMappings = await stagingDb.query(
+        'conversation_note_mapping',
+        where: 'conversationId = ? AND noteId = ?',
+        whereArgs: [mapping['conversationId'], mapping['noteId']],
+      );
+      
+      if (existingMappings.isEmpty) {
+        // Insert new mapping (without id if it's auto-increment)
+        final newMapping = Map<String, dynamic>.from(mapping);
+        // Remove id if it's auto-increment to let SQLite generate a new one
+        if (newMapping.containsKey('id') && mapping['id'] is int) {
+          newMapping.remove('id');
+        }
+        await stagingDb.insert('conversation_note_mapping', newMapping);
       }
     }
   }
