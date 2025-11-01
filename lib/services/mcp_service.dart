@@ -1,16 +1,18 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mcp_client/mcp_client.dart';
+import 'package:mcp_client/mcp_client.dart' as mcp;
 import 'package:uuid/uuid.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
+import 'oauth_token_manager.dart';
 
 /// Service for managing MCP (Model Context Protocol) endpoints and tools
 class McpService {
   static const String _endpointsKey = 'mcp_endpoints';
   static const String _toolsCachePrefix = 'mcp_tools_cache_';
   static const String _bearerTokenPrefix = 'mcp_bearer_token_';
+  static final Map<String, OAuthTokenManager> _oauthManagers = <String, OAuthTokenManager>{};
 
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -65,6 +67,8 @@ class McpService {
     required String name,
     required String baseUrl,
     required McpTransportType transportType,
+    McpAuthType authType = McpAuthType.token,
+    OAuthConfig? oauthConfig,
     String? bearerToken,
   }) async {
     try {
@@ -74,16 +78,21 @@ class McpService {
         name: name,
         baseUrl: baseUrl,
         transportType: transportType,
+        authType: authType,
+        oauth: oauthConfig,
         createdAt: now,
         updatedAt: now,
       );
 
-      // Save bearer token to secure storage if provided
-      if (bearerToken != null && bearerToken.isNotEmpty) {
+      // Save auth tokens/secret based on auth type
+      if (authType == McpAuthType.token && bearerToken != null && bearerToken.isNotEmpty) {
         await _storage.write(
           key: '$_bearerTokenPrefix${endpoint.id}',
           value: bearerToken,
         );
+      } else if (authType == McpAuthType.oauth && oauthConfig != null) {
+        // Initialize token manager for this endpoint
+        _oauthManagers[endpoint.id] = OAuthTokenManager(endpointId: endpoint.id, config: oauthConfig);
       }
 
       // Add endpoint to list
@@ -106,6 +115,8 @@ class McpService {
     String? name,
     String? baseUrl,
     McpTransportType? transportType,
+    McpAuthType? authType,
+    OAuthConfig? oauthConfig,
     String? bearerToken,
   }) async {
     try {
@@ -121,6 +132,8 @@ class McpService {
         name: name ?? endpoints[index].name,
         baseUrl: baseUrl ?? endpoints[index].baseUrl,
         transportType: transportType ?? endpoints[index].transportType,
+        authType: authType ?? endpoints[index].authType,
+        oauth: oauthConfig ?? endpoints[index].oauth,
         updatedAt: now,
       );
 
@@ -130,6 +143,11 @@ class McpService {
           key: '$_bearerTokenPrefix$id',
           value: bearerToken,
         );
+      }
+      // Maintain OAuth manager
+      final ep = endpoints[index];
+      if (ep.authType == McpAuthType.oauth && ep.oauth != null) {
+        _oauthManagers[id] = OAuthTokenManager(endpointId: id, config: ep.oauth!);
       }
 
       await _saveEndpoints(endpoints);
@@ -154,6 +172,9 @@ class McpService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('$_toolsCachePrefix$id');
 
+      // Remove OAuth tokens/manager
+      _oauthManagers.remove(id);
+
       LoggerService.debug('McpService: Deleted endpoint: $id');
     } catch (e) {
       LoggerService.error('McpService: Error deleting endpoint: $e');
@@ -164,6 +185,14 @@ class McpService {
   /// Get bearer token for an endpoint
   static Future<String?> getBearerToken(String endpointId) async {
     try {
+      final endpoints = await getEndpoints();
+      final endpoint = endpoints.firstWhere((e) => e.id == endpointId, orElse: () => throw Exception('Endpoint not found'));
+      if (endpoint.authType == McpAuthType.oauth) {
+        final manager = _oauthManagers[endpointId] ??= (endpoint.oauth != null
+            ? OAuthTokenManager(endpointId: endpointId, config: endpoint.oauth!)
+            : throw Exception('OAuth config missing for endpoint $endpointId'));
+        return await manager.getAccessToken();
+      }
       return await _storage.read(key: '$_bearerTokenPrefix$endpointId');
     } catch (e) {
       LoggerService.error('McpService: Error getting bearer token: $e');
@@ -218,7 +247,7 @@ class McpService {
       );
 
       // Create MCP client configuration
-      final config = McpClient.simpleConfig(
+      final config = mcp.McpClient.simpleConfig(
         name: 'NoteSynapse',
         version: '1.0.0',
         enableDebugLogging: true,
@@ -230,11 +259,11 @@ class McpService {
       };
 
       // Create transport configuration based on type
-      final TransportConfig transportConfig;
+      final mcp.TransportConfig transportConfig;
       switch (endpoint.transportType) {
         case McpTransportType.sse:
           // For SSE, bearer token is passed as a parameter
-          transportConfig = TransportConfig.sse(
+          transportConfig = mcp.TransportConfig.sse(
             serverUrl: endpoint.baseUrl,
             headers: headers,
             bearerToken: bearerToken,
@@ -245,7 +274,7 @@ class McpService {
           if (bearerToken != null && bearerToken.isNotEmpty) {
             headers['Authorization'] = 'Bearer $bearerToken';
           }
-          transportConfig = TransportConfig.streamableHttp(
+          transportConfig = mcp.TransportConfig.streamableHttp(
             baseUrl: endpoint.baseUrl,
             headers: headers,
           );
@@ -253,7 +282,7 @@ class McpService {
       }
 
       // Create and connect client
-      final clientResult = await McpClient.createAndConnect(
+      final clientResult = await mcp.McpClient.createAndConnect(
         config: config,
         transportConfig: transportConfig,
       );
@@ -379,7 +408,7 @@ class McpService {
       );
 
       // Create MCP client configuration
-      final config = McpClient.simpleConfig(
+      final config = mcp.McpClient.simpleConfig(
         name: 'NoteSynapse',
         version: '1.0.0',
         enableDebugLogging: false,
@@ -391,11 +420,11 @@ class McpService {
       };
 
       // Create transport configuration based on type
-      final TransportConfig transportConfig;
+      final mcp.TransportConfig transportConfig;
       switch (endpoint.transportType) {
         case McpTransportType.sse:
           // For SSE, bearer token is passed as a parameter
-          transportConfig = TransportConfig.sse(
+          transportConfig = mcp.TransportConfig.sse(
             serverUrl: endpoint.baseUrl,
             headers: headers,
             bearerToken: bearerToken,
@@ -406,7 +435,7 @@ class McpService {
           if (bearerToken != null && bearerToken.isNotEmpty) {
             headers['Authorization'] = 'Bearer $bearerToken';
           }
-          transportConfig = TransportConfig.streamableHttp(
+          transportConfig = mcp.TransportConfig.streamableHttp(
             baseUrl: endpoint.baseUrl,
             headers: headers,
           );
@@ -414,7 +443,7 @@ class McpService {
       }
 
       // Create and connect client
-      final clientResult = await McpClient.createAndConnect(
+      final clientResult = await mcp.McpClient.createAndConnect(
         config: config,
         transportConfig: transportConfig,
       );
@@ -433,7 +462,7 @@ class McpService {
         // Extract text content from result
         final buffer = StringBuffer();
         for (final content in result.content) {
-          if (content is TextContent) {
+          if (content is mcp.TextContent) {
             buffer.write(content.text);
           }
         }

@@ -2760,4 +2760,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteNodeAndDescendants => 'Delete this node and all descendants';
+
+  @override
+  String get tokenTab => 'Token';
+
+  @override
+  String get oauthTab => 'OAuth';
+
+  @override
+  String get autoConfigure => 'Auto Configure';
+
+  @override
+  String get login => 'Login';
+
+  @override
+  String get authorizationEndpoint => 'Authorization Endpoint';
+
+  @override
+  String get tokenEndpoint => 'Token Endpoint';
+
+  @override
+  String get clientId => 'Client ID';
+
+  @override
+  String get clientSecretOptionalForPkce => 'Client Secret (Optional for PKCE)';
+
+  @override
+  String get scope => 'Scope';
+
+  @override
+  String get usePkceNoClientSecret => 'Use PKCE (no client secret)';
+
+  @override
+  String get oauthDiscoveryMetadataUrlOptional =>
+      'OAuth Discovery Page: Metadata URL (optional)';
+
+  @override
+  String get discover => 'Discover';
+
+  @override
+  String get registerClient => 'Register Client';
+
+  @override
+  String get register => 'Register';
+
+  @override
+  String get editMcpEndpoint => 'Edit MCP Endpoint';
+
+  @override
+  String get metadataUrlOptional => 'Metadata URL (optional)';
+
+  @override
+  String get metadataUrlOptionalHint =>
+      'Leave blank to auto-detect using RFC 9728';
+
+  @override
+  String get oauthDiscovery => 'OAuth Discovery';
 }

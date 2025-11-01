@@ -9,5 +9,5 @@ model_capabilities:
   - support_document_understanding
   - support_image
 max_input_token: 262144
-max_output_token: 16384
+max_output_token: 65536
 warn_premium: true

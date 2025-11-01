@@ -133,7 +133,7 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
   }
 
   void _runNoteActionApp(UserApp app) {
-    Navigator.of(context).push(
+    Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => UserAppViewScreen(
           app: app,

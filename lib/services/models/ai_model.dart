@@ -29,6 +29,28 @@ abstract class AIModel {
     String? requestId,
   });
 
+  /// Generate text using messages array (for conversations)
+  /// messages is a list of maps with 'role' and 'content' keys
+  /// roles can be 'system', 'user', or 'assistant'
+  /// 
+  /// NOTE: This method MUST be overridden by model implementations.
+  /// The default implementation throws an exception to prevent incorrect behavior.
+  Future<String> generateWithMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) {
+    // This should never be called - model implementations must override this method
+    throw UnimplementedError(
+      'generateWithMessages must be implemented by model classes. '
+      'Messages arrays should not be converted to strings.'
+    );
+  }
+
   /// Generate with function calling support
   /// Returns raw response data that may contain function calls
   Future<Map<String, dynamic>> generateWithTools(
@@ -56,6 +78,28 @@ abstract class AIModel {
       'text': text,
       'function_calls': null,
     };
+  }
+
+  /// Generate with function calling support using messages array
+  /// Returns raw response data that may contain function calls
+  /// 
+  /// NOTE: This method MUST be overridden by model implementations.
+  /// The default implementation throws an exception to prevent incorrect behavior.
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    // This should never be called - model implementations must override this method
+    throw UnimplementedError(
+      'generateWithToolsAndMessages must be implemented by model classes. '
+      'Messages arrays should not be converted to strings.'
+    );
   }
 
   /// Common utility methods for all AI models
