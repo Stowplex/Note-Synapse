@@ -2673,4 +2673,58 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteNodeAndDescendants => '删除此节点及其所有后代';
+
+  @override
+  String get tokenTab => '令牌';
+
+  @override
+  String get oauthTab => 'OAuth';
+
+  @override
+  String get autoConfigure => '自动配置';
+
+  @override
+  String get login => '登录';
+
+  @override
+  String get authorizationEndpoint => '授权端点';
+
+  @override
+  String get tokenEndpoint => '令牌端点';
+
+  @override
+  String get clientId => '客户端ID';
+
+  @override
+  String get clientSecretOptionalForPkce => '客户端密钥（PKCE可选）';
+
+  @override
+  String get scope => '作用域';
+
+  @override
+  String get usePkceNoClientSecret => '使用PKCE（无需客户端密钥）';
+
+  @override
+  String get oauthDiscoveryMetadataUrlOptional => 'OAuth发现页面：元数据URL（可选）';
+
+  @override
+  String get discover => '发现';
+
+  @override
+  String get registerClient => '注册客户端';
+
+  @override
+  String get register => '注册';
+
+  @override
+  String get editMcpEndpoint => '编辑MCP端点';
+
+  @override
+  String get metadataUrlOptional => '元数据URL（可选）';
+
+  @override
+  String get metadataUrlOptionalHint => '留空以使用RFC 9728自动检测';
+
+  @override
+  String get oauthDiscovery => 'OAuth发现';
 }

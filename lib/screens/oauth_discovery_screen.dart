@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/oauth_service.dart';
 import '../services/logger_service.dart';
+import '../l10n/app_localizations.dart';
 
 class OAuthDiscoveryResultData {
   final String authorizationEndpoint;
@@ -251,9 +252,10 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final summary = _summary;
     return Scaffold(
-      appBar: AppBar(title: const Text('OAuth Discovery')),
+      appBar: AppBar(title: Text(l10n.oauthDiscovery)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -261,10 +263,10 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
           children: [
             TextField(
               controller: _metaController,
-              decoration: const InputDecoration(
-                labelText: 'Metadata URL (optional)',
-                hintText: 'Leave blank to auto-detect using RFC 9728',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.metadataUrlOptional,
+                hintText: l10n.metadataUrlOptionalHint,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -272,19 +274,19 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
               children: [
                 ElevatedButton(
                   onPressed: _loading ? null : () => _discover(),
-                  child: const Text('Discover'),
+                  child: Text(l10n.discover),
                 ),
                 const SizedBox(width: 12),
                 if (summary != null)
                   OutlinedButton(
                     onPressed: _loading ? null : _apply,
-                    child: const Text('Apply'),
+                    child: Text(l10n.apply),
                   ),
                 const SizedBox(width: 12),
                 if (summary?.authorizationServerMetadata?['registration_endpoint'] != null)
                   ElevatedButton(
                     onPressed: _loading ? null : _register,
-                    child: const Text('Register Client'),
+                    child: Text(l10n.registerClient),
                   ),
               ],
             ),

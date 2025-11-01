@@ -107,7 +107,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(isEditing ? 'Edit MCP Endpoint' : l10n.addMcpEndpointTitle),
+          title: Text(isEditing ? l10n.editMcpEndpoint : l10n.addMcpEndpointTitle),
           content: SizedBox(
             width: 560,
             child: SingleChildScrollView(
@@ -172,9 +172,9 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                               selectedCredTab = index;
                             });
                           },
-                          tabs: const [
-                            Tab(text: 'Token'),
-                            Tab(text: 'OAuth'),
+                          tabs: [
+                            Tab(text: l10n.tokenTab),
+                            Tab(text: l10n.oauthTab),
                           ],
                         ),
                         Expanded(
@@ -245,7 +245,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                           }
                                         },
                                         icon: const Icon(Icons.auto_fix_high),
-                                        label: const Text('Auto Configure'),
+                                        label: Text(l10n.autoConfigure),
                                       ),
                                       const SizedBox(width: 12),
                                       OutlinedButton.icon(
@@ -284,55 +284,55 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                           }
                                         },
                                         icon: const Icon(Icons.login),
-                                        label: const Text('Login'),
+                                        label: Text(l10n.login),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: authEndpointController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Authorization Endpoint',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l10n.authorizationEndpoint,
+                                      border: const OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: tokenEndpointController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Token Endpoint',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l10n.tokenEndpoint,
+                                      border: const OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: clientIdController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Client ID',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l10n.clientId,
+                                      border: const OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: clientSecretController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Client Secret (optional for PKCE)',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l10n.clientSecretOptionalForPkce,
+                                      border: const OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: scopeController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Scope',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l10n.scope,
+                                      border: const OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   CheckboxListTile(
                                     value: usePkce,
                                     onChanged: (v) { setState(() { usePkce = v ?? true; }); },
-                                    title: const Text('Use PKCE (no client secret)'),
+                                    title: Text(l10n.usePkceNoClientSecret),
                                     controlAffinity: ListTileControlAffinity.leading,
                                     contentPadding: EdgeInsets.zero,
                                   ),
@@ -486,7 +486,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                   }
                 }
               },
-              child: Text(isEditing ? 'Save' : l10n.create),
+              child: Text(isEditing ? l10n.save : l10n.create),
             ),
           ],
         ),

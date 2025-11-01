@@ -4951,6 +4951,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete this node and all descendants'**
   String get deleteNodeAndDescendants;
+
+  /// No description provided for @tokenTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Token'**
+  String get tokenTab;
+
+  /// No description provided for @oauthTab.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth'**
+  String get oauthTab;
+
+  /// No description provided for @autoConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Configure'**
+  String get autoConfigure;
+
+  /// No description provided for @login.
+  ///
+  /// In en, this message translates to:
+  /// **'Login'**
+  String get login;
+
+  /// No description provided for @authorizationEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization Endpoint'**
+  String get authorizationEndpoint;
+
+  /// No description provided for @tokenEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Endpoint'**
+  String get tokenEndpoint;
+
+  /// No description provided for @clientId.
+  ///
+  /// In en, this message translates to:
+  /// **'Client ID'**
+  String get clientId;
+
+  /// No description provided for @clientSecretOptionalForPkce.
+  ///
+  /// In en, this message translates to:
+  /// **'Client Secret (Optional for PKCE)'**
+  String get clientSecretOptionalForPkce;
+
+  /// No description provided for @scope.
+  ///
+  /// In en, this message translates to:
+  /// **'Scope'**
+  String get scope;
+
+  /// No description provided for @usePkceNoClientSecret.
+  ///
+  /// In en, this message translates to:
+  /// **'Use PKCE (no client secret)'**
+  String get usePkceNoClientSecret;
+
+  /// No description provided for @oauthDiscoveryMetadataUrlOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth Discovery Page: Metadata URL (optional)'**
+  String get oauthDiscoveryMetadataUrlOptional;
+
+  /// No description provided for @discover.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover'**
+  String get discover;
+
+  /// No description provided for @registerClient.
+  ///
+  /// In en, this message translates to:
+  /// **'Register Client'**
+  String get registerClient;
+
+  /// No description provided for @register.
+  ///
+  /// In en, this message translates to:
+  /// **'Register'**
+  String get register;
+
+  /// No description provided for @editMcpEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit MCP Endpoint'**
+  String get editMcpEndpoint;
+
+  /// No description provided for @metadataUrlOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Metadata URL (optional)'**
+  String get metadataUrlOptional;
+
+  /// No description provided for @metadataUrlOptionalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to auto-detect using RFC 9728'**
+  String get metadataUrlOptionalHint;
+
+  /// No description provided for @oauthDiscovery.
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth Discovery'**
+  String get oauthDiscovery;
 }
 
 class _AppLocalizationsDelegate
