@@ -36,6 +36,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   bool _hasRefreshedOnce = false;
   Duration _selectedTimeRange = const Duration(days: 3);
   String? _highlightedConversationId; // Conversation ID to highlight
+  Map<String, List<String>> _nodeToConversationIds = {};
 
   @override
   void initState() {
@@ -60,11 +61,30 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
+  Future<void> _fetchNodeConversationIds() async {
+    if (_tree == null) return;
+
+    final newMap = <String, List<String>>{};
+    for (final node in _tree!.nodes.values) {
+      if (node.messageId != null) {
+        final conversationIds = await _databaseService.getConversationsContainingMessage(node.messageId!);
+        newMap[node.id] = conversationIds;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _nodeToConversationIds = newMap;
+      });
+    }
+  }
+
   Future<void> _loadTree() async {
     setState(() => _isLoading = true);
     
     try {
       _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
+      await _fetchNodeConversationIds();
       if (_tree == null) {
         if (mounted) {
           try {
@@ -117,6 +137,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     
     try {
       _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
+      await _fetchNodeConversationIds();
       if (_tree == null) {
         if (mounted) {
           try {
@@ -748,160 +769,164 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     final isRoot = node.id == 'root';
     // Check if this node belongs to the highlighted conversation
     final isHighlighted = _highlightedConversationId != null && 
-                          node.conversationId == _highlightedConversationId;
+                          (_nodeToConversationIds[node.id]?.contains(_highlightedConversationId) ?? false);
 
-    return GestureDetector(
-      onTap: () {
-        if (_isMultiSelectMode && !isRoot) {
-          _toggleNodeSelection(node.id);
-        } else if (isInteraction) {
-          _selectInteraction(node);
-        }
-      },
-      onLongPress: () {
-        if (isInteraction && !isRoot) {
-          if (!_isMultiSelectMode) {
-            _toggleMultiSelectMode();
-          }
-          _toggleNodeSelection(node.id);
-        }
-      },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 220, // Slightly wider for better text display
-          minWidth: 140, // Minimum width to ensure readability
-        ),
-      child: Container(
-        padding: const EdgeInsets.all(3.0),
-        decoration: BoxDecoration(
-          color: isSelected 
+    return Material(
+      color: isSelected
+          ? Theme.of(context).colorScheme.primaryContainer
+          : isHighlighted
               ? Theme.of(context).colorScheme.primaryContainer
-              : isHighlighted
-                  ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2)
-                  : isRoot
-                      ? Theme.of(context).colorScheme.surfaceVariant
-                      : Theme.of(context).colorScheme.surface,
-          border: Border.all(
-            color: isSelected 
-                ? Theme.of(context).colorScheme.primary
-                : isHighlighted
-                    ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
-                    : isRoot
-                        ? Theme.of(context).colorScheme.outline
-                        : Theme.of(context).colorScheme.outline.withOpacity(0.3),
-            width: isSelected ? 2 : (isHighlighted ? 1.5 : 1),
+              : isRoot
+                  ? Theme.of(context).colorScheme.surfaceVariant
+                  : Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      elevation: isSelected || isHighlighted ? 4 : 1,
+      child: GestureDetector(
+        onTap: () {
+          if (_isMultiSelectMode && !isRoot) {
+            _toggleNodeSelection(node.id);
+          } else if (isInteraction) {
+            _selectInteraction(node);
+          }
+        },
+        onLongPress: () {
+          if (isInteraction && !isRoot) {
+            if (!_isMultiSelectMode) {
+              _toggleMultiSelectMode();
+            }
+            _toggleNodeSelection(node.id);
+          }
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 220, // Slightly wider for better text display
+            minWidth: 140, // Minimum width to ensure readability
           ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+        child: Container(
+          padding: const EdgeInsets.all(3.0),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isSelected 
+                  ? Theme.of(context).colorScheme.primary
+                  : isHighlighted
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                      : isRoot
+                          ? Theme.of(context).colorScheme.outline
+                          : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              width: isSelected ? 2 : (isHighlighted ? 1.5 : 1),
             ),
-          ] : isHighlighted ? [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ] : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top row: Icons only
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left side icons
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Expand/collapse button
-                    if (hasChildren && !isRoot)
-                      IconButton(
-                        icon: Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 14,
-                        ),
-                        onPressed: () => _toggleNodeExpansion(node.id),
-                        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                        padding: EdgeInsets.zero,
-                      )
-                    else if (!isRoot)
-                      const SizedBox(width: 20),
-                    // Node type icon
-                    Icon(
-                      isRoot 
-                          ? Icons.account_tree
-                          : isInteraction 
-                              ? Icons.chat_bubble_outline
-                              : Icons.folder_outlined,
-                      size: 14,
-                      color: isRoot
-                          ? Theme.of(context).colorScheme.primary
-                          : isInteraction 
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.secondary,
-                    ),
-                  ],
-                ),
-                // Right side: Menu button
-                if (isInteraction && !isRoot)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 14),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        _deleteInteraction(node);
-                      } else if (value == 'fork') {
-                        _forkInteraction(node);
-                      }
-                    },
-                    itemBuilder: (popupContext) {
-                      final popupL10n = AppLocalizations.of(popupContext)!;
-                      return [
-                      PopupMenuItem(
-                        value: 'fork',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.call_split, size: 16),
-                            const SizedBox(width: 8),
-                            Text(popupL10n.forkFromHere),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete, size: 16),
-                            const SizedBox(width: 8),
-                            Text(popupL10n.deleteInteractionAction),
-                          ],
-                        ),
-                      ),
-                    ];
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Bottom row: Text content
-            Padding(
-              padding: const EdgeInsets.only(left: 10, right: 2),
-              child: Text(
-                node.summary,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: isRoot ? FontWeight.bold : FontWeight.normal,
-                ),
-                softWrap: true,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected ? [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-            ),
-          ],
-        ),
+            ] : isHighlighted ? [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ] : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: Icons only
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Left side icons
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Expand/collapse button
+                      if (hasChildren && !isRoot)
+                        IconButton(
+                          icon: Icon(
+                            isExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 14,
+                          ),
+                          onPressed: () => _toggleNodeExpansion(node.id),
+                          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                          padding: EdgeInsets.zero,
+                        )
+                      else if (!isRoot)
+                        const SizedBox(width: 20),
+                      // Node type icon
+                      Icon(
+                        isRoot 
+                            ? Icons.account_tree
+                            : isInteraction 
+                                ? Icons.chat_bubble_outline
+                                : Icons.folder_outlined,
+                        size: 14,
+                        color: isRoot
+                            ? Theme.of(context).colorScheme.primary
+                            : isInteraction 
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.secondary,
+                      ),
+                    ],
+                  ),
+                  // Right side: Menu button
+                  if (isInteraction && !isRoot)
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, size: 14),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _deleteInteraction(node);
+                        } else if (value == 'fork') {
+                          _forkInteraction(node);
+                        }
+                      },
+                      itemBuilder: (popupContext) {
+                        final popupL10n = AppLocalizations.of(popupContext)!;
+                        return [
+                        PopupMenuItem(
+                          value: 'fork',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.call_split, size: 16),
+                              const SizedBox(width: 8),
+                              Text(popupL10n.forkFromHere),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.delete, size: 16),
+                              const SizedBox(width: 8),
+                              Text(popupL10n.deleteInteractionAction),
+                            ],
+                          ),
+                        ),
+                      ];
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Bottom row: Text content
+              Padding(
+                padding: const EdgeInsets.only(left: 10, right: 2),
+                child: Text(
+                  node.summary,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: isRoot ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  softWrap: true,
+                ),
+              ),
+            ],
+          ),
+          ),
         ),
       ),
     );
