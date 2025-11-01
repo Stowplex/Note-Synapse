@@ -664,12 +664,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         final backupUpdatedAt = note['updatedAt'] as int;
         
         if (backupUpdatedAt > existingUpdatedAt) {
-          // Replace with backup note
-          await stagingDb.update('notes', note, where: 'id = ?', whereArgs: [note['id']]);
+          // Replace with backup note - filter to only existing columns
+          final filteredData = await _filterDataForTable(stagingDb, 'notes', note);
+          await stagingDb.update('notes', filteredData, where: 'id = ?', whereArgs: [note['id']]);
         }
       } else {
-        // Insert new note
-        await stagingDb.insert('notes', note);
+        // Insert new note - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'notes', note);
+        await stagingDb.insert('notes', filteredData);
       }
     }
   }
@@ -692,14 +694,16 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         final backupCreatedAt = subNote['createdAt'] as int;
         
         if (backupCreatedAt > existingCreatedAt) {
-          // Replace with backup subnote
-          await stagingDb.update('subnotes', subNote, 
+          // Replace with backup subnote - filter to only existing columns
+          final filteredData = await _filterDataForTable(stagingDb, 'subnotes', subNote);
+          await stagingDb.update('subnotes', filteredData, 
               where: 'id = ? AND noteId = ?', 
               whereArgs: [subNote['id'], subNote['noteId']]);
         }
       } else {
-        // Insert new subnote
-        await stagingDb.insert('subnotes', subNote);
+        // Insert new subnote - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'subnotes', subNote);
+        await stagingDb.insert('subnotes', filteredData);
       }
     }
   }
@@ -716,8 +720,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingTags.isEmpty) {
-        // Insert new tag
-        await stagingDb.insert('tags', tag);
+        // Insert new tag - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'tags', tag);
+        await stagingDb.insert('tags', filteredData);
       } else {
         // Tag exists, check if note_tags table needs updating
         final existingTag = existingTags.first;
@@ -749,8 +754,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingNoteTags.isEmpty) {
-        // Insert new note-tag relationship
-        await stagingDb.insert('note_tags', noteTag);
+        // Insert new note-tag relationship - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'note_tags', noteTag);
+        await stagingDb.insert('note_tags', filteredData);
       }
     }
   }
@@ -767,8 +773,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingRelationships.isEmpty) {
-        // Insert new relationship
-        await stagingDb.insert('relationships', relationship);
+        // Insert new relationship - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'relationships', relationship);
+        await stagingDb.insert('relationships', filteredData);
       }
     }
   }
@@ -785,8 +792,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingFilters.isEmpty) {
-        // Insert new filter
-        await stagingDb.insert('filters', filter);
+        // Insert new filter - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'filters', filter);
+        await stagingDb.insert('filters', filteredData);
       }
     }
   }
@@ -806,8 +814,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         // UUID clash - insert PINNED revision as latest revision
         await _insertPinnedRevisionForApp(stagingDb, backupDb, app);
       } else {
-        // Insert app as-is
-        await stagingDb.insert('user_apps', app);
+        // Insert app - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'user_apps', app);
+        await stagingDb.insert('user_apps', filteredData);
         
         // Insert associated revisions
         final revisions = await backupDb.query(
@@ -817,8 +826,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         );
         
         for (final revision in revisions) {
-          // Update the revision ID to use the original app's ID
-          await stagingDb.insert('app_revisions', revision);
+          // Insert revision - filter to only existing columns
+          final filteredRevision = await _filterDataForTable(stagingDb, 'app_revisions', revision);
+          await stagingDb.insert('app_revisions', filteredRevision);
         }
         
         // Insert associated libraries and dependencies
@@ -886,8 +896,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       'attachmentPaths': pinnedRevisionData['attachmentPaths'],
     };
     
-    // Insert the new revision
-    await stagingDb.insert('app_revisions', newRevision);
+    // Insert the new revision - filter to only existing columns
+    final filteredRevision = await _filterDataForTable(stagingDb, 'app_revisions', newRevision);
+    await stagingDb.insert('app_revisions', filteredRevision);
     
     // Update the existing app to set the selectedRevisionId to the new revision
     await stagingDb.update(
@@ -909,7 +920,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     );
     
     for (final library in libraries) {
-      final libraryId = await stagingDb.insert('user_app_libraries', library);
+      // Insert library - filter to only existing columns
+      final filteredLibrary = await _filterDataForTable(stagingDb, 'user_app_libraries', library);
+      final libraryId = await stagingDb.insert('user_app_libraries', filteredLibrary);
       
       // Get dependencies for this library using chunked reading to avoid cursor window issues
       final dependencies = await backupDb.rawQuery('''
@@ -942,7 +955,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           dependencyData['bytes'] = Uint8List(0);
         }
         
-        await stagingDb.insert('user_app_library_dependencies', dependencyData);
+        // Insert dependency - filter to only existing columns
+        final filteredDependency = await _filterDataForTable(stagingDb, 'user_app_library_dependencies', dependencyData);
+        await stagingDb.insert('user_app_library_dependencies', filteredDependency);
       }
     }
   }
@@ -978,10 +993,35 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         newAttachment['filePath'] = finalFilePath;
         newAttachment['isRelativePath'] = 1; // Always store as relative path
         
-        // Insert attachment if it doesn't exist
-        await stagingDb.insert('attachments', newAttachment);
+        // Insert attachment - filter to only existing columns
+        final filteredAttachment = await _filterDataForTable(stagingDb, 'attachments', newAttachment);
+        await stagingDb.insert('attachments', filteredAttachment);
       }
     }
+  }
+
+  /// Gets the list of column names that exist in the target table
+  Future<List<String>> _getTableColumns(Database db, String tableName) async {
+    final tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
+    return tableInfo.map((col) => col['name'] as String).toList();
+  }
+
+  /// Filters data to only include columns that exist in the target table
+  Future<Map<String, dynamic>> _filterDataForTable(
+    Database db,
+    String tableName,
+    Map<String, dynamic> data,
+  ) async {
+    final validColumns = await _getTableColumns(db, tableName);
+    final filtered = <String, dynamic>{};
+    
+    for (final entry in data.entries) {
+      if (validColumns.contains(entry.key)) {
+        filtered[entry.key] = entry.value;
+      }
+    }
+    
+    return filtered;
   }
 
   Future<void> _mergeConversations(Database stagingDb, Database backupDb) async {
@@ -996,8 +1036,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingConversations.isEmpty) {
-        // Insert new conversation
-        await stagingDb.insert('conversations', conversation);
+        // Insert new conversation - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'conversations', conversation);
+        await stagingDb.insert('conversations', filteredData);
       }
     }
   }
@@ -1014,8 +1055,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingMessages.isEmpty) {
-        // Insert new message
-        await stagingDb.insert('conversation_messages', message);
+        // Insert new message - filter to only existing columns (removes conversationId if present)
+        final filteredData = await _filterDataForTable(stagingDb, 'conversation_messages', message);
+        await stagingDb.insert('conversation_messages', filteredData);
       }
     }
   }
@@ -1032,8 +1074,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingAttachments.isEmpty) {
-        // Insert new attachment
-        await stagingDb.insert('conversation_attachments', attachment);
+        // Insert new attachment - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'conversation_attachments', attachment);
+        await stagingDb.insert('conversation_attachments', filteredData);
       }
     }
   }
@@ -1050,13 +1093,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingMappings.isEmpty) {
-        // Insert new mapping (without id if it's auto-increment)
-        final newMapping = Map<String, dynamic>.from(mapping);
+        // Insert new mapping - filter to only existing columns, remove id if auto-increment
+        var filteredData = await _filterDataForTable(stagingDb, 'conversation_message_mapping', mapping);
         // Remove id if it's auto-increment to let SQLite generate a new one
-        if (newMapping.containsKey('id') && mapping['id'] is int) {
-          newMapping.remove('id');
+        if (filteredData.containsKey('id') && mapping['id'] is int) {
+          filteredData.remove('id');
         }
-        await stagingDb.insert('conversation_message_mapping', newMapping);
+        await stagingDb.insert('conversation_message_mapping', filteredData);
       }
     }
   }
@@ -1073,8 +1116,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingParents.isEmpty) {
-        // Insert new parent relationship (id is TEXT PRIMARY KEY, so keep it)
-        await stagingDb.insert('message_parents', parent);
+        // Insert new parent relationship - filter to only existing columns
+        final filteredData = await _filterDataForTable(stagingDb, 'message_parents', parent);
+        await stagingDb.insert('message_parents', filteredData);
       }
     }
   }
@@ -1091,13 +1135,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
       
       if (existingMappings.isEmpty) {
-        // Insert new mapping (without id if it's auto-increment)
-        final newMapping = Map<String, dynamic>.from(mapping);
+        // Insert new mapping - filter to only existing columns, remove id if auto-increment
+        var filteredData = await _filterDataForTable(stagingDb, 'conversation_note_mapping', mapping);
         // Remove id if it's auto-increment to let SQLite generate a new one
-        if (newMapping.containsKey('id') && mapping['id'] is int) {
-          newMapping.remove('id');
+        if (filteredData.containsKey('id') && mapping['id'] is int) {
+          filteredData.remove('id');
         }
-        await stagingDb.insert('conversation_note_mapping', newMapping);
+        await stagingDb.insert('conversation_note_mapping', filteredData);
       }
     }
   }
