@@ -13,9 +13,9 @@ import '../widgets/add_note_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
-  final String? activeConversationId;
+  final List<String>? activeConversationIds;
   
-  const ConversationTreeScreen({Key? key, this.activeConversationId}) : super(key: key);
+  const ConversationTreeScreen({super.key, this.activeConversationIds});
 
   @override
   State<ConversationTreeScreen> createState() => _ConversTreeScreenState();
@@ -28,21 +28,23 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   final GraphViewController _graphController = GraphViewController();
   
   ConversationTree? _tree;
-  List<String> _selectedNodes = [];
+  final List<String> _selectedNodes = [];
   bool _isLoading = true;
   String? _selectedConversationId;
   ConversationMessage? _selectedMessage;
   bool _isMultiSelectMode = false;
   bool _hasRefreshedOnce = false;
   Duration _selectedTimeRange = const Duration(days: 3);
-  String? _highlightedConversationId; // Conversation ID to highlight
+  List<String> _highlightedConversationIds = []; // Conversation IDs to highlight
   Map<String, List<String>> _nodeToConversationIds = {};
 
   @override
   void initState() {
     super.initState();
     // Set highlighted conversation from widget parameter
-    _highlightedConversationId = widget.activeConversationId;
+    if (widget.activeConversationIds != null) {
+      _highlightedConversationIds = widget.activeConversationIds!;
+    }
     _loadTree();
   }
 
@@ -83,7 +85,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange, conversationIds: _highlightedConversationIds);
       await _fetchNodeConversationIds();
       if (_tree == null) {
         if (mounted) {
@@ -131,12 +133,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       _isLoading = true;
       // Clear highlighted conversation only when manually refreshed
       if (clearHighlight) {
-        _highlightedConversationId = null;
+        _highlightedConversationIds = [];
       }
     });
     
     try {
-      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange);
+      _tree = await _conversationService.refreshConversationTree(maxAge: _selectedTimeRange, conversationIds: _highlightedConversationIds);
       await _fetchNodeConversationIds();
       if (_tree == null) {
         if (mounted) {
@@ -150,20 +152,6 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           );
           } catch (contextError) {
             LoggerService.warning('Could not show info SnackBar: $contextError');
-          }
-        }
-      } else {
-        if (mounted) {
-          try {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(l10n.treeRefreshedSuccessfully),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-          } catch (contextError) {
-            LoggerService.warning('Could not show success SnackBar: $contextError');
           }
         }
       }
@@ -768,8 +756,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     final isInteraction = node.id != 'root';
     final isRoot = node.id == 'root';
     // Check if this node belongs to the highlighted conversation
-    final isHighlighted = _highlightedConversationId != null && 
-                          (_nodeToConversationIds[node.id]?.contains(_highlightedConversationId) ?? false);
+    final isHighlighted = _highlightedConversationIds.isNotEmpty && 
+                          (_nodeToConversationIds[node.id]?.any((id) => _highlightedConversationIds.contains(id)) ?? false);
 
     return Material(
       color: isSelected
@@ -777,7 +765,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           : isHighlighted
               ? Theme.of(context).colorScheme.primaryContainer
               : isRoot
-                  ? Theme.of(context).colorScheme.surfaceVariant
+                  ? Theme.of(context).colorScheme.surfaceContainerHighest
                   : Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       elevation: isSelected || isHighlighted ? 4 : 1,
@@ -980,7 +968,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
                 border: Border(
                   bottom: BorderSide(
                     color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
@@ -1153,7 +1141,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 decoration: BoxDecoration(
-                  color: Theme.of(futureContext).colorScheme.surfaceVariant.withOpacity(0.5),
+                  color: Theme.of(futureContext).colorScheme.surfaceContainerHighest.withOpacity(0.5),
                   border: Border(
                     bottom: BorderSide(
                       color: Theme.of(futureContext).colorScheme.outline.withOpacity(0.3),

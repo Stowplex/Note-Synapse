@@ -51,7 +51,7 @@ class ConversationService {
     required String forkFromMessageId,
     required String newTitle,
   }) async {
-    LoggerService.info('Forking conversation ${originalConversationId} from message ${forkFromMessageId}');
+    LoggerService.info('Forking conversation $originalConversationId from message $forkFromMessageId');
     // Get the original conversation
     final originalConversation = await _databaseService.getConversation(originalConversationId);
     if (originalConversation == null) {
@@ -89,7 +89,7 @@ class ConversationService {
     // Parent relationships for copied messages already exist from the original conversation
     // They are inherited since we're copying message IDs, not creating new messages
 
-    LoggerService.info('Forked conversation ${originalConversationId} to ${forkedConversation.id} from message ${forkFromMessageId}');
+    LoggerService.info('Forked conversation $originalConversationId to ${forkedConversation.id} from message $forkFromMessageId');
     
     // Refresh the conversation tree to include the new forked conversation
     await refreshConversationTree();
@@ -176,7 +176,7 @@ class ConversationService {
     // When the first new message is added, it will detect the fork point automatically
     // by checking if the last message exists in multiple conversations
 
-    LoggerService.info('Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message ${forkFromMessageId} with selected context');
+    LoggerService.info('Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message $forkFromMessageId with selected context');
     
     // Refresh the conversation tree to include the new forked conversation
     await refreshConversationTree();
@@ -348,16 +348,16 @@ class ConversationService {
 
 
   // Get conversation tree
-  Future<ConversationTree?> getConversationTree({Duration? maxAge}) async {
-    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
+  Future<ConversationTree?> getConversationTree({Duration? maxAge, List<String>? conversationIds}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge, conversationIds: conversationIds);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
   }
 
   // Refresh conversation tree
-  Future<ConversationTree?> refreshConversationTree({Duration? maxAge}) async {
-    final conversations = await _databaseService.getAllConversations(maxAge: maxAge);
+  Future<ConversationTree?> refreshConversationTree({Duration? maxAge, List<String>? conversationIds}) async {
+    final conversations = await _databaseService.getAllConversations(maxAge: maxAge, conversationIds: conversationIds);
     if (conversations.isEmpty) return null;
 
     return await _buildConversationTree(conversations);
@@ -588,7 +588,7 @@ class ConversationService {
     if (tree == null) return messageIds.toList();
     
     // Recursive function to traverse the tree node
-    void _traverseNode(ConversationTreeNode currentNode) {
+    void traverseNode(ConversationTreeNode currentNode) {
       if (currentNode.messageId != null) {
         messageIds.add(currentNode.messageId!);
       }
@@ -599,11 +599,11 @@ class ConversationService {
         if (childNode == null) {
           throw Exception('Child node $childId not found in tree');
         }
-        _traverseNode(childNode);
+        traverseNode(childNode);
       }
     }
     
-    _traverseNode(node);
+    traverseNode(node);
     return messageIds.toList();
   }
 

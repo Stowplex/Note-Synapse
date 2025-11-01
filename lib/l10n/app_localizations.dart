@@ -5059,6 +5059,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OAuth Discovery'**
   String get oauthDiscovery;
+
+  /// No description provided for @openInTree.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Tree'**
+  String get openInTree;
 }
 
 class _AppLocalizationsDelegate

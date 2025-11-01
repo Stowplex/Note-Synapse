@@ -20,7 +20,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
   late TabController _tabController;
   
   // Dedup rules state
-  List<DedupRule> _dedupRules = [];
+  final List<DedupRule> _dedupRules = [];
   bool _isAiSuggesting = false;
 
   @override
@@ -383,7 +383,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
         : null;
     
     return DropdownButtonFormField<String>(
-      value: validSelectedTag,
+      initialValue: validSelectedTag,
       decoration: InputDecoration(
         hintText: hintText,
         border: const OutlineInputBorder(),

@@ -147,7 +147,7 @@ class FileTypeUtils {
     }
     
     // Text files: Check if it's likely text (printable ASCII)
-    if (header.length >= 1) {
+    if (header.isNotEmpty) {
       bool isLikelyText = true;
       for (int i = 0; i < header.length; i++) {
         final byte = header[i];

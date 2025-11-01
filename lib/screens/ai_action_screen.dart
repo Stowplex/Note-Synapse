@@ -32,7 +32,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   AIInteractionType? _selectedAction;
   bool _isProcessing = false;
   String? _response;
-  List<PlatformFile> _attachedFiles = [];
+  final List<PlatformFile> _attachedFiles = [];
 
   @override
   void dispose() {
@@ -207,7 +207,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 decoration: BoxDecoration(
                   color: isSelected 
                       ? Theme.of(context).primaryColor.withOpacity(0.1)
-                      : Theme.of(context).colorScheme.surfaceVariant,
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Icon(
@@ -505,7 +505,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
       ),

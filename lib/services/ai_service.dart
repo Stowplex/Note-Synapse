@@ -558,8 +558,8 @@ class AIService {
     // Add indentation based on depth
     final indent = '  ' * depth;
     
-    buffer.writeln('${indent}--- Note: ${note.title} ---');
-    buffer.writeln('${indent}${note.content}');
+    buffer.writeln('$indent--- Note: ${note.title} ---');
+    buffer.writeln('$indent${note.content}');
     
     // Add file attachment info if any (files will be sent as binary data separately)
     if (note.attachmentPaths.isNotEmpty) {
@@ -569,9 +569,9 @@ class AIService {
         final file = File(attachmentPath);
         if (file.existsSync()) {
           final fileSize = file.lengthSync();
-          buffer.writeln('${indent}- $fileName (${_formatFileSize(fileSize)})');
+          buffer.writeln('$indent- $fileName (${_formatFileSize(fileSize)})');
         } else {
-          buffer.writeln('${indent}- $fileName (file not found)');
+          buffer.writeln('$indent- $fileName (file not found)');
         }
       }
     }
@@ -579,7 +579,7 @@ class AIService {
     if (note.subNotes.isNotEmpty) {
       buffer.writeln('${indent}Sub-notes:');
       for (final subNote in note.subNotes) {
-        buffer.writeln('${indent}- ${subNote.name}: ${subNote.content}');
+        buffer.writeln('$indent- ${subNote.name}: ${subNote.content}');
       }
     }
     
@@ -603,11 +603,11 @@ class AIService {
             final direction = isOutgoing ? '→' : '←';
             final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
             
-            buffer.writeln('${indent}  ${direction} $relationshipDisplay: ${linkedNote.title}');
+            buffer.writeln('$indent  $direction $relationshipDisplay: ${linkedNote.title}');
             
             // Recursively add linked note content (with depth limit)
             if (depth < 2) {
-              buffer.writeln('${indent}  Linked Note Content:');
+              buffer.writeln('$indent  Linked Note Content:');
               await _addNoteToContext(buffer, linkedNote, processedNoteIds, depth + 2);
             }
           }
@@ -638,7 +638,7 @@ class AIService {
           final direction = isOutgoing ? '→' : '←';
           final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
           
-          buffer.writeln('  ${direction} $relationshipDisplay: ${linkedNote.title}');
+          buffer.writeln('  $direction $relationshipDisplay: ${linkedNote.title}');
           buffer.writeln('  Content: ${linkedNote.content}');
           
           if (linkedNote.tags.isNotEmpty) {

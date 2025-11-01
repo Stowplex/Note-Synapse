@@ -206,7 +206,7 @@ class UserAppService {
       // Always create initial revision for new apps
       final databaseService = DatabaseService();
       final revision = AppRevision(
-        id: DateTime.now().millisecondsSinceEpoch.toString() + '_rev',
+        id: '${DateTime.now().millisecondsSinceEpoch}_rev',
         appId: app.id,
         revisionNumber: 1,
         revisionTimestamp: DateTime.now(),
@@ -1370,16 +1370,16 @@ EXAMPLE USAGE:
 ```javascript
 // Check if notes are available
 if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
-  console.log(\`Processing \${window.Synapse.Notes.length} selected notes\`);
+  console.log(`Processing \${window.Synapse.Notes.length} selected notes`);
   
   // Process each note
   window.Synapse.Notes.forEach((note, index) => {
-    console.log(\`Note \${index + 1}: \${note.title}\`);
-    console.log(\`Content: \${note.content}\`);
-    console.log(\`Tags: \${note.tags.join(', ')}\`);
-    console.log(\`Type: \${note.isTask ? 'Task' : 'Note'}\`);
+    console.log(`Note \${index + 1}: \${note.title}`);
+    console.log(`Content: \${note.content}`);
+    console.log(`Tags: \${note.tags.join(', ')}`);
+    console.log(`Type: \${note.isTask ? 'Task' : 'Note'}`);
     if (note.isTask) {
-      console.log(\`Status: \${note.status}\`);
+      console.log(`Status: \${note.status}`);
     }
   });
 } else {
@@ -1566,7 +1566,7 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
       
       // Create a new revision with the selected revision's content
       final newRevision = AppRevision(
-        id: DateTime.now().millisecondsSinceEpoch.toString() + '_rev',
+        id: '${DateTime.now().millisecondsSinceEpoch}_rev',
         appId: newApp.id,
         revisionNumber: 1,
         revisionTimestamp: DateTime.now(),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:note_synapse/main.dart';
 import 'package:note_synapse/providers/app_provider.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/screens/notes_screen.dart';

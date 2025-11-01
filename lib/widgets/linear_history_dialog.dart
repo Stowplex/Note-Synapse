@@ -13,11 +13,11 @@ class LinearHistoryDialog extends StatefulWidget {
   final VoidCallback? onConversationDeleted;
 
   const LinearHistoryDialog({
-    Key? key,
+    super.key,
     required this.initialTimeRange,
     required this.onTimeRangeChanged,
     this.onConversationDeleted,
-  }) : super(key: key);
+  });
 
   @override
   State<LinearHistoryDialog> createState() => _LinearHistoryDialogState();

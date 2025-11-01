@@ -15,10 +15,10 @@ class AINoteCreatorDialog extends StatefulWidget {
   final List<Note> contextNotes;
   
   const AINoteCreatorDialog({
-    Key? key,
+    super.key,
     required this.conversationContent,
     this.contextNotes = const [],
-  }) : super(key: key);
+  });
   
   /// Show the dialog and return the created notes if any
   static Future<List<Note>?> show({
@@ -195,7 +195,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
@@ -291,7 +291,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
       ),

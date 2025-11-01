@@ -24,14 +24,14 @@ class RecoveryScreen extends StatefulWidget {
 class _RecoveryScreenState extends State<RecoveryScreen> {
   bool _isBackingUp = false;
   double _backupProgress = 0.0;
-  List<String> _backupLogs = [];
+  final List<String> _backupLogs = [];
   List<Map<String, dynamic>> _backups = [];
   List<Map<String, dynamic>> _availableRecoveries = [];
   
   // Import functionality
   bool _isImporting = false;
   double _importProgress = 0.0;
-  List<String> _importLogs = [];
+  final List<String> _importLogs = [];
   String? _originalDbBackupPath;
 
   @override
@@ -1491,7 +1491,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   ],
                 ),
               ),
-            )).toList(),
+            )),
           ],
           if (_backupLogs.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -1640,7 +1640,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   ],
                 ),
               ),
-            )).toList(),
+            )),
           ],
         ],
       ),

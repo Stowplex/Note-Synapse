@@ -36,7 +36,7 @@ class UserAppViewScreen extends StatefulWidget {
 }
 
 class _UserAppViewScreenState extends State<UserAppViewScreen> {
-  List<String> _consoleOutput = [];
+  final List<String> _consoleOutput = [];
   bool _isLoading = true;
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
@@ -1088,7 +1088,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final prompt = args[0] as String;
           final options = args.length > 1 ? args[1] as Map<String, dynamic>? : <String, dynamic>{};
-          LoggerService.debug('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}');
+          LoggerService.debug('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? '${prompt.substring(0, 100)}...' : prompt}');
           LoggerService.debug('[Synapse.chatAI] Raw options received: $options');
           
           // Extract and validate optional parameters with explicit type checking
@@ -1203,7 +1203,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         try {
           final text = args[0] as String;
           await Clipboard.setData(ClipboardData(text: text));
-          LoggerService.debug('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? text.substring(0, 50) + '...' : text}');
+          LoggerService.debug('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? '${text.substring(0, 50)}...' : text}');
           return {'success': true};
         } catch (e) {
           LoggerService.error('[UserApp.CLIPBOARD] Error copying to clipboard: $e', error: e);

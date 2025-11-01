@@ -21,13 +21,13 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
   bool _isNoteActionApp = false;
-  List<String> _attachmentPaths = [];
+  final List<String> _attachmentPaths = [];
   
   // Tab management
   late TabController _tabController;
   
   // Library management
-  List<UserAppLibraryInfo> _libraries = [];
+  final List<UserAppLibraryInfo> _libraries = [];
 
   @override
   void initState() {

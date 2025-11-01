@@ -532,7 +532,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       );
                     },
                   );
-                }).toList(),
+                }),
 
               ],
             ),

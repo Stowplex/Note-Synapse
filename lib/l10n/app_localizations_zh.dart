@@ -2727,4 +2727,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get oauthDiscovery => 'OAuth发现';
+
+  @override
+  String get openInTree => '在树状图中打开';
 }

@@ -946,5 +946,6 @@
       "editMcpEndpoint": "Edit MCP Endpoint",
       "metadataUrlOptional": "Metadata URL (optional)",
       "metadataUrlOptionalHint": "Leave blank to auto-detect using RFC 9728",
-      "oauthDiscovery": "OAuth Discovery"
+      "oauthDiscovery": "OAuth Discovery",
+      "openInTree": "Open in Tree"
 }

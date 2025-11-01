@@ -2816,4 +2816,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get oauthDiscovery => 'OAuth Discovery';
+
+  @override
+  String get openInTree => 'Open in Tree';
 }

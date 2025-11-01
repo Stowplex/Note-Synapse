@@ -28,10 +28,10 @@ class ConversationChatScreen extends StatefulWidget {
   final List<String>? initialNoteIds;
 
   const ConversationChatScreen({
-    Key? key,
+    super.key,
     this.conversationId,
     this.initialNoteIds,
-  }) : super(key: key);
+  });
 
   @override
   State<ConversationChatScreen> createState() => _ConversationChatScreenState();
@@ -49,12 +49,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   bool _isSending = false;
   bool _isAborting = false;
   String? _currentRequestId;
-  Set<String> _cancelledRequestIds = {};
-  List<PlatformFile> _attachedFiles = [];
+  final Set<String> _cancelledRequestIds = {};
+  final List<PlatformFile> _attachedFiles = [];
   
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
-  Set<String> _selectedMcpEndpointIds = {};
+  final Set<String> _selectedMcpEndpointIds = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
 
@@ -698,7 +698,7 @@ You may supplement the information from the notes with your own knowledge to pro
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
       ),
@@ -772,7 +772,7 @@ You may supplement the information from the notes with your own knowledge to pro
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
@@ -1170,7 +1170,7 @@ You may supplement the information from the notes with your own knowledge to pro
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
                   builder: (context) => ConversationTreeScreen(
-                    activeConversationId: _conversation?.id,
+                    activeConversationIds: _conversation?.id != null ? [_conversation!.id] : [],
                   ),
                 ),
               );
@@ -1201,7 +1201,7 @@ You may supplement the information from the notes with your own knowledge to pro
               onTap: () => _showNotesAndContext(),
               child: Container(
                 padding: const EdgeInsets.all(8.0),
-                color: Theme.of(context).colorScheme.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Row(
                   children: [
                     const Icon(Icons.note, size: 16),

@@ -24,7 +24,7 @@ class AppProvider extends ChangeNotifier {
   List<Tag> _tags = [];
   List<Filter> _filters = [];
   List<UserApp> _userApps = [];
-  Map<String, List<AppRevision>> _appRevisions = {}; // Cache revisions by appId
+  final Map<String, List<AppRevision>> _appRevisions = {}; // Cache revisions by appId
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;

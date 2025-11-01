@@ -2136,25 +2136,35 @@ class DatabaseService {
     return conversation.id;
   }
 
-  Future<List<Conversation>> getAllConversations({Duration? maxAge}) async {
+  // Get all conversations
+  Future<List<Conversation>> getAllConversations({Duration? maxAge, List<String>? conversationIds}) async {
     final db = await database;
-    String? where;
-    List<dynamic>? whereArgs;
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
 
     if (maxAge != null) {
-      final since = DateTime.now().subtract(maxAge).millisecondsSinceEpoch;
-      where = 'updatedAt >= ?';
-      whereArgs = [since];
+      final cutoff = DateTime.now().subtract(maxAge).millisecondsSinceEpoch;
+      whereClause += 'createdAt >= ?';
+      whereArgs.add(cutoff);
+    }
+
+    if (conversationIds != null && conversationIds.isNotEmpty) {
+      final idsPlaceholder = List.filled(conversationIds.length, '?').join(',');
+      if (whereClause.isNotEmpty) {
+        whereClause += ' AND ';
+      }
+      whereClause += 'id IN ($idsPlaceholder)';
+      whereArgs.addAll(conversationIds);
     }
 
     final List<Map<String, dynamic>> maps = await db.query(
       'conversations',
-      where: where,
-      whereArgs: whereArgs,
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'updatedAt DESC',
     );
 
-    return maps.map((map) => _mapToConversation(map)).toList().cast<Conversation>();
+    return maps.map((map) => _mapToConversation(map)).toList();
   }
 
   Future<Conversation?> getConversation(String id) async {
@@ -2328,7 +2338,7 @@ class DatabaseService {
     final messagesToDelete = <String>{};
     
     // Recursive function to traverse the tree
-    Future<void> _traverseSubtree(String currentMessageId) async {
+    Future<void> traverseSubtree(String currentMessageId) async {
       if (messagesToDelete.contains(currentMessageId)) {
         return; // Already processed
       }
@@ -2345,11 +2355,11 @@ class DatabaseService {
       // Recursively process each child
       for (final child in children) {
         final childId = child['messageId'] as String;
-        await _traverseSubtree(childId);
+        await traverseSubtree(childId);
       }
     }
     
-    await _traverseSubtree(messageId);
+    await traverseSubtree(messageId);
     return messagesToDelete.toList();
   }
 
@@ -2513,7 +2523,7 @@ class DatabaseService {
     required String parentMessageId,
   }) async {
     final db = await database;
-    final id = '${messageId}_${parentMessageId}';
+    final id = '${messageId}_$parentMessageId';
     await db.insert('message_parents', {
       'id': id,
       'messageId': messageId,

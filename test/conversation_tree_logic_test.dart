@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:note_synapse/models/conversation.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 

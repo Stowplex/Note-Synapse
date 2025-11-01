@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'model_type.dart';
 import 'model_capabilities.dart';
 
@@ -24,7 +23,7 @@ class ModelConfig {
     this.maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
     this.isConfigured = false,
-  }) : this.customCapabilitiesObject = customCapabilitiesObject ??
+  }) : customCapabilitiesObject = customCapabilitiesObject ??
       const ModelCapabilities(
         maxInputTokens: 100000,
         maxOutputTokens: 4000,

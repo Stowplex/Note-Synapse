@@ -26,6 +26,7 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../models/conversation.dart';
 import 'conversation_chat_screen.dart';
+import 'conversation_tree_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -1310,7 +1311,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('${action == 'archive' ? 'Archive' : 'Unarchive'} Note'),
-        content: Text('Are you sure you want to ${action} this note?'),
+        content: Text('Are you sure you want to $action this note?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2499,7 +2500,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedTag,
+                    initialValue: _selectedTag,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2645,7 +2646,7 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _isCustomMode ? 'custom' : _selectedRelationshipType,
+              initialValue: _isCustomMode ? 'custom' : _selectedRelationshipType,
               decoration: const InputDecoration(
                 labelText: 'Relationship Type',
                 border: OutlineInputBorder(),
@@ -2735,7 +2736,7 @@ class _AddTagDialog extends StatefulWidget {
 
 class _AddTagDialogState extends State<_AddTagDialog> {
   final TextEditingController _newTagController = TextEditingController();
-  Set<String> _selectedTags = {};
+  final Set<String> _selectedTags = {};
   String _tagSearchQuery = '';
 
   @override
@@ -2973,6 +2974,22 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onPrimary,
                       ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close the current dialog
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ConversationTreeScreen(
+                            activeConversationIds: widget.conversations.map((c) => c.id).toList(),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      l10n.openInTree,
+                      style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
                     ),
                   ),
                   IconButton(

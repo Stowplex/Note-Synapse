@@ -946,5 +946,6 @@
       "editMcpEndpoint": "编辑MCP端点",
       "metadataUrlOptional": "元数据URL（可选）",
       "metadataUrlOptionalHint": "留空以使用RFC 9728自动检测",
-      "oauthDiscovery": "OAuth发现"
+      "oauthDiscovery": "OAuth发现",
+      "openInTree": "在树状图中打开"
 }
