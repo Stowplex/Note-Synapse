@@ -2940,6 +2940,7 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                             activeConversationIds: widget.conversations
                                 .map((c) => c.id)
                                 .toList(),
+                            filterByActiveConversations: true, // Filter mode (from note)
                           ),
                         ),
                       );
