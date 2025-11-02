@@ -2141,8 +2141,8 @@ abstract class AppLocalizations {
   /// No description provided for @tagUsageCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} notes'**
-  String tagUsageCount(Object count);
+  /// **'{noteCount} notes / {conversationCount} conversations'**
+  String tagUsageCount(Object conversationCount, Object noteCount);
 
   /// No description provided for @deleteTag.
   ///
@@ -2159,8 +2159,8 @@ abstract class AppLocalizations {
   /// No description provided for @confirmDeleteTagWarning.
   ///
   /// In en, this message translates to:
-  /// **'This will remove the tag from all {count} associated notes. This action cannot be undone.'**
-  String confirmDeleteTagWarning(Object count);
+  /// **'This will remove the tag from {noteCount} notes and {conversationCount} conversations. This action cannot be undone.'**
+  String confirmDeleteTagWarning(Object conversationCount, Object noteCount);
 
   /// No description provided for @tagDeletedSuccessfully.
   ///

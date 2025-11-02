@@ -1117,8 +1117,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagManagement => 'Tag Management';
 
   @override
-  String tagUsageCount(Object count) {
-    return '$count notes';
+  String tagUsageCount(Object conversationCount, Object noteCount) {
+    return '$noteCount notes / $conversationCount conversations';
   }
 
   @override
@@ -1130,8 +1130,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String confirmDeleteTagWarning(Object count) {
-    return 'This will remove the tag from all $count associated notes. This action cannot be undone.';
+  String confirmDeleteTagWarning(Object conversationCount, Object noteCount) {
+    return 'This will remove the tag from $noteCount notes and $conversationCount conversations. This action cannot be undone.';
   }
 
   @override

@@ -14,11 +14,12 @@ class TagManagementScreen extends StatefulWidget {
   State<TagManagementScreen> createState() => _TagManagementScreenState();
 }
 
-class _TagManagementScreenState extends State<TagManagementScreen> with TickerProviderStateMixin {
+class _TagManagementScreenState extends State<TagManagementScreen>
+    with TickerProviderStateMixin {
   List<TagWithUsage> _tagsWithUsage = [];
   bool _isLoading = true;
   late TabController _tabController;
-  
+
   // Dedup rules state
   final List<DedupRule> _dedupRules = [];
   bool _isAiSuggesting = false;
@@ -44,15 +45,15 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
     try {
       final appProvider = context.read<AppProvider>();
       final tags = appProvider.tags;
-      final tagsWithUsage = <TagWithUsage>[];
-
-      for (final tag in tags) {
-        final usageCount = await appProvider.getTagUsageCount(tag.name);
-        tagsWithUsage.add(TagWithUsage(
-          tag: tag,
-          usageCount: usageCount,
-        ));
-      }
+      final tagsWithUsage = tags
+          .map(
+            (tag) => TagWithUsage(
+              tag: tag,
+              noteUsageCount: tag.usageCount,
+              conversationUsageCount: tag.conversationUsageCount,
+            ),
+          )
+          .toList();
 
       // Sort alphabetically by tag name
       tagsWithUsage.sort((a, b) {
@@ -80,7 +81,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
   Future<void> _deleteTag(TagWithUsage tagWithUsage) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -92,7 +93,10 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
             Text(l10n.confirmDeleteTag(tagWithUsage.tag.name)),
             const SizedBox(height: 16),
             Text(
-              l10n.confirmDeleteTagWarning(tagWithUsage.usageCount),
+              l10n.confirmDeleteTagWarning(
+                tagWithUsage.noteUsageCount,
+                tagWithUsage.conversationUsageCount,
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.red,
                 fontWeight: FontWeight.w500,
@@ -117,7 +121,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
     if (confirmed == true) {
       try {
         await context.read<AppProvider>().deleteTag(tagWithUsage.tag.name);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -125,7 +129,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
               backgroundColor: Colors.green,
             ),
           );
-          
+
           // Reload the tags
           await _loadTagsWithUsage();
         }
@@ -159,10 +163,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildDeleteTagsTab(l10n),
-          _buildDedupTagsTab(l10n),
-        ],
+        children: [_buildDeleteTagsTab(l10n), _buildDedupTagsTab(l10n)],
       ),
     );
   }
@@ -177,17 +178,13 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.label_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.label_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               l10n.noTagsAvailable,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
             ),
           ],
         ),
@@ -206,7 +203,9 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
               width: 24,
               height: 24,
               decoration: BoxDecoration(
-                color: Color(int.parse(tagWithUsage.tag.color.replaceFirst('#', '0xFF'))),
+                color: Color(
+                  int.parse(tagWithUsage.tag.color.replaceFirst('#', '0xFF')),
+                ),
                 shape: BoxShape.circle,
               ),
             ),
@@ -215,7 +214,10 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
             subtitle: Text(
-              l10n.tagUsageCount(tagWithUsage.usageCount),
+              l10n.tagUsageCount(
+                tagWithUsage.noteUsageCount,
+                tagWithUsage.conversationUsageCount,
+              ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
             trailing: IconButton(
@@ -245,7 +247,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 onPressed: _isAiSuggesting ? null : _aiSuggestDedupRules,
-                icon: _isAiSuggesting 
+                icon: _isAiSuggesting
                     ? const SizedBox(
                         width: 16,
                         height: 16,
@@ -275,17 +277,12 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.rule,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
+                      Icon(Icons.rule, size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text(
                         l10n.noDedupRules,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -325,7 +322,8 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
                   flex: 2,
                   child: _buildTagSelector(
                     selectedTag: rule.leftTag,
-                    onTagSelected: (tag) => _updateDedupRule(rule, leftTag: tag),
+                    onTagSelected: (tag) =>
+                        _updateDedupRule(rule, leftTag: tag),
                     hintText: l10n.selectLeftTag,
                     l10n: l10n,
                   ),
@@ -340,7 +338,8 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
                   flex: 2,
                   child: _buildTagSelector(
                     selectedTag: rule.rightTag,
-                    onTagSelected: (tag) => _updateDedupRule(rule, rightTag: tag),
+                    onTagSelected: (tag) =>
+                        _updateDedupRule(rule, rightTag: tag),
                     hintText: l10n.selectRightTag,
                     l10n: l10n,
                   ),
@@ -376,12 +375,13 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
     required AppLocalizations l10n,
   }) {
     // Only set value if it's not empty and exists in the items
-    final validSelectedTag = selectedTag != null && 
-        selectedTag.isNotEmpty && 
-        _tagsWithUsage.any((t) => t.tag.name == selectedTag) 
-        ? selectedTag 
+    final validSelectedTag =
+        selectedTag != null &&
+            selectedTag.isNotEmpty &&
+            _tagsWithUsage.any((t) => t.tag.name == selectedTag)
+        ? selectedTag
         : null;
-    
+
     return DropdownButtonFormField<String>(
       initialValue: validSelectedTag,
       decoration: InputDecoration(
@@ -391,16 +391,16 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
         isDense: true,
       ),
       isExpanded: true,
-        items: _tagsWithUsage.map((tagWithUsage) {
-          return DropdownMenuItem<String>(
-            value: tagWithUsage.tag.name,
-            child: Text(
-              tagWithUsage.tag.name,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          );
-        }).toList(),
+      items: _tagsWithUsage.map((tagWithUsage) {
+        return DropdownMenuItem<String>(
+          value: tagWithUsage.tag.name,
+          child: Text(
+            tagWithUsage.tag.name,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }).toList(),
       onChanged: (value) {
         if (value != null) {
           onTagSelected(value);
@@ -410,11 +410,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
   }
 
   void _addDedupRule() {
-    final newRule = DedupRule(
-      id: const Uuid().v4(),
-      leftTag: '',
-      rightTag: '',
-    );
+    final newRule = DedupRule(id: const Uuid().v4(), leftTag: '', rightTag: '');
     setState(() {
       _dedupRules.add(newRule);
     });
@@ -460,7 +456,9 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
     // Check for duplicate left tags (not allowed)
     final leftTags = _dedupRules.map((r) => r.leftTag).toList();
-    final duplicateLeftTags = leftTags.where((tag) => leftTags.indexOf(tag) != leftTags.lastIndexOf(tag)).toSet();
+    final duplicateLeftTags = leftTags
+        .where((tag) => leftTags.indexOf(tag) != leftTags.lastIndexOf(tag))
+        .toSet();
     if (duplicateLeftTags.isNotEmpty) {
       return 'Left tag "${duplicateLeftTags.first}" appears in multiple rules';
     }
@@ -485,7 +483,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
   Future<void> _executeDedupRules() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     // Validate rules
     final validationError = _validateDedupRules();
     if (validationError != null) {
@@ -521,12 +519,12 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
     if (confirmed == true) {
       try {
         final appProvider = context.read<AppProvider>();
-        
+
         // Execute each rule
         for (final rule in _dedupRules) {
           await appProvider.replaceTag(rule.leftTag, rule.rightTag);
         }
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -534,7 +532,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
               backgroundColor: Colors.green,
             ),
           );
-          
+
           // Clear rules and reload tags
           setState(() {
             _dedupRules.clear();
@@ -556,7 +554,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
   Future<void> _aiSuggestDedupRules() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (_tagsWithUsage.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -573,7 +571,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
     try {
       final tagNames = _tagsWithUsage.map((t) => t.tag.name).toList();
-      
+
       // Get tags used by filters
       final appProvider = context.read<AppProvider>();
       final filterTagSet = <String>{};
@@ -581,14 +579,17 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
         filterTagSet.addAll(filter.includeTags);
       }
       final filterTags = filterTagSet.toList();
-      
-      final suggestions = await AIService.suggestDedupRules(tagNames, protectedTags: filterTags);
-      
+
+      final suggestions = await AIService.suggestDedupRules(
+        tagNames,
+        protectedTags: filterTags,
+      );
+
       if (mounted) {
         setState(() {
           _dedupRules.addAll(suggestions);
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${suggestions.length} dedup rules suggested by AI'),
@@ -617,10 +618,12 @@ class _TagManagementScreenState extends State<TagManagementScreen> with TickerPr
 
 class TagWithUsage {
   final Tag tag;
-  final int usageCount;
+  final int noteUsageCount;
+  final int conversationUsageCount;
 
   TagWithUsage({
     required this.tag,
-    required this.usageCount,
+    required this.noteUsageCount,
+    required this.conversationUsageCount,
   });
 }

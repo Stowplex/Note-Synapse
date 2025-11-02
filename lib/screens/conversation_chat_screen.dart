@@ -5,6 +5,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
@@ -22,6 +23,8 @@ import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import '../widgets/add_note_dialog.dart';
+import '../widgets/tag_selection_dialog.dart';
+import '../providers/app_provider.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -51,7 +54,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final List<PlatformFile> _attachedFiles = [];
-  
+  List<String> _conversationTags = [];
+
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
@@ -75,22 +79,25 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
-
-
   Future<void> _initializeConversation() async {
     setState(() => _isLoading = true);
 
     try {
       if (widget.conversationId != null) {
         // Load existing conversation
-        final conversationWithMessages = await _conversationService.getConversationWithFullHistory(widget.conversationId!);
+        final conversationWithMessages = await _conversationService
+            .getConversationWithFullHistory(widget.conversationId!);
         if (conversationWithMessages != null) {
           _conversation = conversationWithMessages.conversation;
           _messages = conversationWithMessages.messages;
-          _notes = await _conversationService.getConversationNotes(widget.conversationId!);
-          
+          _notes = await _conversationService.getConversationNotes(
+            widget.conversationId!,
+          );
+          await _refreshConversationTags();
+
           // Validate note references and show alert if any are missing
-          final missingNoteIds = await _conversationService.validateConversationNotes(widget.conversationId!);
+          final missingNoteIds = await _conversationService
+              .validateConversationNotes(widget.conversationId!);
           if (missingNoteIds.isNotEmpty && mounted) {
             _showMissingNotesAlert(missingNoteIds);
           }
@@ -98,8 +105,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       } else {
         // This is a new conversation, so we'll load any initial notes but not create the
         // conversation entity until the first message is sent.
-        if (widget.initialNoteIds != null && widget.initialNoteIds!.isNotEmpty) {
-          _notes = await _conversationService.getNotesByIds(widget.initialNoteIds!);
+        if (widget.initialNoteIds != null &&
+            widget.initialNoteIds!.isNotEmpty) {
+          _notes = await _conversationService.getNotesByIds(
+            widget.initialNoteIds!,
+          );
         }
       }
     } catch (e) {
@@ -134,6 +144,78 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
+  Future<void> _refreshConversationTags() async {
+    if (_conversation == null) {
+      if (mounted && _conversationTags.isNotEmpty) {
+        setState(() {
+          _conversationTags = [];
+        });
+      }
+      return;
+    }
+
+    try {
+      final tags = await _conversationService.getConversationTagNames(
+        _conversation!.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _conversationTags = tags;
+      });
+    } catch (e) {
+      LoggerService.error('Error loading conversation tags: $e', error: e);
+    }
+  }
+
+  Future<void> _showConversationTagsDialog() async {
+    if (_conversation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Create the conversation before adding tags.'),
+        ),
+      );
+      return;
+    }
+
+    final appProvider = context.read<AppProvider>();
+    final selectedTags = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => TagSelectionDialog(
+        title: 'Manage Tags',
+        description: 'Select tags for "${_conversation!.title}":',
+        initialSelectedTags: _conversationTags,
+        allowCreateNew: true,
+        allowEmptySelection: true,
+        confirmLabelBuilder: (count) {
+          if (count == 0) return 'Clear Tags';
+          return 'Apply $count Tag${count > 1 ? 's' : ''}';
+        },
+      ),
+    );
+
+    if (selectedTags == null) return;
+
+    try {
+      await _conversationService.setConversationTags(
+        _conversation!.id,
+        selectedTags,
+      );
+      await appProvider.refreshTags();
+      await _refreshConversationTags();
+      if (!mounted) return;
+      final message = selectedTags.isEmpty ? 'Tags cleared' : 'Tags updated';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      LoggerService.error('Error updating conversation tags: $e', error: e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating tags: $e')));
+    }
+  }
+
   Future<void> _updateMcpTools() async {
     if (_selectedMcpEndpointIds.isEmpty) {
       setState(() {
@@ -149,7 +231,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       setState(() {
         _mcpToolsByEndpoint = toolsByEndpoint;
       });
-      LoggerService.info('Updated MCP tools: ${toolsByEndpoint.length} services, ${toolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools');
+      LoggerService.info(
+        'Updated MCP tools: ${toolsByEndpoint.length} services, ${toolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools',
+      );
     } catch (e) {
       LoggerService.error('Error updating MCP tools: $e');
     }
@@ -178,7 +262,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         if (!mounted) return;
         setState(() {
           _conversation = newConversation;
+          _conversationTags = [];
         });
+        await _refreshConversationTags();
       }
 
       // Add the user's message
@@ -198,7 +284,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       _currentRequestId = requestId;
 
-      final aiResponseContent = await _generateAIResponse(content, attachments, requestId);
+      final aiResponseContent = await _generateAIResponse(
+        content,
+        attachments,
+        requestId,
+      );
 
       if (_cancelledRequestIds.contains(requestId)) {
         _cancelledRequestIds.remove(requestId);
@@ -215,12 +305,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         _messages.add(aiMessage);
       });
       _scrollToBottom();
-
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending message: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
       }
     } finally {
       if (mounted) {
@@ -240,9 +329,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => ConversationChatScreen(
-            conversationId: newConversation.id,
-          ),
+          builder: (context) =>
+              ConversationChatScreen(conversationId: newConversation.id),
         ),
       );
     }
@@ -250,14 +338,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Future<void> _abortRequest() async {
     if (!_isSending || _currentRequestId == null) return;
-    
+
     setState(() {
       _isAborting = true;
     });
-    
+
     // Mark the current request as cancelled
     _cancelledRequestIds.add(_currentRequestId!);
-    
+
     // Show feedback to user
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -267,10 +355,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         ),
       );
     }
-    
+
     // Wait a moment for the request to be cancelled
     await Future.delayed(const Duration(milliseconds: 500));
-    
+
     setState(() {
       _isSending = false;
       _isAborting = false;
@@ -278,7 +366,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     });
   }
 
-  Future<String> _generateAIResponse(String userMessage, List<PlatformFile> attachedFiles, String requestId) async {
+  Future<String> _generateAIResponse(
+    String userMessage,
+    List<PlatformFile> attachedFiles,
+    String requestId,
+  ) async {
     try {
       // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
@@ -287,16 +379,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       // Build messages array with system, user, and assistant roles
       final messages = <Map<String, dynamic>>[];
-      
+
       // Build system message with note context
       final systemContent = await _buildSystemMessage(_notes);
       if (systemContent.isNotEmpty) {
-        messages.add({
-          'role': 'system',
-          'content': systemContent,
-        });
+        messages.add({'role': 'system', 'content': systemContent});
       }
-      
+
       // Add conversation history (_messages already includes the current user message)
       // since it was added to _messages before calling _generateAIResponse
       for (final msg in _messages) {
@@ -322,12 +411,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
           useOwnKnowledge: true,
         );
-        
+
         // Check if this specific request was cancelled after AI response
         if (_cancelledRequestIds.contains(requestId)) {
           throw Exception('Request cancelled by user');
         }
-        
+
         return response;
       }
     } catch (e) {
@@ -348,10 +437,10 @@ ${AIPrompts.mathFormulaGuidelines}
 
 ''';
     }
-    
+
     // Build note context for system message
     final contextText = await AIService.buildContextFromNotes(notes);
-    
+
     // Build system message from context (without a specific question)
     return '''You are a helpful assistant that can answer questions and help with tasks.
 
@@ -373,7 +462,11 @@ You may supplement the information from the notes with your own knowledge to pro
 ''';
   }
 
-  Future<String> _generateWithMcpTools(List<Map<String, dynamic>> messages, List<PlatformFile> attachedFiles, String requestId) async {
+  Future<String> _generateWithMcpTools(
+    List<Map<String, dynamic>> messages,
+    List<PlatformFile> attachedFiles,
+    String requestId,
+  ) async {
     try {
       // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
@@ -381,9 +474,11 @@ You may supplement the information from the notes with your own knowledge to pro
       }
 
       // Add MCP tool information to system message if present, otherwise create one
-      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+        _mcpToolsByEndpoint,
+      );
       final messagesWithMcp = <Map<String, dynamic>>[];
-      
+
       // Find or create system message
       bool hasSystemMessage = false;
       for (final msg in messages) {
@@ -398,28 +493,31 @@ You may supplement the information from the notes with your own knowledge to pro
           messagesWithMcp.add(msg);
         }
       }
-      
+
       // If no system message exists, add one with MCP prompt
       if (!hasSystemMessage) {
-        messagesWithMcp.insert(0, {
-          'role': 'system',
-          'content': mcpPrompt,
-        });
+        messagesWithMcp.insert(0, {'role': 'system', 'content': mcpPrompt});
       }
-      
+
       // Get call_tool function definition based on current model type
       final currentModelType = ModelSelector.instance.currentModelType;
       final callToolFunction = currentModelType == ModelType.openaiCompatible
-          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(_mcpToolsByEndpoint)
-          : McpToolIntegrationService.getCallToolFunctionForGemini(_mcpToolsByEndpoint);
-      
-      LoggerService.info('Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services');
-      
+          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
+              _mcpToolsByEndpoint,
+            )
+          : McpToolIntegrationService.getCallToolFunctionForGemini(
+              _mcpToolsByEndpoint,
+            );
+
+      LoggerService.info(
+        'Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services',
+      );
+
       // Tool calling loop - max 5 iterations to prevent infinite loops
       const maxIterations = 10;
       List<Map<String, dynamic>> currentMessages = List.from(messagesWithMcp);
       final conversationParts = <String>[];
-      
+
       for (int iteration = 0; iteration < maxIterations; iteration++) {
         // Check if this specific request was cancelled before each iteration
         if (_cancelledRequestIds.contains(requestId)) {
@@ -427,25 +525,26 @@ You may supplement the information from the notes with your own knowledge to pro
         }
 
         LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
-        
+
         // Call AI with tools
-        final response = await ModelSelector.instance.generateWithToolsAndMessages(
-          currentMessages,
-          attachedFiles,
-          [callToolFunction],
-        );
-        
+        final response = await ModelSelector.instance
+            .generateWithToolsAndMessages(currentMessages, attachedFiles, [
+              callToolFunction,
+            ]);
+
         // Check if this specific request was cancelled after AI response
         if (_cancelledRequestIds.contains(requestId)) {
           throw Exception('Request cancelled by user');
         }
-        
+
         final textResponse = response['text'] as String?;
         final functionCalls = response['function_calls'] as List?;
-        
+
         if (functionCalls != null && functionCalls.isNotEmpty) {
-          LoggerService.info('AI requested ${functionCalls.length} tool call(s)');
-          
+          LoggerService.info(
+            'AI requested ${functionCalls.length} tool call(s)',
+          );
+
           // Execute all function calls
           final toolResults = <String>[];
           for (final functionCall in functionCalls) {
@@ -456,73 +555,88 @@ You may supplement the information from the notes with your own knowledge to pro
 
             final functionName = functionCall['name'] as String;
             final args = functionCall['args'] as Map<String, dynamic>;
-            
-            LoggerService.debug('Processing function call', error: {
-              'functionName': functionName,
-              'args': args,
-            });
-            
+
+            LoggerService.debug(
+              'Processing function call',
+              error: {'functionName': functionName, 'args': args},
+            );
+
             if (functionName == 'call_tool') {
-              final parsedArgs = McpToolIntegrationService.parseCallToolArguments(args);
+              final parsedArgs =
+                  McpToolIntegrationService.parseCallToolArguments(args);
               if (parsedArgs != null) {
                 final serviceName = parsedArgs['service_name'] as String;
                 final toolName = parsedArgs['tool_name'] as String;
                 final params = parsedArgs['params'] as Map<String, dynamic>;
-                
+
                 LoggerService.info('Executing: $serviceName.$toolName');
                 LoggerService.debug('Tool parameters', error: params);
-                
+
                 try {
-                  final result = await McpToolIntegrationService.executeToolCall(
-                    serviceName: serviceName,
-                    toolName: toolName,
-                    parameters: params,
-                    enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+                  final result =
+                      await McpToolIntegrationService.executeToolCall(
+                        serviceName: serviceName,
+                        toolName: toolName,
+                        parameters: params,
+                        enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+                      );
+
+                  toolResults.add(
+                    'Tool: $serviceName.$toolName\nResult: $result',
                   );
-                  
-                  toolResults.add('Tool: $serviceName.$toolName\nResult: $result');
-                  conversationParts.add('[Tool executed: $serviceName.$toolName]');
+                  conversationParts.add(
+                    '[Tool executed: $serviceName.$toolName]',
+                  );
                 } catch (e) {
                   LoggerService.error('Tool execution failed: $e');
                   toolResults.add('Tool: $serviceName.$toolName\nError: $e');
                 }
               } else {
-                LoggerService.error('Failed to parse call_tool arguments', error: {'args': args});
+                LoggerService.error(
+                  'Failed to parse call_tool arguments',
+                  error: {'args': args},
+                );
               }
             }
           }
-          
+
           // If we have tool results, continue the conversation with them
           if (toolResults.isNotEmpty) {
             // Add assistant response with function call
             currentMessages = List.from(currentMessages);
-            
+
             // Add tool results - format depends on model type
             final currentModelType = ModelSelector.instance.currentModelType;
             if (currentModelType == ModelType.openaiCompatible) {
               // OpenAI format: assistant message with tool_calls, then tool messages with results
               // Store function calls with their results for proper ID mapping
               final toolCallsWithResults = <Map<String, dynamic>>[];
-              for (int i = 0; i < functionCalls.length && i < toolResults.length; i++) {
+              for (
+                int i = 0;
+                i < functionCalls.length && i < toolResults.length;
+                i++
+              ) {
                 final functionCall = functionCalls[i];
                 final functionName = functionCall['name'] as String;
-                final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}_${functionName}_$i';
-                
+                final toolCallId =
+                    'call_${DateTime.now().millisecondsSinceEpoch}_${functionName}_$i';
+
                 toolCallsWithResults.add({
                   'id': toolCallId,
                   'function_call': functionCall,
                   'result': toolResults[i],
                 });
               }
-              
+
               // Add assistant message with tool calls
               currentMessages.add({
                 'role': 'assistant',
                 'content': textResponse ?? '',
                 'function_calls': functionCalls,
-                'tool_calls_with_results': toolCallsWithResults, // Store for ID mapping
+                'tool_calls_with_results':
+                    toolCallsWithResults, // Store for ID mapping
               });
-              
+
               // Add tool result messages
               for (final toolCallWithResult in toolCallsWithResults) {
                 currentMessages.add({
@@ -543,13 +657,14 @@ You may supplement the information from the notes with your own knowledge to pro
               final toolResultsText = toolResults.join('\n\n');
               currentMessages.add({
                 'role': 'user',
-                'content': 'Tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response.',
+                'content':
+                    'Tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response.',
               });
             }
             continue; // Go to next iteration
           }
         }
-        
+
         // If we get here, either no function calls or we have a text response
         if (textResponse != null && textResponse.isNotEmpty) {
           if (conversationParts.isNotEmpty) {
@@ -557,18 +672,19 @@ You may supplement the information from the notes with your own knowledge to pro
           }
           return textResponse;
         }
-        
+
         // If no text and no function calls, something went wrong
-        LoggerService.warning('No text response and no function calls in iteration ${iteration + 1}');
+        LoggerService.warning(
+          'No text response and no function calls in iteration ${iteration + 1}',
+        );
         break;
       }
-      
+
       // If we exhausted iterations, return what we have
       LoggerService.warning('Reached maximum tool calling iterations');
-      return conversationParts.isEmpty 
+      return conversationParts.isEmpty
           ? 'I apologize, but I was unable to complete the task after multiple attempts.'
           : conversationParts.join('\n');
-          
     } catch (e) {
       if (_cancelledRequestIds.contains(requestId)) {
         // Don't show error for cancelled requests
@@ -607,7 +723,7 @@ You may supplement the information from the notes with your own knowledge to pro
   Future<void> _captureImage() async {
     try {
       final ImagePicker picker = ImagePicker();
-      
+
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1920,
@@ -619,14 +735,14 @@ You may supplement the information from the notes with your own knowledge to pro
         // Convert XFile to PlatformFile for consistency with existing attachment system
         final file = File(image.path);
         final bytes = await file.readAsBytes();
-        
+
         final platformFile = PlatformFile(
           name: image.name,
           size: bytes.length,
           bytes: bytes,
           path: image.path,
         );
-        
+
         setState(() {
           _attachedFiles.add(platformFile);
         });
@@ -651,7 +767,7 @@ You may supplement the information from the notes with your own knowledge to pro
 
   IconData _getFileIcon(String? extension) {
     if (extension == null) return Icons.insert_drive_file;
-    
+
     switch (extension.toLowerCase()) {
       case 'pdf':
         return Icons.picture_as_pdf;
@@ -693,27 +809,35 @@ You may supplement the information from the notes with your own knowledge to pro
 
   Widget _buildAttachedFilesSection() {
     if (_attachedFiles.isEmpty) return const SizedBox.shrink();
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.attach_file, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+              Icon(
+                Icons.attach_file,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
               const SizedBox(width: 8),
               Text(
                 'Attached Files (${_attachedFiles.length})',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.8),
                 ),
               ),
             ],
@@ -727,14 +851,18 @@ You may supplement the information from the notes with your own knowledge to pro
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                ),
               ),
               child: Row(
                 children: [
                   Icon(
                     _getFileIcon(file.extension),
                     size: 16,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -748,12 +876,17 @@ You may supplement the information from the notes with your own knowledge to pro
                   ),
                   IconButton(
                     icon: Icon(
-                      Icons.close, 
+                      Icons.close,
                       size: 16,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                     onPressed: () => _removeAttachedFile(index),
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
                     padding: EdgeInsets.zero,
                   ),
                 ],
@@ -767,7 +900,7 @@ You may supplement the information from the notes with your own knowledge to pro
 
   Widget _buildMcpSelectionSection() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -794,22 +927,31 @@ You may supplement the information from the notes with your own knowledge to pro
                 Icon(
                   Icons.cloud_sync,
                   size: 16,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
                 ),
                 const SizedBox(width: 8),
-                  Text(
-                    l10n.mcpTools,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                    ),
+                Text(
+                  l10n.mcpTools,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.8),
                   ),
+                ),
                 if (_selectedMcpEndpointIds.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -830,7 +972,9 @@ You may supplement the information from the notes with your own knowledge to pro
                   child: Icon(
                     Icons.keyboard_arrow_down,
                     size: 20,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
               ],
@@ -843,7 +987,9 @@ You may supplement the information from the notes with your own knowledge to pro
               spacing: 8,
               runSpacing: 4,
               children: _availableMcpEndpoints.map((endpoint) {
-                final isSelected = _selectedMcpEndpointIds.contains(endpoint.id);
+                final isSelected = _selectedMcpEndpointIds.contains(
+                  endpoint.id,
+                );
                 return FilterChip(
                   label: Text(endpoint.name),
                   selected: isSelected,
@@ -862,7 +1008,9 @@ You may supplement the information from the notes with your own knowledge to pro
                     size: 16,
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        : Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
                   ),
                 );
               }).toList(),
@@ -870,9 +1018,16 @@ You may supplement the information from the notes with your own knowledge to pro
             if (_mcpToolsByEndpoint.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                l10n.toolsAvailable(_mcpToolsByEndpoint.values.fold<int>(0, (sum, tools) => sum + tools.length)),
+                l10n.toolsAvailable(
+                  _mcpToolsByEndpoint.values.fold<int>(
+                    0,
+                    (sum, tools) => sum + tools.length,
+                  ),
+                ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -891,7 +1046,7 @@ You may supplement the information from the notes with your own knowledge to pro
         content: responseContent,
         contextNotes: _notes,
       );
-      
+
       // If notes were created through AI, show success message with view action
       if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
         final firstNote = createdNotes.first;
@@ -972,9 +1127,8 @@ You may supplement the information from the notes with your own knowledge to pro
         // Navigate to the forked conversation
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => ConversationChatScreen(
-              conversationId: forkedConversation.id,
-            ),
+            builder: (context) =>
+                ConversationChatScreen(conversationId: forkedConversation.id),
           ),
         );
       } catch (e) {
@@ -997,9 +1151,14 @@ You may supplement the information from the notes with your own knowledge to pro
 
     if (selectedNotes != null && selectedNotes.isNotEmpty) {
       final noteIds = selectedNotes.map((note) => note.id).toList();
-      await _conversationService.addNotesToConversation(_conversation!.id, noteIds);
+      await _conversationService.addNotesToConversation(
+        _conversation!.id,
+        noteIds,
+      );
       // Reload all notes from the conversation to ensure we have the complete list
-      final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
+      final updatedNotes = await _conversationService.getConversationNotes(
+        _conversation!.id,
+      );
       setState(() {
         _notes = updatedNotes;
       });
@@ -1039,7 +1198,7 @@ You may supplement the information from the notes with your own knowledge to pro
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           subtitle: Text(
-                            note.content.length > 100 
+                            note.content.length > 100
                                 ? '${note.content.substring(0, 100)}...'
                                 : note.content,
                             style: Theme.of(context).textTheme.bodySmall,
@@ -1053,13 +1212,15 @@ You may supplement the information from the notes with your own knowledge to pro
                               });
                               dialogSetState(() {});
                               try {
-                                await _conversationService.removeNotesFromConversation(
-                                  _conversation!.id,
-                                  [note.id],
-                                );
+                                await _conversationService
+                                    .removeNotesFromConversation(
+                                      _conversation!.id,
+                                      [note.id],
+                                    );
                               } catch (_) {
                                 // If removal fails, refresh from service to reflect truth
-                                final updatedNotes = await _conversationService.getConversationNotes(_conversation!.id);
+                                final updatedNotes = await _conversationService
+                                    .getConversationNotes(_conversation!.id);
                                 if (mounted) {
                                   setState(() {
                                     _notes = updatedNotes;
@@ -1073,7 +1234,8 @@ You may supplement the information from the notes with your own knowledge to pro
                             Navigator.of(dialogContext).pop();
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (context) => NoteDetailScreen(note: note),
+                                builder: (context) =>
+                                    NoteDetailScreen(note: note),
                               ),
                             );
                           },
@@ -1125,7 +1287,9 @@ You may supplement the information from the notes with your own knowledge to pro
   }
 
   Future<void> _removeNote(Note note) async {
-    await _conversationService.removeNotesFromConversation(_conversation!.id, [note.id]);
+    await _conversationService.removeNotesFromConversation(_conversation!.id, [
+      note.id,
+    ]);
     setState(() {
       _notes.removeWhere((n) => n.id == note.id);
     });
@@ -1133,9 +1297,12 @@ You may supplement the information from the notes with your own knowledge to pro
 
   Future<void> _clearAllNotes() async {
     if (_notes.isEmpty) return;
-    
+
     final noteIds = _notes.map((note) => note.id).toList();
-    await _conversationService.removeNotesFromConversation(_conversation!.id, noteIds);
+    await _conversationService.removeNotesFromConversation(
+      _conversation!.id,
+      noteIds,
+    );
     setState(() {
       _notes.clear();
     });
@@ -1144,12 +1311,10 @@ You may supplement the information from the notes with your own knowledge to pro
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.newConversation),
-        ),
+        appBar: AppBar(title: Text(l10n.newConversation)),
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -1170,7 +1335,9 @@ You may supplement the information from the notes with your own knowledge to pro
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
                   builder: (context) => ConversationTreeScreen(
-                    activeConversationIds: _conversation?.id != null ? [_conversation!.id] : [],
+                    activeConversationIds: _conversation?.id != null
+                        ? [_conversation!.id]
+                        : [],
                   ),
                 ),
               );
@@ -1181,9 +1348,16 @@ You may supplement the information from the notes with your own knowledge to pro
             onSelected: (value) {
               if (value == 'new_conversation') {
                 _startNewConversation();
+              } else if (value == 'add_tags') {
+                _showConversationTagsDialog();
               }
             },
             itemBuilder: (context) => [
+              if (_conversation != null)
+                const PopupMenuItem<String>(
+                  value: 'add_tags',
+                  child: Text('Add tags'),
+                ),
               if (_messages.isNotEmpty)
                 PopupMenuItem<String>(
                   value: 'new_conversation',
@@ -1217,6 +1391,48 @@ You may supplement the information from the notes with your own knowledge to pro
                 ),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _conversation == null
+                    ? null
+                    : _showConversationTagsDialog,
+                icon: const Icon(Icons.label_outline),
+                label: Text(
+                  _conversationTags.isEmpty ? 'Add tags' : 'Manage tags',
+                ),
+              ),
+            ),
+          ),
+          if (_conversationTags.isNotEmpty)
+            GestureDetector(
+              onTap: _showConversationTagsDialog,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: _conversationTags
+                      .map(
+                        (tag) => Chip(
+                          label: Text(tag),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
           // Messages
           Expanded(
             child: ListView.builder(
@@ -1246,33 +1462,35 @@ You may supplement the information from the notes with your own knowledge to pro
             ),
             child: Row(
               children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      enabled: !_isSending || _isAborting,
-                      decoration: InputDecoration(
-                        hintText: _isAborting ? l10n.cancellingRequest : l10n.typeYourMessage,
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.attach_file),
-                              onPressed: _isSending ? null : _attachFiles,
-                              tooltip: l10n.attachFiles,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.camera_alt),
-                              onPressed: _isSending ? null : _captureImage,
-                              tooltip: l10n.takePhotoAttachment,
-                            ),
-                          ],
-                        ),
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    enabled: !_isSending || _isAborting,
+                    decoration: InputDecoration(
+                      hintText: _isAborting
+                          ? l10n.cancellingRequest
+                          : l10n.typeYourMessage,
+                      border: const OutlineInputBorder(),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.attach_file),
+                            onPressed: _isSending ? null : _attachFiles,
+                            tooltip: l10n.attachFiles,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.camera_alt),
+                            onPressed: _isSending ? null : _captureImage,
+                            tooltip: l10n.takePhotoAttachment,
+                          ),
+                        ],
                       ),
-                      maxLines: null,
-                      onSubmitted: (_) => _isSending ? null : _sendMessage(),
                     ),
+                    maxLines: null,
+                    onSubmitted: (_) => _isSending ? null : _sendMessage(),
                   ),
+                ),
                 const SizedBox(width: 8),
                 if (_isSending && !_isAborting)
                   _buildAbortButtonWithSpinner()
@@ -1289,7 +1507,7 @@ You may supplement the information from the notes with your own knowledge to pro
                 else
                   IconButton(
                     onPressed: _isSending ? null : _sendMessage,
-                    icon: _isSending 
+                    icon: _isSending
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -1307,7 +1525,7 @@ You may supplement the information from the notes with your own knowledge to pro
 
   Widget _buildAbortButtonWithSpinner() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return SizedBox(
       width: 48,
       height: 48,
@@ -1342,15 +1560,11 @@ You may supplement the information from the notes with your own knowledge to pro
             ),
             child: IconButton(
               onPressed: _abortRequest,
-                              icon: const Icon(
-                                Icons.stop,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                              tooltip: l10n.cancelAiRequest,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
+              icon: const Icon(Icons.stop, color: Colors.white, size: 16),
+              tooltip: l10n.cancelAiRequest,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
           ),
         ],
       ),
@@ -1360,7 +1574,7 @@ You may supplement the information from the notes with your own knowledge to pro
   Widget _buildMessageCard(ConversationMessage message) {
     final l10n = AppLocalizations.of(context)!;
     final isUser = message.type == MessageType.user;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
       child: Padding(
@@ -1373,7 +1587,7 @@ You may supplement the information from the notes with your own knowledge to pro
                 Icon(
                   isUser ? Icons.person : Icons.smart_toy,
                   size: 20,
-                  color: isUser 
+                  color: isUser
                       ? Theme.of(context).colorScheme.primary
                       : Theme.of(context).colorScheme.secondary,
                 ),
@@ -1381,7 +1595,7 @@ You may supplement the information from the notes with your own knowledge to pro
                 Text(
                   isUser ? l10n.you : l10n.ai,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: isUser 
+                    color: isUser
                         ? Theme.of(context).colorScheme.primary
                         : Theme.of(context).colorScheme.secondary,
                     fontWeight: FontWeight.bold,
@@ -1421,7 +1635,9 @@ You may supplement the information from the notes with your own knowledge to pro
                         } else {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Could not open link: $url')),
+                              SnackBar(
+                                content: Text('Could not open link: $url'),
+                              ),
                             );
                           }
                         }
@@ -1444,11 +1660,16 @@ You may supplement the information from the notes with your own knowledge to pro
                     icon: Icon(
                       Icons.apps_outlined,
                       size: 18,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
                     ),
                     tooltip: 'Run Note Action App',
                     onPressed: () => _openNoteActionAppsForContent(message),
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                     padding: EdgeInsets.zero,
                   ),
                   const Spacer(),
@@ -1466,7 +1687,10 @@ You may supplement the information from the notes with your own knowledge to pro
                     icon: const Icon(Icons.copy, size: 16),
                     label: Text(l10n.copy),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -1477,7 +1701,10 @@ You may supplement the information from the notes with your own knowledge to pro
                     icon: const Icon(Icons.note_add, size: 16),
                     label: Text(l10n.addToNote),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -1500,8 +1727,8 @@ You may supplement the information from the notes with your own knowledge to pro
       title: content.trim().isEmpty
           ? 'AI Message'
           : (content.trim().split('\n').first.length > 60
-              ? content.trim().split('\n').first.substring(0, 60)
-              : content.trim().split('\n').first),
+                ? content.trim().split('\n').first.substring(0, 60)
+                : content.trim().split('\n').first),
       content: content,
       type: NoteType.note,
       createdAt: now,
@@ -1510,9 +1737,8 @@ You may supplement the information from the notes with your own knowledge to pro
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => NoteActionAppSelectionScreen(
-          selectedNotes: [tempNote],
-        ),
+        builder: (context) =>
+            NoteActionAppSelectionScreen(selectedNotes: [tempNote]),
       ),
     );
   }
@@ -1521,7 +1747,7 @@ You may supplement the information from the notes with your own knowledge to pro
     final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final difference = now.difference(timestamp);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {
@@ -1543,12 +1769,16 @@ You may supplement the information from the notes with your own knowledge to pro
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('This conversation references notes that no longer exist:'),
+              const Text(
+                'This conversation references notes that no longer exist:',
+              ),
               const SizedBox(height: 8),
-              ...missingNoteIds.map((noteId) => Text(
-                '• $noteId',
-                style: const TextStyle(fontFamily: 'monospace'),
-              )),
+              ...missingNoteIds.map(
+                (noteId) => Text(
+                  '• $noteId',
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
+              ),
               const SizedBox(height: 8),
               const Text('These references will be automatically cleaned up.'),
             ],
@@ -1574,8 +1804,6 @@ You may supplement the information from the notes with your own knowledge to pro
     );
   }
 
-
-
   @override
   void dispose() {
     _messageController.dispose();
@@ -1583,4 +1811,3 @@ You may supplement the information from the notes with your own knowledge to pro
     super.dispose();
   }
 }
-

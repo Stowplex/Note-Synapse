@@ -9,6 +9,7 @@ class Tag {
   final String color; // Hex color code
   final DateTime createdAt;
   final int usageCount;
+  final int conversationUsageCount;
 
   Tag({
     required this.id,
@@ -16,6 +17,7 @@ class Tag {
     required this.color,
     required this.createdAt,
     this.usageCount = 0,
+    this.conversationUsageCount = 0,
   });
 
   factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
@@ -27,6 +29,7 @@ class Tag {
     String? color,
     DateTime? createdAt,
     int? usageCount,
+    int? conversationUsageCount,
   }) {
     return Tag(
       id: id ?? this.id,
@@ -34,6 +37,8 @@ class Tag {
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       usageCount: usageCount ?? this.usageCount,
+      conversationUsageCount:
+          conversationUsageCount ?? this.conversationUsageCount,
     );
   }
 }
