@@ -1454,48 +1454,52 @@ You may supplement the information from the notes with your own knowledge to pro
           if (_conversationTags.isNotEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(8.0),
+              height: 40,
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Wrap(
-                alignment: WrapAlignment.start,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: _conversationTags
-                    .map(
-                      (tag) => Chip(
-                        label: Text(
-                          tag,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                fontSize: 11,
-                                height: 1.2,
-                              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Row(
+                  children: _conversationTags
+                      .map(
+                        (tag) => Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Chip(
+                            label: Text(
+                              tag,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontSize: 11,
+                                    height: 1.2,
+                                  ),
+                            ),
+                            deleteIcon: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.7),
+                            ),
+                            onDeleted: () => _removeTag(tag),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                          ),
                         ),
-                        deleteIcon: Icon(
-                          Icons.close,
-                          size: 12,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.7),
-                        ),
-                        onDeleted: () => _removeTag(tag),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        labelPadding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                        ),
-                      ),
-                    )
-                    .toList(),
+                      )
+                      .toList(),
+                ),
               ),
             ),
           // Messages
