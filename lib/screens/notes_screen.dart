@@ -572,15 +572,17 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return AlertDialog(
-      title: const Text('Link Notes'),
+      title: Text(l10n.linkNotesDialogTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Link "${widget.fromNote.title}" to:',
+              l10n.linkNoteTo(widget.fromNote.title),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -593,7 +595,7 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
             )),
             const SizedBox(height: 16),
             Text(
-              'Relationship Type:',
+              l10n.relationshipType,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -614,13 +616,13 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
                     ],
                   ),
                 )),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'custom',
                   child: Row(
                     children: [
                       Icon(Icons.edit, size: 20),
-                      SizedBox(width: 8),
-                      Text('Custom...'),
+                      const SizedBox(width: 8),
+                      Text(l10n.customEllipsis),
                     ],
                   ),
                 ),
@@ -635,9 +637,9 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
               const SizedBox(height: 16),
               TextField(
                 controller: _customTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Custom Relationship Type',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.customRelationshipType,
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
                   setState(() {
@@ -652,7 +654,7 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           onPressed: () {
@@ -663,7 +665,7 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
               widget.onLink(relationshipType);
             }
           },
-          child: const Text('Link'),
+          child: Text(l10n.link),
         ),
       ],
     );

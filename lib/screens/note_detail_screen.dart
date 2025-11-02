@@ -2285,17 +2285,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Audio transcription methods
   Future<void> _transcribeAudio(String audioPath) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
       // Show loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
+        builder: (context) => AlertDialog(
           content: Row(
             children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Transcribing audio...'),
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Text(l10n.transcribingAudio),
             ],
           ),
         ),
@@ -2310,19 +2312,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Audio Transcription'),
+          title: Text(l10n.audioTranscription),
           content: SingleChildScrollView(child: Text(transcription)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(l10n.close),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _addTranscriptionToNote(transcription);
               },
-              child: const Text('Add to Note'),
+              child: Text(l10n.addToNote),
             ),
           ],
         ),
@@ -2333,7 +2335,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error transcribing audio: $e'),
+          content: Text(l10n.errorTranscribingAudio(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -2341,6 +2343,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _addTranscriptionToNote(String transcription) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
       final currentNote = context.read<AppProvider>().notes.firstWhere(
         (note) => note.id == widget.note.id,
@@ -2364,15 +2368,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Transcription added to note'),
+        SnackBar(
+          content: Text(l10n.transcriptionAddedToNote),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error adding transcription: $e'),
+          content: Text(l10n.errorAddingTranscription(e.toString())),
           backgroundColor: Colors.red,
         ),
       );

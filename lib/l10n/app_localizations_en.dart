@@ -2976,4 +2976,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remove => 'Remove';
+
+  @override
+  String get linkNotesDialogTitle => 'Link Notes';
+
+  @override
+  String get link => 'Link';
+
+  @override
+  String linkNoteTo(String noteTitle) {
+    return 'Link \"$noteTitle\" to:';
+  }
+
+  @override
+  String get audioTranscription => 'Audio Transcription';
+
+  @override
+  String get transcribingAudio => 'Transcribing audio...';
+
+  @override
+  String get transcriptionAddedToNote => 'Transcription added to note';
+
+  @override
+  String errorTranscribingAudio(String error) {
+    return 'Error transcribing audio: $error';
+  }
+
+  @override
+  String errorAddingTranscription(String error) {
+    return 'Error adding transcription: $error';
+  }
 }

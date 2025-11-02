@@ -2853,4 +2853,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remove => '移除';
+
+  @override
+  String get linkNotesDialogTitle => '链接笔记';
+
+  @override
+  String get link => '链接';
+
+  @override
+  String linkNoteTo(String noteTitle) {
+    return '将 \"$noteTitle\" 链接到：';
+  }
+
+  @override
+  String get audioTranscription => '音频转录';
+
+  @override
+  String get transcribingAudio => '正在转录音频...';
+
+  @override
+  String get transcriptionAddedToNote => '转录已添加到笔记';
+
+  @override
+  String errorTranscribingAudio(String error) {
+    return '转录音频时出错：$error';
+  }
+
+  @override
+  String errorAddingTranscription(String error) {
+    return '添加转录时出错：$error';
+  }
 }

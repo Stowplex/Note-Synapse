@@ -5281,6 +5281,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove'**
   String get remove;
+
+  /// No description provided for @linkNotesDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Notes'**
+  String get linkNotesDialogTitle;
+
+  /// No description provided for @link.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get link;
+
+  /// No description provided for @linkNoteTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Link \"{noteTitle}\" to:'**
+  String linkNoteTo(String noteTitle);
+
+  /// No description provided for @audioTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Transcription'**
+  String get audioTranscription;
+
+  /// No description provided for @transcribingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing audio...'**
+  String get transcribingAudio;
+
+  /// No description provided for @transcriptionAddedToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription added to note'**
+  String get transcriptionAddedToNote;
+
+  /// No description provided for @errorTranscribingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Error transcribing audio: {error}'**
+  String errorTranscribingAudio(String error);
+
+  /// No description provided for @errorAddingTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Error adding transcription: {error}'**
+  String errorAddingTranscription(String error);
 }
 
 class _AppLocalizationsDelegate

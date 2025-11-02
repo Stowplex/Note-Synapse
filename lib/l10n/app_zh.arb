@@ -1039,5 +1039,34 @@
       "enterCustomRelationshipType": "输入自定义关系类型",
       "customEllipsis": "自定义...",
       "confirmRemoveLink": "您确定要移除此链接吗？",
-      "remove": "移除"
+      "remove": "移除",
+      "linkNotesDialogTitle": "链接笔记",
+      "link": "链接",
+      "linkNoteTo": "将 \"{noteTitle}\" 链接到：",
+      "@linkNoteTo": {
+        "placeholders": {
+          "noteTitle": {
+            "type": "String"
+          }
+        }
+      },
+      "audioTranscription": "音频转录",
+      "transcribingAudio": "正在转录音频...",
+      "transcriptionAddedToNote": "转录已添加到笔记",
+      "errorTranscribingAudio": "转录音频时出错：{error}",
+      "@errorTranscribingAudio": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorAddingTranscription": "添加转录时出错：{error}",
+      "@errorAddingTranscription": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      }
 }
