@@ -1460,43 +1460,38 @@ You may supplement the information from the notes with your own knowledge to pro
                 alignment: WrapAlignment.start,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
-                runSpacing: 2,
+                runSpacing: 4,
                 children: _conversationTags
                     .map(
-                      (tag) => ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxHeight: 20,
+                      (tag) => Chip(
+                        label: Text(
+                          tag,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                fontSize: 11,
+                                height: 1.2,
+                              ),
                         ),
-                        child: Transform.translate(
-                          offset: const Offset(0, -1),
-                          child: Chip(
-                            label: Text(
-                              tag,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontSize: 11,
-                                    height: 1.0,
-                                  ),
-                            ),
-                            deleteIcon: Icon(
-                              Icons.close,
-                              size: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.7),
-                            ),
-                            onDeleted: () => _removeTag(tag),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            labelPadding: const EdgeInsets.only(
-                              left: 6,
-                              right: 6,
-                            ),
-                          ),
+                        deleteIcon: Icon(
+                          Icons.close,
+                          size: 12,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.7),
+                        ),
+                        onDeleted: () => _removeTag(tag),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        labelPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
                         ),
                       ),
                     )
