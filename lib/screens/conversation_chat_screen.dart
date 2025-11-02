@@ -216,6 +216,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
+  Future<void> _removeTag(String tagName) async {
+    if (_conversation == null) return;
+
+    try {
+      await _conversationService.removeTagFromConversation(
+        _conversation!.id,
+        tagName,
+      );
+      await _refreshConversationTags();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tag "$tagName" removed')),
+      );
+    } catch (e) {
+      LoggerService.error('Error removing tag: $e', error: e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error removing tag: $e')),
+      );
+    }
+  }
+
   Future<void> _updateMcpTools() async {
     if (_selectedMcpEndpointIds.isEmpty) {
       setState(() {
@@ -1428,46 +1450,57 @@ You may supplement the information from the notes with your own knowledge to pro
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _conversation == null
-                    ? null
-                    : _showConversationTagsDialog,
-                icon: const Icon(Icons.label_outline),
-                label: Text(
-                  _conversationTags.isEmpty ? 'Add tags' : 'Manage tags',
-                ),
-              ),
-            ),
-          ),
+          // Tags display
           if (_conversationTags.isNotEmpty)
-            GestureDetector(
-              onTap: _showConversationTagsDialog,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 8.0,
-                ),
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: _conversationTags
-                      .map(
-                        (tag) => Chip(
-                          label: Text(tag),
-                          visualDensity: VisualDensity.compact,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8.0),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Wrap(
+                alignment: WrapAlignment.start,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 2,
+                children: _conversationTags
+                    .map(
+                      (tag) => ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxHeight: 20,
                         ),
-                      )
-                      .toList(),
-                ),
+                        child: Transform.translate(
+                          offset: const Offset(0, -1),
+                          child: Chip(
+                            label: Text(
+                              tag,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontSize: 11,
+                                    height: 1.0,
+                                  ),
+                            ),
+                            deleteIcon: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.7),
+                            ),
+                            onDeleted: () => _removeTag(tag),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            labelPadding: const EdgeInsets.only(
+                              left: 6,
+                              right: 6,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
             ),
           // Messages
