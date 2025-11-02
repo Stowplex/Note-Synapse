@@ -372,6 +372,18 @@
       }
     }
   },
+  "addTagsCapitalized": "Add Tags",
+  "addTagsWithCount": "Add {count} {count, plural, =1{Tag} other{Tags}}",
+  "@addTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchTags": "Search tags",
+  "searchTagsCapitalized": "Search Tags",
+  "addNewTagOrSearch": "Add new tag or search",
   "tagManagement": "Tag Management",
   "tagUsageCount": "{noteCount} notes / {conversationCount} conversations",
   "deleteTag": "Delete Tag",

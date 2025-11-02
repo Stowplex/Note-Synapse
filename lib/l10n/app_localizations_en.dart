@@ -1154,6 +1154,29 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get addTagsCapitalized => 'Add Tags';
+
+  @override
+  String addTagsWithCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tags',
+      one: 'Tag',
+    );
+    return 'Add $count $_temp0';
+  }
+
+  @override
+  String get searchTags => 'Search tags';
+
+  @override
+  String get searchTagsCapitalized => 'Search Tags';
+
+  @override
+  String get addNewTagOrSearch => 'Add new tag or search';
+
+  @override
   String get tagManagement => 'Tag Management';
 
   @override

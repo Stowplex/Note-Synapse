@@ -2180,6 +2180,36 @@ abstract class AppLocalizations {
   /// **'Apply {count} {count, plural, =1{Tag} other{Tags}}'**
   String applyTagsWithCount(int count);
 
+  /// No description provided for @addTagsCapitalized.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Tags'**
+  String get addTagsCapitalized;
+
+  /// No description provided for @addTagsWithCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add {count} {count, plural, =1{Tag} other{Tags}}'**
+  String addTagsWithCount(int count);
+
+  /// No description provided for @searchTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Search tags'**
+  String get searchTags;
+
+  /// No description provided for @searchTagsCapitalized.
+  ///
+  /// In en, this message translates to:
+  /// **'Search Tags'**
+  String get searchTagsCapitalized;
+
+  /// No description provided for @addNewTagOrSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Add new tag or search'**
+  String get addNewTagOrSearch;
+
   /// No description provided for @tagManagement.
   ///
   /// In en, this message translates to:

@@ -1126,6 +1126,23 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get addTagsCapitalized => '添加标签';
+
+  @override
+  String addTagsWithCount(int count) {
+    return '添加$count个标签';
+  }
+
+  @override
+  String get searchTags => '搜索标签';
+
+  @override
+  String get searchTagsCapitalized => '搜索标签';
+
+  @override
+  String get addNewTagOrSearch => '添加新标签或搜索';
+
+  @override
   String get tagManagement => '标签管理';
 
   @override

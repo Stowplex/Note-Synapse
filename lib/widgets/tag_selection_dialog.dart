@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 
 class TagSelectionDialog extends StatefulWidget {
@@ -8,7 +9,7 @@ class TagSelectionDialog extends StatefulWidget {
   final List<String> excludedTags;
   final bool allowCreateNew;
   final bool allowEmptySelection;
-  final String title;
+  final String? title;
   final String? description;
   final String Function(int count)? confirmLabelBuilder;
 
@@ -18,7 +19,7 @@ class TagSelectionDialog extends StatefulWidget {
     this.excludedTags = const [],
     this.allowCreateNew = true,
     this.allowEmptySelection = false,
-    this.title = 'Select Tags',
+    this.title,
     this.description,
     this.confirmLabelBuilder,
   });
@@ -51,25 +52,27 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
 
   bool get _canSubmit => widget.allowEmptySelection || _selectedTags.isNotEmpty;
 
-  String _buildConfirmLabel() {
+  String _buildConfirmLabel(AppLocalizations l10n) {
     final builder = widget.confirmLabelBuilder;
     if (builder != null) {
       return builder(_selectedTags.length);
     }
 
     if (_selectedTags.isEmpty) {
-      return widget.allowEmptySelection ? 'Apply' : 'Add Tags';
+      return widget.allowEmptySelection ? l10n.apply : l10n.addTagsCapitalized;
     }
 
     final count = _selectedTags.length;
-    return 'Add $count Tag${count > 1 ? 's' : ''}';
+    return l10n.addTagsWithCount(count);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final searchLabel = widget.allowCreateNew
-        ? 'Add new tag or search'
-        : 'Search tags';
+        ? l10n.addNewTagOrSearch
+        : l10n.searchTags;
+    final dialogTitle = widget.title ?? l10n.selectTags;
 
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
@@ -84,7 +87,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
         }).toList();
 
         return AlertDialog(
-          title: Text(widget.title),
+          title: Text(dialogTitle),
           content: SizedBox(
             width: 400,
             height: 400,
@@ -112,7 +115,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                         children: [
                           if (_selectedTags.isNotEmpty) ...[
                             Text(
-                              'Selected tags:',
+                              l10n.selectedTags,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -203,7 +206,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                           if (availableTags.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             Text(
-                              'Available tags:',
+                              l10n.availableTags,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -239,7 +242,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             ElevatedButton(
               onPressed: _canSubmit
@@ -247,7 +250,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                       Navigator.of(context).pop(_selectedTags.toList());
                     }
                   : null,
-              child: Text(_buildConfirmLabel()),
+              child: Text(_buildConfirmLabel(l10n)),
             ),
           ],
         );

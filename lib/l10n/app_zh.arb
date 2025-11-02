@@ -372,6 +372,18 @@
       }
     }
   },
+  "addTagsCapitalized": "添加标签",
+  "addTagsWithCount": "添加{count}个标签",
+  "@addTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchTags": "搜索标签",
+  "searchTagsCapitalized": "搜索标签",
+  "addNewTagOrSearch": "添加新标签或搜索",
   "tagManagement": "标签管理",
   "tagUsageCount": "{noteCount}条笔记 / {conversationCount}个会话",
   "deleteTag": "删除标签",
