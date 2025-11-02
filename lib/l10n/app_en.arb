@@ -350,11 +350,45 @@
   "addFilter": "Add Filter",
   "delete": "Delete",
   "manageTags": "Manage Tags",
+  "addTags": "Add tags",
+  "filterTags": "Filter tags",
+  "filterTagsDialog": "Filter Tags",
+  "filterTagsCount": "{count} {count, plural, =1{tag} other{tags}}",
+  "@filterTagsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "Clear Filters",
+  "applyFilters": "Apply Filters",
+  "clearTags": "Clear Tags",
+  "applyTagsWithCount": "Apply {count} {count, plural, =1{Tag} other{Tags}}",
+  "@applyTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addTagsCapitalized": "Add Tags",
+  "addTagsWithCount": "Add {count} {count, plural, =1{Tag} other{Tags}}",
+  "@addTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchTags": "Search tags",
+  "searchTagsCapitalized": "Search Tags",
+  "addNewTagOrSearch": "Add new tag or search",
   "tagManagement": "Tag Management",
-  "tagUsageCount": "{count} notes",
+  "tagUsageCount": "{noteCount} notes / {conversationCount} conversations",
   "deleteTag": "Delete Tag",
   "confirmDeleteTag": "Are you sure you want to delete the tag \"{tagName}\"?",
-  "confirmDeleteTagWarning": "This will remove the tag from all {count} associated notes. This action cannot be undone.",
+  "confirmDeleteTagWarning": "This will remove the tag from {noteCount} notes and {conversationCount} conversations. This action cannot be undone.",
   "tagDeletedSuccessfully": "Tag deleted successfully!",
   "errorDeletingTag": "Error deleting tag: {error}",
   "noTagsAvailable": "No tags available",
@@ -946,5 +980,6 @@
       "editMcpEndpoint": "Edit MCP Endpoint",
       "metadataUrlOptional": "Metadata URL (optional)",
       "metadataUrlOptionalHint": "Leave blank to auto-detect using RFC 9728",
-      "oauthDiscovery": "OAuth Discovery"
+      "oauthDiscovery": "OAuth Discovery",
+      "openInTree": "Open in Tree"
 }

@@ -24,14 +24,14 @@ class RecoveryScreen extends StatefulWidget {
 class _RecoveryScreenState extends State<RecoveryScreen> {
   bool _isBackingUp = false;
   double _backupProgress = 0.0;
-  List<String> _backupLogs = [];
+  final List<String> _backupLogs = [];
   List<Map<String, dynamic>> _backups = [];
   List<Map<String, dynamic>> _availableRecoveries = [];
-  
+
   // Import functionality
   bool _isImporting = false;
   double _importProgress = 0.0;
-  List<String> _importLogs = [];
+  final List<String> _importLogs = [];
   String? _originalDbBackupPath;
 
   @override
@@ -39,18 +39,20 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     super.initState();
     _loadBackups();
     _loadAvailableRecoveries();
-}
+  }
 
   Future<void> _loadBackups() async {
     try {
       final tempDir = await getTemporaryDirectory();
       if (await tempDir.exists()) {
         final files = await tempDir.list().toList();
-        final backupFiles = files.where((file) => 
-          file.path.endsWith('.zip') && 
-          file.path.contains('backup_')
-        ).toList();
-        
+        final backupFiles = files
+            .where(
+              (file) =>
+                  file.path.endsWith('.zip') && file.path.contains('backup_'),
+            )
+            .toList();
+
         setState(() {
           _backups = backupFiles.map((file) {
             final stat = file.statSync();
@@ -72,22 +74,27 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     try {
       final tempDir = await getTemporaryDirectory();
       final List<Map<String, dynamic>> recoveries = [];
-      
+
       // Look for original backup files (the actual undo targets)
       final files = await tempDir.list().toList();
-      final backupFiles = files.where((file) => 
-        file.path.endsWith('.db') && 
-        file.path.contains('original_db_backup_')
-      ).toList();
-      
+      final backupFiles = files
+          .where(
+            (file) =>
+                file.path.endsWith('.db') &&
+                file.path.contains('original_db_backup_'),
+          )
+          .toList();
+
       for (final backupFile in backupFiles) {
         final stat = await backupFile.stat();
         final fileName = backupFile.path.split('/').last;
         // Extract timestamp from filename (original_db_backup_1234567890.db)
-        final timestampStr = fileName.replaceAll('original_db_backup_', '').replaceAll('.db', '');
+        final timestampStr = fileName
+            .replaceAll('original_db_backup_', '')
+            .replaceAll('.db', '');
         final timestamp = int.tryParse(timestampStr) ?? 0;
         final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-        
+
         recoveries.add({
           'name': 'Database Backup',
           'date': date.toString().substring(0, 19),
@@ -97,22 +104,22 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           'timestamp': timestamp,
         });
       }
-      
+
       setState(() {
         _availableRecoveries = recoveries;
         // Sort by timestamp (newest first)
-        _availableRecoveries.sort((a, b) => (b['timestamp'] as int).compareTo(a['timestamp'] as int));
+        _availableRecoveries.sort(
+          (a, b) => (b['timestamp'] as int).compareTo(a['timestamp'] as int),
+        );
       });
     } catch (e) {
       LoggerService.error('Error loading available recoveries: $e');
     }
   }
 
-
-
   Future<void> _backupAllNotes() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     setState(() {
       _isBackingUp = true;
       _backupProgress = 0.0;
@@ -121,13 +128,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
     try {
       _addLog(l10n.startingBackupProcess);
-      
+
       // 1. Create temp directory
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final tempDir = await getTemporaryDirectory();
       final exportDir = Directory('${tempDir.path}/backup_$timestamp');
       await exportDir.create(recursive: true);
-      
+
       _addLog(l10n.createdTempDirectory(exportDir.path));
       _updateProgress(0.1);
 
@@ -180,20 +187,19 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       final cacheDir = await getTemporaryDirectory();
       final finalZipFile = File('${cacheDir.path}/backup_$timestamp.zip');
       await zipFile.rename(finalZipFile.path);
-      
+
       _addLog(l10n.backupCompleted(finalZipFile.path));
       _updateProgress(1.0);
 
       // 9. Offer download zip
       await _saveToExternalStorage(finalZipFile);
-      
+
       // Reload backups list
       await _loadBackups();
-      
+
       setState(() {
         _isBackingUp = false;
       });
-      
     } catch (e) {
       _addLog(l10n.backupFailed(e.toString()));
       setState(() {
@@ -204,10 +210,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _updateAttachmentPathsInCopiedDatabase(String dbPath) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     // Open the copied database directly
     final db = await openDatabase(dbPath);
-    
+
     try {
       // Get all attachments with absolute paths
       final attachments = await db.query(
@@ -215,38 +221,39 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'isRelativePath = ?',
         whereArgs: [0], // 0 means absolute path
       );
-      
+
       _addLog(l10n.foundAttachmentsWithAbsolutePaths(attachments.length));
-      
+
       // Copy files with absolute paths to exported attachments directory
-      final attachmentsDir = Directory('${dbPath.substring(0, dbPath.lastIndexOf('/'))}/attachments');
-      
+      final attachmentsDir = Directory(
+        '${dbPath.substring(0, dbPath.lastIndexOf('/'))}/attachments',
+      );
+
       for (final attachment in attachments) {
         final originalFilePath = attachment['filePath'] as String;
         final originalFileName = attachment['fileName'] as String;
-        
+
         // Check if source file exists
         final sourceFile = File(originalFilePath);
         if (await sourceFile.exists()) {
           // Generate unique filename with UUID prefix
-          final uniqueFileName = FileUtils.generateUniqueFileName(originalFileName);
+          final uniqueFileName = FileUtils.generateUniqueFileName(
+            originalFileName,
+          );
           final destFile = File('${attachmentsDir.path}/$uniqueFileName');
-          
+
           // Copy the file to the exported attachments directory
           await sourceFile.copy(destFile.path);
-          
+
           // Update the database to use the new relative path
           final relativePath = 'attachments/$uniqueFileName';
           await db.update(
             'attachments',
-            {
-              'filePath': relativePath,
-              'isRelativePath': 1,
-            },
+            {'filePath': relativePath, 'isRelativePath': 1},
             where: 'id = ?',
             whereArgs: [attachment['id']],
           );
-          
+
           _addLog(l10n.copiedAndUpdated(originalFileName, uniqueFileName));
         } else {
           _addLog(l10n.warningSourceFileNotFound(originalFilePath));
@@ -259,11 +266,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _copyDirectory(Directory source, Directory destination) async {
     await destination.create(recursive: true);
-    
+
     await for (final entity in source.list(recursive: true)) {
       final relativePath = entity.path.substring(source.path.length + 1);
       final destPath = '${destination.path}/$relativePath';
-      
+
       if (entity is File) {
         final destFile = File(destPath);
         await destFile.parent.create(recursive: true);
@@ -277,7 +284,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _createZipArchive(Directory sourceDir, File zipFile) async {
     final archive = Archive();
-    
+
     await for (final entity in sourceDir.list(recursive: true)) {
       if (entity is File) {
         final relativePath = entity.path.substring(sourceDir.path.length + 1);
@@ -285,7 +292,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         archive.addFile(ArchiveFile(relativePath, fileBytes.length, fileBytes));
       }
     }
-    
+
     final zipData = ZipEncoder().encode(archive);
     if (zipData != null) {
       await zipFile.writeAsBytes(zipData);
@@ -298,14 +305,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     try {
       final bytes = await zipFile.readAsBytes();
       final fileName = zipFile.path.split('/').last;
-      
+
       await FileSaver.instance.saveAs(
         name: fileName,
         bytes: bytes,
         ext: 'zip',
         mimeType: MimeType.zip,
       );
-      
+
       _addLog('File saved to external storage: $fileName');
     } catch (e) {
       _addLog('Error saving to external storage: $e');
@@ -314,7 +321,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _deleteBackup(Map<String, dynamic> backup) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final file = File(backup['path']);
       if (await file.exists()) {
@@ -329,7 +336,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _saveBackupAgain(Map<String, dynamic> backup) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final file = File(backup['path']);
       if (await file.exists()) {
@@ -344,7 +351,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   void _addLog(String message) {
     setState(() {
-      _backupLogs.add('${DateTime.now().toString().substring(11, 19)}: $message');
+      _backupLogs.add(
+        '${DateTime.now().toString().substring(11, 19)}: $message',
+      );
     });
   }
 
@@ -362,20 +371,23 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   void _addImportLog(String message) {
     setState(() {
-      _importLogs.add('${DateTime.now().toString().substring(11, 19)}: $message');
+      _importLogs.add(
+        '${DateTime.now().toString().substring(11, 19)}: $message',
+      );
     });
   }
 
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<void> _importBackup() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -398,7 +410,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _processBackupFile(String backupFilePath) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     setState(() {
       _isImporting = true;
       _importProgress = 0.0;
@@ -408,82 +420,83 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     try {
       _addImportLog(l10n.checkpointingDatabase);
       _updateImportProgress(0.05);
-      
+
       // Step -1: Checkpoint current app's DB
       final databaseService = DatabaseService();
       await databaseService.checkpoint();
-      
+
       _addImportLog(l10n.copyingDatabaseToStaging);
       _updateImportProgress(0.1);
-      
+
       // Step -0.5: Copy the app's DB to a staging directory
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final stagingDir = Directory('${tempDir.path}/staging_$timestamp');
       await stagingDir.create(recursive: true);
-      
+
       final currentDbPath = await databaseService.getDatabasePath();
       final currentDbFile = File(currentDbPath);
       final stagingDbFile = File('${stagingDir.path}/note_synapse.db');
       await currentDbFile.copy(stagingDbFile.path);
-      
+
       // Store original DB backup path for undo functionality
-      _originalDbBackupPath = '${tempDir.path}/original_db_backup_$timestamp.db';
+      _originalDbBackupPath =
+          '${tempDir.path}/original_db_backup_$timestamp.db';
       await currentDbFile.copy(_originalDbBackupPath!);
-      
+
       _addImportLog(l10n.extractingBackupFile);
       _updateImportProgress(0.15);
-      
+
       // Step 0: Open the staging DB
       final stagingDb = await openDatabase(stagingDbFile.path);
-      
+
       // Step 1: Open the file as zip
       final backupFile = File(backupFilePath);
       if (!await backupFile.exists()) {
         throw Exception(l10n.invalidBackupFile);
       }
-      
+
       final zipBytes = await backupFile.readAsBytes();
       final archive = ZipDecoder().decodeBytes(zipBytes);
-      
+
       // Step 2: Extract the zip to a temp directory
       final extractDir = Directory('${tempDir.path}/extract_$timestamp');
       await extractDir.create(recursive: true);
-      
+
       for (final file in archive) {
         final filePath = '${extractDir.path}/${file.name}';
         final fileDir = Directory(path.dirname(filePath));
         await fileDir.create(recursive: true);
-        
+
         if (file.isFile) {
           final fileData = file.content as List<int>;
           await File(filePath).writeAsBytes(fileData);
         }
       }
-      
+
       _addImportLog(l10n.validatingBackupDatabase);
       _updateImportProgress(0.2);
-      
+
       // Step 3: Check the database version of the backed up DB
       final backupDbPath = '${extractDir.path}/note_synapse.db';
       final backupDbFile = File(backupDbPath);
       if (!await backupDbFile.exists()) {
         throw Exception(l10n.invalidBackupFile);
       }
-      
+
       final backupDb = await openDatabase(backupDbPath);
       final versionResult = await backupDb.rawQuery('PRAGMA user_version');
       final backupVersion = versionResult.first['user_version'] as int;
       await backupDb.close();
-      
+
       // Check if backup version is compatible
       if (backupVersion > DatabaseService.DATABASE_VERSION) {
         throw Exception(l10n.backupVersionTooNew);
       }
-      
+
       _addImportLog(l10n.migratingBackupDatabase);
       _updateImportProgress(0.25);
-      
+
       // Step 4: Upgrade the backup database to current version
       final migratedBackupDb = await openDatabase(
         backupDbPath,
@@ -493,131 +506,141 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           // Apply migrations from old version to new version
-          await databaseService.migrateBackupDatabase(db, oldVersion, newVersion);
+          await databaseService.migrateBackupDatabase(
+            db,
+            oldVersion,
+            newVersion,
+          );
         },
       );
-      
+
       _addImportLog(l10n.mergingNotes);
       _updateImportProgress(0.06);
-      
+
       // Step 1: Merge the notes table
       await _mergeNotes(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.mergingSubNotes);
       _updateImportProgress(0.12);
-      
+
       // Step 2: Insert all subnotes
       await _mergeSubNotes(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.mergingTags);
       _updateImportProgress(0.18);
-      
+
       // Step 3: Insert all tags
       await _mergeTags(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging note-tag relationships...');
       _updateImportProgress(0.24);
-      
+
       // Step 4: Merge note_tags table
       await _mergeNoteTags(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.mergingRelationships);
       _updateImportProgress(0.30);
-      
+
       // Step 5: Insert all relationships
       await _mergeRelationships(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.mergingFilters);
       _updateImportProgress(0.36);
-      
+
       // Step 6: Insert all unique filters
       await _mergeFilters(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.mergingUserApps);
       _updateImportProgress(0.42);
-      
+
       // Step 7: Merge user apps
       await _mergeUserApps(stagingDb, migratedBackupDb);
-      
+
       _addImportLog(l10n.copyingAttachments);
       _updateImportProgress(0.48);
-      
+
       // Copy attachments
       final attachmentsDir = Directory('${extractDir.path}/attachments');
       if (await attachmentsDir.exists()) {
         final appAttachmentsDir = await FileUtils.getPrivateStorageDirectory();
         await _copyDirectory(attachmentsDir, appAttachmentsDir);
       }
-      
+
       _addImportLog('Merging attachments...');
       _updateImportProgress(0.54);
-      
+
       // Step 8: Merge attachments table
       await _mergeAttachments(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging conversations...');
       _updateImportProgress(0.60);
-      
+
       // Step 9: Insert all conversations that are not already in the db (by id)
       await _mergeConversations(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging conversation messages...');
       _updateImportProgress(0.66);
-      
+
       // Step 10: Insert all conversation messages that are not already in the db (by message id)
       await _mergeConversationMessages(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging conversation attachments...');
       _updateImportProgress(0.72);
-      
+
       // Step 11: Insert all conversation attachments that are not already in db (by id)
       await _mergeConversationAttachments(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging conversation-message mappings...');
       _updateImportProgress(0.78);
-      
+
       // Step 12: Insert all unique conversation - message mappings by (conversationId, messageId)
       await _mergeConversationMessageMappings(stagingDb, migratedBackupDb);
-      
+
       _addImportLog('Merging message parents...');
       _updateImportProgress(0.84);
-      
+
       // Step 13: Insert all unique message parents (unique by messageId, parentMessageId)
       await _mergeMessageParents(stagingDb, migratedBackupDb);
-      
+
+      _addImportLog('Merging conversation-tag mappings...');
+      _updateImportProgress(0.87);
+
+      // Step 14: Insert all unique conversation tag mappings (conversationId, tagId)
+      await _mergeConversationTagMappings(stagingDb, migratedBackupDb);
+
       _addImportLog('Merging conversation-note mappings...');
       _updateImportProgress(0.90);
-      
-      // Step 14: Insert all conversation note mapping unique by (noteId, conversationId)
+
+      // Step 15: Insert all conversation note mapping unique by (noteId, conversationId)
       await _mergeConversationNoteMappings(stagingDb, migratedBackupDb);
-      
+
       await migratedBackupDb.close();
       await stagingDb.close();
-      
+
       _addImportLog(l10n.swappingDatabases);
       _updateImportProgress(0.94);
-      
+
       // Step 16: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
-      
+
       _addImportLog(l10n.reloadingData);
       _updateImportProgress(1.0);
-      
+
       // Step 17: Reload data in the app
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
       }
-      
+
       setState(() {
         _isImporting = false;
       });
-      
+
       // Reload available recoveries after successful import
       await _loadAvailableRecoveries();
-      
+
       _addImportLog(l10n.importCompletedSuccessfully);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -626,13 +649,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           ),
         );
       }
-      
     } catch (e) {
       _addImportLog('${l10n.importFailed}: $e');
       setState(() {
         _isImporting = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -644,11 +666,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-
   Future<void> _mergeNotes(Database stagingDb, Database backupDb) async {
     // Get all notes from backup
     final backupNotes = await backupDb.query('notes');
-    
+
     for (final note in backupNotes) {
       // Check if note exists in staging
       final existingNotes = await stagingDb.query(
@@ -656,21 +677,34 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'id = ?',
         whereArgs: [note['id']],
       );
-      
+
       if (existingNotes.isNotEmpty) {
         // Check if backup note is newer
         final existingNote = existingNotes.first;
         final existingUpdatedAt = existingNote['updatedAt'] as int;
         final backupUpdatedAt = note['updatedAt'] as int;
-        
+
         if (backupUpdatedAt > existingUpdatedAt) {
           // Replace with backup note - filter to only existing columns
-          final filteredData = await _filterDataForTable(stagingDb, 'notes', note);
-          await stagingDb.update('notes', filteredData, where: 'id = ?', whereArgs: [note['id']]);
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'notes',
+            note,
+          );
+          await stagingDb.update(
+            'notes',
+            filteredData,
+            where: 'id = ?',
+            whereArgs: [note['id']],
+          );
         }
       } else {
         // Insert new note - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'notes', note);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'notes',
+          note,
+        );
         await stagingDb.insert('notes', filteredData);
       }
     }
@@ -678,7 +712,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _mergeSubNotes(Database stagingDb, Database backupDb) async {
     final backupSubNotes = await backupDb.query('subnotes');
-    
+
     for (final subNote in backupSubNotes) {
       // Check if subnote exists in staging
       final existingSubNotes = await stagingDb.query(
@@ -686,23 +720,34 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'id = ? AND noteId = ?',
         whereArgs: [subNote['id'], subNote['noteId']],
       );
-      
+
       if (existingSubNotes.isNotEmpty) {
         // Check if backup subnote is newer
         final existingSubNote = existingSubNotes.first;
         final existingCreatedAt = existingSubNote['createdAt'] as int;
         final backupCreatedAt = subNote['createdAt'] as int;
-        
+
         if (backupCreatedAt > existingCreatedAt) {
           // Replace with backup subnote - filter to only existing columns
-          final filteredData = await _filterDataForTable(stagingDb, 'subnotes', subNote);
-          await stagingDb.update('subnotes', filteredData, 
-              where: 'id = ? AND noteId = ?', 
-              whereArgs: [subNote['id'], subNote['noteId']]);
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'subnotes',
+            subNote,
+          );
+          await stagingDb.update(
+            'subnotes',
+            filteredData,
+            where: 'id = ? AND noteId = ?',
+            whereArgs: [subNote['id'], subNote['noteId']],
+          );
         }
       } else {
         // Insert new subnote - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'subnotes', subNote);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'subnotes',
+          subNote,
+        );
         await stagingDb.insert('subnotes', filteredData);
       }
     }
@@ -710,7 +755,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _mergeTags(Database stagingDb, Database backupDb) async {
     final backupTags = await backupDb.query('tags');
-    
+
     for (final tag in backupTags) {
       // Check if tag exists in staging
       final existingTags = await stagingDb.query(
@@ -718,7 +763,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'name = ?',
         whereArgs: [tag['name']],
       );
-      
+
       if (existingTags.isEmpty) {
         // Insert new tag - filter to only existing columns
         final filteredData = await _filterDataForTable(stagingDb, 'tags', tag);
@@ -728,7 +773,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         final existingTag = existingTags.first;
         final existingTagId = existingTag['id'] as String;
         final backupTagId = tag['id'] as String;
-        
+
         if (existingTagId != backupTagId) {
           // Update note_tags table to use the existing tag ID
           await stagingDb.update(
@@ -744,7 +789,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _mergeNoteTags(Database stagingDb, Database backupDb) async {
     final backupNoteTags = await backupDb.query('note_tags');
-    
+
     for (final noteTag in backupNoteTags) {
       // Check if note-tag relationship exists in staging
       final existingNoteTags = await stagingDb.query(
@@ -752,29 +797,44 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'noteId = ? AND tagId = ?',
         whereArgs: [noteTag['noteId'], noteTag['tagId']],
       );
-      
+
       if (existingNoteTags.isEmpty) {
         // Insert new note-tag relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'note_tags', noteTag);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'note_tags',
+          noteTag,
+        );
         await stagingDb.insert('note_tags', filteredData);
       }
     }
   }
 
-  Future<void> _mergeRelationships(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeRelationships(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupRelationships = await backupDb.query('relationships');
-    
+
     for (final relationship in backupRelationships) {
       // Check if relationship exists in staging
       final existingRelationships = await stagingDb.query(
         'relationships',
         where: 'fromNoteId = ? AND toNoteId = ? AND type = ?',
-        whereArgs: [relationship['fromNoteId'], relationship['toNoteId'], relationship['type']],
+        whereArgs: [
+          relationship['fromNoteId'],
+          relationship['toNoteId'],
+          relationship['type'],
+        ],
       );
-      
+
       if (existingRelationships.isEmpty) {
         // Insert new relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'relationships', relationship);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'relationships',
+          relationship,
+        );
         await stagingDb.insert('relationships', filteredData);
       }
     }
@@ -782,7 +842,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _mergeFilters(Database stagingDb, Database backupDb) async {
     final backupFilters = await backupDb.query('filters');
-    
+
     for (final filter in backupFilters) {
       // Handle nulls - convert to appropriate defaults for whereArgs
       // SQLite doesn't accept null in whereArgs directly
@@ -790,18 +850,23 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       final includeText = filter['includeText'] as String? ?? '';
       final includeTags = filter['includeTags'] as String? ?? '';
       final includeArchived = filter['includeArchived'] as int? ?? 0;
-      
+
       // Check if filter exists in staging (unique on name, includeText, includeTags, includeArchived)
       // Use COALESCE for nullable fields to handle null comparisons properly
       final existingFilters = await stagingDb.query(
         'filters',
-        where: 'name = ? AND COALESCE(includeText, \'\') = ? AND includeTags = ? AND includeArchived = ?',
+        where:
+            'name = ? AND COALESCE(includeText, \'\') = ? AND includeTags = ? AND includeArchived = ?',
         whereArgs: [name, includeText, includeTags, includeArchived],
       );
-      
+
       if (existingFilters.isEmpty) {
         // Insert new filter - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'filters', filter);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'filters',
+          filter,
+        );
         await stagingDb.insert('filters', filteredData);
       }
     }
@@ -809,7 +874,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _mergeUserApps(Database stagingDb, Database backupDb) async {
     final backupApps = await backupDb.query('user_apps');
-    
+
     for (final app in backupApps) {
       // Check if app exists in staging by UUID
       final existingApps = await stagingDb.query(
@@ -817,66 +882,86 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'uuid = ?',
         whereArgs: [app['uuid']],
       );
-      
+
       if (existingApps.isNotEmpty) {
         // UUID clash - insert PINNED revision as latest revision
         await _insertPinnedRevisionForApp(stagingDb, backupDb, app);
       } else {
         // Insert app - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'user_apps', app);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'user_apps',
+          app,
+        );
         await stagingDb.insert('user_apps', filteredData);
-        
+
         // Insert associated revisions
         final revisions = await backupDb.query(
           'app_revisions',
           where: 'appId = ?',
           whereArgs: [app['id']],
         );
-        
+
         for (final revision in revisions) {
           // Insert revision - filter to only existing columns
-          final filteredRevision = await _filterDataForTable(stagingDb, 'app_revisions', revision);
+          final filteredRevision = await _filterDataForTable(
+            stagingDb,
+            'app_revisions',
+            revision,
+          );
           await stagingDb.insert('app_revisions', filteredRevision);
         }
-        
+
         // Insert associated libraries and dependencies
-        await _copyAppLibrariesAndDependencies(stagingDb, backupDb, app['uuid'] as String);
+        await _copyAppLibrariesAndDependencies(
+          stagingDb,
+          backupDb,
+          app['uuid'] as String,
+        );
       }
     }
   }
 
-  Future<void> _insertPinnedRevisionForApp(Database stagingDb, Database backupDb, Map<String, dynamic> app) async {
-    LoggerService.info('Inserting PINNED revision for app with UUID: ${app['uuid']}');
-    
+  Future<void> _insertPinnedRevisionForApp(
+    Database stagingDb,
+    Database backupDb,
+    Map<String, dynamic> app,
+  ) async {
+    LoggerService.info(
+      'Inserting PINNED revision for app with UUID: ${app['uuid']}',
+    );
+
     // 1. Get the pinned revision from the backup database
     final backupPinnedRevisionId = app['selectedRevisionId'] as String?;
     if (backupPinnedRevisionId == null) {
-      LoggerService.warning('No pinned revision found for app ${app['uuid']}, skipping');
+      LoggerService.warning(
+        'No pinned revision found for app ${app['uuid']}, skipping',
+      );
       return;
     }
-    
+
     final backupPinnedRevision = await backupDb.query(
       'app_revisions',
       where: 'id = ?',
       whereArgs: [backupPinnedRevisionId],
     );
-    
+
     if (backupPinnedRevision.isEmpty) {
-      LoggerService.warning('Pinned revision $backupPinnedRevisionId not found in backup database, skipping');
+      LoggerService.warning(
+        'Pinned revision $backupPinnedRevisionId not found in backup database, skipping',
+      );
       return;
     }
-    
+
     final pinnedRevisionData = backupPinnedRevision.first;
-    
+
     // 2. Get the latest revision number from the staging database for the existing app
-    final existingApp = await stagingDb.query(
-      'user_apps',
-      where: 'uuid = ?',
-      whereArgs: [app['uuid']],
-    ).then((apps) => apps.first);
-    
+    final existingApp = await stagingDb
+        .query('user_apps', where: 'uuid = ?', whereArgs: [app['uuid']])
+        .then((apps) => apps.first);
+
     final existingAppId = existingApp['id'] as String;
-    
+
     final latestRevisions = await stagingDb.query(
       'app_revisions',
       where: 'appId = ?',
@@ -884,15 +969,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       orderBy: 'revisionNumber DESC',
       limit: 1,
     );
-    
-    final nextRevisionNumber = latestRevisions.isEmpty 
-        ? 1 
+
+    final nextRevisionNumber = latestRevisions.isEmpty
+        ? 1
         : (latestRevisions.first['revisionNumber'] as int) + 1;
-    
+
     // 3. Create a new revision in staging database that copies the pinned revision from backup
     final newRevisionId = '${existingAppId}_rev_$nextRevisionNumber';
     final now = DateTime.now().millisecondsSinceEpoch;
-    
+
     final newRevision = {
       'id': newRevisionId,
       'appId': existingAppId, // Use the existing app's ID in staging
@@ -903,11 +988,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       'appCode': pinnedRevisionData['appCode'],
       'attachmentPaths': pinnedRevisionData['attachmentPaths'],
     };
-    
+
     // Insert the new revision - filter to only existing columns
-    final filteredRevision = await _filterDataForTable(stagingDb, 'app_revisions', newRevision);
+    final filteredRevision = await _filterDataForTable(
+      stagingDb,
+      'app_revisions',
+      newRevision,
+    );
     await stagingDb.insert('app_revisions', filteredRevision);
-    
+
     // Update the existing app to set the selectedRevisionId to the new revision
     await stagingDb.update(
       'user_apps',
@@ -915,25 +1004,39 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       where: 'uuid = ?',
       whereArgs: [app['uuid']],
     );
-    
-    LoggerService.info('Created new revision $newRevisionId (revision $nextRevisionNumber) from pinned revision $backupPinnedRevisionId for app UUID: ${app['uuid']}');
+
+    LoggerService.info(
+      'Created new revision $newRevisionId (revision $nextRevisionNumber) from pinned revision $backupPinnedRevisionId for app UUID: ${app['uuid']}',
+    );
   }
 
-  Future<void> _copyAppLibrariesAndDependencies(Database stagingDb, Database backupDb, String appUuid) async {
+  Future<void> _copyAppLibrariesAndDependencies(
+    Database stagingDb,
+    Database backupDb,
+    String appUuid,
+  ) async {
     // Get libraries for this app
     final libraries = await backupDb.query(
       'user_app_libraries',
       where: 'app_uuid = ?',
       whereArgs: [appUuid],
     );
-    
+
     for (final library in libraries) {
       // Insert library - filter to only existing columns
-      final filteredLibrary = await _filterDataForTable(stagingDb, 'user_app_libraries', library);
-      final libraryId = await stagingDb.insert('user_app_libraries', filteredLibrary);
-      
+      final filteredLibrary = await _filterDataForTable(
+        stagingDb,
+        'user_app_libraries',
+        library,
+      );
+      final libraryId = await stagingDb.insert(
+        'user_app_libraries',
+        filteredLibrary,
+      );
+
       // Get dependencies for this library using chunked reading to avoid cursor window issues
-      final dependencies = await backupDb.rawQuery('''
+      final dependencies = await backupDb.rawQuery(
+        '''
         SELECT id, original_url, local_path, library_id,
                CASE 
                  WHEN length(bytes) > 0 THEN 'BLOB_DATA'
@@ -941,42 +1044,57 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                END as has_blob
         FROM user_app_library_dependencies 
         WHERE library_id = ?
-      ''', [library['id']]);
-      
+      ''',
+        [library['id']],
+      );
+
       for (final dependency in dependencies) {
         final dependencyData = Map<String, dynamic>.from(dependency);
         dependencyData['library_id'] = libraryId;
-        
+
         // Remove the temporary has_blob column before inserting
         dependencyData.remove('has_blob');
-        
+
         // Read BLOB data in chunks to avoid cursor window issues
         if (dependency['has_blob'] != null) {
           try {
-            final blobData = await _readBlobInChunks(backupDb, dependency['id'] as int);
+            final blobData = await _readBlobInChunks(
+              backupDb,
+              dependency['id'] as int,
+            );
             dependencyData['bytes'] = Uint8List.fromList(blobData);
           } catch (e) {
-            LoggerService.error('Failed to read BLOB data for dependency ${dependency['id']}: $e', error: e);
+            LoggerService.error(
+              'Failed to read BLOB data for dependency ${dependency['id']}: $e',
+              error: e,
+            );
             dependencyData['bytes'] = Uint8List(0);
           }
         } else {
           dependencyData['bytes'] = Uint8List(0);
         }
-        
+
         // Insert dependency - filter to only existing columns
-        final filteredDependency = await _filterDataForTable(stagingDb, 'user_app_library_dependencies', dependencyData);
-        await stagingDb.insert('user_app_library_dependencies', filteredDependency);
+        final filteredDependency = await _filterDataForTable(
+          stagingDb,
+          'user_app_library_dependencies',
+          dependencyData,
+        );
+        await stagingDb.insert(
+          'user_app_library_dependencies',
+          filteredDependency,
+        );
       }
     }
   }
 
   Future<void> _mergeAttachments(Database stagingDb, Database backupDb) async {
     final backupAttachments = await backupDb.query('attachments');
-    
+
     for (final attachment in backupAttachments) {
       final filePath = attachment['filePath'] as String;
       final isRelativePath = (attachment['isRelativePath'] as int) == 1;
-      
+
       // Convert file path if needed
       String finalFilePath = filePath;
       if (isRelativePath) {
@@ -987,22 +1105,26 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         final fileName = filePath.split('/').last;
         finalFilePath = 'attachments/$fileName';
       }
-      
+
       // Check if attachment exists in staging (unique on noteId, filePath)
       final existingAttachments = await stagingDb.query(
         'attachments',
         where: 'noteId = ? AND filePath = ?',
         whereArgs: [attachment['noteId'], finalFilePath],
       );
-      
+
       if (existingAttachments.isEmpty) {
         // Create new attachment record with proper path
         final newAttachment = Map<String, dynamic>.from(attachment);
         newAttachment['filePath'] = finalFilePath;
         newAttachment['isRelativePath'] = 1; // Always store as relative path
-        
+
         // Insert attachment - filter to only existing columns
-        final filteredAttachment = await _filterDataForTable(stagingDb, 'attachments', newAttachment);
+        final filteredAttachment = await _filterDataForTable(
+          stagingDb,
+          'attachments',
+          newAttachment,
+        );
         await stagingDb.insert('attachments', filteredAttachment);
       }
     }
@@ -1022,19 +1144,22 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   ) async {
     final validColumns = await _getTableColumns(db, tableName);
     final filtered = <String, dynamic>{};
-    
+
     for (final entry in data.entries) {
       if (validColumns.contains(entry.key)) {
         filtered[entry.key] = entry.value;
       }
     }
-    
+
     return filtered;
   }
 
-  Future<void> _mergeConversations(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeConversations(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupConversations = await backupDb.query('conversations');
-    
+
     for (final conversation in backupConversations) {
       // Check if conversation exists in staging by id
       final existingConversations = await stagingDb.query(
@@ -1042,18 +1167,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'id = ?',
         whereArgs: [conversation['id']],
       );
-      
+
       if (existingConversations.isEmpty) {
         // Insert new conversation - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'conversations', conversation);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversations',
+          conversation,
+        );
         await stagingDb.insert('conversations', filteredData);
       }
     }
   }
 
-  Future<void> _mergeConversationMessages(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeConversationMessages(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupMessages = await backupDb.query('conversation_messages');
-    
+
     for (final message in backupMessages) {
       // Check if message exists in staging by id
       final existingMessages = await stagingDb.query(
@@ -1061,18 +1193,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'id = ?',
         whereArgs: [message['id']],
       );
-      
+
       if (existingMessages.isEmpty) {
         // Insert new message - filter to only existing columns (removes conversationId if present)
-        final filteredData = await _filterDataForTable(stagingDb, 'conversation_messages', message);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversation_messages',
+          message,
+        );
         await stagingDb.insert('conversation_messages', filteredData);
       }
     }
   }
 
-  Future<void> _mergeConversationAttachments(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeConversationAttachments(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupAttachments = await backupDb.query('conversation_attachments');
-    
+
     for (final attachment in backupAttachments) {
       // Check if attachment exists in staging by id
       final existingAttachments = await stagingDb.query(
@@ -1080,18 +1219,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'id = ?',
         whereArgs: [attachment['id']],
       );
-      
+
       if (existingAttachments.isEmpty) {
         // Insert new attachment - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'conversation_attachments', attachment);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversation_attachments',
+          attachment,
+        );
         await stagingDb.insert('conversation_attachments', filteredData);
       }
     }
   }
 
-  Future<void> _mergeConversationMessageMappings(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeConversationMessageMappings(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupMappings = await backupDb.query('conversation_message_mapping');
-    
+
     for (final mapping in backupMappings) {
       // Check if mapping exists in staging (unique by conversationId, messageId)
       final existingMappings = await stagingDb.query(
@@ -1099,10 +1245,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'conversationId = ? AND messageId = ?',
         whereArgs: [mapping['conversationId'], mapping['messageId']],
       );
-      
+
       if (existingMappings.isEmpty) {
         // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(stagingDb, 'conversation_message_mapping', mapping);
+        var filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversation_message_mapping',
+          mapping,
+        );
         // Remove id if it's auto-increment to let SQLite generate a new one
         if (filteredData.containsKey('id') && mapping['id'] is int) {
           filteredData.remove('id');
@@ -1112,9 +1262,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-  Future<void> _mergeMessageParents(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeMessageParents(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupParents = await backupDb.query('message_parents');
-    
+
     for (final parent in backupParents) {
       // Check if parent relationship exists in staging (unique by messageId, parentMessageId)
       final existingParents = await stagingDb.query(
@@ -1122,18 +1275,50 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'messageId = ? AND parentMessageId = ?',
         whereArgs: [parent['messageId'], parent['parentMessageId']],
       );
-      
+
       if (existingParents.isEmpty) {
         // Insert new parent relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'message_parents', parent);
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'message_parents',
+          parent,
+        );
         await stagingDb.insert('message_parents', filteredData);
       }
     }
   }
 
-  Future<void> _mergeConversationNoteMappings(Database stagingDb, Database backupDb) async {
+  Future<void> _mergeConversationTagMappings(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
+    final backupMappings = await backupDb.query('conversation_tags');
+
+    for (final mapping in backupMappings) {
+      final existingMappings = await stagingDb.query(
+        'conversation_tags',
+        where: 'conversationId = ? AND tagId = ?',
+        whereArgs: [mapping['conversationId'], mapping['tagId']],
+        limit: 1,
+      );
+
+      if (existingMappings.isEmpty) {
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversation_tags',
+          mapping,
+        );
+        await stagingDb.insert('conversation_tags', filteredData);
+      }
+    }
+  }
+
+  Future<void> _mergeConversationNoteMappings(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupMappings = await backupDb.query('conversation_note_mapping');
-    
+
     for (final mapping in backupMappings) {
       // Check if mapping exists in staging (unique by conversationId, noteId)
       final existingMappings = await stagingDb.query(
@@ -1141,10 +1326,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         where: 'conversationId = ? AND noteId = ?',
         whereArgs: [mapping['conversationId'], mapping['noteId']],
       );
-      
+
       if (existingMappings.isEmpty) {
         // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(stagingDb, 'conversation_note_mapping', mapping);
+        var filteredData = await _filterDataForTable(
+          stagingDb,
+          'conversation_note_mapping',
+          mapping,
+        );
         // Remove id if it's auto-increment to let SQLite generate a new one
         if (filteredData.containsKey('id') && mapping['id'] is int) {
           filteredData.remove('id');
@@ -1157,7 +1346,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   Future<void> _recoverFromBackup(Map<String, dynamic> backup) async {
     final l10n = AppLocalizations.of(context)!;
     final backupPath = backup['path'] as String;
-    
+
     if (!await File(backupPath).exists()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1172,7 +1361,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Recover from Backup'),
-        content: Text('Are you sure you want to recover from ${backup['name'] ?? 'backup'}? This will replace your current data.'),
+        content: Text(
+          'Are you sure you want to recover from ${backup['name'] ?? 'backup'}? This will replace your current data.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1192,7 +1383,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   }
 
   Future<void> _performRecovery(String originalBackupPath) async {
-    
     setState(() {
       _isImporting = true;
       _importProgress = 0.0;
@@ -1202,48 +1392,48 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     try {
       _addImportLog('Starting database undo...');
       _updateImportProgress(0.2);
-      
+
       // Get current database path
       final databaseService = DatabaseService();
       final currentDbPath = await databaseService.getDatabasePath();
-      
+
       _addImportLog('Closing current database...');
       _updateImportProgress(0.4);
-      
+
       // Close the current database
       await databaseService.close();
-      
+
       _addImportLog('Restoring from original backup...');
       _updateImportProgress(0.6);
-      
+
       // Copy original backup to current database location
       final originalBackupFile = File(originalBackupPath);
       if (!await originalBackupFile.exists()) {
         throw Exception('Original backup file not found: $originalBackupPath');
       }
-      
+
       await originalBackupFile.copy(currentDbPath);
       _addImportLog('Database restored from original backup');
-      
+
       _addImportLog('Reloading application data...');
       _updateImportProgress(0.8);
-      
+
       // Reload app data
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
       }
-      
+
       setState(() {
         _isImporting = false;
       });
-      
+
       // Reload available recoveries after successful recovery
       await _loadAvailableRecoveries();
-      
+
       _addImportLog('Undo completed successfully');
       _updateImportProgress(1.0);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1256,9 +1446,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       setState(() {
         _isImporting = false;
       });
-      
+
       _addImportLog('Undo failed: $e');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1272,12 +1462,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _deleteRecovery(Map<String, dynamic> recovery) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete Recovery'),
-        content: Text('Are you sure you want to delete ${recovery['name'] ?? 'backup'}? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete ${recovery['name'] ?? 'backup'}? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1297,7 +1489,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         if (await file.exists()) {
           await file.delete();
           await _loadAvailableRecoveries(); // Reload the list
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -1320,15 +1512,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.recovery),
-      ),
+      appBar: AppBar(title: Text(l10n.recovery)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1357,21 +1546,27 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _isBackingUp ? null : _backupAllNotes,
-                      icon: _isBackingUp 
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download),
-                      label: Text(_isBackingUp ? l10n.creatingBackup : l10n.backupAllNotes),
+                      icon: _isBackingUp
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.download),
+                      label: Text(
+                        _isBackingUp
+                            ? l10n.creatingBackup
+                            : l10n.backupAllNotes,
+                      ),
                     ),
                   ),
                   if (_isBackingUp) ...[
                     const SizedBox(height: 16),
                     LinearProgressIndicator(
                       value: _backupProgress,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1383,9 +1578,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Import section
           Card(
             child: Padding(
@@ -1411,21 +1606,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _isImporting ? null : _importBackup,
-                      icon: _isImporting 
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.upload),
-                      label: Text(_isImporting ? l10n.importingBackup : l10n.importBackup),
+                      icon: _isImporting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload),
+                      label: Text(
+                        _isImporting ? l10n.importingBackup : l10n.importBackup,
+                      ),
                     ),
                   ),
                   if (_isImporting) ...[
                     const SizedBox(height: 16),
                     LinearProgressIndicator(
                       value: _importProgress,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1437,61 +1636,63 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ),
             ),
           ),
-          
+
           // Available undo options section
           if (_availableRecoveries.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
               'Available Undo Options',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ..._availableRecoveries.map((recovery) => Card(
-              child: ListTile(
-                leading: const Icon(Icons.undo),
-                title: Text('Database Backup'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Created: ${recovery['date'] ?? ''}'),
-                    Text(_formatFileSize(recovery['size'] ?? 0)),
-                  ],
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'recover') {
-                      _recoverFromBackup(recovery);
-                    } else if (value == 'delete') {
-                      _deleteRecovery(recovery);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'recover',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.undo),
-                          const SizedBox(width: 8),
-                          Text('Undo Import'),
-                        ],
+            ..._availableRecoveries.map(
+              (recovery) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.undo),
+                  title: Text('Database Backup'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Created: ${recovery['date'] ?? ''}'),
+                      Text(_formatFileSize(recovery['size'] ?? 0)),
+                    ],
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'recover') {
+                        _recoverFromBackup(recovery);
+                      } else if (value == 'delete') {
+                        _deleteRecovery(recovery);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'recover',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.undo),
+                            const SizedBox(width: 8),
+                            Text('Undo Import'),
+                          ],
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete),
-                          const SizedBox(width: 8),
-                          Text(l10n.delete),
-                        ],
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete),
+                            const SizedBox(width: 8),
+                            Text(l10n.delete),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            )).toList(),
+            ),
           ],
           if (_backupLogs.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -1511,10 +1712,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     Container(
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.3),
                         ),
                       ),
                       child: ListView.builder(
@@ -1540,7 +1745,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ),
             ),
           ],
-          
+
           if (_importLogs.isNotEmpty) ...[
             const SizedBox(height: 16),
             Card(
@@ -1559,10 +1764,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     Container(
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.3),
                         ),
                       ),
                       child: ListView.builder(
@@ -1592,55 +1801,57 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             const SizedBox(height: 16),
             Text(
               l10n.previousBackups,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ..._backups.map((backup) => Card(
-              child: ListTile(
-                leading: const Icon(Icons.archive),
-                title: Text(backup['name'] ?? l10n.backup),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(backup['date'] ?? ''),
-                    Text(_formatFileSize(backup['size'] ?? 0)),
-                  ],
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'save') {
-                      _saveBackupAgain(backup);
-                    } else if (value == 'delete') {
-                      _deleteBackup(backup);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'save',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.download),
-                          const SizedBox(width: 8),
-                          Text(l10n.saveAgain),
-                        ],
+            ..._backups.map(
+              (backup) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.archive),
+                  title: Text(backup['name'] ?? l10n.backup),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(backup['date'] ?? ''),
+                      Text(_formatFileSize(backup['size'] ?? 0)),
+                    ],
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'save') {
+                        _saveBackupAgain(backup);
+                      } else if (value == 'delete') {
+                        _deleteBackup(backup);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'save',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.download),
+                            const SizedBox(width: 8),
+                            Text(l10n.saveAgain),
+                          ],
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete),
-                          const SizedBox(width: 8),
-                          Text(l10n.delete),
-                        ],
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete),
+                            const SizedBox(width: 8),
+                            Text(l10n.delete),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            )).toList(),
+            ),
           ],
         ],
       ),
@@ -1651,39 +1862,45 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
     const int chunkSize = 1024 * 1024; // 1MB chunks
     final List<int> allBytes = [];
-    
+
     try {
       // Get the total size of the BLOB
-      final sizeResult = await db.rawQuery('''
+      final sizeResult = await db.rawQuery(
+        '''
         SELECT length(bytes) as blob_size 
         FROM user_app_library_dependencies 
         WHERE id = ?
-      ''', [dependencyId]);
-      
+      ''',
+        [dependencyId],
+      );
+
       if (sizeResult.isEmpty) {
         return <int>[];
       }
-      
+
       final int totalSize = sizeResult.first['blob_size'] as int;
-      
+
       // Read BLOB in chunks
       for (int offset = 0; offset < totalSize; offset += chunkSize) {
-        final int currentChunkSize = (offset + chunkSize > totalSize) 
-            ? totalSize - offset 
+        final int currentChunkSize = (offset + chunkSize > totalSize)
+            ? totalSize - offset
             : chunkSize;
-            
-        final chunkResult = await db.rawQuery('''
+
+        final chunkResult = await db.rawQuery(
+          '''
           SELECT substr(bytes, ?, ?) as chunk
           FROM user_app_library_dependencies 
           WHERE id = ?
-        ''', [offset + 1, currentChunkSize, dependencyId]);
-        
+        ''',
+          [offset + 1, currentChunkSize, dependencyId],
+        );
+
         if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
           final chunk = chunkResult.first['chunk'] as Uint8List;
           allBytes.addAll(chunk);
         }
       }
-      
+
       return allBytes;
     } catch (e) {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);

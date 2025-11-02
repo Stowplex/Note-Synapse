@@ -668,7 +668,7 @@ class OAuthService {
     await Future.delayed(const Duration(milliseconds: 200));
     
     var attempt = 0;
-    Duration _delayForAttempt(int attemptCount, bool isDns) {
+    Duration delayForAttempt(int attemptCount, bool isDns) {
       if (isDns) {
         // DNS failures need longer delays - Android network stack needs time
         final baseMs = 1000;
@@ -718,7 +718,7 @@ class OAuthService {
             client.close();
           } catch (_) {}
         }
-        await Future.delayed(_delayForAttempt(attempt, isDns));
+        await Future.delayed(delayForAttempt(attempt, isDns));
       } on TimeoutException catch (e) {
         lastError = e;
         if (attempt >= maxAttempts) {
@@ -737,7 +737,7 @@ class OAuthService {
             client.close();
           } catch (_) {}
         }
-        await Future.delayed(_delayForAttempt(attempt, false));
+        await Future.delayed(delayForAttempt(attempt, false));
       } on http.ClientException catch (e) {
         final isDns = _isDnsFailure(e);
         lastError = e;
@@ -757,7 +757,7 @@ class OAuthService {
             client.close();
           } catch (_) {}
         }
-        await Future.delayed(_delayForAttempt(attempt, isDns));
+        await Future.delayed(delayForAttempt(attempt, isDns));
       } catch (e) {
         lastError = e is Exception ? e : Exception(e.toString());
         if (client != null) {
@@ -771,7 +771,7 @@ class OAuthService {
         LoggerService.warning(
           'OAuthService: Token request unexpected error (attempt $attempt/$maxAttempts): $e. Retrying...',
         );
-        await Future.delayed(_delayForAttempt(attempt, false));
+        await Future.delayed(delayForAttempt(attempt, false));
       }
     }
     

@@ -1114,11 +1114,74 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageTags => 'Manage Tags';
 
   @override
+  String get addTags => 'Add tags';
+
+  @override
+  String get filterTags => 'Filter tags';
+
+  @override
+  String get filterTagsDialog => 'Filter Tags';
+
+  @override
+  String filterTagsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'tags',
+      one: 'tag',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get clearFilters => 'Clear Filters';
+
+  @override
+  String get applyFilters => 'Apply Filters';
+
+  @override
+  String get clearTags => 'Clear Tags';
+
+  @override
+  String applyTagsWithCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tags',
+      one: 'Tag',
+    );
+    return 'Apply $count $_temp0';
+  }
+
+  @override
+  String get addTagsCapitalized => 'Add Tags';
+
+  @override
+  String addTagsWithCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tags',
+      one: 'Tag',
+    );
+    return 'Add $count $_temp0';
+  }
+
+  @override
+  String get searchTags => 'Search tags';
+
+  @override
+  String get searchTagsCapitalized => 'Search Tags';
+
+  @override
+  String get addNewTagOrSearch => 'Add new tag or search';
+
+  @override
   String get tagManagement => 'Tag Management';
 
   @override
-  String tagUsageCount(Object count) {
-    return '$count notes';
+  String tagUsageCount(Object conversationCount, Object noteCount) {
+    return '$noteCount notes / $conversationCount conversations';
   }
 
   @override
@@ -1130,8 +1193,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String confirmDeleteTagWarning(Object count) {
-    return 'This will remove the tag from all $count associated notes. This action cannot be undone.';
+  String confirmDeleteTagWarning(Object conversationCount, Object noteCount) {
+    return 'This will remove the tag from $noteCount notes and $conversationCount conversations. This action cannot be undone.';
   }
 
   @override
@@ -2816,4 +2879,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get oauthDiscovery => 'OAuth Discovery';
+
+  @override
+  String get openInTree => 'Open in Tree';
 }

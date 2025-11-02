@@ -350,11 +350,45 @@
   "addFilter": "添加筛选器",
   "delete": "删除",
   "manageTags": "管理标签",
+  "addTags": "添加标签",
+  "filterTags": "筛选标签",
+  "filterTagsDialog": "筛选标签",
+  "filterTagsCount": "{count}个标签",
+  "@filterTagsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "清除筛选",
+  "applyFilters": "应用筛选",
+  "clearTags": "清除标签",
+  "applyTagsWithCount": "应用{count}个标签",
+  "@applyTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addTagsCapitalized": "添加标签",
+  "addTagsWithCount": "添加{count}个标签",
+  "@addTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchTags": "搜索标签",
+  "searchTagsCapitalized": "搜索标签",
+  "addNewTagOrSearch": "添加新标签或搜索",
   "tagManagement": "标签管理",
-  "tagUsageCount": "{count}条笔记",
+  "tagUsageCount": "{noteCount}条笔记 / {conversationCount}个会话",
   "deleteTag": "删除标签",
   "confirmDeleteTag": "您确定要删除标签\"{tagName}\"吗？",
-  "confirmDeleteTagWarning": "这将从所有{count}条关联笔记中移除该标签。此操作无法撤销。",
+  "confirmDeleteTagWarning": "这将从{noteCount}条关联笔记和{conversationCount}个会话中移除该标签。此操作无法撤销。",
   "tagDeletedSuccessfully": "标签删除成功！",
   "errorDeletingTag": "删除标签时出错：{error}",
   "noTagsAvailable": "没有可用的标签",
@@ -946,5 +980,6 @@
       "editMcpEndpoint": "编辑MCP端点",
       "metadataUrlOptional": "元数据URL（可选）",
       "metadataUrlOptionalHint": "留空以使用RFC 9728自动检测",
-      "oauthDiscovery": "OAuth发现"
+      "oauthDiscovery": "OAuth发现",
+      "openInTree": "在树状图中打开"
 }

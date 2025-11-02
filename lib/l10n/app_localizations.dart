@@ -2132,6 +2132,84 @@ abstract class AppLocalizations {
   /// **'Manage Tags'**
   String get manageTags;
 
+  /// No description provided for @addTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tags'**
+  String get addTags;
+
+  /// No description provided for @filterTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter tags'**
+  String get filterTags;
+
+  /// No description provided for @filterTagsDialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter Tags'**
+  String get filterTagsDialog;
+
+  /// No description provided for @filterTagsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{tag} other{tags}}'**
+  String filterTagsCount(int count);
+
+  /// No description provided for @clearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Filters'**
+  String get clearFilters;
+
+  /// No description provided for @applyFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply Filters'**
+  String get applyFilters;
+
+  /// No description provided for @clearTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Tags'**
+  String get clearTags;
+
+  /// No description provided for @applyTagsWithCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {count} {count, plural, =1{Tag} other{Tags}}'**
+  String applyTagsWithCount(int count);
+
+  /// No description provided for @addTagsCapitalized.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Tags'**
+  String get addTagsCapitalized;
+
+  /// No description provided for @addTagsWithCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add {count} {count, plural, =1{Tag} other{Tags}}'**
+  String addTagsWithCount(int count);
+
+  /// No description provided for @searchTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Search tags'**
+  String get searchTags;
+
+  /// No description provided for @searchTagsCapitalized.
+  ///
+  /// In en, this message translates to:
+  /// **'Search Tags'**
+  String get searchTagsCapitalized;
+
+  /// No description provided for @addNewTagOrSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Add new tag or search'**
+  String get addNewTagOrSearch;
+
   /// No description provided for @tagManagement.
   ///
   /// In en, this message translates to:
@@ -2141,8 +2219,8 @@ abstract class AppLocalizations {
   /// No description provided for @tagUsageCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} notes'**
-  String tagUsageCount(Object count);
+  /// **'{noteCount} notes / {conversationCount} conversations'**
+  String tagUsageCount(Object conversationCount, Object noteCount);
 
   /// No description provided for @deleteTag.
   ///
@@ -2159,8 +2237,8 @@ abstract class AppLocalizations {
   /// No description provided for @confirmDeleteTagWarning.
   ///
   /// In en, this message translates to:
-  /// **'This will remove the tag from all {count} associated notes. This action cannot be undone.'**
-  String confirmDeleteTagWarning(Object count);
+  /// **'This will remove the tag from {noteCount} notes and {conversationCount} conversations. This action cannot be undone.'**
+  String confirmDeleteTagWarning(Object conversationCount, Object noteCount);
 
   /// No description provided for @tagDeletedSuccessfully.
   ///
@@ -5059,6 +5137,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OAuth Discovery'**
   String get oauthDiscovery;
+
+  /// No description provided for @openInTree.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Tree'**
+  String get openInTree;
 }
 
 class _AppLocalizationsDelegate

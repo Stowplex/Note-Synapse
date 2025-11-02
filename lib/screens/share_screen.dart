@@ -320,7 +320,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             const SizedBox(height: 12),
                             // Note selection dropdown
                             DropdownButtonFormField<Note>(
-                              value: _selectedNote,
+                              initialValue: _selectedNote,
                               decoration: InputDecoration(
                                 border: const OutlineInputBorder(),
                                 hintText: l10n.selectNote,
@@ -1211,7 +1211,7 @@ class _ShareScreenState extends State<ShareScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -1499,11 +1499,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               // Correct or add extension if needed
               final expectedExt = FileTypeUtils.getExtensionForMime(effectiveMime);
               if (currentExt.isEmpty && expectedExt.isNotEmpty) {
-                fileName = '$fileName.${expectedExt}';
+                fileName = '$fileName.$expectedExt';
               } else if (currentExt.isNotEmpty && expectedExt.isNotEmpty && expectedExt != 'bin' && currentExt != expectedExt) {
                 // Replace the existing extension with the expected one
                 final base = fileName.substring(0, fileName.lastIndexOf('.'));
-                fileName = '$base.${expectedExt}';
+                fileName = '$base.$expectedExt';
               }
 
               // Save file to attachment directory
@@ -1586,7 +1586,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     }
     
     return Dialog(
-      child: Container(
+      child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(

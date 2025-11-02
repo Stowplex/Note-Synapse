@@ -416,7 +416,7 @@ class AudioRecordingService {
         'wavenc',
         '!',
         'filesink',
-        'location=${_currentRecordingPath}',
+        'location=$_currentRecordingPath',
       ];
 
       _linuxRecordingProcess = await Process.start(args[0], args.sublist(1));

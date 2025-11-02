@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:note_synapse/models/conversation.dart';
 
 void main() {
   group('Tree Building Algorithm Tests', () {

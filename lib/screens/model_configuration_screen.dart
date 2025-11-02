@@ -361,7 +361,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<ModelConfig>(
-              value: _selectedPreset,
+              initialValue: _selectedPreset,
               items: _presets.map((preset) {
                 return DropdownMenuItem<ModelConfig>(
                   value: preset,

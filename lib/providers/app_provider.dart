@@ -24,7 +24,8 @@ class AppProvider extends ChangeNotifier {
   List<Tag> _tags = [];
   List<Filter> _filters = [];
   List<UserApp> _userApps = [];
-  Map<String, List<AppRevision>> _appRevisions = {}; // Cache revisions by appId
+  final Map<String, List<AppRevision>> _appRevisions =
+      {}; // Cache revisions by appId
   bool _isLoading = false;
   String? _error;
   bool _isDarkMode = false;
@@ -101,7 +102,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> updateNote(Note note) async {
     try {
       await _databaseService.updateNote(note);
-      
+
       // Reload the note from database to get properly converted attachment paths
       final updatedNote = await _databaseService.getNote(note.id);
       if (updatedNote != null) {
@@ -111,7 +112,7 @@ class AppProvider extends ChangeNotifier {
           notifyListeners();
         }
       }
-      
+
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
@@ -124,16 +125,16 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       final updatedNote = note.copyWith(
         content: newContent,
         updatedAt: DateTime.now(),
       );
-      
+
       // Update the note in the database
       await _databaseService.updateNote(updatedNote);
-      
+
       // Update the local state immediately
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -147,18 +148,18 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       if (!note.isTask) return;
-      
+
       final updatedNote = note.copyWith(
         status: status,
         updatedAt: DateTime.now(),
       );
-      
+
       // Update the note in the database
       await _databaseService.updateNote(updatedNote);
-      
+
       // Update the local state immediately
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -172,16 +173,16 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       final updatedNote = note.copyWith(
         pinned: !note.pinned,
         updatedAt: DateTime.now(),
       );
-      
+
       // Update the note in the database
       await _databaseService.updateNote(updatedNote);
-      
+
       // Update the local state immediately
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -194,11 +195,11 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteNote(String noteId) async {
     try {
       await _databaseService.deleteNote(noteId);
-      
+
       // Remove from local state immediately instead of reloading from database
       _notes.removeWhere((note) => note.id == noteId);
       notifyListeners();
-      
+
       _error = null; // Clear any previous errors
     } catch (e) {
       _error = e.toString();
@@ -227,11 +228,19 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> createNoteRelationships(String fromNoteId, List<String> toNoteIds, String relationshipType) async {
+  Future<void> createNoteRelationships(
+    String fromNoteId,
+    List<String> toNoteIds,
+    String relationshipType,
+  ) async {
     try {
       for (final toNoteId in toNoteIds) {
         // Check if relationship already exists
-        final exists = await _databaseService.relationshipExists(fromNoteId, toNoteId, relationshipType);
+        final exists = await _databaseService.relationshipExists(
+          fromNoteId,
+          toNoteId,
+          relationshipType,
+        );
         if (!exists) {
           final relationship = Relationship(
             id: const Uuid().v4(),
@@ -263,7 +272,9 @@ class AppProvider extends ChangeNotifier {
   Future<List<Note>> getLinkedNotes(String noteId) async {
     try {
       final relationships = await _databaseService.getRelationships(noteId);
-      final linkedNoteIds = relationships.map((r) => r.fromNoteId == noteId ? r.toNoteId : r.fromNoteId).toList();
+      final linkedNoteIds = relationships
+          .map((r) => r.fromNoteId == noteId ? r.toNoteId : r.fromNoteId)
+          .toList();
       return _notes.where((note) => linkedNoteIds.contains(note.id)).toList();
     } catch (e) {
       _error = e.toString();
@@ -273,20 +284,19 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String> answerNoteQuestion(
-    String question, 
+    String question,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
     bool useOwnKnowledge = false,
   }) async {
     try {
       final response = await AIService.answerNoteQuestion(
-        question, 
+        question,
         contextNotes,
         attachedFiles: attachedFiles,
         useOwnKnowledge: useOwnKnowledge,
       );
-      
-      
+
       return response;
     } catch (e) {
       _error = e.toString();
@@ -296,18 +306,17 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String> transformNote(
-    Note note, 
+    Note note,
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
       final response = await AIService.transformNote(
-        note, 
+        note,
         transformationPrompt,
         attachedFiles: attachedFiles,
       );
-      
-      
+
       return response;
     } catch (e) {
       _error = e.toString();
@@ -317,17 +326,17 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<List<Note>> createNewNotes(
-    String prompt, 
+    String prompt,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
   }) async {
     try {
       final newNotes = await AIService.createNewNotes(
-        prompt, 
+        prompt,
         contextNotes,
         attachedFiles: attachedFiles,
       );
-      
+
       // Save all new notes and reload them from database
       final List<Note> addedNotes = [];
       for (final note in newNotes) {
@@ -337,11 +346,11 @@ class AppProvider extends ChangeNotifier {
           addedNotes.add(addedNote);
         }
       }
-      
+
       // Add to local state with properly converted paths
       _notes.addAll(addedNotes);
       notifyListeners();
-      
+
       return addedNotes;
     } catch (e) {
       _error = e.toString();
@@ -358,18 +367,19 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       if (note.tags.contains(tagName)) return; // Tag already exists
-      
+
       final updatedTags = List<String>.from(note.tags)..add(tagName);
       final updatedNote = note.copyWith(
         tags: updatedTags,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
+      _tags = await _databaseService.getAllTags();
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -381,18 +391,19 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       if (!note.tags.contains(tagName)) return; // Tag doesn't exist
-      
+
       final updatedTags = List<String>.from(note.tags)..remove(tagName);
       final updatedNote = note.copyWith(
         tags: updatedTags,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
+      _tags = await _databaseService.getAllTags();
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -408,31 +419,27 @@ class AppProvider extends ChangeNotifier {
     return allTags.toList()..sort();
   }
 
-  Future<int> getTagUsageCount(String tagName) async {
-    try {
-      return await _databaseService.getTagUsageCount(tagName);
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      return 0;
-    }
+  Future<void> refreshTags() async {
+    _tags = await _databaseService.getAllTags();
+    notifyListeners();
   }
 
   Future<void> deleteTag(String tagName) async {
     try {
       await _databaseService.deleteTag(tagName);
-      
+
       // Remove the tag from all notes in local state
       for (int i = 0; i < _notes.length; i++) {
         if (_notes[i].tags.contains(tagName)) {
-          final updatedTags = List<String>.from(_notes[i].tags)..remove(tagName);
+          final updatedTags = List<String>.from(_notes[i].tags)
+            ..remove(tagName);
           _notes[i] = _notes[i].copyWith(
             tags: updatedTags,
             updatedAt: DateTime.now(),
           );
         }
       }
-      
+
       // Reload tags to update the list
       _tags = await _databaseService.getAllTags();
       notifyListeners();
@@ -447,7 +454,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> replaceTag(String oldTagName, String newTagName) async {
     try {
       await _databaseService.replaceTag(oldTagName, newTagName);
-      
+
       // Update the tag in all notes in local state
       for (int i = 0; i < _notes.length; i++) {
         if (_notes[i].tags.contains(oldTagName)) {
@@ -462,7 +469,7 @@ class AppProvider extends ChangeNotifier {
           }
         }
       }
-      
+
       // Reload tags to update the list
       _tags = await _databaseService.getAllTags();
       notifyListeners();
@@ -475,42 +482,57 @@ class AppProvider extends ChangeNotifier {
   }
 
   List<Note> getTasksForDate(DateTime date) {
-    final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    return _notes.where((note) => 
-      note.isTask && 
-      !note.isArchived &&
-      (note.scheduledAt == dateStr || note.completeBy == dateStr ||
-       (note.scheduledAt != null && note.completeBy != null &&
-        _isDateInRange(dateStr, note.scheduledAt!, note.completeBy!)))
-    ).toList();
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return _notes
+        .where(
+          (note) =>
+              note.isTask &&
+              !note.isArchived &&
+              (note.scheduledAt == dateStr ||
+                  note.completeBy == dateStr ||
+                  (note.scheduledAt != null &&
+                      note.completeBy != null &&
+                      _isDateInRange(
+                        dateStr,
+                        note.scheduledAt!,
+                        note.completeBy!,
+                      ))),
+        )
+        .toList();
   }
 
   bool _isDateInRange(String dateStr, String startDate, String endDate) {
     final date = DateTime.tryParse(dateStr);
     final start = DateTime.tryParse(startDate);
     final end = DateTime.tryParse(endDate);
-    
+
     if (date == null || start == null || end == null) return false;
-    
-    return date.isAfter(start.subtract(const Duration(days: 1))) && 
-           date.isBefore(end.add(const Duration(days: 1)));
+
+    return date.isAfter(start.subtract(const Duration(days: 1))) &&
+        date.isBefore(end.add(const Duration(days: 1)));
   }
 
   List<Note> getNotesForDate(DateTime date) {
-    return _notes.where((note) => 
-      !note.isArchived &&
-      note.createdAt.year == date.year &&
-      note.createdAt.month == date.month &&
-      note.createdAt.day == date.day
-    ).toList();
+    return _notes
+        .where(
+          (note) =>
+              !note.isArchived &&
+              note.createdAt.year == date.year &&
+              note.createdAt.month == date.month &&
+              note.createdAt.day == date.day,
+        )
+        .toList();
   }
 
   double calculateTaskCompletionPercentage(Note task) {
     if (!task.isTask || task.subNotes.isEmpty) {
       return task.isCompleted ? 1.0 : 0.0;
     }
-    
-    final completedSubNotes = task.subNotes.where((sn) => sn.isCompleted).length;
+
+    final completedSubNotes = task.subNotes
+        .where((sn) => sn.isCompleted)
+        .length;
     return completedSubNotes / task.subNotes.length;
   }
 
@@ -584,16 +606,16 @@ class AppProvider extends ChangeNotifier {
     try {
       // Clear all data from the database
       await _databaseService.clearAllData();
-      
+
       // Reset local state
       _notes = [];
       _tags = [];
       _error = null;
-      
+
       // Reset theme to default (light mode)
       _isDarkMode = false;
       await _saveThemePreference();
-      
+
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -609,14 +631,14 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       final updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
       final updatedNote = note.copyWith(
         subNotes: updatedSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -626,21 +648,24 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateSubNoteInNote(String noteId, SubNote updatedSubNote) async {
+  Future<void> updateSubNoteInNote(
+    String noteId,
+    SubNote updatedSubNote,
+  ) async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes.map((sn) => 
-        sn.id == updatedSubNote.id ? updatedSubNote : sn
-      ).toList();
-      
+      final updatedSubNotes = note.subNotes
+          .map((sn) => sn.id == updatedSubNote.id ? updatedSubNote : sn)
+          .toList();
+
       final updatedNote = note.copyWith(
         subNotes: updatedSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -654,15 +679,17 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes.where((sn) => sn.id != subNoteId).toList();
-      
+      final updatedSubNotes = note.subNotes
+          .where((sn) => sn.id != subNoteId)
+          .toList();
+
       final updatedNote = note.copyWith(
         subNotes: updatedSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -676,7 +703,7 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
       final updatedSubNotes = note.subNotes.map((sn) {
         if (sn.id == subNoteId) {
@@ -684,12 +711,12 @@ class AppProvider extends ChangeNotifier {
         }
         return sn;
       }).toList();
-      
+
       final updatedNote = note.copyWith(
         subNotes: updatedSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -704,10 +731,12 @@ class AppProvider extends ChangeNotifier {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
-      
+
       final note = _notes[noteIndex];
-      final existingSubNoteIndex = note.subNotes.indexWhere((sn) => sn.id == subNote.id);
-      
+      final existingSubNoteIndex = note.subNotes.indexWhere(
+        (sn) => sn.id == subNote.id,
+      );
+
       List<SubNote> updatedSubNotes;
       if (existingSubNoteIndex >= 0) {
         // Update existing subnote
@@ -717,12 +746,12 @@ class AppProvider extends ChangeNotifier {
         // Add new subnote
         updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
       }
-      
+
       final updatedNote = note.copyWith(
         subNotes: updatedSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
@@ -733,35 +762,42 @@ class AppProvider extends ChangeNotifier {
   }
 
   // Reparent subnote from one note to another
-  Future<void> reparentSubNote(String fromNoteId, String toNoteId, SubNote subNote) async {
+  Future<void> reparentSubNote(
+    String fromNoteId,
+    String toNoteId,
+    SubNote subNote,
+  ) async {
     try {
       // Find source and destination notes
       final fromNoteIndex = _notes.indexWhere((note) => note.id == fromNoteId);
       final toNoteIndex = _notes.indexWhere((note) => note.id == toNoteId);
-      
+
       if (fromNoteIndex == -1 || toNoteIndex == -1) return;
-      
+
       final fromNote = _notes[fromNoteIndex];
       final toNote = _notes[toNoteIndex];
-      
+
       // Remove subnote from source note
-      final updatedFromSubNotes = fromNote.subNotes.where((sn) => sn.id != subNote.id).toList();
+      final updatedFromSubNotes = fromNote.subNotes
+          .where((sn) => sn.id != subNote.id)
+          .toList();
       final updatedFromNote = fromNote.copyWith(
         subNotes: updatedFromSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       // Add subnote to destination note
-      final updatedToSubNotes = List<SubNote>.from(toNote.subNotes)..add(subNote);
+      final updatedToSubNotes = List<SubNote>.from(toNote.subNotes)
+        ..add(subNote);
       final updatedToNote = toNote.copyWith(
         subNotes: updatedToSubNotes,
         updatedAt: DateTime.now(),
       );
-      
+
       // Update both notes in database
       await _databaseService.updateNote(updatedFromNote);
       await _databaseService.updateNote(updatedToNote);
-      
+
       // Update local state
       _notes[fromNoteIndex] = updatedFromNote;
       _notes[toNoteIndex] = updatedToNote;
@@ -817,36 +853,38 @@ class AppProvider extends ChangeNotifier {
 
   List<Note> getFilteredNotes(Filter filter) {
     List<Note> filteredNotes = _notes;
-    
+
     // Filter by archived status
     if (!filter.includeArchived) {
       filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
     }
-    
+
     // Filter by text content
     if (filter.includeText?.isNotEmpty == true) {
       final query = filter.includeText!.toLowerCase();
       filteredNotes = filteredNotes.where((note) {
         return note.title.toLowerCase().contains(query) ||
-               note.content.toLowerCase().contains(query) ||
-               note.tags.any((tag) => tag.toLowerCase().contains(query));
+            note.content.toLowerCase().contains(query) ||
+            note.tags.any((tag) => tag.toLowerCase().contains(query));
       }).toList();
     }
-    
+
     // Filter by tags (AND logic - note must have ALL selected tags)
     if (filter.includeTags.isNotEmpty) {
       filteredNotes = filteredNotes.where((note) {
-        return filter.includeTags.every((selectedTag) => note.tags.contains(selectedTag));
+        return filter.includeTags.every(
+          (selectedTag) => note.tags.contains(selectedTag),
+        );
       }).toList();
     }
-    
+
     // Sort by pinned status first, then by creation date
     filteredNotes.sort((a, b) {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
       return b.createdAt.compareTo(a.createdAt);
     });
-    
+
     return filteredNotes;
   }
 
@@ -903,7 +941,7 @@ class AppProvider extends ChangeNotifier {
         newCode: newCode,
         attachmentPaths: attachmentPaths,
       );
-      
+
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == originalApp.id);
       if (appIndex != -1) {
@@ -912,11 +950,11 @@ class AppProvider extends ChangeNotifier {
           _userApps[appIndex] = updatedApp;
         }
       }
-      
+
       // Clear and refresh revisions cache for this app
       clearAppRevisionsCache(originalApp.id);
       await refreshAppRevisions(originalApp.id);
-      
+
       _error = null;
       return revision;
     } catch (e) {
@@ -949,8 +987,9 @@ class AppProvider extends ChangeNotifier {
   }) async {
     try {
       // Construct user prompt from the provided information
-      final userPrompt = 'Create a $name app. Description: $description. Steps: ${steps.join(', ')}';
-      
+      final userPrompt =
+          'Create a $name app. Description: $description. Steps: ${steps.join(', ')}';
+
       final app = await UserAppService.createUserApp(
         name: name,
         description: description,
@@ -971,7 +1010,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-
   Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
@@ -985,7 +1023,7 @@ class AppProvider extends ChangeNotifier {
         attachmentPaths: attachmentPaths,
         libraries: libraries,
       );
-      
+
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == originalApp.id);
       if (appIndex != -1) {
@@ -994,19 +1032,21 @@ class AppProvider extends ChangeNotifier {
           _userApps[appIndex] = updatedApp;
         }
       }
-      
+
       // Clear and refresh revisions cache for this app
       clearAppRevisionsCache(originalApp.id);
       await refreshAppRevisions(originalApp.id);
-      
+
       // Automatically pin the latest revision after editing
       final latestRevisions = _appRevisions[originalApp.id] ?? [];
       if (latestRevisions.isNotEmpty) {
         // Find the latest revision (highest revision number)
-        final latestRevision = latestRevisions.reduce((a, b) => a.revisionNumber > b.revisionNumber ? a : b);
+        final latestRevision = latestRevisions.reduce(
+          (a, b) => a.revisionNumber > b.revisionNumber ? a : b,
+        );
         await setSelectedRevision(originalApp.id, latestRevision.id);
       }
-      
+
       _error = null;
       return revision;
     } catch (e) {
@@ -1044,13 +1084,13 @@ class AppProvider extends ChangeNotifier {
       if (_appRevisions.containsKey(appId)) {
         return _appRevisions[appId]!;
       }
-      
+
       // Load revisions from database
       final revisions = await UserAppService.getAppRevisions(appId);
-      
+
       // Cache the revisions (already sorted by revisionNumber ASC from database)
       _appRevisions[appId] = revisions;
-      
+
       return revisions;
     } catch (e) {
       _error = e.toString();
@@ -1080,17 +1120,17 @@ class AppProvider extends ChangeNotifier {
           break;
         }
       }
-      
+
       if (appId == null) {
         throw Exception('Revision not found in any app');
       }
-      
+
       await UserAppService.deleteAppRevision(revisionId);
-      
+
       // Clear and refresh revisions cache for this app
       clearAppRevisionsCache(appId);
       await refreshAppRevisions(appId);
-      
+
       // Also refresh the app data in case the pinned revision changed
       final updatedApp = await _databaseService.getUserApp(appId);
       if (updatedApp != null) {
@@ -1099,7 +1139,7 @@ class AppProvider extends ChangeNotifier {
           _userApps[appIndex] = updatedApp;
         }
       }
-      
+
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -1111,7 +1151,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> setSelectedRevision(String appId, String revisionId) async {
     try {
       await UserAppService.setSelectedRevision(appId, revisionId);
-      
+
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);
       if (appIndex != -1) {
@@ -1120,7 +1160,7 @@ class AppProvider extends ChangeNotifier {
           _userApps[appIndex] = updatedApp;
         }
       }
-      
+
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -1151,7 +1191,7 @@ class AppProvider extends ChangeNotifier {
   Future<AppRevision> createInitialRevision(String appId) async {
     try {
       final revision = await UserAppService.createInitialRevision(appId);
-      
+
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);
       if (appIndex != -1) {
@@ -1160,7 +1200,7 @@ class AppProvider extends ChangeNotifier {
           _userApps[appIndex] = updatedApp;
         }
       }
-      
+
       notifyListeners();
       return revision;
     } catch (e) {
@@ -1178,6 +1218,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteConversation(String conversationId) async {
     try {
       await _conversationService.deleteConversation(conversationId);
+      await refreshTags();
       notifyListeners(); // Notify listeners that conversation was deleted
       _error = null;
     } catch (e) {

@@ -6,10 +6,10 @@ class ForkContextSelectionDialog extends StatefulWidget {
   final Function(ConversationContext?, String?) onConfirm;
 
   const ForkContextSelectionDialog({
-    Key? key,
+    super.key,
     required this.selection,
     required this.onConfirm,
-  }) : super(key: key);
+  });
 
   @override
   State<ForkContextSelectionDialog> createState() => _ForkContextSelectionDialogState();

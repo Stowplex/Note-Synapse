@@ -13,10 +13,10 @@ class AddNoteDialog extends StatelessWidget {
   final List<Note> contextNotes;
   
   const AddNoteDialog({
-    Key? key,
+    super.key,
     required this.content,
     this.contextNotes = const [],
-  }) : super(key: key);
+  });
   
   /// Show the dialog and return the created note(s) if any
   static Future<List<Note>?> show({

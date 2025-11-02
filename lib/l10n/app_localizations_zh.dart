@@ -1098,11 +1098,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageTags => '管理标签';
 
   @override
+  String get addTags => '添加标签';
+
+  @override
+  String get filterTags => '筛选标签';
+
+  @override
+  String get filterTagsDialog => '筛选标签';
+
+  @override
+  String filterTagsCount(int count) {
+    return '$count个标签';
+  }
+
+  @override
+  String get clearFilters => '清除筛选';
+
+  @override
+  String get applyFilters => '应用筛选';
+
+  @override
+  String get clearTags => '清除标签';
+
+  @override
+  String applyTagsWithCount(int count) {
+    return '应用$count个标签';
+  }
+
+  @override
+  String get addTagsCapitalized => '添加标签';
+
+  @override
+  String addTagsWithCount(int count) {
+    return '添加$count个标签';
+  }
+
+  @override
+  String get searchTags => '搜索标签';
+
+  @override
+  String get searchTagsCapitalized => '搜索标签';
+
+  @override
+  String get addNewTagOrSearch => '添加新标签或搜索';
+
+  @override
   String get tagManagement => '标签管理';
 
   @override
-  String tagUsageCount(Object count) {
-    return '$count条笔记';
+  String tagUsageCount(Object conversationCount, Object noteCount) {
+    return '$noteCount条笔记 / $conversationCount个会话';
   }
 
   @override
@@ -1114,8 +1159,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String confirmDeleteTagWarning(Object count) {
-    return '这将从所有$count条关联笔记中移除该标签。此操作无法撤销。';
+  String confirmDeleteTagWarning(Object conversationCount, Object noteCount) {
+    return '这将从$noteCount条关联笔记和$conversationCount个会话中移除该标签。此操作无法撤销。';
   }
 
   @override
@@ -2727,4 +2772,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get oauthDiscovery => 'OAuth发现';
+
+  @override
+  String get openInTree => '在树状图中打开';
 }

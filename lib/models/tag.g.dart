@@ -12,6 +12,8 @@ Tag _$TagFromJson(Map<String, dynamic> json) => Tag(
   color: json['color'] as String,
   createdAt: DateTime.parse(json['createdAt'] as String),
   usageCount: (json['usageCount'] as num?)?.toInt() ?? 0,
+  conversationUsageCount:
+      (json['conversationUsageCount'] as num?)?.toInt() ?? 0,
 );
 
 Map<String, dynamic> _$TagToJson(Tag instance) => <String, dynamic>{
@@ -20,4 +22,5 @@ Map<String, dynamic> _$TagToJson(Tag instance) => <String, dynamic>{
   'color': instance.color,
   'createdAt': instance.createdAt.toIso8601String(),
   'usageCount': instance.usageCount,
+  'conversationUsageCount': instance.conversationUsageCount,
 };

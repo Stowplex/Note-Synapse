@@ -14,6 +14,7 @@ import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_list.dart';
 import '../widgets/share_dialog.dart';
+import '../widgets/tag_selection_dialog.dart';
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
@@ -26,12 +27,17 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../models/conversation.dart';
 import 'conversation_chat_screen.dart';
+import 'conversation_tree_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
   final bool isNewNote;
 
-  const NoteDetailScreen({super.key, required this.note, this.isNewNote = false});
+  const NoteDetailScreen({
+    super.key,
+    required this.note,
+    this.isNewNote = false,
+  });
 
   @override
   State<NoteDetailScreen> createState() => _NoteDetailScreenState();
@@ -51,7 +57,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   List<Relationship> _relationships = [];
   List<Note> _linkedNotes = [];
   final DatabaseService _databaseService = DatabaseService();
-  
+
   // Audio recording state
   AudioRecordingService? _audioService;
   bool _isRecording = false;
@@ -66,20 +72,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _titleController = TextEditingController(text: widget.note.title);
     _contentController = TextEditingController(text: widget.note.content);
     _contentFocusNode = FocusNode();
-    
+
     // Initialize date fields for tasks
     if (widget.note.isTask) {
-      _scheduledAt = widget.note.scheduledAt != null 
-          ? DateTime.tryParse(widget.note.scheduledAt!) 
+      _scheduledAt = widget.note.scheduledAt != null
+          ? DateTime.tryParse(widget.note.scheduledAt!)
           : null;
-      _completeBy = widget.note.completeBy != null 
-          ? DateTime.tryParse(widget.note.completeBy!) 
+      _completeBy = widget.note.completeBy != null
+          ? DateTime.tryParse(widget.note.completeBy!)
           : null;
     }
-    
+
     _titleController.addListener(_onTextChanged);
     _contentController.addListener(_onTextChanged);
-    
+
     // Start in editing mode for new notes
     if (widget.isNewNote) {
       _isEditing = true;
@@ -87,18 +93,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } else {
       _hasBeenSaved = true; // Existing notes are already in the database
     }
-    
+
     // Load relationships
     _loadRelationships();
-    
-      // Initialize audio service on all platforms (including Linux)
+
+    // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
   }
 
   void _initializeAudioService() {
     _audioService = AudioRecordingService();
     _setupAudioListeners();
-    
+
     // Reset audio state
     _isRecording = false;
     _isPlaying = false;
@@ -129,7 +135,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _setupAudioListeners() {
     if (_audioService == null) return;
-    
+
     _audioService!.recordingStateStream.listen((isRecording) {
       if (mounted) {
         setState(() {
@@ -175,7 +181,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _hasChanges = true;
       });
     }
-    
+
     // Auto-save after 2 seconds of no typing
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
@@ -192,7 +198,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _hasChanges = true;
       });
     }
-    
+
     // Auto-save after 2 seconds of no changes
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
@@ -205,9 +211,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _loadRelationships() async {
     try {
       final appProvider = context.read<AppProvider>();
-      final relationships = await appProvider.getNoteRelationships(widget.note.id);
+      final relationships = await appProvider.getNoteRelationships(
+        widget.note.id,
+      );
       final linkedNotes = await appProvider.getLinkedNotes(widget.note.id);
-      
+
       if (mounted) {
         setState(() {
           _relationships = relationships;
@@ -222,7 +230,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
         // Get the latest version of the note from the provider
@@ -230,7 +238,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
         );
-        
+
         return PopScope(
           canPop: !_isEditing, // Don't allow popping when editing
           onPopInvokedWithResult: (didPop, result) {
@@ -240,113 +248,126 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             }
           },
           child: Scaffold(
-          appBar: AppBar(
-            title: Text(currentNote.title),
-        actions: [
-          if (_isEditing) ...[
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              child: Chip(
-                label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
-                backgroundColor: _hasChanges 
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.green.withOpacity(0.1),
-                labelStyle: TextStyle(
-                  color: _hasChanges ? Colors.orange : Colors.green,
-                  fontWeight: FontWeight.w500,
-                ),
-                avatar: Icon(
-                  _hasChanges ? Icons.edit : Icons.check,
-                  size: 16,
-                  color: _hasChanges ? Colors.orange : Colors.green,
-                ),
-              ),
-            ),
-          ] else ...[
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: _startEditing,
-            ),
-            IconButton(
-              icon: const Icon(Icons.psychology),
-              onPressed: _openAIAction,
-            ),
-            IconButton(
-              icon: const Icon(Icons.apps),
-              onPressed: _openNoteActionApps,
-              tooltip: 'Run Note Action App',
-            ),
-            IconButton(
-              icon: const Icon(Icons.share),
-              onPressed: _shareNote,
-            ),
-            PopupMenuButton(
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Text(l10n.deleteNote, style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-                if (widget.note.isTask)
-                  PopupMenuItem(
-                    value: 'convert',
-                    child: Row(
-                      children: [
-                        Icon(Icons.note),
-                        const SizedBox(width: 8),
-                        Text(l10n.convertToNote),
-                      ],
-                    ),
-                  ),
-                if (!widget.note.isTask)
-                  PopupMenuItem(
-                    value: 'convert',
-                    child: Row(
-                      children: [
-                        Icon(Icons.task),
-                        const SizedBox(width: 8),
-                        Text(l10n.convertToTask),
-                      ],
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'archive',
-                  child: Row(
-                    children: [
-                      Icon(
-                        currentNote.isArchived ? Icons.unarchive : Icons.archive,
-                        color: currentNote.isArchived ? Colors.orange : Colors.grey[600],
+            appBar: AppBar(
+              title: Text(currentNote.title),
+              actions: [
+                if (_isEditing) ...[
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Chip(
+                      label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
+                      backgroundColor: _hasChanges
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
+                      labelStyle: TextStyle(
+                        color: _hasChanges ? Colors.orange : Colors.green,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        currentNote.isArchived ? l10n.unarchiveNote : l10n.archiveNote,
-                        style: TextStyle(
-                          color: currentNote.isArchived ? Colors.orange : Colors.grey[600],
+                      avatar: Icon(
+                        _hasChanges ? Icons.edit : Icons.check,
+                        size: 16,
+                        color: _hasChanges ? Colors.orange : Colors.green,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: _startEditing,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.psychology),
+                    onPressed: _openAIAction,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.apps),
+                    onPressed: _openNoteActionApps,
+                    tooltip: 'Run Note Action App',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    onPressed: _shareNote,
+                  ),
+                  PopupMenuButton(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, color: Colors.red),
+                            const SizedBox(width: 8),
+                            Text(
+                              l10n.deleteNote,
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (widget.note.isTask)
+                        PopupMenuItem(
+                          value: 'convert',
+                          child: Row(
+                            children: [
+                              Icon(Icons.note),
+                              const SizedBox(width: 8),
+                              Text(l10n.convertToNote),
+                            ],
+                          ),
+                        ),
+                      if (!widget.note.isTask)
+                        PopupMenuItem(
+                          value: 'convert',
+                          child: Row(
+                            children: [
+                              Icon(Icons.task),
+                              const SizedBox(width: 8),
+                              Text(l10n.convertToTask),
+                            ],
+                          ),
+                        ),
+                      PopupMenuItem(
+                        value: 'archive',
+                        child: Row(
+                          children: [
+                            Icon(
+                              currentNote.isArchived
+                                  ? Icons.unarchive
+                                  : Icons.archive,
+                              color: currentNote.isArchived
+                                  ? Colors.orange
+                                  : Colors.grey[600],
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              currentNote.isArchived
+                                  ? l10n.unarchiveNote
+                                  : l10n.archiveNote,
+                              style: TextStyle(
+                                color: currentNote.isArchived
+                                    ? Colors.orange
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        _deleteNote();
+                      } else if (value == 'convert') {
+                        _convertNoteType();
+                      } else if (value == 'archive') {
+                        _toggleArchive();
+                      }
+                    },
                   ),
-                ),
+                ],
               ],
-              onSelected: (value) {
-                if (value == 'delete') {
-                  _deleteNote();
-                } else if (value == 'convert') {
-                  _convertNoteType();
-                } else if (value == 'archive') {
-                  _toggleArchive();
-                }
-              },
             ),
-          ],
-        ],
-      ),
-            body: _isEditing ? _buildEditingView() : _buildViewingView(currentNote, l10n),
+            body: _isEditing
+                ? _buildEditingView()
+                : _buildViewingView(currentNote, l10n),
             bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
           ),
         );
@@ -366,9 +387,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ],
           SelectableText(
             currentNote.title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           SelectionArea(
@@ -403,100 +424,114 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            ...currentNote.subNotes.map((subNote) => Card(
-              child: ListTile(
-                    leading: Icon(
-                      subNote.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                      color: subNote.isCompleted ? Colors.green : Colors.grey,
-                    ),
-                    title: SelectableText(subNote.name),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        InteractiveCheckboxList(
-                          key: ValueKey('subnote_${subNote.id}'),
-                          originalContent: subNote.content,
-                          onContentChanged: (newContent) => _updateSubNoteContent(subNote, newContent),
-                          style: Theme.of(context).textTheme.bodySmall,
-                          textDirection: TextDirection.ltr,
-                          onLinkTap: _handleLinkTap,
+            ...currentNote.subNotes.map(
+              (subNote) => Card(
+                child: ListTile(
+                  leading: Icon(
+                    subNote.isCompleted
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: subNote.isCompleted ? Colors.green : Colors.grey,
+                  ),
+                  title: SelectableText(subNote.name),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InteractiveCheckboxList(
+                        key: ValueKey('subnote_${subNote.id}'),
+                        originalContent: subNote.content,
+                        onContentChanged: (newContent) =>
+                            _updateSubNoteContent(subNote, newContent),
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textDirection: TextDirection.ltr,
+                        onLinkTap: _handleLinkTap,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${l10n.created} ${AppDateUtils.formatDateOnly(subNote.createdAt)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.5),
+                          fontSize: 11,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${l10n.created} ${AppDateUtils.formatDateOnly(subNote.createdAt)}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                            fontSize: 11,
-                          ),
+                      ),
+                    ],
+                  ),
+                  trailing: PopupMenuButton(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 16),
+                            const SizedBox(width: 8),
+                            Text(l10n.editSubNote),
+                          ],
                         ),
-                      ],
-                    ),
-                    trailing: PopupMenuButton(
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, size: 16),
-                          const SizedBox(width: 8),
-                          Text(l10n.editSubNote),
-                        ],
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'toggle',
-                      child: Row(
-                        children: [
-                          Icon(
-                            subNote.isCompleted ? Icons.undo : Icons.check,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(subNote.isCompleted ? l10n.markIncomplete : l10n.markComplete),
-                        ],
+                      PopupMenuItem(
+                        value: 'toggle',
+                        child: Row(
+                          children: [
+                            Icon(
+                              subNote.isCompleted ? Icons.undo : Icons.check,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              subNote.isCompleted
+                                  ? l10n.markIncomplete
+                                  : l10n.markComplete,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'reparent',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.move_to_inbox, size: 16),
-                          const SizedBox(width: 8),
-                          Text(l10n.reparentSubNote),
-                        ],
+                      PopupMenuItem(
+                        value: 'reparent',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.move_to_inbox, size: 16),
+                            const SizedBox(width: 8),
+                            Text(l10n.reparentSubNote),
+                          ],
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete, color: Colors.red, size: 16),
-                          const SizedBox(width: 8),
-                          Text(l10n.deleteSubNote, style: TextStyle(color: Colors.red)),
-                        ],
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, color: Colors.red, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              l10n.deleteSubNote,
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'edit':
-                        _editSubNote(currentNote, subNote);
-                        break;
-                      case 'toggle':
-                        _toggleSubNoteCompletion(subNote);
-                        break;
-                      case 'reparent':
-                        _reparentSubNote(currentNote, subNote);
-                        break;
-                      case 'delete':
-                        _deleteSubNote(currentNote, subNote);
-                        break;
-                    }
-                  },
+                    ],
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          _editSubNote(currentNote, subNote);
+                          break;
+                        case 'toggle':
+                          _toggleSubNoteCompletion(subNote);
+                          break;
+                        case 'reparent':
+                          _reparentSubNote(currentNote, subNote);
+                          break;
+                        case 'delete':
+                          _deleteSubNote(currentNote, subNote);
+                          break;
+                      }
+                    },
+                  ),
+                  onTap: () => _toggleSubNoteCompletion(subNote),
                 ),
-                onTap: () => _toggleSubNoteCompletion(subNote),
               ),
-            )),
+            ),
           ] else if (!_isEditing) ...[
             const SizedBox(height: 24),
             Row(
@@ -521,9 +556,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Text(
                 l10n.tags,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               TextButton.icon(
@@ -538,13 +573,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: currentNote.tags.map((tag) => Chip(
-                label: Text(tag),
-                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                deleteIcon: const Icon(Icons.close, size: 16),
-                onDeleted: () => _removeTag(currentNote, tag),
-              )).toList(),
+              children: currentNote.tags
+                  .map(
+                    (tag) => Chip(
+                      label: Text(tag),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.1),
+                      labelStyle: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      deleteIcon: const Icon(Icons.close, size: 16),
+                      onDeleted: () => _removeTag(currentNote, tag),
+                    ),
+                  )
+                  .toList(),
             )
           else
             Container(
@@ -568,12 +611,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 24),
             Text(
               l10n.attachments,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ...currentNote.attachmentPaths.map((path) => _buildAttachmentCard(path, currentNote)),
+            ...currentNote.attachmentPaths.map(
+              (path) => _buildAttachmentCard(path, currentNote),
+            ),
           ],
           if (_linkedNotes.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -636,13 +681,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             children: [
               Text(
                 l10n.conversations,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               FutureBuilder<int>(
-                future: context.read<AppProvider>().getNoteConversationCount(currentNote.id),
+                future: context.read<AppProvider>().getNoteConversationCount(
+                  currentNote.id,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
                     final count = snapshot.data!;
@@ -671,16 +718,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           const SizedBox(height: 24),
           SelectableText(
             '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
           ),
           if (currentNote.updatedAt != currentNote.createdAt)
             SelectableText(
               '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
             ),
         ],
       ),
@@ -689,7 +736,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Widget _buildEditingView() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -741,10 +788,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-
   Widget _buildDateSelectionFields() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Column(
       children: [
         Row(
@@ -757,16 +803,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     labelText: l10n.scheduledAt,
                     border: OutlineInputBorder(
                       borderSide: BorderSide(
-                        color: _dateValidationError != null ? Colors.red : Colors.grey,
+                        color: _dateValidationError != null
+                            ? Colors.red
+                            : Colors.grey,
                       ),
                     ),
                   ),
                   child: Text(
-                    _scheduledAt != null 
+                    _scheduledAt != null
                         ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year}'
                         : 'Select date',
-                    style: _scheduledAt != null 
-                        ? null 
+                    style: _scheduledAt != null
+                        ? null
                         : TextStyle(color: Colors.grey[600]),
                   ),
                 ),
@@ -781,16 +829,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     labelText: l10n.completeBy,
                     border: OutlineInputBorder(
                       borderSide: BorderSide(
-                        color: _dateValidationError != null ? Colors.red : Colors.grey,
+                        color: _dateValidationError != null
+                            ? Colors.red
+                            : Colors.grey,
                       ),
                     ),
                   ),
                   child: Text(
-                    _completeBy != null 
+                    _completeBy != null
                         ? '${_completeBy!.day}/${_completeBy!.month}/${_completeBy!.year}'
                         : 'Select date',
-                    style: _completeBy != null 
-                        ? null 
+                    style: _completeBy != null
+                        ? null
                         : TextStyle(color: Colors.grey[600]),
                   ),
                 ),
@@ -804,10 +854,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               _dateValidationError!,
-              style: TextStyle(
-                color: Colors.red[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.red[600], fontSize: 12),
             ),
           ),
         ],
@@ -817,20 +864,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Widget _buildTaskStatus(Note currentNote) {
     if (!currentNote.isTask) return const SizedBox.shrink();
-    
+
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Card(
       color: _getStatusColor().withOpacity(0.1),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(
-              _getStatusIcon(),
-              color: _getStatusColor(),
-              size: 24,
-            ),
+            Icon(_getStatusIcon(), color: _getStatusColor(), size: 24),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -840,10 +883,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     children: [
                       Text(
                         '${l10n.status}: ',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _getStatusColor(),
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: _getStatusColor(),
+                            ),
                       ),
                       _buildStatusDropdown(currentNote),
                     ],
@@ -874,7 +918,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    
+
     if (picked != null) {
       setState(() {
         _scheduledAt = picked;
@@ -890,7 +934,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    
+
     if (picked != null) {
       setState(() {
         _completeBy = picked;
@@ -903,7 +947,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (_scheduledAt != null && _completeBy != null) {
       if (_completeBy!.isBefore(_scheduledAt!)) {
         setState(() {
-          _dateValidationError = 'Complete By must be no earlier than Schedule At';
+          _dateValidationError =
+              'Complete By must be no earlier than Schedule At';
         });
       } else {
         setState(() {
@@ -919,14 +964,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Widget _buildBottomBar() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
-        border: Border(
-          top: BorderSide(color: Colors.grey[300]!),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey[300]!)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -955,7 +998,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _isRecording ? _stopRecording : _startRecording,
                     icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                    label: Text(_isRecording ? l10n.stopRecording : l10n.recordAudio),
+                    label: Text(
+                      _isRecording ? l10n.stopRecording : l10n.recordAudio,
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _isRecording ? Colors.red : null,
                     ),
@@ -1004,10 +1049,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Tap "Stop Recording" when you\'re done',
-                  style: TextStyle(
-                    color: Colors.red[700],
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.red[700], fontSize: 12),
                 ),
               ],
             ),
@@ -1094,21 +1136,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     // Update controllers with the latest content
     _titleController.text = currentNote.title;
     _contentController.text = currentNote.content;
-    
+
     // Update date fields for tasks
     if (currentNote.isTask) {
-      _scheduledAt = currentNote.scheduledAt != null 
-          ? DateTime.tryParse(currentNote.scheduledAt!) 
+      _scheduledAt = currentNote.scheduledAt != null
+          ? DateTime.tryParse(currentNote.scheduledAt!)
           : null;
-      _completeBy = currentNote.completeBy != null 
-          ? DateTime.tryParse(currentNote.completeBy!) 
+      _completeBy = currentNote.completeBy != null
+          ? DateTime.tryParse(currentNote.completeBy!)
           : null;
     }
-    
+
     setState(() {
       _isEditing = true;
       _hasChanges = false;
@@ -1121,51 +1163,58 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     setState(() {
       _isEditing = false;
       _hasChanges = false;
       _titleController.text = currentNote.title;
       _contentController.text = currentNote.content;
       _dateValidationError = null;
-      
+
       // Reset date fields for tasks
       if (currentNote.isTask) {
-        _scheduledAt = currentNote.scheduledAt != null 
-            ? DateTime.tryParse(currentNote.scheduledAt!) 
+        _scheduledAt = currentNote.scheduledAt != null
+            ? DateTime.tryParse(currentNote.scheduledAt!)
             : null;
-        _completeBy = currentNote.completeBy != null 
-            ? DateTime.tryParse(currentNote.completeBy!) 
+        _completeBy = currentNote.completeBy != null
+            ? DateTime.tryParse(currentNote.completeBy!)
             : null;
       }
     });
   }
 
   void _autoSave() {
-    if (_titleController.text.trim().isEmpty && _contentController.text.trim().isEmpty) {
+    if (_titleController.text.trim().isEmpty &&
+        _contentController.text.trim().isEmpty) {
       return; // Don't save empty notes
     }
-    
+
     // Don't save if there are validation errors
     if (_dateValidationError != null) {
       return;
     }
-    
+
     // Get the current note from the provider to preserve any tags that were added
     final appProvider = context.read<AppProvider>();
     final currentNote = appProvider.notes.firstWhere(
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     final updatedNote = currentNote.copyWith(
-      title: _titleController.text.trim().isEmpty ? 'Untitled' : _titleController.text.trim(),
+      title: _titleController.text.trim().isEmpty
+          ? 'Untitled'
+          : _titleController.text.trim(),
       content: _contentController.text.trim(),
       updatedAt: DateTime.now(),
-      scheduledAt: _scheduledAt != null ? AppDateUtils.formatDateOnly(_scheduledAt!) : null,
-      completeBy: _completeBy != null ? AppDateUtils.formatDateOnly(_completeBy!) : null,
+      scheduledAt: _scheduledAt != null
+          ? AppDateUtils.formatDateOnly(_scheduledAt!)
+          : null,
+      completeBy: _completeBy != null
+          ? AppDateUtils.formatDateOnly(_completeBy!)
+          : null,
     );
-    
+
     if (!_hasBeenSaved) {
       // First save: Add new note to the database
       appProvider.addNote(updatedNote);
@@ -1176,18 +1225,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       // Subsequent saves: Update existing note
       appProvider.updateNote(updatedNote);
     }
-    
+
     setState(() {
       _hasChanges = false;
     });
   }
 
-
   void _deleteNote() async {
     // Check if there are associated conversations
     final appProvider = context.read<AppProvider>();
-    final conversationCount = await appProvider.getNoteConversationCount(widget.note.id);
-    
+    final conversationCount = await appProvider.getNoteConversationCount(
+      widget.note.id,
+    );
+
     if (conversationCount > 0) {
       showDialog(
         context: context,
@@ -1201,9 +1251,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               const SizedBox(height: 8),
               Text(
                 'Deleting this note will remove it from $conversationCount conversation${conversationCount == 1 ? '' : 's'}.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 16),
               const Text('Are you sure you want to delete this note?'),
@@ -1270,13 +1320,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     final newType = currentNote.isTask ? NoteType.note : NoteType.task;
     final updatedNote = currentNote.copyWith(
       type: newType,
       updatedAt: DateTime.now(),
     );
-    
+
     context.read<AppProvider>().updateNote(updatedNote);
     Navigator.pop(context);
   }
@@ -1286,14 +1336,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     // Check if trying to archive a pinned note
     if (!currentNote.isArchived && currentNote.pinned) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Cannot Archive Pinned Note'),
-          content: const Text('Please unpin the note first before archiving it.'),
+          content: const Text(
+            'Please unpin the note first before archiving it.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -1304,13 +1356,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
       return;
     }
-    
+
     final action = currentNote.isArchived ? 'unarchive' : 'archive';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('${action == 'archive' ? 'Archive' : 'Unarchive'} Note'),
-        content: Text('Are you sure you want to ${action} this note?'),
+        content: Text('Are you sure you want to $action this note?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1321,7 +1373,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               Navigator.pop(context);
               final updatedNote = currentNote.copyWith(
                 isArchived: !currentNote.isArchived,
-                pinned: currentNote.isArchived ? currentNote.pinned : false, // Unpin when archiving
+                pinned: currentNote.isArchived
+                    ? currentNote.pinned
+                    : false, // Unpin when archiving
                 updatedAt: DateTime.now(),
               );
               context.read<AppProvider>().updateNote(updatedNote);
@@ -1335,7 +1389,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _toggleSubNoteCompletion(SubNote subNote) {
-    context.read<AppProvider>().toggleSubNoteCompletion(widget.note.id, subNote.id);
+    context.read<AppProvider>().toggleSubNoteCompletion(
+      widget.note.id,
+      subNote.id,
+    );
   }
 
   void _addSubNote(Note note) {
@@ -1349,10 +1406,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _editSubNote(Note note, SubNote subNote) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => SubNoteEditScreen(
-          parentNote: note,
-          subNote: subNote,
-        ),
+        builder: (context) =>
+            SubNoteEditScreen(parentNote: note, subNote: subNote),
       ),
     );
   }
@@ -1371,7 +1426,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              context.read<AppProvider>().deleteSubNoteFromNote(note.id, subNote.id);
+              context.read<AppProvider>().deleteSubNoteFromNote(
+                note.id,
+                subNote.id,
+              );
             },
             child: const Text('Delete'),
           ),
@@ -1379,7 +1437,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
   }
-
 
   void _updateNote(Note newNote) {
     setState(() {
@@ -1414,10 +1471,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => NoteActionAppSelectionScreen(selectedNotes: [currentNote]),
+        builder: (context) =>
+            NoteActionAppSelectionScreen(selectedNotes: [currentNote]),
       ),
     );
   }
@@ -1428,27 +1486,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       (note) => note.id == widget.note.id,
       orElse: () => widget.note,
     );
-    
+
     showDialog(
       context: context,
-      builder: (context) => ShareDialog(
-        notes: [currentNote],
-        title: currentNote.title,
-      ),
+      builder: (context) =>
+          ShareDialog(notes: [currentNote], title: currentNote.title),
     );
   }
 
   Widget _buildAttachmentCard(String attachmentPath, Note currentNote) {
     final l10n = AppLocalizations.of(context)!;
     final fileName = attachmentPath.split('/').last;
-    
+
     // The attachmentPath should already be an absolute path when loaded from the database
     // If it's not, there's an issue with the database service
     final file = File(attachmentPath);
     final fileExists = file.existsSync();
     final isAudioFile = _isAudioFile(fileName);
-    final isCurrentlyPlaying = _isPlaying && _currentPlayingPath == attachmentPath;
-    
+    final isCurrentlyPlaying =
+        _isPlaying && _currentPlayingPath == attachmentPath;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -1458,15 +1515,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
         title: Text(
           fileName,
-          style: TextStyle(
-            color: fileExists ? null : Colors.grey,
-          ),
+          style: TextStyle(color: fileExists ? null : Colors.grey),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              fileExists ? _formatFileSize(file.lengthSync()) : 'File not found',
+              fileExists
+                  ? _formatFileSize(file.lengthSync())
+                  : 'File not found',
               style: TextStyle(
                 color: fileExists ? Colors.grey[600] : Colors.red,
               ),
@@ -1510,7 +1567,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
         ),
-        onTap: fileExists && !isAudioFile ? () => FileUtils.openFile(attachmentPath, context) : null,
+        onTap: fileExists && !isAudioFile
+            ? () => FileUtils.openFile(attachmentPath, context)
+            : null,
       ),
     );
   }
@@ -1520,8 +1579,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       children: [
         if (isCurrentlyPlaying) ...[
           Slider(
-            value: _playingDuration.inMilliseconds > 0 
-                ? _playingPosition.inMilliseconds / _playingDuration.inMilliseconds 
+            value: _playingDuration.inMilliseconds > 0
+                ? _playingPosition.inMilliseconds /
+                      _playingDuration.inMilliseconds
                 : 0.0,
             onChanged: (value) {
               final newPosition = Duration(
@@ -1576,12 +1636,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-
-  Future<void> _removeAttachment(String attachmentPath, Note currentNote) async {
+  Future<void> _removeAttachment(
+    String attachmentPath,
+    Note currentNote,
+  ) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       // Show confirmation dialog
@@ -1589,7 +1652,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: Text(l10n.removeAttachment),
-          content: Text(l10n.removeAttachmentConfirm(attachmentPath.split('/').last)),
+          content: Text(
+            l10n.removeAttachmentConfirm(attachmentPath.split('/').last),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -1605,9 +1670,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       if (confirmed == true) {
         // Remove attachment from note
-        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        final updatedAttachmentPaths = List<String>.from(
+          currentNote.attachmentPaths,
+        );
         updatedAttachmentPaths.remove(attachmentPath);
-        
+
         final updatedNote = currentNote.copyWith(
           attachmentPaths: updatedAttachmentPaths,
           updatedAt: DateTime.now(),
@@ -1615,7 +1682,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
         // Update the note in the database
         await context.read<AppProvider>().updateNote(updatedNote);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.attachmentRemoved),
@@ -1649,17 +1716,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
 
         // Get existing attachment paths
-        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
-        
+        final updatedAttachmentPaths = List<String>.from(
+          currentNote.attachmentPaths,
+        );
+
         // Process and add new attachment paths
         for (final file in result.files) {
           try {
             // Read file bytes and save to private storage
             final bytes = file.bytes ?? await File(file.path!).readAsBytes();
-            final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, file.name);
+            final relativePath = await FileUtils.saveFileToPrivateStorage(
+              bytes,
+              file.name,
+            );
             updatedAttachmentPaths.add(relativePath);
           } catch (e) {
-            LoggerService.error('Error processing file ${file.name}: $e', error: e);
+            LoggerService.error(
+              'Error processing file ${file.name}: $e',
+              error: e,
+            );
             // Continue with other files even if one fails
           }
         }
@@ -1671,7 +1746,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
 
         await context.read<AppProvider>().updateNote(updatedNote);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.addedAttachments(result.files.length)),
@@ -1702,16 +1777,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Read file bytes and save to private storage
         final file = File(image.path);
         final bytes = await file.readAsBytes();
-        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, image.name);
-        
+        final relativePath = await FileUtils.saveFileToPrivateStorage(
+          bytes,
+          image.name,
+        );
+
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
         );
 
         // Get existing attachment paths
-        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
-        
+        final updatedAttachmentPaths = List<String>.from(
+          currentNote.attachmentPaths,
+        );
+
         // Add the new photo path (relative path)
         updatedAttachmentPaths.add(relativePath);
 
@@ -1722,7 +1802,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
 
         await context.read<AppProvider>().updateNote(updatedNote);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.photoAddedToNote),
@@ -1815,7 +1895,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   List<Widget> _buildLinkedNotesList(Note currentNote) {
     return _relationships.map((relationship) {
       final linkedNote = _linkedNotes.firstWhere(
-        (note) => note.id == (relationship.fromNoteId == currentNote.id ? relationship.toNoteId : relationship.fromNoteId),
+        (note) =>
+            note.id ==
+            (relationship.fromNoteId == currentNote.id
+                ? relationship.toNoteId
+                : relationship.fromNoteId),
         orElse: () => Note(
           id: 'unknown',
           title: 'Unknown Note',
@@ -1825,9 +1909,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           updatedAt: DateTime.now(),
         ),
       );
-      
+
       final isOutgoing = relationship.fromNoteId == currentNote.id;
-      
+
       return Card(
         margin: const EdgeInsets.only(bottom: 8),
         child: ListTile(
@@ -1838,10 +1922,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           title: SelectableText(linkedNote.title),
           subtitle: Text(
             '${RelationshipType.getDisplayName(relationship.type)} ${isOutgoing ? '→' : '←'}',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
           trailing: IconButton(
             icon: const Icon(Icons.remove_circle, color: Colors.red),
@@ -1871,9 +1952,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
 
     if (selectedNotes == null || selectedNotes.isEmpty) return;
-    
+
     // Filter out the current note if it was somehow selected
-    final notesToLink = selectedNotes.where((note) => note.id != widget.note.id).toList();
+    final notesToLink = selectedNotes
+        .where((note) => note.id != widget.note.id)
+        .toList();
     if (notesToLink.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1882,17 +1965,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
       return;
     }
-    
+
     // Step 2: Show relationship type selection dialog
     final relationshipType = await showDialog<String>(
       context: context,
-      builder: (context) => _RelationshipTypeSelectionDialog(
-        noteCount: notesToLink.length,
-      ),
+      builder: (context) =>
+          _RelationshipTypeSelectionDialog(noteCount: notesToLink.length),
     );
-    
+
     if (relationshipType == null || relationshipType.isEmpty) return;
-    
+
     // Step 3: Create relationships for all selected notes
     try {
       final noteIds = notesToLink.map((note) => note.id).toList();
@@ -1902,7 +1984,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         relationshipType,
       );
       await _loadRelationships();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1942,7 +2024,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await context.read<AppProvider>().deleteRelationship(relationshipId);
+              await context.read<AppProvider>().deleteRelationship(
+                relationshipId,
+              );
               await _loadRelationships();
             },
             child: const Text('Remove', style: TextStyle(color: Colors.red)),
@@ -1957,7 +2041,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Tag'),
-        content: Text('Are you sure you want to remove the tag "$tagName" from this note?'),
+        content: Text(
+          'Are you sure you want to remove the tag "$tagName" from this note?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1966,7 +2052,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await context.read<AppProvider>().removeTagFromNote(currentNote.id, tagName);
+              await context.read<AppProvider>().removeTagFromNote(
+                currentNote.id,
+                tagName,
+              );
             },
             child: const Text('Remove', style: TextStyle(color: Colors.red)),
           ),
@@ -1976,29 +2065,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _showAddTagDialog(Note currentNote) {
-    // Get a reference to AppProvider before showing the dialog
     final appProvider = context.read<AppProvider>();
-    
-    showDialog(
+    showDialog<List<String>>(
       context: context,
-      builder: (context) => _AddTagDialog(
-        currentNote: currentNote,
-        onAddTags: (tagNames) async {
-          Navigator.pop(context);
-          // Use the saved reference instead of context.read
-          for (final tagName in tagNames) {
-            await appProvider.addTagToNote(currentNote.id, tagName);
-          }
-        },
+      builder: (context) => TagSelectionDialog(
+        title: 'Add Tags',
+        description: 'Add tags to "${currentNote.title}":',
+        excludedTags: currentNote.tags,
+        allowCreateNew: true,
+        allowEmptySelection: false,
+        confirmLabelBuilder: (count) =>
+            count > 0 ? 'Add $count Tag${count > 1 ? 's' : ''}' : 'Add Tags',
       ),
-    );
+    ).then((tagNames) async {
+      if (tagNames == null || tagNames.isEmpty) return;
+      for (final tagName in tagNames) {
+        await appProvider.addTagToNote(currentNote.id, tagName);
+      }
+    });
   }
 
   void _showConversationsDialog() async {
     try {
       final appProvider = context.read<AppProvider>();
-      final conversationIds = await appProvider.getNoteConversationIds(widget.note.id);
-      
+      final conversationIds = await appProvider.getNoteConversationIds(
+        widget.note.id,
+      );
+
       if (conversationIds.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No conversations found for this note')),
@@ -2009,7 +2102,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       // Get conversation details with messages
       final conversations = <Conversation>[];
       for (final conversationId in conversationIds) {
-        final conversation = await _databaseService.getConversation(conversationId);
+        final conversation = await _databaseService.getConversation(
+          conversationId,
+        );
         if (conversation != null) {
           conversations.add(conversation);
         }
@@ -2040,11 +2135,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-
   // Audio recording methods
   Future<void> _startRecording() async {
     if (_audioService == null) return;
-    
+
     try {
       final success = await _audioService!.startRecording();
       if (success) {
@@ -2057,7 +2151,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to start recording. Please check microphone permissions.'),
+            content: Text(
+              'Failed to start recording. Please check microphone permissions.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2075,7 +2171,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _stopRecording() async {
     if (_audioService == null) return;
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
@@ -2083,15 +2179,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         final file = File(audioPath);
         final bytes = await file.readAsBytes();
         final fileName = audioPath.split('/').last;
-        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
-        
+        final relativePath = await FileUtils.saveFileToPrivateStorage(
+          bytes,
+          fileName,
+        );
+
         // Add the recorded audio as an attachment
         final currentNote = context.read<AppProvider>().notes.firstWhere(
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
         );
 
-        final updatedAttachmentPaths = List<String>.from(currentNote.attachmentPaths);
+        final updatedAttachmentPaths = List<String>.from(
+          currentNote.attachmentPaths,
+        );
         updatedAttachmentPaths.add(relativePath);
 
         final updatedNote = currentNote.copyWith(
@@ -2120,7 +2221,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _cancelRecording() async {
     if (_audioService == null) return;
-    
+
     await _audioService!.cancelRecording();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -2133,7 +2234,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // Audio playback methods
   Future<void> _toggleAudioPlayback(String audioPath) async {
     if (_audioService == null) return;
-    
+
     try {
       if (_isPlaying && _currentPlayingPath == audioPath) {
         await _audioService!.pausePlaying();
@@ -2164,7 +2265,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _stopAudioPlayback() async {
     if (_audioService == null) return;
-    
+
     try {
       await _audioService!.stopPlaying();
       setState(() {
@@ -2199,7 +2300,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
 
       final transcription = await AIService.transcribeAudio(audioPath);
-      
+
       // Close loading dialog
       Navigator.of(context).pop();
 
@@ -2208,9 +2309,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Audio Transcription'),
-          content: SingleChildScrollView(
-            child: Text(transcription),
-          ),
+          content: SingleChildScrollView(child: Text(transcription)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -2229,7 +2328,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } catch (e) {
       // Close loading dialog if it's open
       Navigator.of(context).pop();
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error transcribing audio: $e'),
@@ -2246,8 +2345,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         orElse: () => widget.note,
       );
 
-      final updatedContent = currentNote.content.isEmpty 
-          ? transcription 
+      final updatedContent = currentNote.content.isEmpty
+          ? transcription
           : '${currentNote.content}\n\n--- Audio Transcription ---\n$transcription';
 
       final updatedNote = currentNote.copyWith(
@@ -2281,7 +2380,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // Helper methods
   bool _isAudioFile(String fileName) {
     final extension = FileTypeUtils.getFileExtension(fileName);
-    return ['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'wma'].contains(extension);
+    return [
+      'mp3',
+      'wav',
+      'aac',
+      'm4a',
+      'ogg',
+      'flac',
+      'wma',
+    ].contains(extension);
   }
 
   String _formatDuration(Duration duration) {
@@ -2296,10 +2403,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (mounted) {
       // Cancel any pending auto-save to prevent race condition
       _autoSaveTimer?.cancel();
-      
+
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       await appProvider.updateNoteContent(widget.note.id, newContent);
-      
+
       // If we're in editing mode, update the content controller to reflect the changes
       if (_isEditing) {
         _contentController.text = newContent;
@@ -2329,7 +2436,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         subNote: subNote,
         onReparent: (newParentNoteId) async {
           final appProvider = Provider.of<AppProvider>(context, listen: false);
-          await appProvider.reparentSubNote(currentNote.id, newParentNoteId, subNote);
+          await appProvider.reparentSubNote(
+            currentNote.id,
+            newParentNoteId,
+            subNote,
+          );
           if (mounted) {
             Navigator.of(context).pop();
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2382,12 +2493,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 class _RelationshipTypeSelectionDialog extends StatefulWidget {
   final int noteCount;
 
-  const _RelationshipTypeSelectionDialog({
-    required this.noteCount,
-  });
+  const _RelationshipTypeSelectionDialog({required this.noteCount});
 
   @override
-  State<_RelationshipTypeSelectionDialog> createState() => _RelationshipTypeSelectionDialogState();
+  State<_RelationshipTypeSelectionDialog> createState() =>
+      _RelationshipTypeSelectionDialogState();
 }
 
 class _ReparentSubNoteDialog extends StatefulWidget {
@@ -2435,13 +2545,15 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   List<Note> _getAvailableNotes() {
     final l10n = AppLocalizations.of(context)!;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
-    var notes = appProvider.notes.where((note) => note.id != widget.currentNote.id).toList();
+    var notes = appProvider.notes
+        .where((note) => note.id != widget.currentNote.id)
+        .toList();
 
     // Filter by search query
     if (_searchQuery.isNotEmpty) {
       notes = notes.where((note) {
         return note.title.toLowerCase().contains(_searchQuery) ||
-               note.content.toLowerCase().contains(_searchQuery);
+            note.content.toLowerCase().contains(_searchQuery);
       }).toList();
     }
 
@@ -2484,11 +2596,14 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                 hintText: 'Search notes...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Tags Dropdown
             Row(
               children: [
@@ -2499,10 +2614,13 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedTag,
+                    initialValue: _selectedTag,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     hint: Text(l10n.allNotes),
                     items: _getAllTags().map((tag) {
@@ -2522,13 +2640,15 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
               ],
             ),
             const SizedBox(height: 16),
-            
+
             // Notes List
             Expanded(
               child: _filteredNotes.isEmpty
                   ? Center(
                       child: Text(
-                        _searchQuery.isNotEmpty || (_selectedTag != null && _selectedTag != l10n.allNotes)
+                        _searchQuery.isNotEmpty ||
+                                (_selectedTag != null &&
+                                    _selectedTag != l10n.allNotes)
                             ? 'No notes match your search'
                             : 'No other notes available',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -2541,15 +2661,19 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                       itemBuilder: (context, index) {
                         final note = _filteredNotes[index];
                         final isSelected = _selectedNoteId == note.id;
-                        
+
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
-                          color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+                          color: isSelected
+                              ? Theme.of(context).primaryColor.withOpacity(0.1)
+                              : null,
                           child: ListTile(
                             title: Text(
                               note.title,
                               style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
                             subtitle: Column(
@@ -2557,7 +2681,7 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                               children: [
                                 const SizedBox(height: 4),
                                 Text(
-                                  note.content.length > 80 
+                                  note.content.length > 80
                                       ? '${note.content.substring(0, 80)}...'
                                       : note.content,
                                   maxLines: 2,
@@ -2572,24 +2696,42 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
                                   Wrap(
                                     spacing: 4,
                                     runSpacing: 2,
-                                    children: note.tags.take(3).map((tag) => Chip(
-                                      label: Text(
-                                        tag,
-                                        style: const TextStyle(fontSize: 10),
-                                      ),
-                                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                      labelStyle: TextStyle(
-                                        color: Theme.of(context).colorScheme.primary,
-                                        fontSize: 10,
-                                      ),
-                                    )).toList(),
+                                    children: note.tags
+                                        .take(3)
+                                        .map(
+                                          (tag) => Chip(
+                                            label: Text(
+                                              tag,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                            backgroundColor: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.1),
+                                            labelStyle: TextStyle(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
                                   ),
                                 ],
                               ],
                             ),
-                            trailing: isSelected 
-                                ? const Icon(Icons.check_circle, color: Colors.green)
-                                : const Icon(Icons.radio_button_unchecked, color: Colors.grey),
+                            trailing: isSelected
+                                ? const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  )
+                                : const Icon(
+                                    Icons.radio_button_unchecked,
+                                    color: Colors.grey,
+                                  ),
                             onTap: () {
                               setState(() {
                                 _selectedNoteId = note.id;
@@ -2619,7 +2761,8 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   }
 }
 
-class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelectionDialog> {
+class _RelationshipTypeSelectionDialogState
+    extends State<_RelationshipTypeSelectionDialog> {
   String _selectedRelationshipType = RelationshipType.related;
   bool _isCustomMode = false;
   final TextEditingController _customTypeController = TextEditingController();
@@ -2645,23 +2788,30 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _isCustomMode ? 'custom' : _selectedRelationshipType,
+              initialValue: _isCustomMode
+                  ? 'custom'
+                  : _selectedRelationshipType,
               decoration: const InputDecoration(
                 labelText: 'Relationship Type',
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: [
-                ...RelationshipType.predefined.map((type) => DropdownMenuItem(
-                  value: type,
-                  child: Row(
-                    children: [
-                      Icon(RelationshipType.getIcon(type), size: 20),
-                      const SizedBox(width: 8),
-                      Text(RelationshipType.getDisplayName(type)),
-                    ],
+                ...RelationshipType.predefined.map(
+                  (type) => DropdownMenuItem(
+                    value: type,
+                    child: Row(
+                      children: [
+                        Icon(RelationshipType.getIcon(type), size: 20),
+                        const SizedBox(width: 8),
+                        Text(RelationshipType.getDisplayName(type)),
+                      ],
+                    ),
                   ),
-                )),
+                ),
                 const DropdownMenuItem(
                   value: 'custom',
                   child: Row(
@@ -2706,213 +2856,18 @@ class _RelationshipTypeSelectionDialogState extends State<_RelationshipTypeSelec
         ),
         ElevatedButton(
           onPressed: () {
-            final relationshipType = _isCustomMode 
+            final relationshipType = _isCustomMode
                 ? _customTypeController.text.trim()
                 : _selectedRelationshipType;
             if (relationshipType.isNotEmpty) {
               Navigator.pop(context, relationshipType);
             }
           },
-          child: Text('Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}'),
+          child: Text(
+            'Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}',
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _AddTagDialog extends StatefulWidget {
-  final Note currentNote;
-  final Function(List<String> tagNames) onAddTags;
-
-  const _AddTagDialog({
-    required this.currentNote,
-    required this.onAddTags,
-  });
-
-  @override
-  State<_AddTagDialog> createState() => _AddTagDialogState();
-}
-
-class _AddTagDialogState extends State<_AddTagDialog> {
-  final TextEditingController _newTagController = TextEditingController();
-  Set<String> _selectedTags = {};
-  String _tagSearchQuery = '';
-
-  @override
-  void dispose() {
-    _newTagController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AppProvider>(
-      builder: (context, appProvider, child) {
-        final allTags = appProvider.tags.map((tag) => tag.name).toList()..sort();
-        
-        // Filter available tags based on search query
-        final availableTags = allTags.where((tag) => 
-          !_selectedTags.contains(tag) && 
-          !widget.currentNote.tags.contains(tag) &&
-          (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase()))
-        ).toList();
-        
-        return AlertDialog(
-          title: const Text('Add Tags'),
-          content: SizedBox(
-            width: 400,
-            height: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Add tags to "${widget.currentNote.title}":',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Scrollable tags container with constrained height
-                  Container(
-                    height: 300, // Fixed height for scrollable area
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Selected tags
-                          if (_selectedTags.isNotEmpty) ...[
-                            Text(
-                              'Selected tags:',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: _selectedTags.map((tag) {
-                                return Chip(
-                                  label: Text(tag),
-                                  deleteIcon: const Icon(Icons.close, size: 18),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _selectedTags.remove(tag);
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          
-                          // Add new tag
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _newTagController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Add new tag or search',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.add),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _tagSearchQuery = value;
-                                    });
-                                  },
-                                  onSubmitted: (value) {
-                                    if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
-                                      setState(() {
-                                        _selectedTags.add(value.trim());
-                                        _newTagController.clear();
-                                        _tagSearchQuery = '';
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                onPressed: () {
-                                  final value = _newTagController.text.trim();
-                                  if (value.isNotEmpty && !_selectedTags.contains(value)) {
-                                    setState(() {
-                                      _selectedTags.add(value);
-                                      _newTagController.clear();
-                                      _tagSearchQuery = '';
-                                    });
-                                  }
-                                },
-                                icon: const Icon(Icons.add),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
-                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          // Available tags to select from
-                          if (availableTags.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              'Available tags:',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: availableTags.map((tag) {
-                                return ActionChip(
-                                  label: Text(tag),
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedTags.add(tag);
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: _selectedTags.isNotEmpty ? () {
-                widget.onAddTags(_selectedTags.toList());
-              } : null,
-              child: Text(
-                _selectedTags.isNotEmpty 
-                    ? 'Add ${_selectedTags.length} Tag${_selectedTags.length > 1 ? 's' : ''}' 
-                    : 'Add Tags',
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }
@@ -2927,7 +2882,8 @@ class _NoteConversationsDialog extends StatefulWidget {
   });
 
   @override
-  State<_NoteConversationsDialog> createState() => _NoteConversationsDialogState();
+  State<_NoteConversationsDialog> createState() =>
+      _NoteConversationsDialogState();
 }
 
 class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
@@ -2975,6 +2931,26 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                       ),
                     ),
                   ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close the current dialog
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ConversationTreeScreen(
+                            activeConversationIds: widget.conversations
+                                .map((c) => c.id)
+                                .toList(),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      l10n.openInTree,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: Icon(
@@ -2985,7 +2961,7 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                 ],
               ),
             ),
-            
+
             // Conversations list
             Expanded(
               child: _conversations.isEmpty
@@ -3001,9 +2977,8 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                           const SizedBox(height: 16),
                           Text(
                             'No conversations found',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ],
                       ),
@@ -3018,7 +2993,9 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: BorderSide(
-                              color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacity(0.5),
                               width: 1,
                             ),
                           ),
@@ -3028,12 +3005,15 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        conversation.title, 
-                                        style: Theme.of(context).textTheme.titleMedium,
+                                        conversation.title,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
                                       ),
                                     ),
                                     Row(
@@ -3044,14 +3024,23 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                             Navigator.of(context).pop();
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
-                                                builder: (context) => ConversationChatScreen(conversationId: conversation.id),
+                                                builder: (context) =>
+                                                    ConversationChatScreen(
+                                                      conversationId:
+                                                          conversation.id,
+                                                    ),
                                               ),
                                             );
                                           },
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete),
-                                          onPressed: () => _showDeleteConfirmation(context, conversation, l10n),
+                                          onPressed: () =>
+                                              _showDeleteConfirmation(
+                                                context,
+                                                conversation,
+                                                l10n,
+                                              ),
                                         ),
                                       ],
                                     ),
@@ -3059,9 +3048,13 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                 ),
                                 const SizedBox(height: 8),
                                 FutureBuilder<ConversationWithMessages?>(
-                                  future: _conversationService.getConversationWithMessages(conversation.id),
+                                  future: _conversationService
+                                      .getConversationWithMessages(
+                                        conversation.id,
+                                      ),
                                   builder: (context, snapshot) {
-                                    if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
+                                    if (!snapshot.hasData ||
+                                        snapshot.data!.messages.isEmpty) {
                                       return const SizedBox.shrink();
                                     }
                                     final messages = snapshot.data!.messages;
@@ -3070,18 +3063,26 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                         Expanded(
                                           child: Text(
                                             '${l10n.first}: ${messages.first.content}',
-                                            style: Theme.of(context).textTheme.bodySmall,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
                                             maxLines: 3,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        Container(width: 1, height: 40, color: Colors.grey),
+                                        Container(
+                                          width: 1,
+                                          height: 40,
+                                          color: Colors.grey,
+                                        ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
                                             '${l10n.last}: ${messages.last.content}',
-                                            style: Theme.of(context).textTheme.bodySmall,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
                                             maxLines: 3,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -3103,11 +3104,15 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, Conversation conversation, AppLocalizations l10n) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    Conversation conversation,
+    AppLocalizations l10n,
+  ) {
     // Capture AppProvider and ScaffoldMessenger before showing dialog
     final appProvider = widget.appProvider;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    
+
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -3122,9 +3127,9 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
             onPressed: () async {
               Navigator.of(dialogContext).pop();
               await _deleteConversation(
-                conversation.id, 
-                l10n, 
-                appProvider, 
+                conversation.id,
+                l10n,
+                appProvider,
                 scaffoldMessenger,
               );
             },
@@ -3140,7 +3145,7 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
   }
 
   Future<void> _deleteConversation(
-    String conversationId, 
+    String conversationId,
     AppLocalizations l10n,
     AppProvider appProvider,
     ScaffoldMessengerState scaffoldMessenger,
@@ -3148,15 +3153,15 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
     try {
       // Perform deletion - this doesn't depend on context
       await appProvider.deleteConversation(conversationId);
-      
+
       // Check if widget is still mounted before updating UI
       if (!mounted) return;
-      
+
       // Remove conversation from local list
       setState(() {
         _conversations.removeWhere((c) => c.id == conversationId);
       });
-      
+
       // Show success message
       scaffoldMessenger.showSnackBar(
         SnackBar(
@@ -3164,7 +3169,7 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
           backgroundColor: Colors.green,
         ),
       );
-      
+
       // If no conversations left, close the dialog after a short delay
       if (_conversations.isEmpty && mounted) {
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -3175,10 +3180,10 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
       }
     } catch (e) {
       LoggerService.error('Error deleting conversation: $e', error: e);
-      
+
       // Check if widget is still mounted before showing error
       if (!mounted) return;
-      
+
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(l10n.errorDeletingConversation(e.toString())),
@@ -3188,4 +3193,3 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
     }
   }
 }
-

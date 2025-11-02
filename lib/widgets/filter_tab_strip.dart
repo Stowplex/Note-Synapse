@@ -96,7 +96,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     
-    return Container(
+    return SizedBox(
       height: 48,
       child: SingleChildScrollView(
         controller: _scrollController,

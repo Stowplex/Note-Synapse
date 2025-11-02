@@ -598,7 +598,7 @@ class _LinkNotesDialogState extends State<_LinkNotesDialog> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedRelationshipType,
+              initialValue: _selectedRelationshipType,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
