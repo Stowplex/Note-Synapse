@@ -350,6 +350,28 @@
   "addFilter": "添加筛选器",
   "delete": "删除",
   "manageTags": "管理标签",
+  "addTags": "添加标签",
+  "filterTags": "筛选标签",
+  "filterTagsDialog": "筛选标签",
+  "filterTagsCount": "{count}个标签",
+  "@filterTagsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "清除筛选",
+  "applyFilters": "应用筛选",
+  "clearTags": "清除标签",
+  "applyTagsWithCount": "应用{count}个标签",
+  "@applyTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tagManagement": "标签管理",
   "tagUsageCount": "{noteCount}条笔记 / {conversationCount}个会话",
   "deleteTag": "删除标签",

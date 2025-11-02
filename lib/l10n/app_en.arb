@@ -350,6 +350,28 @@
   "addFilter": "Add Filter",
   "delete": "Delete",
   "manageTags": "Manage Tags",
+  "addTags": "Add tags",
+  "filterTags": "Filter tags",
+  "filterTagsDialog": "Filter Tags",
+  "filterTagsCount": "{count} {count, plural, =1{tag} other{tags}}",
+  "@filterTagsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "Clear Filters",
+  "applyFilters": "Apply Filters",
+  "clearTags": "Clear Tags",
+  "applyTagsWithCount": "Apply {count} {count, plural, =1{Tag} other{Tags}}",
+  "@applyTagsWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tagManagement": "Tag Management",
   "tagUsageCount": "{noteCount} notes / {conversationCount} conversations",
   "deleteTag": "Delete Tag",

@@ -1098,6 +1098,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageTags => '管理标签';
 
   @override
+  String get addTags => '添加标签';
+
+  @override
+  String get filterTags => '筛选标签';
+
+  @override
+  String get filterTagsDialog => '筛选标签';
+
+  @override
+  String filterTagsCount(int count) {
+    return '$count个标签';
+  }
+
+  @override
+  String get clearFilters => '清除筛选';
+
+  @override
+  String get applyFilters => '应用筛选';
+
+  @override
+  String get clearTags => '清除标签';
+
+  @override
+  String applyTagsWithCount(int count) {
+    return '应用$count个标签';
+  }
+
+  @override
   String get tagManagement => '标签管理';
 
   @override

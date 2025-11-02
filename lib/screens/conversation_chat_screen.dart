@@ -177,18 +177,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final appProvider = context.read<AppProvider>();
     final selectedTags = await showDialog<List<String>>(
       context: context,
       builder: (context) => TagSelectionDialog(
-        title: 'Manage Tags',
+        title: l10n.manageTags,
         description: 'Select tags for "${_conversation!.title}":',
         initialSelectedTags: _conversationTags,
         allowCreateNew: true,
         allowEmptySelection: true,
         confirmLabelBuilder: (count) {
-          if (count == 0) return 'Clear Tags';
-          return 'Apply $count Tag${count > 1 ? 's' : ''}';
+          if (count == 0) return l10n.clearTags;
+          return l10n.applyTagsWithCount(count);
         },
       ),
     );
@@ -1413,9 +1414,9 @@ You may supplement the information from the notes with your own knowledge to pro
             },
             itemBuilder: (context) => [
               if (_conversation != null)
-                const PopupMenuItem<String>(
+                PopupMenuItem<String>(
                   value: 'add_tags',
-                  child: Text('Add tags'),
+                  child: Text(l10n.addTags),
                 ),
               if (_messages.isNotEmpty)
                 PopupMenuItem<String>(

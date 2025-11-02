@@ -124,8 +124,8 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                     icon: const Icon(Icons.label_outline),
                     label: Text(
                       _selectedTags.isEmpty
-                          ? 'Filter tags'
-                          : '${_selectedTags.length} tag${_selectedTags.length == 1 ? '' : 's'}',
+                          ? l10n.filterTags
+                          : l10n.filterTagsCount(_selectedTags.length),
                     ),
                   ),
                 ],
@@ -304,15 +304,16 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
   }
 
   Future<void> _showTagFilter() async {
+    final l10n = AppLocalizations.of(context)!;
     final result = await showDialog<List<String>>(
       context: context,
       builder: (context) => TagSelectionDialog(
-        title: 'Filter Tags',
+        title: l10n.filterTagsDialog,
         initialSelectedTags: _selectedTags,
         allowCreateNew: false,
         allowEmptySelection: true,
         confirmLabelBuilder: (count) =>
-            count == 0 ? 'Clear Filters' : 'Apply Filters',
+            count == 0 ? l10n.clearFilters : l10n.applyFilters,
       ),
     );
 

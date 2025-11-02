@@ -1114,6 +1114,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageTags => 'Manage Tags';
 
   @override
+  String get addTags => 'Add tags';
+
+  @override
+  String get filterTags => 'Filter tags';
+
+  @override
+  String get filterTagsDialog => 'Filter Tags';
+
+  @override
+  String filterTagsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'tags',
+      one: 'tag',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get clearFilters => 'Clear Filters';
+
+  @override
+  String get applyFilters => 'Apply Filters';
+
+  @override
+  String get clearTags => 'Clear Tags';
+
+  @override
+  String applyTagsWithCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tags',
+      one: 'Tag',
+    );
+    return 'Apply $count $_temp0';
+  }
+
+  @override
   String get tagManagement => 'Tag Management';
 
   @override

@@ -2132,6 +2132,54 @@ abstract class AppLocalizations {
   /// **'Manage Tags'**
   String get manageTags;
 
+  /// No description provided for @addTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tags'**
+  String get addTags;
+
+  /// No description provided for @filterTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter tags'**
+  String get filterTags;
+
+  /// No description provided for @filterTagsDialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter Tags'**
+  String get filterTagsDialog;
+
+  /// No description provided for @filterTagsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{tag} other{tags}}'**
+  String filterTagsCount(int count);
+
+  /// No description provided for @clearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Filters'**
+  String get clearFilters;
+
+  /// No description provided for @applyFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply Filters'**
+  String get applyFilters;
+
+  /// No description provided for @clearTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Tags'**
+  String get clearTags;
+
+  /// No description provided for @applyTagsWithCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {count} {count, plural, =1{Tag} other{Tags}}'**
+  String applyTagsWithCount(int count);
+
   /// No description provided for @tagManagement.
   ///
   /// In en, this message translates to:
