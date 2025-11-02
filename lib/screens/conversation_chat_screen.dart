@@ -255,9 +255,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       if (_conversation == null) {
         final l10n = AppLocalizations.of(context)!;
         final title = content.isNotEmpty ? content : l10n.newConversation;
+        final noteIdSet = <String>{
+          ..._notes.map((note) => note.id),
+          if (widget.initialNoteIds != null) ...widget.initialNoteIds!,
+        };
         final newConversation = await _conversationService.createConversation(
           title: title.length > 50 ? '${title.substring(0, 50)}...' : title,
-          noteIds: widget.initialNoteIds ?? [],
+          noteIds: noteIdSet.toList(),
         );
         if (!mounted) return;
         setState(() {
@@ -265,6 +269,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           _conversationTags = [];
         });
         await _refreshConversationTags();
+        if (noteIdSet.isNotEmpty) {
+          // Reload notes to ensure the newly created conversation pulls latest context
+          final updatedNotes = await _conversationService.getConversationNotes(
+            newConversation.id,
+          );
+          setState(() {
+            _notes = updatedNotes;
+          });
+        }
       }
 
       // Add the user's message
@@ -1150,6 +1163,19 @@ You may supplement the information from the notes with your own knowledge to pro
     );
 
     if (selectedNotes != null && selectedNotes.isNotEmpty) {
+      final existingIds = _notes.map((note) => note.id).toSet();
+      final newNotes = selectedNotes
+          .where((note) => !existingIds.contains(note.id))
+          .toList();
+
+      if (_conversation == null) {
+        if (newNotes.isEmpty) return;
+        setState(() {
+          _notes = [..._notes, ...newNotes];
+        });
+        return;
+      }
+
       final noteIds = selectedNotes.map((note) => note.id).toList();
       await _conversationService.addNotesToConversation(
         _conversation!.id,
@@ -1211,6 +1237,9 @@ You may supplement the information from the notes with your own knowledge to pro
                                 _notes.removeWhere((n) => n.id == note.id);
                               });
                               dialogSetState(() {});
+                              if (_conversation == null) {
+                                return;
+                              }
                               try {
                                 await _conversationService
                                     .removeNotesFromConversation(
@@ -1287,6 +1316,12 @@ You may supplement the information from the notes with your own knowledge to pro
   }
 
   Future<void> _removeNote(Note note) async {
+    if (_conversation == null) {
+      setState(() {
+        _notes.removeWhere((n) => n.id == note.id);
+      });
+      return;
+    }
     await _conversationService.removeNotesFromConversation(_conversation!.id, [
       note.id,
     ]);
@@ -1299,10 +1334,12 @@ You may supplement the information from the notes with your own knowledge to pro
     if (_notes.isEmpty) return;
 
     final noteIds = _notes.map((note) => note.id).toList();
-    await _conversationService.removeNotesFromConversation(
-      _conversation!.id,
-      noteIds,
-    );
+    if (_conversation != null) {
+      await _conversationService.removeNotesFromConversation(
+        _conversation!.id,
+        noteIds,
+      );
+    }
     setState(() {
       _notes.clear();
     });
