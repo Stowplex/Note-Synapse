@@ -69,9 +69,28 @@ class ConstrainedGptMarkdown extends StatelessWidget {
 
     // Wrap the math widget in a horizontal scrollable container
     // This allows long formulas to scroll without affecting the rest of the content
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: mathWidget,
+    // Use LayoutBuilder to ensure proper constraints are provided to the child
+    // This prevents layout errors when selection containers try to access widget sizes
+    // The key is providing finite vertical constraints even when the parent has infinite height
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Provide a finite maxHeight to prevent layout issues with transforms in selection containers
+        // Use a large but finite value if constraints are unbounded
+        final maxHeight = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : 10000.0; // Large finite value as fallback
+        
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.hardEdge,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: maxHeight,
+            ),
+            child: mathWidget,
+          ),
+        );
+      },
     );
   }
 
