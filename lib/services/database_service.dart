@@ -1689,9 +1689,10 @@ class DatabaseService {
     final db = await database;
     final fileName = filePath.split('/').last;
     final fileType = FileTypeUtils.getFileExtension(fileName);
+    final uuid = Uuid();
 
     await db.insert('attachments', {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'id': uuid.v4(),
       'noteId': noteId,
       'filePath': filePath,
       'fileName': fileName,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../models/filter.dart';
 import '../l10n/app_localizations.dart';
 
@@ -22,6 +23,8 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
   late TextEditingController _includeTagsController;
   bool _includeArchived = false;
   Set<String> _selectedTags = {};
+
+  final Uuid _uuid = const Uuid();
 
   @override
   void initState() {
@@ -169,7 +172,7 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
 
   void _saveFilter() {
     final filter = Filter(
-      id: widget.existingFilter?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: widget.existingFilter?.id ?? _uuid.v4(),
       name: _nameController.text.trim(),
       includeText: _includeTextController.text.trim().isEmpty ? null : _includeTextController.text.trim(),
       includeTags: _selectedTags.toList(),
