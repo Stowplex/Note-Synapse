@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
@@ -10,6 +9,7 @@ import '../widgets/multi_select_tag_filter.dart';
 import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/constrained_gpt_markdown.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -339,7 +339,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: SelectionArea(
-              child: GptMarkdown(
+              child: ConstrainedGptMarkdown(
                 task.content,
                 style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 3,

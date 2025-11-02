@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import '../models/conversation.dart';
 import '../models/note.dart';
 import '../services/conversation_service.dart';
@@ -11,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
+import '../widgets/constrained_gpt_markdown.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
@@ -1246,7 +1246,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                                         ? null
                                         : TextOverflow.ellipsis,
                                   )
-                                : GptMarkdown(message.content),
+                                : ConstrainedGptMarkdown(message.content),
                           ],
                         ),
                       ),
@@ -1473,7 +1473,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            GptMarkdown(aiMessage.content),
+                            ConstrainedGptMarkdown(aiMessage.content),
                           ],
                         ),
                       ),

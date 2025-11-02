@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'constrained_gpt_markdown.dart';
 
 class InteractiveCheckboxList extends StatefulWidget {
   final String originalContent;
@@ -127,7 +128,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
           widgets.add(
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: GptMarkdown(
+              child: ConstrainedGptMarkdown(
                 latexBlockLines.join('\n'),
                 style: widget.style,
                 textDirection: widget.textDirection,
@@ -151,7 +152,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
           widgets.add(
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: GptMarkdown(
+              child: ConstrainedGptMarkdown(
                 codeBlockLines.join('\n'),
                 style: widget.style,
                 textDirection: widget.textDirection,
@@ -191,7 +192,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: GptMarkdown(
+            child: ConstrainedGptMarkdown(
               tableLines.join('\n'),
               style: widget.style,
               textDirection: widget.textDirection,
@@ -265,7 +266,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: GptMarkdown(
+                  child: ConstrainedGptMarkdown(
                     text,
                     style: widget.style,
                     textDirection: widget.textDirection,
@@ -283,7 +284,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: GptMarkdown(
+            child: ConstrainedGptMarkdown(
               line,
               style: widget.style,
               textDirection: widget.textDirection,
@@ -301,7 +302,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       widgets.add(
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 2.0),
-          child: GptMarkdown(
+          child: ConstrainedGptMarkdown(
             latexBlockLines.join('\n'),
             style: widget.style,
             textDirection: widget.textDirection,
@@ -318,7 +319,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       widgets.add(
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 2.0),
-          child: GptMarkdown(
+          child: ConstrainedGptMarkdown(
             codeBlockLines.join('\n'),
             style: widget.style,
             textDirection: widget.textDirection,
@@ -335,7 +336,7 @@ class _InteractiveCheckboxListState extends State<InteractiveCheckboxList> {
       widgets.add(
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 2.0),
-          child: GptMarkdown(
+          child: ConstrainedGptMarkdown(
             tableLines.join('\n'),
             style: widget.style,
             textDirection: widget.textDirection,
