@@ -938,6 +938,18 @@ abstract class AppLocalizations {
   /// **'Generate new notes based on your prompt and context'**
   String get createNewNotesDescription;
 
+  /// No description provided for @transformNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe how you want to transform this note...'**
+  String get transformNoteHint;
+
+  /// No description provided for @createNewNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what new notes you want to create...'**
+  String get createNewNotesHint;
+
   /// No description provided for @enterYourPrompt.
   ///
   /// In en, this message translates to:

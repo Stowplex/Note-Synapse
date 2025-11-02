@@ -460,6 +460,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Generate new notes based on your prompt and context';
 
   @override
+  String get transformNoteHint =>
+      'Describe how you want to transform this note...';
+
+  @override
+  String get createNewNotesHint =>
+      'Describe what new notes you want to create...';
+
+  @override
   String get enterYourPrompt => 'Enter your prompt:';
 
   @override

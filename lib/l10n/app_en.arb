@@ -139,6 +139,8 @@
   "transformNoteDescription": "Rewrite, reorganize, or modify your note",
   "createNewNotes": "Create New Notes",
   "createNewNotesDescription": "Generate new notes based on your prompt and context",
+  "transformNoteHint": "Describe how you want to transform this note...",
+  "createNewNotesHint": "Describe what new notes you want to create...",
   "enterYourPrompt": "Enter your prompt:",
   "attachFiles": "Attach Files",
   "answerOnlyFromNotes": "Answer only from selected notes",

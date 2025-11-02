@@ -108,7 +108,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
               TextField(
               controller: _promptController,
               decoration: InputDecoration(
-                hintText: _getPromptHint(),
+                hintText: _getPromptHint(l10n),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.edit),
                 suffixIcon: Row(
@@ -139,13 +139,6 @@ class _AIActionScreenState extends State<AIActionScreen> {
             const SizedBox(height: 8),
             ],
             if (_selectedAction != AIInteractionType.aiConversation) ...[
-              Text(
-                'Tip: Use Enter for new lines, click Process to submit',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
               if (_attachedFiles.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildAttachedFilesSection(),
@@ -338,12 +331,12 @@ class _AIActionScreenState extends State<AIActionScreen> {
     );
   }
 
-  String _getPromptHint() {
+  String _getPromptHint(AppLocalizations l10n) {
     switch (_selectedAction) {
       case AIInteractionType.noteTransformation:
-        return 'Describe how you want to transform this note...';
+        return l10n.transformNoteHint;
       case AIInteractionType.newNoteCreation:
-        return 'Describe what new notes you want to create...';
+        return l10n.createNewNotesHint;
       default:
         return 'Enter your prompt...';
     }

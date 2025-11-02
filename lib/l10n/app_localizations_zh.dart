@@ -453,6 +453,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createNewNotesDescription => '根据您的提示和上下文生成新笔记';
 
   @override
+  String get transformNoteHint => '描述您想要如何转换此笔记...';
+
+  @override
+  String get createNewNotesHint => '描述您想要创建的新笔记...';
+
+  @override
   String get enterYourPrompt => '输入您的提示：';
 
   @override
