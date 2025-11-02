@@ -90,7 +90,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     try {
       _tree = await _conversationService.refreshConversationTree(
         maxAge: _selectedTimeRange,
-        conversationIds: _highlightedConversationIds,
+        conversationIds: null, // Don't filter by conversationIds, only use for highlighting
         tagNames: _selectedFilterTags.isEmpty ? null : _selectedFilterTags,
       );
       await _fetchNodeConversationIds();
@@ -146,7 +146,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     try {
       _tree = await _conversationService.refreshConversationTree(
         maxAge: _selectedTimeRange,
-        conversationIds: _highlightedConversationIds,
+        conversationIds: null, // Don't filter by conversationIds, only use for highlighting
         tagNames: _selectedFilterTags.isEmpty ? null : _selectedFilterTags,
       );
       await _fetchNodeConversationIds();
