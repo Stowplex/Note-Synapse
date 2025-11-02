@@ -827,9 +827,16 @@
   "aiNoteCreatorInstructions": "The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.",
   "prompt": "Prompt",
   "promptHint": "Describe what you want the AI to do...",
-  "promptTip": "Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.",
-  "additionalContextNotes": "Additional Context Notes ({count})",
-  "addNotes": "Add Notes",
+      "promptTip": "Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.",
+      "additionalContextNotes": "Additional Context Notes ({count})",
+      "@additionalContextNotes": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "addNotes": "Add Notes",
   "noAdditionalNotesSelected": "No additional notes selected. The AI will only use the conversation content.",
   "proceed": "Proceed",
   "pleaseEnterPrompt": "Please enter a prompt",
@@ -981,5 +988,33 @@
       "metadataUrlOptional": "Metadata URL (optional)",
       "metadataUrlOptionalHint": "Leave blank to auto-detect using RFC 9728",
       "oauthDiscovery": "OAuth Discovery",
-      "openInTree": "Open in Tree"
+      "openInTree": "Open in Tree",
+      "addConversationDialogTitle": "Add Conversation",
+      "addConversationDialogMessage": "How would you like to create this conversation?",
+      "addDirectly": "Add directly",
+      "addDirectlyDescription": "Create the conversation directly with selected nodes as context",
+      "addWithAIProcessing": "Add with AI processing",
+      "addWithAIProcessingDescription": "Use AI to process the content first (e.g., summarize) then create the conversation",
+      "conversationTitle": "Conversation Title",
+      "enterConversationTitlePrompt": "Enter a title for the new conversation:",
+      "conversationTitleHint": "Conversation title",
+      "createConversation": "Create Conversation",
+      "conversationCreatedSuccessfully": "Conversation \"{title}\" created successfully",
+      "@conversationCreatedSuccessfully": {
+        "placeholders": {
+          "title": {
+            "type": "String"
+          }
+        }
+      },
+      "errorCreatingConversation": "Error creating conversation: {error}",
+      "@errorCreatingConversation": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "aiConversationCreator": "AI Conversation Creator",
+      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt."
 }

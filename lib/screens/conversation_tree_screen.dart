@@ -9,6 +9,7 @@ import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
+import '../widgets/add_conversation_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
 import '../widgets/constrained_gpt_markdown.dart';
 
@@ -409,40 +410,67 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
-  void _createConversationFromSelected() async {
+  Future<void> _createConversationFromSelected() async {
     if (_selectedNodes.isEmpty) return;
 
     // Capture the context safely before the async operation
     final currentContext = context;
+    final l10n = AppLocalizations.of(currentContext)!;
 
     try {
-      // Create conversation directly with auto-generated title
-      final newConversation = await _conversationService
-          .createConversationFromSelectedNodes(
-            selectedNodeIds: _selectedNodes,
-            title: 'Conversation from ${_selectedNodes.length} selected nodes',
-          );
+      // Collect conversation content from selected nodes
+      final conversationContent = await _buildConversationContentFromNodes();
+      final contextNotes = await _collectContextNotesFromNodes();
 
-      // Clear selected nodes and exit multi-select mode
-      setState(() {
-        _selectedNodes.clear();
-        _isMultiSelectMode = false;
-      });
-
-      // Navigate directly to the new conversation, replacing the tree view
-      Navigator.of(currentContext).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) =>
-              ConversationChatScreen(conversationId: newConversation.id),
-        ),
+      // Show the add conversation dialog
+      final newConversation = await AddConversationDialog.show(
+        context: currentContext,
+        selectedNodeIds: _selectedNodes,
+        conversationContent: conversationContent,
+        contextNotes: contextNotes,
       );
+
+      // If conversation was created, navigate to it
+      if (newConversation != null && mounted) {
+        // Show success message
+        try {
+          ScaffoldMessenger.of(currentContext).showSnackBar(
+            SnackBar(
+              content: Text(l10n.conversationCreatedSuccessfully(newConversation.title)),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } catch (_) {
+          // Context may have been deactivated, skip snackbar
+        }
+        
+        // Clear selected nodes and exit multi-select mode
+        setState(() {
+          _selectedNodes.clear();
+          _isMultiSelectMode = false;
+        });
+
+        // Navigate to the new conversation, replacing the tree view
+        try {
+          Navigator.of(currentContext).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ConversationChatScreen(conversationId: newConversation.id),
+            ),
+          );
+        } catch (_) {
+          // Navigation may have failed, but that's okay
+        }
+      }
+      // Note: If newConversation is null, user cancelled (no error message needed)
+      // Errors during creation are logged and handled by the dialog
     } catch (e) {
       if (mounted) {
         try {
-          final l10n = AppLocalizations.of(currentContext)!;
           ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
               content: Text(l10n.errorForkingConversation(e.toString())),
+              backgroundColor: Theme.of(currentContext).colorScheme.error,
             ),
           );
         } catch (contextError) {

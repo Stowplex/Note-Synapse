@@ -827,9 +827,16 @@
   "aiNoteCreatorInstructions": "AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。",
   "prompt": "提示",
   "promptHint": "描述您希望AI执行的操作...",
-  "promptTip": "提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。",
-  "additionalContextNotes": "额外上下文笔记（{count}）",
-  "addNotes": "添加笔记",
+      "promptTip": "提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。",
+      "additionalContextNotes": "额外上下文笔记（{count}）",
+      "@additionalContextNotes": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "addNotes": "添加笔记",
   "noAdditionalNotesSelected": "未选择额外笔记。AI将仅使用对话内容。",
   "proceed": "继续",
   "pleaseEnterPrompt": "请输入提示",
@@ -981,5 +988,33 @@
       "metadataUrlOptional": "元数据URL（可选）",
       "metadataUrlOptionalHint": "留空以使用RFC 9728自动检测",
       "oauthDiscovery": "OAuth发现",
-      "openInTree": "在树状图中打开"
+      "openInTree": "在树状图中打开",
+      "addConversationDialogTitle": "添加对话",
+      "addConversationDialogMessage": "您想如何创建此对话？",
+      "addDirectly": "直接添加",
+      "addDirectlyDescription": "直接创建对话，将所选节点作为上下文",
+      "addWithAIProcessing": "使用AI处理后添加",
+      "addWithAIProcessingDescription": "首先使用AI处理内容（例如总结），然后创建对话",
+      "conversationTitle": "对话标题",
+      "enterConversationTitlePrompt": "输入新对话的标题：",
+      "conversationTitleHint": "对话标题",
+      "createConversation": "创建对话",
+      "conversationCreatedSuccessfully": "对话\"{title}\"创建成功",
+      "@conversationCreatedSuccessfully": {
+        "placeholders": {
+          "title": {
+            "type": "String"
+          }
+        }
+      },
+      "errorCreatingConversation": "创建对话时出错：{error}",
+      "@errorCreatingConversation": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "aiConversationCreator": "AI对话创建器",
+      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。"
 }
