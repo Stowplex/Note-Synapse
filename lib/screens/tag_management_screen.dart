@@ -94,8 +94,8 @@ class _TagManagementScreenState extends State<TagManagementScreen>
             const SizedBox(height: 16),
             Text(
               l10n.confirmDeleteTagWarning(
-                tagWithUsage.noteUsageCount,
                 tagWithUsage.conversationUsageCount,
+                tagWithUsage.noteUsageCount,
               ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.red,
@@ -215,8 +215,8 @@ class _TagManagementScreenState extends State<TagManagementScreen>
             ),
             subtitle: Text(
               l10n.tagUsageCount(
-                tagWithUsage.noteUsageCount,
                 tagWithUsage.conversationUsageCount,
+                tagWithUsage.noteUsageCount,
               ),
               style: Theme.of(context).textTheme.bodySmall,
             ),

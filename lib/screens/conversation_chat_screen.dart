@@ -1455,50 +1455,55 @@ You may supplement the information from the notes with your own knowledge to pro
             Container(
               width: double.infinity,
               height: 40,
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
-                  children: _conversationTags
-                      .map(
-                        (tag) => Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: Chip(
-                            label: Text(
-                              tag,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontSize: 11,
-                                    height: 1.2,
-                                  ),
-                            ),
-                            deleteIcon: Icon(
-                              Icons.close,
-                              size: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.7),
-                            ),
-                            onDeleted: () => _removeTag(tag),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: 4,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: _conversationTags
+                        .map(
+                          (tag) => Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: Chip(
+                              label: Text(
+                                tag,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontSize: 11,
+                                      height: 1.0,
+                                    ),
+                              ),
+                              deleteIcon: Icon(
+                                Icons.close,
+                                size: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withOpacity(0.7),
+                              ),
+                              onDeleted: () => _removeTag(tag),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              labelPadding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 0,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                      .toList(),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
             ),
