@@ -9,7 +9,7 @@ import 'interactive_checkbox_component.dart';
 /// with a custom checkbox component that handles state updates.
 class InteractiveCheckboxMarkdown extends StatefulWidget {
   final String originalContent;
-  final Function(String) onContentChanged;
+  final Function(String)? onContentChanged;
   final TextStyle? style;
   final TextDirection textDirection;
   final Function(String, String)? onLinkTap;
@@ -19,7 +19,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
   const InteractiveCheckboxMarkdown({
     super.key,
     required this.originalContent,
-    required this.onContentChanged,
+    this.onContentChanged,
     this.style,
     this.textDirection = TextDirection.ltr,
     this.onLinkTap,
@@ -74,7 +74,7 @@ class _InteractiveCheckboxMarkdownState
           lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
           
           _currentContent = lines.join('\n');
-          widget.onContentChanged(_currentContent);
+          widget.onContentChanged?.call(_currentContent);
           setState(() {});
           break;
         }
@@ -98,7 +98,7 @@ class _InteractiveCheckboxMarkdownState
             lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
             
             _currentContent = lines.join('\n');
-            widget.onContentChanged(_currentContent);
+            widget.onContentChanged?.call(_currentContent);
             setState(() {});
             break;
           }
@@ -108,7 +108,7 @@ class _InteractiveCheckboxMarkdownState
   }
 
   /// Custom latex builder that wraps individual math formulas in horizontal scroll views
-  /// This preserves the math formula fixes from ConstrainedGptMarkdown
+  /// This handles long formulas by allowing horizontal scrolling
   Widget _customLatexBuilder(
     BuildContext context,
     String tex,
@@ -184,20 +184,23 @@ class _InteractiveCheckboxMarkdownState
 
   @override
   Widget build(BuildContext context) {
-    // Create custom components list with our interactive checkbox component
+    // Create custom components list with our safe HTag and optional interactive checkbox component
     final components = [
       CodeBlockMd(),
       LatexMathMultiLine(),
       NewLines(),
       BlockQuote(),
       TableMd(),
-      HTag(),
+      SafeHTag(), // Use our safe version instead of HTag
       UnOrderedList(),
       OrderedList(),
       RadioButtonMd(),
-      InteractiveCheckboxMd(
-        onToggle: (line, text, value) => _handleCheckboxToggle(line, text, value),
-      ),
+      if (widget.onContentChanged != null)
+        InteractiveCheckboxMd(
+          onToggle: (line, text, value) => _handleCheckboxToggle(line, text, value),
+        )
+      else
+        CheckBoxMd(), // Use regular checkbox if not interactive
       HrLine(),
       IndentMd(),
     ];

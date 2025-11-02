@@ -97,8 +97,7 @@ dependencies:
   table_calendar: ^3.0.9
   
   # Markdown rendering
-  gpt_markdown: #^1.1.4
-    path: third_party/gpt_markdown
+  gpt_markdown: ^1.1.4
 
   flutter_math_fork: ^0.7.3
   

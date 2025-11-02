@@ -9,7 +9,6 @@ import '../widgets/multi_select_tag_filter.dart';
 import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
-import '../widgets/constrained_gpt_markdown.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -339,8 +338,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: SelectionArea(
-              child: ConstrainedGptMarkdown(
-                task.content,
+              child: InteractiveCheckboxMarkdown(
+                originalContent: task.content,
                 style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,

@@ -11,7 +11,7 @@ import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/add_conversation_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
-import '../widgets/constrained_gpt_markdown.dart';
+import '../widgets/interactive_checkbox_markdown.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
@@ -1274,7 +1274,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                                         ? null
                                         : TextOverflow.ellipsis,
                                   )
-                                : ConstrainedGptMarkdown(message.content),
+                                : InteractiveCheckboxMarkdown(originalContent: message.content),
                           ],
                         ),
                       ),
@@ -1501,7 +1501,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ConstrainedGptMarkdown(aiMessage.content),
+                            InteractiveCheckboxMarkdown(originalContent: aiMessage.content),
                           ],
                         ),
                       ),
