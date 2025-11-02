@@ -8,11 +8,13 @@ import '../l10n/app_localizations.dart';
 class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
   final String? title;
+  final bool singleSelection;
 
   const NoteSelectionDialog({
     super.key,
     required this.onNotesSelected,
     this.title,
+    this.singleSelection = false,
   });
 
   @override
@@ -221,7 +223,9 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                   ),
                   ElevatedButton(
                     onPressed: _selectedNotes.isNotEmpty ? _proceedWithSelectedNotes : null,
-                    child: Text(l10n.proceedWithNotes(_selectedNotes.length)),
+                    child: Text(widget.singleSelection 
+                        ? l10n.proceed
+                        : l10n.proceedWithNotes(_selectedNotes.length)),
                   ),
                 ],
               ),
@@ -234,10 +238,21 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
 
   void _toggleNoteSelection(Note note) {
     setState(() {
-      if (_selectedNotes.contains(note)) {
-        _selectedNotes.remove(note);
+      if (widget.singleSelection) {
+        // In single selection mode, replace the current selection
+        if (_selectedNotes.contains(note)) {
+          _selectedNotes.remove(note);
+        } else {
+          _selectedNotes.clear();
+          _selectedNotes.add(note);
+        }
       } else {
-        _selectedNotes.add(note);
+        // In multi-selection mode, toggle selection
+        if (_selectedNotes.contains(note)) {
+          _selectedNotes.remove(note);
+        } else {
+          _selectedNotes.add(note);
+        }
       }
     });
   }
