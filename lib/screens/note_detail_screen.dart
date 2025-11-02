@@ -448,7 +448,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${l10n.created} ${AppDateUtils.formatDateOnly(subNote.createdAt)}',
+                        '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
@@ -811,7 +811,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   child: Text(
                     _scheduledAt != null
-                        ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year}'
+                        ? AppDateUtils.formatDateNumeric(_scheduledAt!, context)
                         : 'Select date',
                     style: _scheduledAt != null
                         ? null
@@ -837,7 +837,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   child: Text(
                     _completeBy != null
-                        ? '${_completeBy!.day}/${_completeBy!.month}/${_completeBy!.year}'
+                        ? AppDateUtils.formatDateNumeric(_completeBy!, context)
                         : 'Select date',
                     style: _completeBy != null
                         ? null
@@ -894,12 +894,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   if (currentNote.scheduledAt != null)
                     SelectableText(
-                      '${l10n.scheduled}: ${AppDateUtils.formatDateForDisplay(currentNote.scheduledAt)}',
+                      '${l10n.scheduled}: ${AppDateUtils.formatDateForDisplayLocalized(currentNote.scheduledAt, context)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (currentNote.completeBy != null)
                     SelectableText(
-                      '${l10n.due}: ${AppDateUtils.formatDateForDisplay(currentNote.completeBy)}',
+                      '${l10n.due}: ${AppDateUtils.formatDateForDisplayLocalized(currentNote.completeBy, context)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                 ],
@@ -1127,7 +1127,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    final locale = Localizations.localeOf(context);
+    String dateStr;
+    
+    // Format date part based on locale
+    if (locale.languageCode == 'zh') {
+      dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    } else {
+      // Default to mm/dd/yyyy for English and other locales
+      dateStr = '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    }
+    
+    return '$dateStr at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   void _startEditing() {

@@ -196,7 +196,7 @@ class NoteCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                              'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.green[600],
                                 fontWeight: FontWeight.bold,
@@ -211,13 +211,13 @@ class NoteCard extends StatelessWidget {
                               color: Colors.orange[600],
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.orange[600],
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                                  Text(
+                                    'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.orange[600],
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ],
                         ],
                         const Spacer(),
@@ -289,7 +289,7 @@ class NoteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                                  'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.green[600],
                                     fontWeight: FontWeight.bold,
@@ -308,7 +308,7 @@ class NoteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
+                                  'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.orange[600],
                                     fontWeight: FontWeight.bold,
@@ -461,7 +461,7 @@ class NoteCard extends StatelessWidget {
     } else if (difference.inDays < 7) {
       return l10n.daysAgo(difference.inDays);
     } else {
-      return '${date.day}/${date.month}/${date.year}';
+      return AppDateUtils.formatDateNumeric(date, context);
     }
   }
 
