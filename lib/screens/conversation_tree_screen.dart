@@ -14,8 +14,15 @@ import '../widgets/linear_history_dialog.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
+  /// When true, activeConversationIds are used to filter the tree (from note detail view)
+  /// When false, activeConversationIds are only used for highlighting (from conversation view)
+  final bool filterByActiveConversations;
 
-  const ConversationTreeScreen({super.key, this.activeConversationIds});
+  const ConversationTreeScreen({
+    super.key,
+    this.activeConversationIds,
+    this.filterByActiveConversations = false,
+  });
 
   @override
   State<ConversationTreeScreen> createState() => _ConversTreeScreenState();
@@ -44,7 +51,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   void initState() {
     super.initState();
     // Set highlighted conversation from widget parameter
-    if (widget.activeConversationIds != null) {
+    // Only highlight if NOT filtering (when filtering, we don't want highlights)
+    if (widget.activeConversationIds != null && !widget.filterByActiveConversations) {
       _highlightedConversationIds = widget.activeConversationIds!;
     }
     _loadTree();
@@ -88,10 +96,20 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // If filterByActiveConversations is true, use activeConversationIds as a filter
+      // This overrides the default time range and tag filters
+      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+          widget.activeConversationIds != null &&
+          widget.activeConversationIds!.isNotEmpty;
+      
       _tree = await _conversationService.refreshConversationTree(
-        maxAge: _selectedTimeRange,
-        conversationIds: null, // Don't filter by conversationIds, only use for highlighting
-        tagNames: _selectedFilterTags.isEmpty ? null : _selectedFilterTags,
+        maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
+        conversationIds: hasActiveConversationFilter
+            ? widget.activeConversationIds
+            : null,
+        tagNames: hasActiveConversationFilter
+            ? null
+            : (_selectedFilterTags.isEmpty ? null : _selectedFilterTags),
       );
       await _fetchNodeConversationIds();
       if (_tree == null) {
@@ -144,10 +162,21 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     });
 
     try {
+      // If filterByActiveConversations is true, use activeConversationIds as a filter
+      // This overrides the default time range and tag filters
+      // Don't clear the filter when clearHighlight is false (automatic refresh)
+      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+          widget.activeConversationIds != null &&
+          widget.activeConversationIds!.isNotEmpty;
+      
       _tree = await _conversationService.refreshConversationTree(
-        maxAge: _selectedTimeRange,
-        conversationIds: null, // Don't filter by conversationIds, only use for highlighting
-        tagNames: _selectedFilterTags.isEmpty ? null : _selectedFilterTags,
+        maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
+        conversationIds: hasActiveConversationFilter
+            ? widget.activeConversationIds
+            : null,
+        tagNames: hasActiveConversationFilter
+            ? null
+            : (_selectedFilterTags.isEmpty ? null : _selectedFilterTags),
       );
       await _fetchNodeConversationIds();
       if (_tree == null) {
@@ -584,11 +613,14 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
 
     if (_tree == null) {
+      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+          widget.activeConversationIds != null &&
+          widget.activeConversationIds!.isNotEmpty;
       return Scaffold(
         appBar: AppBar(
           title: Text(l10n.conversationTree),
           actions: [
-            _buildTimeRangeFilter(l10n),
+            if (!hasActiveConversationFilter) _buildTimeRangeFilter(l10n),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshTree,
@@ -629,7 +661,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
               tooltip: l10n.exitMultiSelect,
             ),
           ] else ...[
-            _buildTimeRangeFilter(l10n),
+            // Hide filter button when filtering by activeConversationIds (from note detail view)
+            if (!widget.filterByActiveConversations)
+              _buildTimeRangeFilter(l10n),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshTree,
