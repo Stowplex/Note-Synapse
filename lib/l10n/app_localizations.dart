@@ -938,6 +938,18 @@ abstract class AppLocalizations {
   /// **'Generate new notes based on your prompt and context'**
   String get createNewNotesDescription;
 
+  /// No description provided for @transformNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe how you want to transform this note...'**
+  String get transformNoteHint;
+
+  /// No description provided for @createNewNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what new notes you want to create...'**
+  String get createNewNotesHint;
+
   /// No description provided for @enterYourPrompt.
   ///
   /// In en, this message translates to:
@@ -5227,6 +5239,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.'**
   String get aiConversationCreatorInstructions;
+
+  /// No description provided for @selectRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Relationship Type'**
+  String get selectRelationshipType;
+
+  /// No description provided for @selectRelationshipTypeForNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:'**
+  String selectRelationshipTypeForNotes(int noteCount);
+
+  /// No description provided for @relationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Relationship Type'**
+  String get relationshipType;
+
+  /// No description provided for @linkNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}'**
+  String linkNotes(int noteCount);
+
+  /// No description provided for @customRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Relationship Type'**
+  String get customRelationshipType;
+
+  /// No description provided for @enterCustomRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter custom relationship type'**
+  String get enterCustomRelationshipType;
+
+  /// No description provided for @customEllipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom...'**
+  String get customEllipsis;
+
+  /// No description provided for @confirmRemoveLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to remove this link?'**
+  String get confirmRemoveLink;
+
+  /// No description provided for @remove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get remove;
+
+  /// No description provided for @linkNotesDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Notes'**
+  String get linkNotesDialogTitle;
+
+  /// No description provided for @link.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get link;
+
+  /// No description provided for @linkNoteTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Link \"{noteTitle}\" to:'**
+  String linkNoteTo(String noteTitle);
+
+  /// No description provided for @audioTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Transcription'**
+  String get audioTranscription;
+
+  /// No description provided for @transcribingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing audio...'**
+  String get transcribingAudio;
+
+  /// No description provided for @transcriptionAddedToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription added to note'**
+  String get transcriptionAddedToNote;
+
+  /// No description provided for @errorTranscribingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Error transcribing audio: {error}'**
+  String errorTranscribingAudio(String error);
+
+  /// No description provided for @errorAddingTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Error adding transcription: {error}'**
+  String errorAddingTranscription(String error);
 }
 
 class _AppLocalizationsDelegate

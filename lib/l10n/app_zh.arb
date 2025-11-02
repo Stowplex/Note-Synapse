@@ -139,6 +139,8 @@
   "transformNoteDescription": "重写、重组或修改您的笔记",
   "createNewNotes": "创建新笔记",
   "createNewNotesDescription": "根据您的提示和上下文生成新笔记",
+  "transformNoteHint": "描述您想要如何转换此笔记...",
+  "createNewNotesHint": "描述您想要创建的新笔记...",
   "enterYourPrompt": "输入您的提示：",
   "attachFiles": "附加文件",
   "answerOnlyFromNotes": "仅从选中的笔记中回答",
@@ -1016,5 +1018,57 @@
         }
       },
       "aiConversationCreator": "AI对话创建器",
-      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。"
+      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。",
+      "selectRelationshipType": "选择关系类型",
+      "selectRelationshipTypeForNotes": "为{noteCount}条笔记选择关系类型：",
+      "@selectRelationshipTypeForNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "relationshipType": "关系类型",
+      "linkNotes": "链接{noteCount}条笔记",
+      "@linkNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "customRelationshipType": "自定义关系类型",
+      "enterCustomRelationshipType": "输入自定义关系类型",
+      "customEllipsis": "自定义...",
+      "confirmRemoveLink": "您确定要移除此链接吗？",
+      "remove": "移除",
+      "linkNotesDialogTitle": "链接笔记",
+      "link": "链接",
+      "linkNoteTo": "将 \"{noteTitle}\" 链接到：",
+      "@linkNoteTo": {
+        "placeholders": {
+          "noteTitle": {
+            "type": "String"
+          }
+        }
+      },
+      "audioTranscription": "音频转录",
+      "transcribingAudio": "正在转录音频...",
+      "transcriptionAddedToNote": "转录已添加到笔记",
+      "errorTranscribingAudio": "转录音频时出错：{error}",
+      "@errorTranscribingAudio": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorAddingTranscription": "添加转录时出错：{error}",
+      "@errorAddingTranscription": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      }
 }

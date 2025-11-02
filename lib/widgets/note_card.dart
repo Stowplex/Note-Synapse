@@ -4,7 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../utils/date_utils.dart';
 import '../services/logger_service.dart';
-import 'interactive_checkbox_list.dart';
+import 'interactive_checkbox_markdown.dart';
 
 class NoteCard extends StatelessWidget {
   final Note note;
@@ -196,7 +196,7 @@ class NoteCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                              'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.green[600],
                                 fontWeight: FontWeight.bold,
@@ -211,13 +211,13 @@ class NoteCard extends StatelessWidget {
                               color: Colors.orange[600],
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.orange[600],
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                                  Text(
+                                    'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.orange[600],
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ],
                         ],
                         const Spacer(),
@@ -289,7 +289,7 @@ class NoteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Start: ${AppDateUtils.formatDateForDisplay(note.scheduledAt)}',
+                                  'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.green[600],
                                     fontWeight: FontWeight.bold,
@@ -308,7 +308,7 @@ class NoteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Due: ${AppDateUtils.formatDateForDisplay(note.completeBy)}',
+                                  'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.orange[600],
                                     fontWeight: FontWeight.bold,
@@ -461,13 +461,13 @@ class NoteCard extends StatelessWidget {
     } else if (difference.inDays < 7) {
       return l10n.daysAgo(difference.inDays);
     } else {
-      return '${date.day}/${date.month}/${date.year}';
+      return AppDateUtils.formatDateNumeric(date, context);
     }
   }
 
   Widget _buildSafeMarkdown(String content, BuildContext context) {
     try {
-      // Use InteractiveCheckboxList approach but limit to first 3 lines
+      // Use InteractiveCheckboxMarkdown approach but limit to first 3 lines
       final lines = content.split('\n');
       final limitedLines = lines.take(3).toList();
       final limitedContent = limitedLines.join('\n');
@@ -476,7 +476,7 @@ class NoteCard extends StatelessWidget {
         child: Align(
           alignment: Alignment.topLeft,
           heightFactor: 1.0,
-          child: InteractiveCheckboxList(
+          child: InteractiveCheckboxMarkdown(
             originalContent: limitedContent,
             onContentChanged: onContentChanged ?? (newContent) {
               // No-op if no callback provided
@@ -492,7 +492,7 @@ class NoteCard extends StatelessWidget {
         ),
       );
     } catch (e) {
-      // Fallback to simple text if InteractiveCheckboxList fails
+      // Fallback to simple text if InteractiveCheckboxMarkdown fails
       return Text(
         content,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(

@@ -15,6 +15,7 @@ import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
+import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -36,12 +37,10 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _isExtracting = false;
   String _action = 'create'; // 'create' or 'append'
   Note? _selectedNote;
-  String _searchQuery = '';
   String? _detectedUrl;
   String? _contentType;
   String _tagSearchQuery = '';
   String? _downloadedFilePath; // Track downloaded file path for cleanup
-  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
@@ -66,7 +65,6 @@ class _ShareScreenState extends State<ShareScreen> {
   void dispose() {
     // Clean up downloaded file if user doesn't proceed
     _cleanupDownloadedFile();
-    _searchController.dispose();
     _titleController.dispose();
     _tagsController.dispose();
     _newTagController.dispose();
@@ -265,121 +263,85 @@ class _ShareScreenState extends State<ShareScreen> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
-                    Consumer<AppProvider>(
-                      builder: (context, appProvider, child) {
-                        final notes = appProvider.notes;
-                        if (appProvider.isLoading) {
-                          return const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          );
-                        }
-                        if (notes.isEmpty) {
-                          return Text(l10n.noNotesAvailable);
-                        }
-                        
-                        // Filter notes based on search query
-                        final filteredNotes = _searchQuery.isEmpty 
-                            ? notes 
-                            : notes.where((note) {
-                                final query = _searchQuery.toLowerCase();
-                                return note.title.toLowerCase().contains(query) ||
-                                       note.content.toLowerCase().contains(query) ||
-                                       note.tags.any((tag) => tag.toLowerCase().contains(query));
-                              }).toList();
-                        
-                        return Column(
+                    // Selected note display
+                    if (_selectedNote != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        child: Row(
                           children: [
-                            // Search field
-                            TextField(
-                              controller: _searchController,
-                              decoration: InputDecoration(
-                                hintText: l10n.searchNotes,
-                                prefixIcon: const Icon(Icons.search),
-                                suffixIcon: _searchQuery.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          setState(() {
-                                            _searchQuery = '';
-                                          });
-                                        },
-                                      )
-                                    : null,
-                                border: const OutlineInputBorder(),
+                            Icon(
+                              Icons.note,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _selectedNote!.title,
+                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (_selectedNote!.content.isNotEmpty)
+                                    Text(
+                                      _selectedNote!.content.length > 60
+                                          ? '${_selectedNote!.content.substring(0, 60)}...'
+                                          : _selectedNote!.content,
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
                               ),
-                              onChanged: (value) {
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
                                 setState(() {
-                                  _searchQuery = value;
-                                  _selectedNote = null; // Clear selection when searching
+                                  _selectedNote = null;
                                 });
                               },
                             ),
-                            const SizedBox(height: 12),
-                            // Note selection dropdown
-                            DropdownButtonFormField<Note>(
-                              initialValue: _selectedNote,
-                              decoration: InputDecoration(
-                                border: const OutlineInputBorder(),
-                                hintText: l10n.selectNote,
-                                prefixIcon: Icon(Icons.note),
-                              ),
-                              items: filteredNotes.map((note) {
-                                return DropdownMenuItem<Note>(
-                                  value: note,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        note.title,
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        note.content.length > 50 
-                                            ? '${note.content.substring(0, 50)}...' 
-                                            : note.content,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (note.tags.isNotEmpty)
-                                        Text(
-                                          'Tags: ${note.tags.take(3).join(', ')}${note.tags.length > 3 ? '...' : ''}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Theme.of(context).colorScheme.primary,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (note) {
-                                setState(() {
-                                  _selectedNote = note;
-                                });
-                              },
-                            ),
-                            if (filteredNotes.length != notes.length)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(
-                                  l10n.showingNotes(filteredNotes.length, notes.length),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ),
                           ],
-                        );
-                      },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    // Button to open note selection dialog
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final selectedNotes = await showDialog<List<Note>>(
+                            context: context,
+                            builder: (context) => NoteSelectionDialog(
+                              onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+                              title: l10n.selectNoteToAppend,
+                              singleSelection: true,
+                            ),
+                          );
+
+                          if (selectedNotes != null && selectedNotes.isNotEmpty) {
+                            setState(() {
+                              // Take the first selected note
+                              _selectedNote = selectedNotes.first;
+                            });
+                          }
+                        },
+                        icon: Icon(_selectedNote == null ? Icons.note_add : Icons.edit),
+                        label: Text(l10n.selectNote),
+                      ),
                     ),
                   ],
                 ),

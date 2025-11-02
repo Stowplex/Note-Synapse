@@ -460,6 +460,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Generate new notes based on your prompt and context';
 
   @override
+  String get transformNoteHint =>
+      'Describe how you want to transform this note...';
+
+  @override
+  String get createNewNotesHint =>
+      'Describe what new notes you want to create...';
+
+  @override
   String get enterYourPrompt => 'Enter your prompt:';
 
   @override
@@ -2933,4 +2941,77 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get aiConversationCreatorInstructions =>
       'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.';
+
+  @override
+  String get selectRelationshipType => 'Select Relationship Type';
+
+  @override
+  String selectRelationshipTypeForNotes(int noteCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      noteCount,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Select the type of relationship for $noteCount $_temp0:';
+  }
+
+  @override
+  String get relationshipType => 'Relationship Type';
+
+  @override
+  String linkNotes(int noteCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      noteCount,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return 'Link $noteCount $_temp0';
+  }
+
+  @override
+  String get customRelationshipType => 'Custom Relationship Type';
+
+  @override
+  String get enterCustomRelationshipType => 'Enter custom relationship type';
+
+  @override
+  String get customEllipsis => 'Custom...';
+
+  @override
+  String get confirmRemoveLink => 'Are you sure you want to remove this link?';
+
+  @override
+  String get remove => 'Remove';
+
+  @override
+  String get linkNotesDialogTitle => 'Link Notes';
+
+  @override
+  String get link => 'Link';
+
+  @override
+  String linkNoteTo(String noteTitle) {
+    return 'Link \"$noteTitle\" to:';
+  }
+
+  @override
+  String get audioTranscription => 'Audio Transcription';
+
+  @override
+  String get transcribingAudio => 'Transcribing audio...';
+
+  @override
+  String get transcriptionAddedToNote => 'Transcription added to note';
+
+  @override
+  String errorTranscribingAudio(String error) {
+    return 'Error transcribing audio: $error';
+  }
+
+  @override
+  String errorAddingTranscription(String error) {
+    return 'Error adding transcription: $error';
+  }
 }

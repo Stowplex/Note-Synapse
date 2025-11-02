@@ -453,6 +453,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createNewNotesDescription => '根据您的提示和上下文生成新笔记';
 
   @override
+  String get transformNoteHint => '描述您想要如何转换此笔记...';
+
+  @override
+  String get createNewNotesHint => '描述您想要创建的新笔记...';
+
+  @override
   String get enterYourPrompt => '输入您的提示：';
 
   @override
@@ -2822,4 +2828,65 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get aiConversationCreatorInstructions =>
       'AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。';
+
+  @override
+  String get selectRelationshipType => '选择关系类型';
+
+  @override
+  String selectRelationshipTypeForNotes(int noteCount) {
+    return '为$noteCount条笔记选择关系类型：';
+  }
+
+  @override
+  String get relationshipType => '关系类型';
+
+  @override
+  String linkNotes(int noteCount) {
+    return '链接$noteCount条笔记';
+  }
+
+  @override
+  String get customRelationshipType => '自定义关系类型';
+
+  @override
+  String get enterCustomRelationshipType => '输入自定义关系类型';
+
+  @override
+  String get customEllipsis => '自定义...';
+
+  @override
+  String get confirmRemoveLink => '您确定要移除此链接吗？';
+
+  @override
+  String get remove => '移除';
+
+  @override
+  String get linkNotesDialogTitle => '链接笔记';
+
+  @override
+  String get link => '链接';
+
+  @override
+  String linkNoteTo(String noteTitle) {
+    return '将 \"$noteTitle\" 链接到：';
+  }
+
+  @override
+  String get audioTranscription => '音频转录';
+
+  @override
+  String get transcribingAudio => '正在转录音频...';
+
+  @override
+  String get transcriptionAddedToNote => '转录已添加到笔记';
+
+  @override
+  String errorTranscribingAudio(String error) {
+    return '转录音频时出错：$error';
+  }
+
+  @override
+  String errorAddingTranscription(String error) {
+    return '添加转录时出错：$error';
+  }
 }

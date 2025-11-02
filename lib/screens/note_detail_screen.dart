@@ -12,7 +12,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
-import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../utils/date_utils.dart';
@@ -393,7 +393,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           const SizedBox(height: 16),
           SelectionArea(
-            child: InteractiveCheckboxList(
+            child: InteractiveCheckboxMarkdown(
               key: ValueKey('note_${currentNote.id}'),
               originalContent: currentNote.content,
               onContentChanged: _updateNoteContent,
@@ -437,7 +437,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      InteractiveCheckboxList(
+                      InteractiveCheckboxMarkdown(
                         key: ValueKey('subnote_${subNote.id}'),
                         originalContent: subNote.content,
                         onContentChanged: (newContent) =>
@@ -448,7 +448,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${l10n.created} ${AppDateUtils.formatDateOnly(subNote.createdAt)}',
+                        '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
@@ -811,7 +811,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   child: Text(
                     _scheduledAt != null
-                        ? '${_scheduledAt!.day}/${_scheduledAt!.month}/${_scheduledAt!.year}'
+                        ? AppDateUtils.formatDateNumeric(_scheduledAt!, context)
                         : 'Select date',
                     style: _scheduledAt != null
                         ? null
@@ -837,7 +837,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   child: Text(
                     _completeBy != null
-                        ? '${_completeBy!.day}/${_completeBy!.month}/${_completeBy!.year}'
+                        ? AppDateUtils.formatDateNumeric(_completeBy!, context)
                         : 'Select date',
                     style: _completeBy != null
                         ? null
@@ -894,12 +894,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   ),
                   if (currentNote.scheduledAt != null)
                     SelectableText(
-                      '${l10n.scheduled}: ${AppDateUtils.formatDateForDisplay(currentNote.scheduledAt)}',
+                      '${l10n.scheduled}: ${AppDateUtils.formatDateForDisplayLocalized(currentNote.scheduledAt, context)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (currentNote.completeBy != null)
                     SelectableText(
-                      '${l10n.due}: ${AppDateUtils.formatDateForDisplay(currentNote.completeBy)}',
+                      '${l10n.due}: ${AppDateUtils.formatDateForDisplayLocalized(currentNote.completeBy, context)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                 ],
@@ -1127,7 +1127,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    final locale = Localizations.localeOf(context);
+    String dateStr;
+    
+    // Format date part based on locale
+    if (locale.languageCode == 'zh') {
+      dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    } else {
+      // Default to mm/dd/yyyy for English and other locales
+      dateStr = '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    }
+    
+    return '$dateStr at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   void _startEditing() {
@@ -2011,15 +2022,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _removeLinkedNote(String relationshipId) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Link'),
-        content: const Text('Are you sure you want to remove this link?'),
+        title: Text(l10n.removeLink),
+        content: Text(l10n.confirmRemoveLink),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () async {
@@ -2029,7 +2041,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               );
               await _loadRelationships();
             },
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: Text(l10n.remove, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -2066,16 +2078,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _showAddTagDialog(Note currentNote) {
     final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
     showDialog<List<String>>(
       context: context,
       builder: (context) => TagSelectionDialog(
-        title: 'Add Tags',
+        title: l10n.addTagsCapitalized,
         description: 'Add tags to "${currentNote.title}":',
         excludedTags: currentNote.tags,
         allowCreateNew: true,
         allowEmptySelection: false,
         confirmLabelBuilder: (count) =>
-            count > 0 ? 'Add $count Tag${count > 1 ? 's' : ''}' : 'Add Tags',
+            count > 0 ? l10n.addTagsWithCount(count) : l10n.addTagsCapitalized,
       ),
     ).then((tagNames) async {
       if (tagNames == null || tagNames.isEmpty) return;
@@ -2283,17 +2296,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Audio transcription methods
   Future<void> _transcribeAudio(String audioPath) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
       // Show loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
+        builder: (context) => AlertDialog(
           content: Row(
             children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Transcribing audio...'),
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Text(l10n.transcribingAudio),
             ],
           ),
         ),
@@ -2308,19 +2323,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Audio Transcription'),
+          title: Text(l10n.audioTranscription),
           content: SingleChildScrollView(child: Text(transcription)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(l10n.close),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _addTranscriptionToNote(transcription);
               },
-              child: const Text('Add to Note'),
+              child: Text(l10n.addToNote),
             ),
           ],
         ),
@@ -2331,7 +2346,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error transcribing audio: $e'),
+          content: Text(l10n.errorTranscribingAudio(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -2339,6 +2354,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _addTranscriptionToNote(String transcription) async {
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
       final currentNote = context.read<AppProvider>().notes.firstWhere(
         (note) => note.id == widget.note.id,
@@ -2362,15 +2379,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Transcription added to note'),
+        SnackBar(
+          content: Text(l10n.transcriptionAddedToNote),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error adding transcription: $e'),
+          content: Text(l10n.errorAddingTranscription(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -2775,15 +2792,16 @@ class _RelationshipTypeSelectionDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text('Select Relationship Type'),
+      title: Text(l10n.selectRelationshipType),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select the type of relationship for ${widget.noteCount} note${widget.noteCount > 1 ? 's' : ''}:',
+              l10n.selectRelationshipTypeForNotes(widget.noteCount),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
@@ -2791,10 +2809,10 @@ class _RelationshipTypeSelectionDialogState
               initialValue: _isCustomMode
                   ? 'custom'
                   : _selectedRelationshipType,
-              decoration: const InputDecoration(
-                labelText: 'Relationship Type',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
+              decoration: InputDecoration(
+                labelText: l10n.relationshipType,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
@@ -2812,13 +2830,13 @@ class _RelationshipTypeSelectionDialogState
                     ),
                   ),
                 ),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'custom',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, size: 20),
-                      SizedBox(width: 8),
-                      Text('Custom...'),
+                      const Icon(Icons.edit, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.customEllipsis),
                     ],
                   ),
                 ),
@@ -2838,10 +2856,10 @@ class _RelationshipTypeSelectionDialogState
               const SizedBox(height: 16),
               TextField(
                 controller: _customTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Custom Relationship Type',
-                  border: OutlineInputBorder(),
-                  hintText: 'Enter custom relationship type',
+                decoration: InputDecoration(
+                  labelText: l10n.customRelationshipType,
+                  border: const OutlineInputBorder(),
+                  hintText: l10n.enterCustomRelationshipType,
                 ),
                 autofocus: true,
               ),
@@ -2852,7 +2870,7 @@ class _RelationshipTypeSelectionDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           onPressed: () {
@@ -2864,7 +2882,7 @@ class _RelationshipTypeSelectionDialogState
             }
           },
           child: Text(
-            'Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}',
+            l10n.linkNotes(widget.noteCount),
           ),
         ),
       ],

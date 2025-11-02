@@ -139,6 +139,8 @@
   "transformNoteDescription": "Rewrite, reorganize, or modify your note",
   "createNewNotes": "Create New Notes",
   "createNewNotesDescription": "Generate new notes based on your prompt and context",
+  "transformNoteHint": "Describe how you want to transform this note...",
+  "createNewNotesHint": "Describe what new notes you want to create...",
   "enterYourPrompt": "Enter your prompt:",
   "attachFiles": "Attach Files",
   "answerOnlyFromNotes": "Answer only from selected notes",
@@ -1016,5 +1018,57 @@
         }
       },
       "aiConversationCreator": "AI Conversation Creator",
-      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt."
+      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.",
+      "selectRelationshipType": "Select Relationship Type",
+      "selectRelationshipTypeForNotes": "Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:",
+      "@selectRelationshipTypeForNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "relationshipType": "Relationship Type",
+      "linkNotes": "Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}",
+      "@linkNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "customRelationshipType": "Custom Relationship Type",
+      "enterCustomRelationshipType": "Enter custom relationship type",
+      "customEllipsis": "Custom...",
+      "confirmRemoveLink": "Are you sure you want to remove this link?",
+      "remove": "Remove",
+      "linkNotesDialogTitle": "Link Notes",
+      "link": "Link",
+      "linkNoteTo": "Link \"{noteTitle}\" to:",
+      "@linkNoteTo": {
+        "placeholders": {
+          "noteTitle": {
+            "type": "String"
+          }
+        }
+      },
+      "audioTranscription": "Audio Transcription",
+      "transcribingAudio": "Transcribing audio...",
+      "transcriptionAddedToNote": "Transcription added to note",
+      "errorTranscribingAudio": "Error transcribing audio: {error}",
+      "@errorTranscribingAudio": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorAddingTranscription": "Error adding transcription: {error}",
+      "@errorAddingTranscription": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      }
 }
