@@ -12,7 +12,7 @@ import '../models/note.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
-import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../utils/date_utils.dart';
@@ -393,7 +393,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           const SizedBox(height: 16),
           SelectionArea(
-            child: InteractiveCheckboxList(
+            child: InteractiveCheckboxMarkdown(
               key: ValueKey('note_${currentNote.id}'),
               originalContent: currentNote.content,
               onContentChanged: _updateNoteContent,
@@ -437,7 +437,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      InteractiveCheckboxList(
+                      InteractiveCheckboxMarkdown(
                         key: ValueKey('subnote_${subNote.id}'),
                         originalContent: subNote.content,
                         onContentChanged: (newContent) =>

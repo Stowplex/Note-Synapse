@@ -8,7 +8,7 @@ import '../models/note.dart';
 import '../widgets/multi_select_tag_filter.dart';
 import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
-import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/constrained_gpt_markdown.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -933,7 +933,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildSafeMarkdown(String content, BuildContext context) {
     try {
-      // Use InteractiveCheckboxList approach but limit to first 3 lines
+      // Use InteractiveCheckboxMarkdown approach but limit to first 3 lines
       final lines = content.split('\n');
       final limitedLines = lines.take(3).toList();
       final limitedContent = limitedLines.join('\n');
@@ -942,7 +942,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Align(
           alignment: Alignment.topLeft,
           heightFactor: 1.0,
-          child: InteractiveCheckboxList(
+          child: InteractiveCheckboxMarkdown(
             originalContent: limitedContent,
             onContentChanged: (newContent) {
               // No-op for read-only display
@@ -953,7 +953,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       );
     } catch (e) {
-      // Fallback to simple text if InteractiveCheckboxList fails
+      // Fallback to simple text if InteractiveCheckboxMarkdown fails
       return Text(
         content,
         style: Theme.of(context).textTheme.bodySmall,

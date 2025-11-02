@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
-import '../widgets/interactive_checkbox_list.dart';
+import '../widgets/interactive_checkbox_markdown.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
 
@@ -279,7 +279,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 padding: const EdgeInsets.all(16),
                 child: SingleChildScrollView(
                   child: SelectionArea(
-                    child: InteractiveCheckboxList(
+                    child: InteractiveCheckboxMarkdown(
                       originalContent: _response!,
                       onContentChanged: _updateResponseContent,
                       style: Theme.of(context).textTheme.bodyLarge,
