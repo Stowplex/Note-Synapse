@@ -6,6 +6,7 @@ import '../providers/app_provider.dart';
 import '../models/tag.dart';
 import '../models/dedup_rule.dart';
 import '../services/ai_service.dart';
+import '../widgets/tag_detail_dialog.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -77,6 +78,18 @@ class _TagManagementScreenState extends State<TagManagementScreen>
         );
       }
     }
+  }
+
+  Future<void> _showTagDetail(TagWithUsage tagWithUsage) async {
+    await showDialog(
+      context: context,
+      builder: (context) => TagDetailDialog(
+        tagName: tagWithUsage.tag.name,
+        tag: tagWithUsage.tag,
+      ),
+    );
+    // Reload tags after dialog is closed in case tags were updated
+    await _loadTagsWithUsage();
   }
 
   Future<void> _deleteTag(TagWithUsage tagWithUsage) async {
@@ -220,11 +233,22 @@ class _TagManagementScreenState extends State<TagManagementScreen>
               ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteTag(tagWithUsage),
-              tooltip: l10n.deleteTag,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  onPressed: () => _showTagDetail(tagWithUsage),
+                  tooltip: 'View details',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _deleteTag(tagWithUsage),
+                  tooltip: l10n.deleteTag,
+                ),
+              ],
             ),
+            onTap: () => _showTagDetail(tagWithUsage),
           ),
         );
       },
