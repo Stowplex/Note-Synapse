@@ -98,6 +98,7 @@ dependencies:
   
   # Markdown rendering
   gpt_markdown: ^1.1.4
+  flutter_math_fork: ^0.7.3
   
   # Markdown toolbar
   markdown_toolbar: ^0.5.0

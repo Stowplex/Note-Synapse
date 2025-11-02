@@ -2483,7 +2483,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。';
 
   @override
-  String additionalContextNotes(Object count) {
+  String additionalContextNotes(num count) {
     return '额外上下文笔记（$count）';
   }
 
@@ -2775,4 +2775,51 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openInTree => '在树状图中打开';
+
+  @override
+  String get addConversationDialogTitle => '添加对话';
+
+  @override
+  String get addConversationDialogMessage => '您想如何创建此对话？';
+
+  @override
+  String get addDirectly => '直接添加';
+
+  @override
+  String get addDirectlyDescription => '直接创建对话，将所选节点作为上下文';
+
+  @override
+  String get addWithAIProcessing => '使用AI处理后添加';
+
+  @override
+  String get addWithAIProcessingDescription => '首先使用AI处理内容（例如总结），然后创建对话';
+
+  @override
+  String get conversationTitle => '对话标题';
+
+  @override
+  String get enterConversationTitlePrompt => '输入新对话的标题：';
+
+  @override
+  String get conversationTitleHint => '对话标题';
+
+  @override
+  String get createConversation => '创建对话';
+
+  @override
+  String conversationCreatedSuccessfully(String title) {
+    return '对话\"$title\"创建成功';
+  }
+
+  @override
+  String errorCreatingConversation(String error) {
+    return '创建对话时出错：$error';
+  }
+
+  @override
+  String get aiConversationCreator => 'AI对话创建器';
+
+  @override
+  String get aiConversationCreatorInstructions =>
+      'AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。';
 }

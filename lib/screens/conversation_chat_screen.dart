@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +16,7 @@ import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
+import '../widgets/constrained_gpt_markdown.dart';
 import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
@@ -1699,7 +1699,7 @@ You may supplement the information from the notes with your own knowledge to pro
               )
             else ...[
               SelectionArea(
-                child: GptMarkdown(
+                child: ConstrainedGptMarkdown(
                   message.content,
                   onLinkTap: (url, _) {
                     final uri = Uri.tryParse(url);

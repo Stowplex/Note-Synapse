@@ -4602,7 +4602,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Additional Context Notes ({count})'**
-  String additionalContextNotes(Object count);
+  String additionalContextNotes(num count);
 
   /// No description provided for @noAdditionalNotesSelected.
   ///
@@ -5143,6 +5143,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open in Tree'**
   String get openInTree;
+
+  /// No description provided for @addConversationDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Conversation'**
+  String get addConversationDialogTitle;
+
+  /// No description provided for @addConversationDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'How would you like to create this conversation?'**
+  String get addConversationDialogMessage;
+
+  /// No description provided for @addDirectly.
+  ///
+  /// In en, this message translates to:
+  /// **'Add directly'**
+  String get addDirectly;
+
+  /// No description provided for @addDirectlyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create the conversation directly with selected nodes as context'**
+  String get addDirectlyDescription;
+
+  /// No description provided for @addWithAIProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Add with AI processing'**
+  String get addWithAIProcessing;
+
+  /// No description provided for @addWithAIProcessingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use AI to process the content first (e.g., summarize) then create the conversation'**
+  String get addWithAIProcessingDescription;
+
+  /// No description provided for @conversationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Title'**
+  String get conversationTitle;
+
+  /// No description provided for @enterConversationTitlePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a title for the new conversation:'**
+  String get enterConversationTitlePrompt;
+
+  /// No description provided for @conversationTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation title'**
+  String get conversationTitleHint;
+
+  /// No description provided for @createConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Conversation'**
+  String get createConversation;
+
+  /// No description provided for @conversationCreatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation \"{title}\" created successfully'**
+  String conversationCreatedSuccessfully(String title);
+
+  /// No description provided for @errorCreatingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Error creating conversation: {error}'**
+  String errorCreatingConversation(String error);
+
+  /// No description provided for @aiConversationCreator.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Conversation Creator'**
+  String get aiConversationCreator;
+
+  /// No description provided for @aiConversationCreatorInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.'**
+  String get aiConversationCreatorInstructions;
 }
 
 class _AppLocalizationsDelegate

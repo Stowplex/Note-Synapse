@@ -2582,7 +2582,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.';
 
   @override
-  String additionalContextNotes(Object count) {
+  String additionalContextNotes(num count) {
     return 'Additional Context Notes ($count)';
   }
 
@@ -2882,4 +2882,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openInTree => 'Open in Tree';
+
+  @override
+  String get addConversationDialogTitle => 'Add Conversation';
+
+  @override
+  String get addConversationDialogMessage =>
+      'How would you like to create this conversation?';
+
+  @override
+  String get addDirectly => 'Add directly';
+
+  @override
+  String get addDirectlyDescription =>
+      'Create the conversation directly with selected nodes as context';
+
+  @override
+  String get addWithAIProcessing => 'Add with AI processing';
+
+  @override
+  String get addWithAIProcessingDescription =>
+      'Use AI to process the content first (e.g., summarize) then create the conversation';
+
+  @override
+  String get conversationTitle => 'Conversation Title';
+
+  @override
+  String get enterConversationTitlePrompt =>
+      'Enter a title for the new conversation:';
+
+  @override
+  String get conversationTitleHint => 'Conversation title';
+
+  @override
+  String get createConversation => 'Create Conversation';
+
+  @override
+  String conversationCreatedSuccessfully(String title) {
+    return 'Conversation \"$title\" created successfully';
+  }
+
+  @override
+  String errorCreatingConversation(String error) {
+    return 'Error creating conversation: $error';
+  }
+
+  @override
+  String get aiConversationCreator => 'AI Conversation Creator';
+
+  @override
+  String get aiConversationCreatorInstructions =>
+      'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.';
 }
