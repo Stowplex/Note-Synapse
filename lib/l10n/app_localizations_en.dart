@@ -2933,4 +2933,47 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get aiConversationCreatorInstructions =>
       'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.';
+
+  @override
+  String get selectRelationshipType => 'Select Relationship Type';
+
+  @override
+  String selectRelationshipTypeForNotes(int noteCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      noteCount,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Select the type of relationship for $noteCount $_temp0:';
+  }
+
+  @override
+  String get relationshipType => 'Relationship Type';
+
+  @override
+  String linkNotes(int noteCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      noteCount,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return 'Link $noteCount $_temp0';
+  }
+
+  @override
+  String get customRelationshipType => 'Custom Relationship Type';
+
+  @override
+  String get enterCustomRelationshipType => 'Enter custom relationship type';
+
+  @override
+  String get customEllipsis => 'Custom...';
+
+  @override
+  String get confirmRemoveLink => 'Are you sure you want to remove this link?';
+
+  @override
+  String get remove => 'Remove';
 }

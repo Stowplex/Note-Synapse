@@ -1016,5 +1016,28 @@
         }
       },
       "aiConversationCreator": "AI对话创建器",
-      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。"
+      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。",
+      "selectRelationshipType": "选择关系类型",
+      "selectRelationshipTypeForNotes": "为{noteCount}条笔记选择关系类型：",
+      "@selectRelationshipTypeForNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "relationshipType": "关系类型",
+      "linkNotes": "链接{noteCount}条笔记",
+      "@linkNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "customRelationshipType": "自定义关系类型",
+      "enterCustomRelationshipType": "输入自定义关系类型",
+      "customEllipsis": "自定义...",
+      "confirmRemoveLink": "您确定要移除此链接吗？",
+      "remove": "移除"
 }

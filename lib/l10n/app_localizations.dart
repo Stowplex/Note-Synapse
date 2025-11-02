@@ -5227,6 +5227,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.'**
   String get aiConversationCreatorInstructions;
+
+  /// No description provided for @selectRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Relationship Type'**
+  String get selectRelationshipType;
+
+  /// No description provided for @selectRelationshipTypeForNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:'**
+  String selectRelationshipTypeForNotes(int noteCount);
+
+  /// No description provided for @relationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Relationship Type'**
+  String get relationshipType;
+
+  /// No description provided for @linkNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}'**
+  String linkNotes(int noteCount);
+
+  /// No description provided for @customRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Relationship Type'**
+  String get customRelationshipType;
+
+  /// No description provided for @enterCustomRelationshipType.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter custom relationship type'**
+  String get enterCustomRelationshipType;
+
+  /// No description provided for @customEllipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom...'**
+  String get customEllipsis;
+
+  /// No description provided for @confirmRemoveLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to remove this link?'**
+  String get confirmRemoveLink;
+
+  /// No description provided for @remove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get remove;
 }
 
 class _AppLocalizationsDelegate

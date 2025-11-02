@@ -2822,4 +2822,35 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get aiConversationCreatorInstructions =>
       'AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。';
+
+  @override
+  String get selectRelationshipType => '选择关系类型';
+
+  @override
+  String selectRelationshipTypeForNotes(int noteCount) {
+    return '为$noteCount条笔记选择关系类型：';
+  }
+
+  @override
+  String get relationshipType => '关系类型';
+
+  @override
+  String linkNotes(int noteCount) {
+    return '链接$noteCount条笔记';
+  }
+
+  @override
+  String get customRelationshipType => '自定义关系类型';
+
+  @override
+  String get enterCustomRelationshipType => '输入自定义关系类型';
+
+  @override
+  String get customEllipsis => '自定义...';
+
+  @override
+  String get confirmRemoveLink => '您确定要移除此链接吗？';
+
+  @override
+  String get remove => '移除';
 }

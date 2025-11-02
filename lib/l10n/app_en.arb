@@ -1016,5 +1016,28 @@
         }
       },
       "aiConversationCreator": "AI Conversation Creator",
-      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt."
+      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.",
+      "selectRelationshipType": "Select Relationship Type",
+      "selectRelationshipTypeForNotes": "Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:",
+      "@selectRelationshipTypeForNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "relationshipType": "Relationship Type",
+      "linkNotes": "Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}",
+      "@linkNotes": {
+        "placeholders": {
+          "noteCount": {
+            "type": "int"
+          }
+        }
+      },
+      "customRelationshipType": "Custom Relationship Type",
+      "enterCustomRelationshipType": "Enter custom relationship type",
+      "customEllipsis": "Custom...",
+      "confirmRemoveLink": "Are you sure you want to remove this link?",
+      "remove": "Remove"
 }

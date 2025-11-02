@@ -2011,15 +2011,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _removeLinkedNote(String relationshipId) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Link'),
-        content: const Text('Are you sure you want to remove this link?'),
+        title: Text(l10n.removeLink),
+        content: Text(l10n.confirmRemoveLink),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () async {
@@ -2029,7 +2030,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               );
               await _loadRelationships();
             },
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: Text(l10n.remove, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -2066,16 +2067,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _showAddTagDialog(Note currentNote) {
     final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
     showDialog<List<String>>(
       context: context,
       builder: (context) => TagSelectionDialog(
-        title: 'Add Tags',
+        title: l10n.addTagsCapitalized,
         description: 'Add tags to "${currentNote.title}":',
         excludedTags: currentNote.tags,
         allowCreateNew: true,
         allowEmptySelection: false,
         confirmLabelBuilder: (count) =>
-            count > 0 ? 'Add $count Tag${count > 1 ? 's' : ''}' : 'Add Tags',
+            count > 0 ? l10n.addTagsWithCount(count) : l10n.addTagsCapitalized,
       ),
     ).then((tagNames) async {
       if (tagNames == null || tagNames.isEmpty) return;
@@ -2775,15 +2777,16 @@ class _RelationshipTypeSelectionDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text('Select Relationship Type'),
+      title: Text(l10n.selectRelationshipType),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select the type of relationship for ${widget.noteCount} note${widget.noteCount > 1 ? 's' : ''}:',
+              l10n.selectRelationshipTypeForNotes(widget.noteCount),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
@@ -2791,10 +2794,10 @@ class _RelationshipTypeSelectionDialogState
               initialValue: _isCustomMode
                   ? 'custom'
                   : _selectedRelationshipType,
-              decoration: const InputDecoration(
-                labelText: 'Relationship Type',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
+              decoration: InputDecoration(
+                labelText: l10n.relationshipType,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
@@ -2812,13 +2815,13 @@ class _RelationshipTypeSelectionDialogState
                     ),
                   ),
                 ),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'custom',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, size: 20),
-                      SizedBox(width: 8),
-                      Text('Custom...'),
+                      const Icon(Icons.edit, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.customEllipsis),
                     ],
                   ),
                 ),
@@ -2838,10 +2841,10 @@ class _RelationshipTypeSelectionDialogState
               const SizedBox(height: 16),
               TextField(
                 controller: _customTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Custom Relationship Type',
-                  border: OutlineInputBorder(),
-                  hintText: 'Enter custom relationship type',
+                decoration: InputDecoration(
+                  labelText: l10n.customRelationshipType,
+                  border: const OutlineInputBorder(),
+                  hintText: l10n.enterCustomRelationshipType,
                 ),
                 autofocus: true,
               ),
@@ -2852,7 +2855,7 @@ class _RelationshipTypeSelectionDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           onPressed: () {
@@ -2864,7 +2867,7 @@ class _RelationshipTypeSelectionDialogState
             }
           },
           child: Text(
-            'Link ${widget.noteCount} Note${widget.noteCount > 1 ? 's' : ''}',
+            l10n.linkNotes(widget.noteCount),
           ),
         ),
       ],
