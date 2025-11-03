@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
+import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -77,9 +79,27 @@ class GeminiModel implements AIModel {
   }
 
   @override
+  Future<String> generateFromPrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) {
+    return generateWithMessages(
+      request.buildFullMessageList(),
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  @override
   Future<String> generateWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
@@ -101,7 +121,6 @@ class GeminiModel implements AIModel {
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
         messages,
-        attachedFiles,
         generationConfig: generationConfig,
       );
 
@@ -145,8 +164,7 @@ class GeminiModel implements AIModel {
 
   @override
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
     double? temperature,
     int? topK,
@@ -169,7 +187,6 @@ class GeminiModel implements AIModel {
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
         messages,
-        attachedFiles,
         generationConfig: generationConfig,
       );
 
@@ -189,103 +206,72 @@ class GeminiModel implements AIModel {
     });
   }
 
-  /// Build request body from messages array
-  /// Gemini uses a different format: contents array where each content has parts
-  /// System messages are passed in a separate systemInstruction field
-  /// Gemini expects alternating user and model messages
+  /// Build request body from prompt messages.
   Map<String, dynamic> _buildRequestBodyFromMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     Map<String, dynamic>? generationConfig,
   }) {
-    final todayContext = AIModel.getTodayContext();
     final contents = <Map<String, dynamic>>[];
-    String? systemInstruction;
-    
-    // Extract system messages and combine them for systemInstruction
     final systemMessages = <String>[];
-    final conversationMessages = <Map<String, dynamic>>[];
-    
-    for (final msg in messages) {
-      final role = msg['role'] as String;
-      final content = msg['content'] as String;
-      
-      if (role == 'system') {
-        systemMessages.add(content);
-      } else {
-        conversationMessages.add(msg);
-      }
-    }
-    
-    if (systemMessages.isNotEmpty) {
-      systemInstruction = systemMessages.join('\n\n');
-    }
-    
-    // Find the index of the last user message first
-    int lastUserMessageIndex = -1;
-    for (int i = conversationMessages.length - 1; i >= 0; i--) {
-      if (conversationMessages[i]['role'] == 'user') {
-        lastUserMessageIndex = i;
-        break;
-      }
-    }
-    
-    // Convert messages to Gemini format
-    // Gemini expects alternating user and model (assistant) messages
-    for (int i = 0; i < conversationMessages.length; i++) {
-      final msg = conversationMessages[i];
-      final role = msg['role'] as String;
-      final content = msg['content'] as String;
-      
-      if (role == 'assistant') {
-        // Add assistant response as model's turn
-        contents.add({
-          'role': 'model',
-          'parts': [{'text': content}]
-        });
-      } else if (role == 'user') {
-        // Determine if this is the last user message (where we attach files and add todayContext)
-        final isLastUserMessage = i == lastUserMessageIndex;
-        
-        // Build parts for this user message
-        final parts = <Map<String, dynamic>>[];
-        
-        // Add today's context to last user message only
-        String messageText = content;
-        if (isLastUserMessage) {
-          messageText = messageText + todayContext;
-        }
-        
-        parts.add({'text': messageText});
-        
-        // Add file attachments to the last user message
-        if (isLastUserMessage && attachedFiles.isNotEmpty) {
-          for (final file in attachedFiles) {
-            if (file.bytes != null) {
-              final base64Data = base64Encode(file.bytes!);
+
+    for (final message in messages) {
+      switch (message.role) {
+        case PromptRole.system:
+          if (message.content.trim().isNotEmpty) {
+            systemMessages.add(message.content.trim());
+          }
+          break;
+        case PromptRole.user:
+          final parts = <Map<String, dynamic>>[
+            {'text': message.content},
+          ];
+
+          if (message.attachments.isNotEmpty) {
+            for (final file in message.attachments) {
+              final bytes = _readPlatformFileBytes(file);
+              if (bytes == null) continue;
+
               final extension = FileTypeUtils.getFileExtension(file.name);
               final mimeType = FileTypeUtils.getMimeTypeForBytes(
-                file.bytes!,
+                bytes,
                 extension: extension.isEmpty ? null : extension,
               );
-              
+
               parts.add({
                 'inline_data': {
                   'mime_type': mimeType,
-                  'data': base64Data,
+                  'data': base64Encode(bytes),
                 }
               });
             }
           }
-        }
-        
-        contents.add({
-          'role': 'user',
-          'parts': parts
-        });
+
+          contents.add({
+            'role': 'user',
+            'parts': parts,
+          });
+          break;
+        case PromptRole.assistant:
+          contents.add({
+            'role': 'model',
+            'parts': [
+              {'text': message.content},
+            ],
+          });
+          break;
+        case PromptRole.tool:
+          contents.add({
+            'role': 'user',
+            'parts': [
+              {
+                'text': 'Tool result:\n${message.content}',
+              }
+            ],
+          });
+          break;
       }
     }
-    
+
     final requestBody = <String, dynamic>{
       'contents': contents,
       'generationConfig': generationConfig ??
@@ -296,15 +282,33 @@ class GeminiModel implements AIModel {
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
           },
     };
-    
-    // Add systemInstruction if we have system messages
-    if (systemInstruction != null && systemInstruction.isNotEmpty) {
+
+    if (systemMessages.isNotEmpty) {
       requestBody['systemInstruction'] = {
-        'parts': [{'text': systemInstruction}]
+        'parts': [
+          {'text': systemMessages.join('\n\n')},
+        ],
       };
     }
-    
+
     return requestBody;
+  }
+
+  Uint8List? _readPlatformFileBytes(PlatformFile file) {
+    if (file.bytes != null) {
+      return Uint8List.fromList(file.bytes!);
+    }
+
+    if (file.path != null) {
+      try {
+        final bytes = File(file.path!).readAsBytesSync();
+        return Uint8List.fromList(bytes);
+      } catch (e) {
+        LoggerService.warning('GeminiModel: failed to read attachment ${file.path}: $e');
+      }
+    }
+
+    return null;
   }
 
 

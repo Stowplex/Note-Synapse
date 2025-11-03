@@ -4,18 +4,66 @@ import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
-import '../models/relationship.dart';
 import '../models/dedup_rule.dart';
 import 'model_selector.dart';
 import 'prompts/ai_prompts.dart';
 import 'logger_service.dart';
 import 'database_service.dart';
+import 'prompts/prompt_models.dart';
+import 'prompts/system_prompt_builder.dart';
+import 'prompts/note_prompt_builder.dart';
 
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
   /// Initialize the AI service
   static Future<void> initialize(AppProvider appProvider) async {
     await ModelSelector.instance.initialize(appProvider);
+  }
+
+  static NotePromptBuilder _notePromptBuilder() => NotePromptBuilder(DatabaseService());
+
+  static PromptRequest _singleTurnRequest({
+    required String taskContext,
+    required String userInstruction,
+    List<PlatformFile> attachments = const [],
+    List<String> guidelines = const [],
+  }) {
+    final system = SystemPromptBuilder.build(
+      taskContext: taskContext,
+      guidelines: guidelines,
+    );
+
+    final user = PromptMessage(
+      role: PromptRole.user,
+      content: userInstruction,
+      attachments: attachments,
+    );
+
+    return PromptRequest.singleTurn(
+      systemMessage: system,
+      userMessage: user,
+    );
+  }
+
+  static Future<String> executePrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    return await _withErrorHandling('prompt execution', () async {
+      final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
+        temperature: temperature,
+        topK: topK,
+        topP: topP,
+        maxOutputTokens: maxOutputTokens,
+        requestId: actualRequestId,
+      );
+    }, requestId: requestId);
   }
 
   /// Note Q&A
@@ -34,62 +82,25 @@ class AIService {
         'requestId': requestId,
       });
 
-      final contextText = await _buildContextFromNotes(contextNotes);
-      final prompt = AIPrompts.buildNoteQAPrompt(question, contextText, useOwnKnowledge: useOwnKnowledge);
-      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
+      final builder = _notePromptBuilder();
+      final request = await builder.buildQuestionPrompt(
+        question: question,
+        contextNotes: contextNotes,
+        useOwnKnowledge: useOwnKnowledge,
+        additionalAttachments: attachedFiles ?? const [],
+      );
 
-      LoggerService.debug('Note Q&A context built', error: {
-        'contextLength': contextText.length,
-        'totalAttachedFiles': allAttachedFiles.length,
+      LoggerService.debug('Note Q&A prompt assembled', error: {
         'requestId': requestId,
+        'contextMessages': request.contextMessages.length,
+        'conversationMessages': request.conversationMessages.length,
       });
 
-      // Model will handle capability limitations gracefully
-
-      return await ModelSelector.instance.generateWithAttachments(
-        prompt,
-        allAttachedFiles,
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
         requestId: requestId,
       );
     });
-  }
-
-  /// Note Q&A with messages array (for conversations)
-  static Future<String> answerNoteQuestionWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<Note> contextNotes, {
-    List<PlatformFile>? attachedFiles,
-    bool useOwnKnowledge = false,
-  }) async {
-    return await _withErrorHandling('note Q&A with messages', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-      LoggerService.debug('Starting note Q&A with messages request', error: {
-        'messagesCount': messages.length,
-        'contextNotesCount': contextNotes.length,
-        'attachedFilesCount': attachedFiles?.length ?? 0,
-        'requestId': requestId,
-      });
-
-      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
-
-      LoggerService.debug('Note Q&A with messages prepared', error: {
-        'totalAttachedFiles': allAttachedFiles.length,
-        'requestId': requestId,
-      });
-
-      // Model will handle capability limitations gracefully
-
-      return await ModelSelector.instance.generateWithMessages(
-        messages,
-        allAttachedFiles,
-        requestId: requestId,
-      );
-    });
-  }
-
-  /// Expose buildContextFromNotes as a public static method
-  static Future<String> buildContextFromNotes(List<Note> notes) async {
-    return await _buildContextFromNotes(notes);
   }
 
   /// Note transformation
@@ -108,29 +119,20 @@ class AIService {
         'requestId': requestId,
       });
 
-      final linkedNotesContext = await _buildLinkedNotesContext(note);
-      final prompt = AIPrompts.buildNoteTransformationPrompt(
-        note.title,
-        note.content,
-        transformationPrompt,
-        attachmentPaths: note.attachmentPaths,
-        subNotes: note.subNotes.map((sn) => '${sn.name}: ${sn.content}').toList(),
-        tags: note.tags,
-        linkedNotesContext: linkedNotesContext,
+      final builder = _notePromptBuilder();
+      final request = await builder.buildTransformationPrompt(
+        note: note,
+        instruction: transformationPrompt,
+        additionalAttachments: attachedFiles ?? const [],
       );
-      final allAttachedFiles = await _prepareAttachedFiles([note], attachedFiles);
-      
+
       LoggerService.debug('Note transformation prompt built', error: {
-        'promptLength': prompt.length,
-        'totalAttachedFiles': allAttachedFiles.length,
         'requestId': requestId,
+        'contextMessages': request.contextMessages.length,
       });
-      
-      // Model will handle capability limitations gracefully
-      
-      return await ModelSelector.instance.generateWithAttachments(
-        prompt,
-        allAttachedFiles,
+
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
         requestId: requestId,
       );
     });
@@ -151,22 +153,20 @@ class AIService {
         'requestId': requestId,
       });
 
-      final contextText = await _buildContextFromNotes(contextNotes);
-      final aiPrompt = AIPrompts.buildNewNoteCreationPrompt(prompt, contextText);
-      final allAttachedFiles = await _prepareAttachedFiles(contextNotes, attachedFiles);
+      final builder = _notePromptBuilder();
+      final request = await builder.buildNewNoteCreationPrompt(
+        userInstruction: prompt,
+        contextNotes: contextNotes,
+        additionalAttachments: attachedFiles ?? const [],
+      );
 
       LoggerService.debug('New note creation prompt built', error: {
-        'promptLength': aiPrompt.length,
-        'contextLength': contextText.length,
-        'totalAttachedFiles': allAttachedFiles.length,
         'requestId': requestId,
+        'contextMessages': request.contextMessages.length,
       });
 
-      // Model will handle capability limitations gracefully
-
-      final response = await ModelSelector.instance.generateWithAttachments(
-        aiPrompt,
-        allAttachedFiles,
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
         requestId: requestId,
       );
       return _parseNewNotesResponse(response);
@@ -196,8 +196,16 @@ class AIService {
         bytes: bytes,
       );
 
-      final prompt = AIPrompts.buildAudioTranscriptionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [audioFile], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext: 'Transcribe any attached audio files verbatim. Preserve punctuation and speaker cues if present.',
+        userInstruction: AIPrompts.buildAudioTranscriptionPrompt(),
+        attachments: [audioFile],
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
       
       LoggerService.debug('Audio transcription completed', error: {
         'transcriptionLength': response.length,
@@ -232,8 +240,17 @@ class AIService {
         bytes: bytes,
       );
 
-      final prompt = AIPrompts.buildAudioSummarizationPrompt(context: context);
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [audioFile], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext:
+            'Summarize user-provided audio into concise bullet points and highlight actionable items. Use optional context if provided.',
+        userInstruction: AIPrompts.buildAudioSummarizationPrompt(context: context),
+        attachments: [audioFile],
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
       
       LoggerService.debug('Audio summarization completed', error: {
         'summaryLength': response.length,
@@ -259,8 +276,16 @@ class AIService {
         'requestId': requestId,
       });
 
-      final prompt = AIPrompts.buildContentExtractionPrompt(text, contentType, title);
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext:
+            'Extract key information, structure, and actionable insights from provided ${contentType.toLowerCase()}.',
+        userInstruction: AIPrompts.buildContentExtractionPrompt(text, contentType, title),
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
 
       LoggerService.debug('Content extraction completed', error: {
         'requestId': requestId,
@@ -299,8 +324,16 @@ class AIService {
         bytes: bytes,
       );
 
-      final prompt = AIPrompts.buildImageContentExtractionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [imageFile], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext: 'Analyze attached images and provide detailed descriptions of text and visual elements.',
+        userInstruction: AIPrompts.buildImageContentExtractionPrompt(),
+        attachments: [imageFile],
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
 
       LoggerService.debug('Image content extraction completed', error: {
         'requestId': requestId,
@@ -339,8 +372,16 @@ class AIService {
         bytes: bytes,
       );
 
-      final prompt = AIPrompts.buildPdfContentExtractionPrompt();
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [pdfFile], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext: 'Summarize and extract structure from the attached PDF document.',
+        userInstruction: AIPrompts.buildPdfContentExtractionPrompt(),
+        attachments: [pdfFile],
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
 
       LoggerService.debug('PDF content extraction completed', error: {
         'requestId': requestId,
@@ -370,8 +411,15 @@ class AIService {
         'requestId': requestId,
       });
 
-      final prompt = AIPrompts.buildDedupRulesSuggestionPrompt(tagNames, protectedTags: protectedTags);
-      final response = await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext: 'Suggest tag deduplication rules given current taxonomy and protected tags.',
+        userInstruction: AIPrompts.buildDedupRulesSuggestionPrompt(tagNames, protectedTags: protectedTags),
+      );
+
+      final response = await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
       
       LoggerService.debug('AI dedup rules suggestion completed', error: {
         'requestId': requestId,
@@ -391,7 +439,15 @@ class AIService {
         'requestId': requestId,
       });
 
-      return await ModelSelector.instance.generateWithAttachments(prompt, [], requestId: requestId);
+      final request = _singleTurnRequest(
+        taskContext: 'Create a self-contained HTML/CSS/JS application that satisfies the user specification.',
+        userInstruction: prompt,
+      );
+
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
+        requestId: requestId,
+      );
     });
   }
 
@@ -405,11 +461,14 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Model will handle capability limitations gracefully
+      final request = _singleTurnRequest(
+        taskContext: 'Create a self-contained HTML/CSS/JS application that satisfies the user specification and uses attached assets if provided.',
+        userInstruction: prompt,
+        attachments: attachedFiles ?? const [],
+      );
 
-      return await ModelSelector.instance.generateWithAttachments(
-        prompt,
-        attachedFiles ?? [],
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
         requestId: requestId,
       );
     });
@@ -434,11 +493,14 @@ class AIService {
         'requestId': requestId,
       });
 
-      // Model will handle capability limitations gracefully
+      final request = _singleTurnRequest(
+        taskContext: 'General assistant conversation without domain-specific context.',
+        userInstruction: prompt,
+        attachments: attachedFiles ?? const [],
+      );
 
-      return await ModelSelector.instance.generateWithAttachments(
-        prompt,
-        attachedFiles ?? [],
+      return await ModelSelector.instance.generateFromPrompt(
+        request,
         temperature: temperature,
         topK: topK,
         topP: topP,
@@ -465,198 +527,6 @@ class AIService {
       rethrow;
     }
   }
-
-  static Future<List<PlatformFile>> _prepareAttachedFiles(
-    List<Note> notes,
-    List<PlatformFile>? additionalFiles,
-  ) async {
-    final allAttachedFiles = <PlatformFile>[];
-    if (additionalFiles != null) allAttachedFiles.addAll(additionalFiles);
-    
-    final noteAttachments = await _convertNoteAttachmentsToPlatformFiles(notes);
-    allAttachedFiles.addAll(noteAttachments);
-    
-    return allAttachedFiles;
-  }
-
-  static Future<List<PlatformFile>> _convertNoteAttachmentsToPlatformFiles(List<Note> notes) async {
-    final platformFiles = <PlatformFile>[];
-    final processedFiles = <String>{}; // To avoid duplicate files
-    
-    for (final note in notes) {
-      // Add attachments from the main note
-      await _addNoteAttachments(platformFiles, note, processedFiles);
-      
-      // Add attachments from linked notes
-      try {
-        final databaseService = DatabaseService();
-        final relationships = await databaseService.getRelationships(note.id);
-        
-        for (final relationship in relationships) {
-          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
-          final linkedNote = await databaseService.getNote(linkedNoteId);
-          
-          if (linkedNote != null) {
-            await _addNoteAttachments(platformFiles, linkedNote, processedFiles);
-          }
-        }
-      } catch (e) {
-        LoggerService.warning('Error loading linked note attachments for ${note.title}: $e');
-        // Continue with other files even if one fails
-      }
-    }
-    
-    return platformFiles;
-  }
-
-  static Future<void> _addNoteAttachments(List<PlatformFile> platformFiles, Note note, Set<String> processedFiles) async {
-    for (final attachmentPath in note.attachmentPaths) {
-      // Skip if we've already processed this file
-      if (processedFiles.contains(attachmentPath)) continue;
-      processedFiles.add(attachmentPath);
-      
-      try {
-        final file = File(attachmentPath);
-        if (file.existsSync()) {
-          final bytes = await file.readAsBytes();
-          final fileName = attachmentPath.split('/').last;
-          
-          final platformFile = PlatformFile(
-            name: fileName,
-            path: attachmentPath,
-            size: bytes.length,
-            bytes: bytes,
-          );
-          
-          platformFiles.add(platformFile);
-        }
-      } catch (e) {
-        LoggerService.warning('Error reading attachment file $attachmentPath: $e');
-        // Continue with other files even if one fails
-      }
-    }
-  }
-
-  static Future<String> _buildContextFromNotes(List<Note> notes) async {
-    if (notes.isEmpty) return '';
-
-    final buffer = StringBuffer();
-    final processedNoteIds = <String>{};
-    
-    for (final note in notes) {
-      await _addNoteToContext(buffer, note, processedNoteIds, 0);
-    }
-    
-    return buffer.toString();
-  }
-
-  static Future<void> _addNoteToContext(StringBuffer buffer, Note note, Set<String> processedNoteIds, int depth) async {
-    // Avoid infinite loops and duplicate processing
-    if (processedNoteIds.contains(note.id) || depth > 3) return;
-    processedNoteIds.add(note.id);
-    
-    // Add indentation based on depth
-    final indent = '  ' * depth;
-    
-    buffer.writeln('$indent--- Note: ${note.title} ---');
-    buffer.writeln('$indent${note.content}');
-    
-    // Add file attachment info if any (files will be sent as binary data separately)
-    if (note.attachmentPaths.isNotEmpty) {
-      buffer.writeln('${indent}File Attachments:');
-      for (final attachmentPath in note.attachmentPaths) {
-        final fileName = attachmentPath.split('/').last;
-        final file = File(attachmentPath);
-        if (file.existsSync()) {
-          final fileSize = file.lengthSync();
-          buffer.writeln('$indent- $fileName (${_formatFileSize(fileSize)})');
-        } else {
-          buffer.writeln('$indent- $fileName (file not found)');
-        }
-      }
-    }
-    
-    if (note.subNotes.isNotEmpty) {
-      buffer.writeln('${indent}Sub-notes:');
-      for (final subNote in note.subNotes) {
-        buffer.writeln('$indent- ${subNote.name}: ${subNote.content}');
-      }
-    }
-    
-    if (note.tags.isNotEmpty) {
-      buffer.writeln('${indent}Tags: ${note.tags.join(', ')}');
-    }
-    
-    // Add linked notes with relationships
-    try {
-      final databaseService = DatabaseService();
-      final relationships = await databaseService.getRelationships(note.id);
-      
-      if (relationships.isNotEmpty) {
-        buffer.writeln('${indent}Linked Notes:');
-        for (final relationship in relationships) {
-          final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
-          final linkedNote = await databaseService.getNote(linkedNoteId);
-          
-          if (linkedNote != null) {
-            final isOutgoing = relationship.fromNoteId == note.id;
-            final direction = isOutgoing ? '→' : '←';
-            final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
-            
-            buffer.writeln('$indent  $direction $relationshipDisplay: ${linkedNote.title}');
-            
-            // Recursively add linked note content (with depth limit)
-            if (depth < 2) {
-              buffer.writeln('$indent  Linked Note Content:');
-              await _addNoteToContext(buffer, linkedNote, processedNoteIds, depth + 2);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // If there's an error loading relationships, continue without them
-      LoggerService.warning('Error loading linked notes for ${note.title}: $e');
-    }
-    
-    buffer.writeln();
-  }
-
-  static Future<String> _buildLinkedNotesContext(Note note) async {
-    try {
-      final databaseService = DatabaseService();
-      final relationships = await databaseService.getRelationships(note.id);
-      
-      if (relationships.isEmpty) return '';
-      
-      final buffer = StringBuffer();
-      for (final relationship in relationships) {
-        final linkedNoteId = relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
-        final linkedNote = await databaseService.getNote(linkedNoteId);
-        
-        if (linkedNote != null) {
-          final isOutgoing = relationship.fromNoteId == note.id;
-          final direction = isOutgoing ? '→' : '←';
-          final relationshipDisplay = RelationshipType.getDisplayName(relationship.type);
-          
-          buffer.writeln('  $direction $relationshipDisplay: ${linkedNote.title}');
-          buffer.writeln('  Content: ${linkedNote.content}');
-          
-          if (linkedNote.tags.isNotEmpty) {
-            buffer.writeln('  Tags: ${linkedNote.tags.join(', ')}');
-          }
-          buffer.writeln();
-        }
-      }
-      
-      return buffer.toString();
-    } catch (e) {
-      LoggerService.warning('Error loading linked notes for transformation: $e');
-      return '';
-    }
-  }
-
-
-
 
   static List<Note> _parseNewNotesResponse(String response) {
     try {
@@ -779,10 +649,4 @@ class AIService {
     }
   }
 
-  static String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
 }

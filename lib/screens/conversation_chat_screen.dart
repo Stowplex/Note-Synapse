@@ -16,6 +16,10 @@ import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
+import '../services/prompts/prompt_models.dart';
+import '../services/prompts/system_prompt_builder.dart';
+import '../services/prompts/note_prompt_builder.dart';
+import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../l10n/app_localizations.dart';
 import 'note_selection_dialog.dart';
@@ -38,6 +42,16 @@ class ConversationChatScreen extends StatefulWidget {
 
   @override
   State<ConversationChatScreen> createState() => _ConversationChatScreenState();
+}
+
+class _AssistantResponse {
+  const _AssistantResponse({
+    required this.content,
+    this.metadata,
+  });
+
+  final String content;
+  final Map<String, dynamic>? metadata;
 }
 
 class _ConversationChatScreenState extends State<ConversationChatScreen> {
@@ -320,7 +334,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       _currentRequestId = requestId;
 
-      final aiResponseContent = await _generateAIResponse(
+      final aiResponse = await _generateAIResponse(
         content,
         attachments,
         requestId,
@@ -333,7 +347,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
-        content: aiResponseContent,
+        content: aiResponse.content,
+        metadata: aiResponse.metadata,
       );
       if (!mounted) return;
 
@@ -402,7 +417,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     });
   }
 
-  Future<String> _generateAIResponse(
+  Future<_AssistantResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
     String requestId,
@@ -413,23 +428,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         throw Exception('Request cancelled by user');
       }
 
-      // Build messages array with system, user, and assistant roles
-      final messages = <Map<String, dynamic>>[];
-
-      // Build system message with note context
-      final systemContent = await _buildSystemMessage(_notes);
-      if (systemContent.isNotEmpty) {
-        messages.add({'role': 'system', 'content': systemContent});
-      }
-
-      // Add conversation history (_messages already includes the current user message)
-      // since it was added to _messages before calling _generateAIResponse
-      for (final msg in _messages) {
-        messages.add({
-          'role': msg.type == MessageType.user ? 'user' : 'assistant',
-          'content': msg.content,
-        });
-      }
+      final request = await _buildConversationPrompt(attachedFiles);
 
       // Check if this specific request was cancelled before AI generation
       if (_cancelledRequestIds.contains(requestId)) {
@@ -438,14 +437,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       // Check if MCP tools are available
       if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(messages, attachedFiles, requestId);
+        return await _generateWithMcpTools(request, requestId);
       } else {
-        // Use AI service's answerNoteQuestion method which handles note context and attachments
-        final response = await AIService.answerNoteQuestionWithMessages(
-          messages,
-          _notes,
-          attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
-          useOwnKnowledge: true,
+        final responseText = await AIService.executePrompt(
+          request,
+          requestId: requestId,
         );
 
         // Check if this specific request was cancelled after AI response
@@ -453,7 +449,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           throw Exception('Request cancelled by user');
         }
 
-        return response;
+        return _AssistantResponse(content: responseText);
       }
     } catch (e) {
       if (_cancelledRequestIds.contains(requestId)) {
@@ -461,81 +457,195 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         rethrow;
       }
       LoggerService.error('Error generating AI response: $e', error: e);
-      return 'I apologize, but I encountered an error while generating a response. Please try again.';
+      return _AssistantResponse(
+        content:
+            'I apologize, but I encountered an error while generating a response. Please try again.',
+      );
     }
   }
 
-  Future<String> _buildSystemMessage(List<Note> notes) async {
-    if (notes.isEmpty) {
-      return '''You are a helpful assistant that can answer questions and help with tasks.
+  Future<PromptRequest> _buildConversationPrompt(
+    List<PlatformFile> latestUserAttachments,
+  ) async {
+    final noteBuilder = NotePromptBuilder(DatabaseService());
+    final systemMessage = _buildConversationSystemMessage();
+    final contextMessage = await noteBuilder.buildContextMessage(_notes);
 
-${AIPrompts.mathFormulaGuidelines}
+    final conversationMessages = <PromptMessage>[];
+    for (final message in _messages) {
+      final role = message.type == MessageType.user
+          ? PromptRole.user
+          : PromptRole.assistant;
+      final attachments = await _loadConversationAttachments(
+        message,
+        latestUserAttachments,
+      );
 
-''';
+      final promptMessage = PromptMessage(
+        role: role,
+        content: message.content,
+        attachments: attachments,
+        metadata: message.metadata,
+      );
+
+      conversationMessages.add(promptMessage);
+
+      if (role == PromptRole.assistant) {
+        final toolCallsWithResults =
+            message.metadata?['tool_calls_with_results'] as List?;
+        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
+          for (final entry in toolCallsWithResults) {
+            final toolCallId = entry['id'];
+            final toolResult = entry['result'] as String? ?? '';
+            conversationMessages.add(
+              PromptMessage(
+                role: PromptRole.tool,
+                content: toolResult,
+                metadata: {
+                  if (toolCallId != null) 'tool_call_id': toolCallId,
+                  ...((entry is Map<String, dynamic>) ? entry : {}),
+                },
+              ),
+            );
+          }
+        }
+      }
     }
 
-    // Build note context for system message
-    final contextText = await AIService.buildContextFromNotes(notes);
+    final contextMessages = (contextMessage.content.trim().isEmpty &&
+            contextMessage.attachments.isEmpty)
+        ? <PromptMessage>[]
+        : [contextMessage];
 
-    // Build system message from context (without a specific question)
-    return '''You are a helpful assistant that can answer questions and help with tasks.
-
-Based on the following notes and their linked relationships, please answer user questions.
-
-Context Notes (including linked notes and their relationships):
-$contextText
-
-Please provide comprehensive answers using both the information in the notes and your own knowledge.
-Consider the relationships between the NOTES in the context:
-- The hierarchical structure shown (indented linked notes)
-- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
-- How linked notes might provide additional context or clarification
-- The direction of relationships (→ for outgoing, ← for incoming)
-
-${AIPrompts.mathFormulaGuidelines}
-
-You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
-''';
+    return PromptRequest(
+      systemMessage: systemMessage,
+      contextMessages: contextMessages,
+      conversationMessages: conversationMessages,
+    );
   }
 
-  Future<String> _generateWithMcpTools(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+  PromptMessage _buildConversationSystemMessage() {
+    final lines = <String>[
+      'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
+      'Treat all prior messages as immutable history for KV-cache friendly reuse.',
+      'Incorporate note relationships and hierarchies when citing evidence.',
+      'Use your own knowledge to clarify or extend when the notes are insufficient.',
+    ];
+
+    if (_mcpToolsByEndpoint.isNotEmpty) {
+      lines.add(
+        'The user has enabled MCP tools. Prefer using them when a tool can improve accuracy before responding.',
+      );
+    }
+
+    if (_notes.isEmpty) {
+      lines.add('No note context is currently attached. Rely on the conversation history.');
+    }
+
+    final taskContext = lines.join('\n');
+
+    return SystemPromptBuilder.build(
+      taskContext: taskContext,
+      guidelines: [
+        'Reference evidence when drawing conclusions and mention uncertainties.',
+        AIPrompts.mathFormulaGuidelines,
+        AIPrompts.relationshipGuidelines,
+      ],
+    );
+  }
+
+  Future<List<PlatformFile>> _loadConversationAttachments(
+    ConversationMessage message,
+    List<PlatformFile> latestUserAttachments,
+  ) async {
+    if (message.type != MessageType.user) {
+      return const [];
+    }
+
+    final isLatestUserMessage =
+        _messages.isNotEmpty && identical(message, _messages.last);
+
+    if (isLatestUserMessage && latestUserAttachments.isNotEmpty) {
+      return Future.wait(
+        latestUserAttachments.map(_normalizePlatformFile),
+      );
+    }
+
+    if (message.attachmentPaths.isEmpty) {
+      return const [];
+    }
+
+    final files = <PlatformFile>[];
+    for (final path in message.attachmentPaths) {
+      try {
+        final file = File(path);
+        if (!file.existsSync()) {
+          continue;
+        }
+        final bytes = await file.readAsBytes();
+        files.add(
+          PlatformFile(
+            name: path.split('/').last,
+            path: path,
+            size: bytes.length,
+            bytes: bytes,
+          ),
+        );
+      } catch (e) {
+        LoggerService.warning('Failed to load conversation attachment $path: $e');
+      }
+    }
+
+    return files;
+  }
+
+  Future<PlatformFile> _normalizePlatformFile(PlatformFile file) async {
+    if (file.bytes != null) {
+      return file;
+    }
+
+    if (file.path != null) {
+      try {
+        final bytes = await File(file.path!).readAsBytes();
+        return PlatformFile(
+          name: file.name,
+          path: file.path,
+          size: bytes.length,
+          bytes: bytes,
+        );
+      } catch (e) {
+        LoggerService.warning('Failed to normalize attachment ${file.name}: $e');
+      }
+    }
+
+    return file;
+  }
+
+  Future<_AssistantResponse> _generateWithMcpTools(
+    PromptRequest request,
     String requestId,
   ) async {
     try {
-      // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
         throw Exception('Request cancelled by user');
       }
 
-      // Add MCP tool information to system message if present, otherwise create one
       final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
         _mcpToolsByEndpoint,
       );
-      final messagesWithMcp = <Map<String, dynamic>>[];
 
-      // Find or create system message
-      bool hasSystemMessage = false;
-      for (final msg in messages) {
-        if (msg['role'] == 'system') {
-          // Append MCP prompt to existing system message
-          messagesWithMcp.add({
-            'role': 'system',
-            'content': '${msg['content']}\n\n$mcpPrompt',
-          });
-          hasSystemMessage = true;
-        } else {
-          messagesWithMcp.add(msg);
-        }
-      }
+      final systemMessage = request.systemMessage.copyWith(
+        content: request.systemMessage.content.isEmpty
+            ? mcpPrompt
+            : '${request.systemMessage.content}\n\n$mcpPrompt',
+      );
 
-      // If no system message exists, add one with MCP prompt
-      if (!hasSystemMessage) {
-        messagesWithMcp.insert(0, {'role': 'system', 'content': mcpPrompt});
-      }
+      var currentMessages = <PromptMessage>[
+        systemMessage,
+        ...request.contextMessages,
+        ...request.conversationMessages,
+      ];
 
-      // Get call_tool function definition based on current model type
       final currentModelType = ModelSelector.instance.currentModelType;
       final callToolFunction = currentModelType == ModelType.openaiCompatible
           ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
@@ -549,26 +659,20 @@ You may supplement the information from the notes with your own knowledge to pro
         'Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services',
       );
 
-      // Tool calling loop - max 5 iterations to prevent infinite loops
       const maxIterations = 10;
-      List<Map<String, dynamic>> currentMessages = List.from(messagesWithMcp);
       final conversationParts = <String>[];
+      Map<String, dynamic>? lastAssistantMetadata;
 
       for (int iteration = 0; iteration < maxIterations; iteration++) {
-        // Check if this specific request was cancelled before each iteration
         if (_cancelledRequestIds.contains(requestId)) {
           throw Exception('Request cancelled by user');
         }
 
         LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
 
-        // Call AI with tools
         final response = await ModelSelector.instance
-            .generateWithToolsAndMessages(currentMessages, attachedFiles, [
-              callToolFunction,
-            ]);
+            .generateWithToolsAndMessages(currentMessages, [callToolFunction]);
 
-        // Check if this specific request was cancelled after AI response
         if (_cancelledRequestIds.contains(requestId)) {
           throw Exception('Request cancelled by user');
         }
@@ -581,14 +685,15 @@ You may supplement the information from the notes with your own knowledge to pro
             'AI requested ${functionCalls.length} tool call(s)',
           );
 
-          // Execute all function calls
           final toolResults = <String>[];
-          for (final functionCall in functionCalls) {
-            // Check if this specific request was cancelled before each tool execution
+          final toolCallsWithResults = <Map<String, dynamic>>[];
+
+          for (int i = 0; i < functionCalls.length; i++) {
             if (_cancelledRequestIds.contains(requestId)) {
               throw Exception('Request cancelled by user');
             }
 
+            final functionCall = functionCalls[i] as Map<String, dynamic>;
             final functionName = functionCall['name'] as String;
             final args = functionCall['args'] as Map<String, dynamic>;
 
@@ -597,10 +702,20 @@ You may supplement the information from the notes with your own knowledge to pro
               error: {'functionName': functionName, 'args': args},
             );
 
-            if (functionName == 'call_tool') {
+            if (functionName != 'call_tool') {
+              continue;
+            }
+
               final parsedArgs =
                   McpToolIntegrationService.parseCallToolArguments(args);
-              if (parsedArgs != null) {
+            if (parsedArgs == null) {
+              LoggerService.error(
+                'Failed to parse call_tool arguments',
+                error: {'args': args},
+              );
+              continue;
+            }
+
                 final serviceName = parsedArgs['service_name'] as String;
                 final toolName = parsedArgs['tool_name'] as String;
                 final params = parsedArgs['params'] as Map<String, dynamic>;
@@ -609,125 +724,119 @@ You may supplement the information from the notes with your own knowledge to pro
                 LoggerService.debug('Tool parameters', error: params);
 
                 try {
-                  final result =
-                      await McpToolIntegrationService.executeToolCall(
+              final result = await McpToolIntegrationService.executeToolCall(
                         serviceName: serviceName,
                         toolName: toolName,
                         parameters: params,
                         enabledEndpointIds: _selectedMcpEndpointIds.toList(),
                       );
 
-                  toolResults.add(
-                    'Tool: $serviceName.$toolName\nResult: $result',
-                  );
-                  conversationParts.add(
-                    '[Tool executed: $serviceName.$toolName]',
-                  );
-                } catch (e) {
-                  LoggerService.error('Tool execution failed: $e');
-                  toolResults.add('Tool: $serviceName.$toolName\nError: $e');
-                }
-              } else {
-                LoggerService.error(
-                  'Failed to parse call_tool arguments',
-                  error: {'args': args},
-                );
-              }
-            }
-          }
+              final toolSummary =
+                  'Tool: $serviceName.$toolName\nResult: $result';
+              toolResults.add(toolSummary);
+              conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
-          // If we have tool results, continue the conversation with them
-          if (toolResults.isNotEmpty) {
-            // Add assistant response with function call
-            currentMessages = List.from(currentMessages);
-
-            // Add tool results - format depends on model type
-            final currentModelType = ModelSelector.instance.currentModelType;
             if (currentModelType == ModelType.openaiCompatible) {
-              // OpenAI format: assistant message with tool_calls, then tool messages with results
-              // Store function calls with their results for proper ID mapping
-              final toolCallsWithResults = <Map<String, dynamic>>[];
-              for (
-                int i = 0;
-                i < functionCalls.length && i < toolResults.length;
-                i++
-              ) {
-                final functionCall = functionCalls[i];
-                final functionName = functionCall['name'] as String;
                 final toolCallId =
-                    'call_${DateTime.now().millisecondsSinceEpoch}_${functionName}_$i';
-
+                    'call_${DateTime.now().millisecondsSinceEpoch}_${toolName}_$i';
                 toolCallsWithResults.add({
                   'id': toolCallId,
                   'function_call': functionCall,
-                  'result': toolResults[i],
+                  'result': toolSummary,
                 });
               }
-
-              // Add assistant message with tool calls
-              currentMessages.add({
-                'role': 'assistant',
-                'content': textResponse ?? '',
-                'function_calls': functionCalls,
-                'tool_calls_with_results':
-                    toolCallsWithResults, // Store for ID mapping
-              });
-
-              // Add tool result messages
-              for (final toolCallWithResult in toolCallsWithResults) {
-                currentMessages.add({
-                  'role': 'tool',
-                  'tool_call_id': toolCallWithResult['id'],
-                  'name': toolCallWithResult['function_call']['name'],
-                  'content': toolCallWithResult['result'],
-                });
-              }
-            } else {
-              // Gemini format: tool results are included differently
-              // For Gemini, we add tool results as a continuation in the user role
-              currentMessages.add({
-                'role': 'assistant',
-                'content': textResponse ?? '',
-                'function_calls': functionCalls,
-              });
-              final toolResultsText = toolResults.join('\n\n');
-              currentMessages.add({
-                'role': 'user',
-                'content':
-                    'Tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response.',
-              });
+            } catch (e) {
+              LoggerService.error('Tool execution failed: $e');
+              toolResults.add('Tool: $serviceName.$toolName\nError: $e');
             }
-            continue; // Go to next iteration
+          }
+
+          if (toolResults.isNotEmpty) {
+            final assistantMetadata = <String, dynamic>{
+                'function_calls': functionCalls,
+            };
+
+            if (toolCallsWithResults.isNotEmpty) {
+              assistantMetadata['tool_calls_with_results'] =
+                  toolCallsWithResults;
+            }
+
+            final assistantMessage = PromptMessage(
+              role: PromptRole.assistant,
+              content: textResponse ?? '',
+              metadata: assistantMetadata,
+            );
+            lastAssistantMetadata = assistantMetadata;
+
+            if (currentModelType == ModelType.openaiCompatible) {
+              final toolMessages = toolCallsWithResults
+                  .map(
+                    (toolCall) => PromptMessage(
+                      role: PromptRole.tool,
+                      content: toolCall['result'] as String,
+                      metadata: {
+                        'tool_call_id': toolCall['id'],
+                      },
+                    ),
+                  )
+                  .toList();
+
+              currentMessages = [
+                ...currentMessages,
+                assistantMessage,
+                ...toolMessages,
+              ];
+            } else {
+              final toolMessages = toolResults
+                  .map(
+                    (result) => PromptMessage(
+                      role: PromptRole.user,
+                      content: result,
+                    ),
+                  )
+                  .toList();
+
+              currentMessages = [
+                ...currentMessages,
+                assistantMessage,
+                ...toolMessages,
+              ];
+            }
+
+            continue;
           }
         }
 
-        // If we get here, either no function calls or we have a text response
         if (textResponse != null && textResponse.isNotEmpty) {
-          if (conversationParts.isNotEmpty) {
-            return '${conversationParts.join('\n')}\n\n$textResponse';
-          }
-          return textResponse;
+          conversationParts.add(textResponse);
+          return _AssistantResponse(
+            content: conversationParts.join('\n\n'),
+            metadata: lastAssistantMetadata,
+          );
         }
 
-        // If no text and no function calls, something went wrong
-        LoggerService.warning(
-          'No text response and no function calls in iteration ${iteration + 1}',
+        LoggerService.warning('AI returned empty response after tool calls');
+        return _AssistantResponse(
+          content: 'I was unable to generate a response. Please try again.',
+          metadata: lastAssistantMetadata,
         );
-        break;
       }
 
-      // If we exhausted iterations, return what we have
-      LoggerService.warning('Reached maximum tool calling iterations');
-      return conversationParts.isEmpty
-          ? 'I apologize, but I was unable to complete the task after multiple attempts.'
-          : conversationParts.join('\n');
+      LoggerService.warning('MCP tool loop exceeded $maxIterations iterations');
+      return _AssistantResponse(
+        content:
+            'I was unable to complete the request with the available tools. Please try again later.',
+        metadata: lastAssistantMetadata,
+      );
     } catch (e) {
       if (_cancelledRequestIds.contains(requestId)) {
-        // Don't show error for cancelled requests
         rethrow;
       }
-      LoggerService.error('Error in MCP tool calling: $e', error: e);
-      return 'I apologize, but I encountered an error while using external tools. Error: $e';
+      LoggerService.error('Error during MCP tool execution: $e', error: e);
+      return _AssistantResponse(
+        content:
+            'I encountered an error while coordinating tools for this request. Please try again.',
+      );
     }
   }
 
