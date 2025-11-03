@@ -23,26 +23,47 @@ class NotePromptBuilder {
     bool useOwnKnowledge = false,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final relationshipGuidance = contextNotes.isEmpty
+        ? null
+        : 'Note relationship reminders:\n${AIPrompts.relationshipGuidelines}';
+
+    final guidelines = <String>[
+      'Prefer structured, concise explanations.',
+      if (relationshipGuidance != null) relationshipGuidance,
+      if (useOwnKnowledge)
+        'Use relevant general knowledge only after exhausting the provided notes, and flag outside information explicitly.'
+      else
+        'Do not use knowledge beyond the provided materials.',
+      AIPrompts.mathFormulaGuidelines,
+    ];
+
     final systemMessage = SystemPromptBuilder.build(
       taskContext:
           'You answer detailed questions about the user\'s notes. The next message contains note context with optional attachments. '
           '${useOwnKnowledge ? 'You may augment answers with general knowledge when helpful.' : 'Do not use outside knowledge unless the notes lack the answer.'}',
-      guidelines: [
-        'Prefer structured, concise explanations.',
-        'Cite note relationships when relevant.',
-        AIPrompts.mathFormulaGuidelines,
-      ],
+      guidelines: guidelines,
     );
 
     final contextMessage = await buildContextMessage(contextNotes);
+    final contextMessages = <PromptMessage>[
+      if (contextMessage.content.trim().isNotEmpty ||
+          contextMessage.attachments.isNotEmpty)
+        contextMessage,
+    ];
 
     final buffer = StringBuffer();
-    buffer.writeln('Question: $question');
-    if (useOwnKnowledge) {
-      buffer.writeln('You may incorporate relevant general knowledge.');
+    buffer.writeln('Question: "$question"');
+    if (contextNotes.isNotEmpty) {
+      buffer.writeln('Base your answer on the supplied note context.');
     } else {
-      buffer.writeln('Answer strictly from the provided note context.');
+      buffer.writeln('No note context is provided. Use the system guidance to determine how to answer.');
     }
+    if (useOwnKnowledge) {
+      buffer.writeln('Supplement with general knowledge only when it clarifies gaps, and identify assumptions.');
+    } else {
+      buffer.writeln('Do not rely on information outside the provided materials.');
+    }
+    buffer.writeln('If the answer cannot be found, state explicitly that the information is unavailable.');
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
@@ -52,7 +73,7 @@ class NotePromptBuilder {
 
     return PromptRequest(
       systemMessage: systemMessage,
-      contextMessages: [contextMessage],
+      contextMessages: contextMessages,
       conversationMessages: [userMessage],
     );
   }
@@ -75,9 +96,16 @@ class NotePromptBuilder {
     );
 
     final noteContextMessage = await buildContextMessage([note]);
+    final contextMessages = <PromptMessage>[
+      if (noteContextMessage.content.trim().isNotEmpty ||
+          noteContextMessage.attachments.isNotEmpty)
+        noteContextMessage,
+    ];
 
     final buffer = StringBuffer();
-    buffer.writeln('Transformation instruction: $instruction');
+    buffer.writeln('Transformation instruction: "$instruction"');
+    buffer.writeln('Apply the changes while preserving the note\'s existing structure (title, sections, sub-notes, tags, metadata) unless explicitly instructed otherwise.');
+    buffer.writeln('Incorporate relevant linked note context and attachments when appropriate.');
     buffer.writeln('Return only the transformed note content.');
 
     final userMessage = PromptMessage(
@@ -88,7 +116,7 @@ class NotePromptBuilder {
 
     return PromptRequest(
       systemMessage: systemMessage,
-      contextMessages: [noteContextMessage],
+      contextMessages: contextMessages,
       conversationMessages: [userMessage],
     );
   }
@@ -103,17 +131,58 @@ class NotePromptBuilder {
       taskContext:
           'Generate new notes based on user goals. The next message contains the existing note graph for context, including relationships.',
       guidelines: [
-        'Output valid JSON as specified by the user.',
+        'Output valid JSON exactly as specified below without extra prose or markdown fences.',
+        'Derive relative dates using the current date/time context before responding.',
         'Create related notes that align with observed relationships.',
         AIPrompts.mathFormulaGuidelines,
       ],
     );
 
     final contextMessage = await buildContextMessage(contextNotes);
+    final contextMessages = <PromptMessage>[
+      if (contextMessage.content.trim().isNotEmpty ||
+          contextMessage.attachments.isNotEmpty)
+        contextMessage,
+    ];
 
     final buffer = StringBuffer();
-    buffer.writeln('User prompt: $userInstruction');
-    buffer.writeln('Produce new notes in JSON following the specification.');
+    buffer.writeln('Use the provided note context (previous message) and the instruction below to create new notes.');
+    buffer.writeln();
+    buffer.writeln('User Prompt: "$userInstruction"');
+    buffer.writeln();
+    buffer.writeln('Return a single JSON object with the following structure:');
+    buffer.writeln('''{
+  "notes": [
+    {
+      "title": "Note Title",
+      "content": "Note content here",
+      "type": "note" or "task",
+      "tags": ["tag1", "tag2"],
+      "subNotes": [
+        {
+          "name": "Sub-note name",
+          "content": "Sub-note content",
+          "isCompleted": false
+        }
+      ],
+      "scheduledAt": "YYYY-MM-DD" (only for tasks),
+      "completeBy": "YYYY-MM-DD" (only for tasks),
+      "status": "todo" (only for tasks)
+    }
+  ]
+}''');
+    buffer.writeln();
+    buffer.writeln('Critical JSON rules:');
+    buffer.writeln('1. The response must be valid JSON with no additional commentary.');
+    buffer.writeln('2. Escape all quotes, backslashes, newlines, and control characters.');
+    buffer.writeln('3. When using LaTeX (e.g., \\( E = mc^2 \\)), double-escape backslashes (\\\\) to keep JSON valid.');
+    buffer.writeln('4. Preserve arrays even when empty (e.g., "tags": []).');
+    buffer.writeln();
+    buffer.writeln('Additional requirements:');
+    buffer.writeln('- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.');
+    buffer.writeln('- Ensure each generated note relates to the user prompt and the supplied context hierarchy.');
+    buffer.writeln('- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.');
+    buffer.writeln('- Follow the LaTeX formatting guidance from the system message when including formulas.');
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
@@ -123,7 +192,7 @@ class NotePromptBuilder {
 
     return PromptRequest(
       systemMessage: systemMessage,
-      contextMessages: [contextMessage],
+      contextMessages: contextMessages,
       conversationMessages: [userMessage],
     );
   }
@@ -265,7 +334,7 @@ class NotePromptBuilder {
     return PromptMessage(
       role: PromptRole.user,
       content: context.isEmpty
-          ? 'No note context provided.'
+          ? ''
           : 'Note context with linked relationships:\n$context',
       attachments: attachments,
       isContext: true,

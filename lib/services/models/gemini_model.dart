@@ -349,10 +349,7 @@ class GeminiModel implements AIModel {
     Map<String, dynamic>? generationConfig,
     List<Map<String, String>>? safetySettings,
   }) {
-    final todayContext = AIModel.getTodayContext();
-    final enhancedPrompt = prompt + todayContext;
-
-    final parts = <Map<String, dynamic>>[{'text': enhancedPrompt}];
+    final parts = <Map<String, dynamic>>[{'text': prompt}];
 
     // Add file attachments if any
     if (attachedFiles.isNotEmpty) {

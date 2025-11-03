@@ -69,6 +69,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final Set<String> _cancelledRequestIds = {};
   final List<PlatformFile> _attachedFiles = [];
   List<String> _conversationTags = [];
+  final DateTime _conversationStartTime = DateTime.now();
 
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
@@ -551,6 +552,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         AIPrompts.mathFormulaGuidelines,
         AIPrompts.relationshipGuidelines,
       ],
+      now: _conversationStartTime,
     );
   }
 
