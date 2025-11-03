@@ -883,7 +883,7 @@ You may supplement the information from the notes with your own knowledge to pro
             final file = _attachedFiles[index];
             return Container(
               margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(4),
@@ -910,20 +910,13 @@ You may supplement the information from the notes with your own knowledge to pro
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
+                  GestureDetector(
+                    onTap: () => _removeAttachedFile(index),
+                    child: Icon(
                       Icons.close,
                       size: 16,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
+                      color: Colors.red[600],
                     ),
-                    onPressed: () => _removeAttachedFile(index),
-                    constraints: const BoxConstraints(
-                      minWidth: 24,
-                      minHeight: 24,
-                    ),
-                    padding: EdgeInsets.zero,
                   ),
                 ],
               ),
