@@ -708,8 +708,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               continue;
             }
 
-              final parsedArgs =
-                  McpToolIntegrationService.parseCallToolArguments(args);
+            final parsedArgs = McpToolIntegrationService.parseCallToolArguments(
+              args,
+            );
             if (parsedArgs == null) {
               LoggerService.error(
                 'Failed to parse call_tool arguments',
@@ -718,27 +719,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               continue;
             }
 
-                final serviceName = parsedArgs['service_name'] as String;
-                final toolName = parsedArgs['tool_name'] as String;
-                final params = parsedArgs['params'] as Map<String, dynamic>;
+            final serviceName = parsedArgs['service_name'] as String;
+            final toolName = parsedArgs['tool_name'] as String;
+            final params = parsedArgs['params'] as Map<String, dynamic>;
 
-                LoggerService.info('Executing: $serviceName.$toolName');
-                LoggerService.debug('Tool parameters', error: params);
+            LoggerService.info('Executing: $serviceName.$toolName');
+            LoggerService.debug('Tool parameters', error: params);
 
-                try {
+            try {
               final result = await McpToolIntegrationService.executeToolCall(
-                        serviceName: serviceName,
-                        toolName: toolName,
-                        parameters: params,
-                        enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-                      );
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              );
 
               final toolSummary =
                   'Tool: $serviceName.$toolName\nResult: $result';
               toolResults.add(toolSummary);
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
-            if (currentModelType == ModelType.openaiCompatible) {
+              if (currentModelType == ModelType.openaiCompatible) {
                 final toolCallId =
                     'call_${DateTime.now().millisecondsSinceEpoch}_${toolName}_$i';
                 toolCallsWithResults.add({
@@ -755,7 +756,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
           if (toolResults.isNotEmpty) {
             final assistantMetadata = <String, dynamic>{
-                'function_calls': functionCalls,
+              'function_calls': functionCalls,
             };
 
             if (toolCallsWithResults.isNotEmpty) {
@@ -776,9 +777,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     (toolCall) => PromptMessage(
                       role: PromptRole.tool,
                       content: toolCall['result'] as String,
-                      metadata: {
-                        'tool_call_id': toolCall['id'],
-                      },
+                      metadata: {'tool_call_id': toolCall['id']},
                     ),
                   )
                   .toList();
@@ -791,10 +790,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             } else {
               final toolMessages = toolResults
                   .map(
-                    (result) => PromptMessage(
-                      role: PromptRole.user,
-                      content: result,
-                    ),
+                    (result) =>
+                        PromptMessage(role: PromptRole.user, content: result),
                   )
                   .toList();
 
@@ -1023,11 +1020,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   ),
                   GestureDetector(
                     onTap: () => _removeAttachedFile(index),
-                    child: Icon(
-                      Icons.close,
-                      size: 16,
-                      color: Colors.red[600],
-                    ),
+                    child: Icon(Icons.close, size: 16, color: Colors.red[600]),
                   ),
                 ],
               ),
@@ -1576,21 +1569,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                             child: Chip(
                               label: Text(
                                 tag,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontSize: 11,
-                                      height: 1.0,
-                                    ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontSize: 11, height: 1.0),
                               ),
                               deleteIcon: Icon(
                                 Icons.close,
                                 size: 12,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.7),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.7),
                               ),
                               onDeleted: () => _removeTag(tag),
                               visualDensity: VisualDensity.compact,
