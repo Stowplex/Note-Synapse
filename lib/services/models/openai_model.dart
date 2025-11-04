@@ -600,7 +600,8 @@ class OpenAIModel implements AIModel {
         // Check for tool/function call (new OpenAI API)
         final toolCalls = message['tool_calls'] as List?;
         final functionCall = message['function_call'];
-        String? textContent = message['content'];
+        final rawContent = message['content'];
+        String? textContent = _extractTextContent(rawContent);
 
         if (toolCalls != null && toolCalls.isNotEmpty) {
           LoggerService.debug('OpenAI API request completed with tool calls', error: {
@@ -657,6 +658,20 @@ class OpenAIModel implements AIModel {
             'raw_data': data,
           };
         }
+
+        if (textContent != null && textContent.isNotEmpty) {
+          LoggerService.debug('OpenAI API request completed with text response', error: {
+            'responseLength': textContent.length,
+            'requestId': requestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          return {
+            'text': textContent,
+            'function_calls': null,
+            'raw_data': data,
+          };
+        }
       }
 
       LoggerService.error('No content in OpenAI API response', error: {
@@ -674,5 +689,50 @@ class OpenAIModel implements AIModel {
       throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
     }
   }
+}
+
+String? _extractTextContent(dynamic content) {
+  if (content == null) {
+    return null;
+  }
+
+  if (content is String) {
+    return content;
+  }
+
+  if (content is List) {
+    final buffer = StringBuffer();
+    for (final part in content) {
+      if (part is Map<String, dynamic>) {
+        final type = part['type']?.toString();
+        if (type == null) {
+          final text = part['text']?.toString();
+          if (text != null) {
+            buffer.write(text);
+          }
+          continue;
+        }
+
+        if (type == 'text' || type == 'output_text') {
+          final text = part['text']?.toString();
+          if (text != null) {
+            buffer.write(text);
+          }
+        } else if (type == 'message' && part['content'] != null) {
+          final nested = _extractTextContent(part['content']);
+          if (nested != null) {
+            buffer.write(nested);
+          }
+        }
+      } else if (part is String) {
+        buffer.write(part);
+      }
+    }
+
+    final result = buffer.toString();
+    return result.isEmpty ? null : result;
+  }
+
+  return content.toString();
 }
 
