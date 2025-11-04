@@ -173,8 +173,13 @@ class OpenAIModel implements AIModel {
 
       // Add tools/functions to request body
       if (tools.isNotEmpty) {
-        requestBody['functions'] = tools;
-        requestBody['function_call'] = 'auto';
+        requestBody['tools'] = tools
+            .map((tool) => {
+                  'type': 'function',
+                  'function': tool,
+                })
+            .toList();
+        requestBody['tool_choice'] = 'auto';
       }
 
       return await _makeOpenAiRequestWithTools(
@@ -209,8 +214,13 @@ class OpenAIModel implements AIModel {
 
       // Add tools/functions to request body
       if (tools.isNotEmpty) {
-        requestBody['functions'] = tools;
-        requestBody['function_call'] = 'auto';
+        requestBody['tools'] = tools
+            .map((tool) => {
+                  'type': 'function',
+                  'function': tool,
+                })
+            .toList();
+        requestBody['tool_choice'] = 'auto';
       }
 
       return await _makeOpenAiRequestWithTools(
@@ -587,41 +597,63 @@ class OpenAIModel implements AIModel {
         final choice = data['choices'][0];
         final message = choice['message'];
 
-        // Check for function call
+        // Check for tool/function call (new OpenAI API)
+        final toolCalls = message['tool_calls'] as List?;
         final functionCall = message['function_call'];
         String? textContent = message['content'];
 
+        if (toolCalls != null && toolCalls.isNotEmpty) {
+          LoggerService.debug('OpenAI API request completed with tool calls', error: {
+            'toolCalls': toolCalls.map((tc) => tc['function']?['name']).toList(),
+            'requestId': requestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          final parsedCalls = toolCalls.map((tc) {
+            final fn = tc['function'] as Map<String, dynamic>? ?? const {};
+            final argsText = fn['arguments'] as String? ?? '{}';
+            Map<String, dynamic> parsedArgs;
+            try {
+              parsedArgs = jsonDecode(argsText) as Map<String, dynamic>;
+            } catch (_) {
+              parsedArgs = {};
+            }
+            return {
+              'name': fn['name'],
+              'args': parsedArgs,
+            };
+          }).toList();
+
+          return {
+            'text': textContent,
+            'function_calls': parsedCalls,
+            'raw_data': data,
+          };
+        }
+
         if (functionCall != null) {
-          // OpenAI returns function call in a different format than Gemini
-          LoggerService.debug('OpenAI API request completed with function call', error: {
+          // Legacy function_call fallback
+          LoggerService.debug('OpenAI API request completed with legacy function call', error: {
             'functionName': functionCall['name'],
             'requestId': requestId,
             'duration': '${duration.inMilliseconds}ms',
           });
+
+          Map<String, dynamic> parsedArgs;
+          try {
+            parsedArgs = jsonDecode(functionCall['arguments']) as Map<String, dynamic>;
+          } catch (_) {
+            parsedArgs = {};
+          }
 
           return {
             'text': textContent,
             'function_calls': [
               {
                 'name': functionCall['name'],
-                'args': jsonDecode(functionCall['arguments']),
+                'args': parsedArgs,
               }
             ],
-            'raw_data': data,
-          };
-        }
-
-        // No function call, just text response
-        if (textContent != null) {
-          LoggerService.debug('OpenAI API request completed successfully', error: {
-            'responseLength': textContent.length,
-            'requestId': requestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-
-          return {
-            'text': textContent,
-            'function_calls': null,
             'raw_data': data,
           };
         }
