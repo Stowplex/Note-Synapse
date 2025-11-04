@@ -477,6 +477,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       final role = message.type == MessageType.user
           ? PromptRole.user
           : PromptRole.assistant;
+
+      // Prepend every user message with a timestamp context message.
+      // The timestamp is based on the message's timestamp for KV-cache friendly reuse.
+      if (role == PromptRole.user) {
+        final messageTimeContext = SystemPromptBuilder.formatTimestamp(message.timestamp);
+        conversationMessages.add(PromptMessage(
+          role: PromptRole.user,
+          content: 'Message created at: $messageTimeContext',
+        ));
+      }
+
       final attachments = await _loadConversationAttachments(
         message,
         latestUserAttachments,
@@ -545,8 +556,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
     final taskContext = lines.join('\n');
 
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+
     return SystemPromptBuilder.build(
-      taskContext: taskContext,
+      taskContext: '$taskContext\n\n$mcpToolsPrompt',
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,
@@ -632,18 +645,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         throw Exception('Request cancelled by user');
       }
 
-      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
-        _mcpToolsByEndpoint,
-      );
-
-      final systemMessage = request.systemMessage.copyWith(
-        content: request.systemMessage.content.isEmpty
-            ? mcpPrompt
-            : '${request.systemMessage.content}\n\n$mcpPrompt',
-      );
-
       var currentMessages = <PromptMessage>[
-        systemMessage,
+        request.systemMessage,
         ...request.contextMessages,
         ...request.conversationMessages,
       ];

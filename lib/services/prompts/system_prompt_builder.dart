@@ -23,8 +23,8 @@ class SystemPromptBuilder {
 
     buffer.writeln('Persona: ${persona ?? defaultPersona}');
 
-    final timestamp = _formatTimestamp(now ?? DateTime.now());
-    buffer.writeln('Current date and time: $timestamp');
+    final timestamp = formatTimestamp(now ?? DateTime.now());
+    buffer.writeln('Conversation start at: $timestamp');
 
     if ((taskContext ?? '').trim().isNotEmpty) {
       buffer.writeln();
@@ -52,7 +52,7 @@ class SystemPromptBuilder {
     );
   }
 
-  static String _formatTimestamp(DateTime dateTime) {
+  static String formatTimestamp(DateTime dateTime) {
     final local = dateTime.toLocal();
     final datePart = DateFormat('yyyy-MM-dd (EEEE)').format(local);
     final timePart = DateFormat('HH:mm:ss').format(local);
