@@ -2285,6 +2285,41 @@ class AppLocalizationsEn extends AppLocalizations {
       'This type of app will operate specifically on pre-selected notes';
 
   @override
+  String get appType => 'Type';
+
+  @override
+  String get appTypeHint => 'Select how this app should behave';
+
+  @override
+  String get appTypeNormal => 'Normal';
+
+  @override
+  String get appTypeNoteAction => 'Note Action';
+
+  @override
+  String get appTypeAiTool => 'AI Tool';
+
+  @override
+  String get aiToolAppSubtitle =>
+      'Expose custom JavaScript functions that the AI can call or you can test in a playground';
+
+  @override
+  String get aiTools => 'AI Tools';
+
+  @override
+  String aiToolStartError(String appName, String error) {
+    return 'Failed to start AI tool \"$appName\": $error';
+  }
+
+  @override
+  String get aiToolMissingRevision =>
+      'This AI tool does not have a selected revision yet.';
+
+  @override
+  String get aiToolDefinitionParseError =>
+      'The selected revision does not contain a valid AI tool specification.';
+
+  @override
   String get imageAttachmentsOptional => 'Image Attachments (Optional)';
 
   @override

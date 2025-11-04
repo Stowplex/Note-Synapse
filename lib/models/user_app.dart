@@ -5,6 +5,7 @@ part 'user_app.g.dart';
 enum UserAppType {
   normal,
   noteAction,
+  aiTool,
 }
 
 class UserAppLibraryInfo {

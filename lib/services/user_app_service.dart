@@ -841,7 +841,7 @@ IMPORTANT - REQUIREMENTS:
 11. Use MathML to display mathematical formulas.
 12. Place adequate console logging to help tracking key steps in the code.
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
 
@@ -1301,7 +1301,7 @@ Example SQL queries you can use:
 - SELECT * FROM notes WHERE pinned = 1 ORDER BY createdAt DESC
 - SELECT * FROM subnotes WHERE noteId = 'some-note-id' AND isCompleted = 0
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
 
 Generate the complete HTML application now.
 
@@ -1333,60 +1333,89 @@ Here's the complete HTML application:
   // Get Note Action App specific instructions
   static String _getNoteActionAppInstructions() {
     return '''
-NOTE ACTION APP SPECIFIC INSTRUCTIONS:
-This is a Note Action App that operates on pre-selected notes. The app will receive a list of notes through window.Synapse.Notes.
+ NOTE ACTION APP SPECIFIC INSTRUCTIONS:
+ This is a Note Action App that operates on pre-selected notes. The app will receive a list of notes through window.Synapse.Notes.
 
-IMPORTANT: The window.Synapse.Notes array will be pre-populated with the user's selected notes when the app runs.
+ IMPORTANT: The window.Synapse.Notes array will be pre-populated with the user's selected notes when the app runs.
 
-Note Object Format:
-Each note in window.Synapse.Notes has the following structure:
-{
-  "id": "string",                    // Unique note identifier
-  "title": "string",                 // Note title
-  "content": "string",               // Note content (may contain markdown)
-  "tags": ["string"],                // Array of tag names
-  "createdAt": "ISO8601 string",     // Creation timestamp
-  "updatedAt": "ISO8601 string",     // Last update timestamp
-  "isTask": boolean,                 // Whether this is a task (true) or note (false)
-  "status": "string",                // Task status: "todo", "inProgress", "completed", "cancelled" (only for tasks)
-  "pinned": boolean,                 // Whether the note is pinned
-  "isArchived": boolean,             // Whether the note is archived
-  "attachmentPaths": ["string"]      // Array of file paths to attachments
-}
+ Note Object Format:
+ Each note in window.Synapse.Notes has the following structure:
+ {
+   "id": "string",                    // Unique note identifier
+   "title": "string",                 // Note title
+   "content": "string",               // Note content (may contain markdown)
+   "tags": ["string"],                // Array of tag names
+   "createdAt": "ISO8601 string",     // Creation timestamp
+   "updatedAt": "ISO8601 string",     // Last update timestamp
+   "isTask": boolean,                 // Whether this is a task (true) or note (false)
+   "status": "string",                // Task status: "todo", "inProgress", "completed", "cancelled" (only for tasks)
+   "pinned": boolean,                 // Whether the note is pinned
+   "isArchived": boolean,             // Whether the note is archived
+   "attachmentPaths": ["string"]      // Array of file paths to attachments
+ }
 
-USAGE GUIDELINES:
-1. The app should primarily work with the notes provided in window.Synapse.Notes
-2. You can access individual notes like: window.Synapse.Notes[0], window.Synapse.Notes[1], etc.
-3. You can iterate through all notes using: window.Synapse.Notes.forEach(note => { ... })
-4. The app should be designed to process, analyze, or manipulate these specific notes
-5. If you need to query the database for additional context, you can still use Synapse.runQuery()
-6. The app should clearly indicate that it's working with the selected notes
-7. Consider showing the number of notes being processed: window.Synapse.Notes.length
-8. You can display note titles, content, tags, and other properties as needed
-9. For tasks, check the isTask property and status to handle them appropriately
-10. For attachments, the attachmentPaths array contains file paths that can be used with Synapse.chatAI() if needed
+ USAGE GUIDELINES:
+ 1. The app should primarily work with the notes provided in window.Synapse.Notes
+ 2. You can access individual notes like: window.Synapse.Notes[0], window.Synapse.Notes[1], etc.
+ 3. You can iterate through all notes using: window.Synapse.Notes.forEach(note => { ... })
+ 4. The app should be designed to process, analyze, or manipulate these specific notes
+ 5. If you need to query the database for additional context, you can still use Synapse.runQuery()
+ 6. The app should clearly indicate that it's working with the selected notes
+ 7. Consider showing the number of notes being processed: window.Synapse.Notes.length
+ 8. You can display note titles, content, tags, and other properties as needed
+ 9. For tasks, check the isTask property and status to handle them appropriately
+ 10. For attachments, the attachmentPaths array contains file paths that can be used with Synapse.chatAI() if needed
 
-EXAMPLE USAGE:
-```javascript
-// Check if notes are available
-if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
-  console.log(`Processing \${window.Synapse.Notes.length} selected notes`);
-  
-  // Process each note
-  window.Synapse.Notes.forEach((note, index) => {
-    console.log(`Note \${index + 1}: \${note.title}`);
-    console.log(`Content: \${note.content}`);
-    console.log(`Tags: \${note.tags.join(', ')}`);
-    console.log(`Type: \${note.isTask ? 'Task' : 'Note'}`);
-    if (note.isTask) {
-      console.log(`Status: \${note.status}`);
-    }
-  });
-} else {
-  console.log('No notes selected');
-}
-```
-''';
+ EXAMPLE USAGE:
+ ```javascript
+ // Check if notes are available
+ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
+   console.log(`Processing \${window.Synapse.Notes.length} selected notes`);
+   
+   // Process each note
+   window.Synapse.Notes.forEach((note, index) => {
+     console.log(`Note \${index + 1}: \${note.title}`);
+     console.log(`Content: \${note.content}`);
+     console.log(`Tags: \${note.tags.join(', ')}`);
+     console.log(`Type: \${note.isTask ? 'Task' : 'Note'}`);
+     if (note.isTask) {
+       console.log(`Status: \${note.status}`);
+     }
+   });
+ } else {
+   console.log('No notes selected');
+ }
+ ```
+ ''';
+  }
+
+  // Get AI Tool App specific instructions
+  static String _getAiToolAppInstructions() {
+    return '''
+ AI TOOL APP SPECIFIC INSTRUCTIONS:
+ This application must expose reusable tools that the AI can call headlessly and that users can try in an interactive playground.
+
+ REQUIRED STRUCTURE:
+ 1. Prepend the HTML with a comment block containing a YAML array describing each tool. For every tool include:
+    - name: Tool identifier (string, snake_case recommended)
+    - description: Concise explanation of what the tool does
+    - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
+    - output_params: Keys and schemas for returned fields the tool produces
+ 2. The YAML must be valid and free of extra commentary so it can be parsed automatically.
+
+ RUNTIME BEHAVIOUR:
+ 1. Register each tool implementation in JavaScript as `window.Synapse.tool.registered.<tool_name> = (params) => { ... }`.
+ 2. Every registered function must return a JSON-serialisable object matching the declared output parameters.
+ 3. Detect `window.Synapse.tool.env.isInteractive`:
+    - When `true`, render a UI playground that lets the user call the tools manually (forms, buttons, result display, etc.).
+    - When `false`, skip the UI and only expose the tool functions for headless execution.
+ 4. Use `console` logging judiciously for debugging key steps.
+
+ GENERAL REQUIREMENTS:
+ - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
+ - Validate user inputs, surface errors gracefully, and ensure return objects never throw.
+ - Document tool usage and parameter expectations in comments or the interactive UI.
+ ''';
   }
   
   // Check if WebView is supported on current platform

@@ -47,4 +47,5 @@ Map<String, dynamic> _$UserAppToJson(UserApp instance) => <String, dynamic>{
 const _$UserAppTypeEnumMap = {
   UserAppType.normal: 'normal',
   UserAppType.noteAction: 'noteAction',
+  UserAppType.aiTool: 'aiTool',
 };

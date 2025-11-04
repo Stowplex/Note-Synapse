@@ -20,7 +20,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
   final _descriptionController = TextEditingController();
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
-  bool _isNoteActionApp = false;
+  UserAppType _selectedAppType = UserAppType.normal;
   final List<String> _attachmentPaths = [];
   
   // Tab management
@@ -53,6 +53,17 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
     setState(() {
       _stepControllers.add(TextEditingController());
     });
+  }
+
+  String _getAppTypeSubtitle(AppLocalizations l10n, UserAppType type) {
+    switch (type) {
+      case UserAppType.noteAction:
+        return l10n.noteActionAppSubtitle;
+      case UserAppType.aiTool:
+        return l10n.aiToolAppSubtitle;
+      case UserAppType.normal:
+        return '';
+    }
   }
 
   void _removeStep(int index) {
@@ -262,7 +273,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         steps: steps,
-        type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
+        type: _selectedAppType,
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
         libraries: _libraries.isNotEmpty ? _libraries : null,
       );
@@ -368,33 +379,62 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
               ),
               const SizedBox(height: 16),
               
-              // Note Action App Checkbox
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CheckboxListTile(
-                        title: Text(
-                          l10n.noteActionApp,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          l10n.noteActionAppSubtitle,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        value: _isNoteActionApp,
-                        onChanged: (value) {
-                          setState(() {
-                            _isNoteActionApp = value ?? false;
-                          });
-                        },
-                        controlAffinity: ListTileControlAffinity.leading,
+              // App Type Selector
+              Builder(
+                builder: (context) {
+                  final subtitle = _getAppTypeSubtitle(l10n, _selectedAppType);
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.appType,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<UserAppType>(
+                            value: _selectedAppType,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              hintText: l10n.appTypeHint,
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: UserAppType.normal,
+                                child: Text(l10n.appTypeNormal),
+                              ),
+                              DropdownMenuItem(
+                                value: UserAppType.noteAction,
+                                child: Text(l10n.appTypeNoteAction),
+                              ),
+                              DropdownMenuItem(
+                                value: UserAppType.aiTool,
+                                child: Text(l10n.appTypeAiTool),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _selectedAppType = value;
+                              });
+                            },
+                          ),
+                          if (subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              subtitle,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               

@@ -2216,6 +2216,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
 
   @override
+  String get appType => '类型';
+
+  @override
+  String get appTypeHint => '选择此应用的行为方式';
+
+  @override
+  String get appTypeNormal => '普通';
+
+  @override
+  String get appTypeNoteAction => '笔记操作';
+
+  @override
+  String get appTypeAiTool => 'AI 工具';
+
+  @override
+  String get aiToolAppSubtitle => '暴露自定义 JavaScript 函数供 AI 调用，并在操场中测试';
+
+  @override
+  String get aiTools => 'AI 工具';
+
+  @override
+  String aiToolStartError(String appName, String error) {
+    return '无法启动 AI 工具“$appName”：$error';
+  }
+
+  @override
+  String get aiToolMissingRevision => '此 AI 工具尚未选择版本。';
+
+  @override
+  String get aiToolDefinitionParseError => '所选版本不包含有效的 AI 工具规范。';
+
+  @override
   String get imageAttachmentsOptional => '图片附件（可选）';
 
   @override

@@ -676,6 +676,26 @@
   "updated": "更新",
   "noteActionApp": "笔记操作应用",
   "noteActionAppSubtitle": "此类应用将专门对预选笔记进行操作",
+  "appType": "类型",
+  "appTypeHint": "选择此应用的行为方式",
+  "appTypeNormal": "普通",
+  "appTypeNoteAction": "笔记操作",
+  "appTypeAiTool": "AI 工具",
+  "aiToolAppSubtitle": "暴露自定义 JavaScript 函数供 AI 调用，并在操场中测试",
+  "aiTools": "AI 工具",
+  "aiToolStartError": "无法启动 AI 工具“{appName}”：{error}",
+  "@aiToolStartError": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiToolMissingRevision": "此 AI 工具尚未选择版本。",
+  "aiToolDefinitionParseError": "所选版本不包含有效的 AI 工具规范。",
   "imageAttachmentsOptional": "图片附件（可选）",
   "imageAttachmentsSubtitle": "附加图片以帮助解释您希望AI创建的内容",
   "addImage": "添加图片",

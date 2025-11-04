@@ -4112,6 +4112,66 @@ abstract class AppLocalizations {
   /// **'This type of app will operate specifically on pre-selected notes'**
   String get noteActionAppSubtitle;
 
+  /// No description provided for @appType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get appType;
+
+  /// No description provided for @appTypeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select how this app should behave'**
+  String get appTypeHint;
+
+  /// No description provided for @appTypeNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get appTypeNormal;
+
+  /// No description provided for @appTypeNoteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Action'**
+  String get appTypeNoteAction;
+
+  /// No description provided for @appTypeAiTool.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Tool'**
+  String get appTypeAiTool;
+
+  /// No description provided for @aiToolAppSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Expose custom JavaScript functions that the AI can call or you can test in a playground'**
+  String get aiToolAppSubtitle;
+
+  /// No description provided for @aiTools.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Tools'**
+  String get aiTools;
+
+  /// No description provided for @aiToolStartError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start AI tool \"{appName}\": {error}'**
+  String aiToolStartError(String appName, String error);
+
+  /// No description provided for @aiToolMissingRevision.
+  ///
+  /// In en, this message translates to:
+  /// **'This AI tool does not have a selected revision yet.'**
+  String get aiToolMissingRevision;
+
+  /// No description provided for @aiToolDefinitionParseError.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected revision does not contain a valid AI tool specification.'**
+  String get aiToolDefinitionParseError;
+
   /// No description provided for @imageAttachmentsOptional.
   ///
   /// In en, this message translates to:

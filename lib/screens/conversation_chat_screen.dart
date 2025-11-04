@@ -14,6 +14,7 @@ import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
+import '../services/ai_tool_service.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
 import '../services/prompts/prompt_models.dart';
@@ -29,6 +30,8 @@ import 'note_action_app_selection_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
+import '../services/user_app_service.dart';
+import '../models/user_app.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -76,6 +79,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final Set<String> _selectedMcpEndpointIds = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
+
+  // AI tool support
+  Map<String, AiToolAppBundle> _aiToolBundles = {};
+  Map<String, List<McpTool>> _aiToolMcpMap = {};
+  final Set<String> _selectedAiToolServices = {};
+  final Map<String, AiToolRuntime> _aiToolRuntimes = {};
 
   bool _hasInitialized = false;
 
@@ -134,6 +143,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         );
       }
     } finally {
+      await _loadAiTools();
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -275,6 +285,110 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     } catch (e) {
       LoggerService.error('Error updating MCP tools: $e');
     }
+  }
+
+  Future<void> _loadAiTools() async {
+    final appProvider = context.read<AppProvider>();
+    final aiApps = appProvider.userApps
+        .where((app) => app.type == UserAppType.aiTool)
+        .toList();
+
+    final bundles = <String, AiToolAppBundle>{};
+    final mcpMap = <String, List<McpTool>>{};
+
+    for (final app in aiApps) {
+      if (app.selectedRevisionId == null) {
+        LoggerService.warning('AI tool "${app.name}" has no selected revision.');
+        continue;
+      }
+
+      try {
+        final revision = await UserAppService.getAppRevision(app.selectedRevisionId!);
+        if (revision == null) {
+          LoggerService.warning('AI tool "${app.name}" selected revision not found.');
+          continue;
+        }
+
+        final bundle = await AiToolService.loadAppBundle(app: app, revision: revision);
+        if (bundle == null || bundle.toolDefinitions.isEmpty) {
+          continue;
+        }
+
+        bundles[bundle.serviceName] = bundle;
+        mcpMap[bundle.serviceName] = bundle.toMcpTools();
+      } catch (e) {
+        LoggerService.error('Failed to load AI tool "${app.name}": $e');
+      }
+    }
+
+    final removedServices = _aiToolRuntimes.keys
+        .where((service) => !bundles.containsKey(service))
+        .toList(growable: false);
+    for (final service in removedServices) {
+      _aiToolRuntimes.remove(service)?.dispose();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _aiToolBundles = bundles;
+      _aiToolMcpMap = mcpMap;
+      _selectedAiToolServices
+        ..removeWhere((service) => !mcpMap.containsKey(service))
+        ..addAll(
+          mcpMap.keys.where((service) => !_selectedAiToolServices.contains(service)),
+        );
+    });
+  }
+
+  Map<String, List<McpTool>> _buildActiveToolsMap() {
+    final combined = <String, List<McpTool>>{};
+    combined.addAll(_mcpToolsByEndpoint);
+
+    for (final service in _selectedAiToolServices) {
+      final tools = _aiToolMcpMap[service];
+      if (tools != null && tools.isNotEmpty) {
+        combined[service] = tools;
+      }
+    }
+
+    return combined;
+  }
+
+  bool get _hasAnyTools =>
+      _buildActiveToolsMap().isNotEmpty;
+
+  void _toggleAiToolService(String serviceName, bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _selectedAiToolServices.add(serviceName);
+      } else {
+        _selectedAiToolServices.remove(serviceName);
+      }
+    });
+
+    if (!isSelected) {
+      _aiToolRuntimes.remove(serviceName)?.dispose();
+    }
+  }
+
+  Future<AiToolRuntime> _getAiToolRuntime(String serviceName) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) {
+      return existing;
+    }
+
+    final bundle = _aiToolBundles[serviceName];
+    if (bundle == null) {
+      throw Exception('AI tool not available: $serviceName');
+    }
+
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
   }
 
   Future<void> _sendMessage() async {
@@ -436,8 +550,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         throw Exception('Request cancelled by user');
       }
 
-      // Check if MCP tools are available
-      if (_mcpToolsByEndpoint.isNotEmpty) {
+      // Check if any external tools are available
+      if (_hasAnyTools) {
         return await _generateWithMcpTools(request, requestId);
       } else {
         final responseText = await AIService.executePrompt(
@@ -544,9 +658,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       'Use your own knowledge to clarify or extend when the notes are insufficient.',
     ];
 
-    if (_mcpToolsByEndpoint.isNotEmpty) {
+    if (_hasAnyTools) {
       lines.add(
-        'The user has enabled MCP tools. Prefer using them when a tool can improve accuracy before responding.',
+        'The user has enabled external tools (MCP services or user-defined AI tools). Prefer calling them when they can improve accuracy before responding.',
       );
     }
 
@@ -556,7 +670,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
     final taskContext = lines.join('\n');
 
-    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(_mcpToolsByEndpoint);
+    final combinedTools = _buildActiveToolsMap();
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(combinedTools);
 
     return SystemPromptBuilder.build(
       taskContext: '$taskContext\n\n$mcpToolsPrompt',
@@ -652,16 +767,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       ];
 
       final currentModelType = ModelSelector.instance.currentModelType;
+      final activeTools = _buildActiveToolsMap();
       final callToolFunction = currentModelType == ModelType.openaiCompatible
-          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
-              _mcpToolsByEndpoint,
-            )
-          : McpToolIntegrationService.getCallToolFunctionForGemini(
-              _mcpToolsByEndpoint,
-            );
+          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
+          : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
 
       LoggerService.info(
-        'Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services',
+        'Starting tool-enabled conversation with ${activeTools.length} services',
       );
 
       const maxIterations = 10;
@@ -730,12 +842,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             LoggerService.debug('Tool parameters', error: params);
 
             try {
-              final result = await McpToolIntegrationService.executeToolCall(
-                serviceName: serviceName,
-                toolName: toolName,
-                parameters: params,
-                enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-              );
+              String result;
+              if (_aiToolBundles.containsKey(serviceName)) {
+                final runtime = await _getAiToolRuntime(serviceName);
+                result = await runtime.invoke(toolName, params);
+              } else {
+                result = await McpToolIntegrationService.executeToolCall(
+                  serviceName: serviceName,
+                  toolName: toolName,
+                  parameters: params,
+                  enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+                );
+              }
 
               final toolSummary =
                   'Tool: $serviceName.$toolName\nResult: $result';
@@ -1036,6 +1154,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Widget _buildMcpSelectionSection() {
     final l10n = AppLocalizations.of(context)!;
+    final combinedTools = _buildActiveToolsMap();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1151,21 +1270,62 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 );
               }).toList(),
             ),
-            if (_mcpToolsByEndpoint.isNotEmpty) ...[
+            if (_aiToolBundles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                l10n.aiTools,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.8),
+                    ),
+              ),
               const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _aiToolBundles.entries.map((entry) {
+                  final serviceName = entry.key;
+                  final bundle = entry.value;
+                  final selected = _selectedAiToolServices.contains(serviceName);
+                  return FilterChip(
+                    label: Text(bundle.displayName),
+                    selected: selected,
+                    onSelected: (value) {
+                      _toggleAiToolService(serviceName, value);
+                    },
+                    avatar: Icon(
+                      Icons.smart_toy,
+                      size: 16,
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.6),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            if (combinedTools.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Text(
                 l10n.toolsAvailable(
-                  _mcpToolsByEndpoint.values.fold<int>(
+                  combinedTools.values.fold<int>(
                     0,
                     (sum, tools) => sum + tools.length,
                   ),
                 ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.6),
-                  fontStyle: FontStyle.italic,
-                ),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
+                      fontStyle: FontStyle.italic,
+                    ),
               ),
             ],
           ],
@@ -1436,21 +1596,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _removeNote(Note note) async {
-    if (_conversation == null) {
-      setState(() {
-        _notes.removeWhere((n) => n.id == note.id);
-      });
-      return;
-    }
-    await _conversationService.removeNotesFromConversation(_conversation!.id, [
-      note.id,
-    ]);
-    setState(() {
-      _notes.removeWhere((n) => n.id == note.id);
-    });
   }
 
   Future<void> _clearAllNotes() async {
@@ -1978,6 +2123,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    for (final runtime in _aiToolRuntimes.values) {
+      runtime.dispose();
+    }
+    _aiToolRuntimes.clear();
     super.dispose();
   }
 }
