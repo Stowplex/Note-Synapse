@@ -759,6 +759,7 @@
   "attachFiles": "附加文件",
   "takePhotoAttachment": "拍照",
   "mcpTools": "MCP工具",
+  "mcpAndLocalTools": "MCP和本地工具",
   "active": "活动",
   "toolsAvailable": "{count}个工具可用",
   "manageNotes": "管理笔记",

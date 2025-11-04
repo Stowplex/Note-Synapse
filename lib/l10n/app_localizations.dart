@@ -4274,6 +4274,12 @@ abstract class AppLocalizations {
   /// **'MCP Tools'**
   String get mcpTools;
 
+  /// No description provided for @mcpAndLocalTools.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP & Local Tools'**
+  String get mcpAndLocalTools;
+
   /// No description provided for @active.
   ///
   /// In en, this message translates to:

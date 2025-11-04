@@ -2301,6 +2301,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mcpTools => 'MCP工具';
 
   @override
+  String get mcpAndLocalTools => 'MCP和本地工具';
+
+  @override
   String get active => '活动';
 
   @override

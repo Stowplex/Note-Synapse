@@ -334,10 +334,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       _aiToolBundles = bundles;
       _aiToolMcpMap = mcpMap;
       _selectedAiToolServices
-        ..removeWhere((service) => !mcpMap.containsKey(service))
-        ..addAll(
-          mcpMap.keys.where((service) => !_selectedAiToolServices.contains(service)),
-        );
+          .removeWhere((service) => !mcpMap.containsKey(service));
     });
   }
 
@@ -1161,6 +1158,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   Widget _buildMcpSelectionSection() {
     final l10n = AppLocalizations.of(context)!;
     final combinedTools = _buildActiveToolsMap();
+    final headerTitle = _isMcpPanelExpanded
+        ? l10n.mcpTools
+        : l10n.mcpAndLocalTools;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1194,7 +1194,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  l10n.mcpTools,
+                  headerTitle,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(
@@ -1278,15 +1278,29 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             ),
             if (_aiToolBundles.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(
-                l10n.aiTools,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.8),
-                    ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.smart_toy,
+                    size: 16,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    l10n.aiTools,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.8),
+                        ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Wrap(

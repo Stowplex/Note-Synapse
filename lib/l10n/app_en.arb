@@ -759,6 +759,7 @@
   "attachFiles": "Attach files",
   "takePhotoAttachment": "Take photo",
   "mcpTools": "MCP Tools",
+  "mcpAndLocalTools": "MCP & Local Tools",
   "active": "active",
   "toolsAvailable": "{count} tools available",
   "manageNotes": "Manage Notes",

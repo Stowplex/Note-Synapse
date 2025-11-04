@@ -2382,6 +2382,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mcpTools => 'MCP Tools';
 
   @override
+  String get mcpAndLocalTools => 'MCP & Local Tools';
+
+  @override
   String get active => 'active';
 
   @override
