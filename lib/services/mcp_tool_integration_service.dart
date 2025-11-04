@@ -114,7 +114,12 @@ class McpToolIntegrationService {
     
     // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
-    toolsDescription.writeln('Call an MCP tool. Available tools:\n');
+    toolsDescription.writeln('Call an MCP tool.');
+    toolsDescription.writeln('You must provide arguments as a JSON object with this shape:');
+    toolsDescription.writeln('{"service_name": "...", "tool_name": "...", "params": {"<required_param>": <value>, ...}}');
+    toolsDescription.writeln('Never omit the params field. Populate every required parameter exactly as listed.');
+    toolsDescription.writeln('If you do not have a value for a required parameter, ask the user for it.');
+    toolsDescription.writeln('\nAvailable tools:\n');
     
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
@@ -198,7 +203,9 @@ class McpToolIntegrationService {
     buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
     buffer.writeln('You have access to external tools via the call_tool function.');
     buffer.writeln('Use function calling to invoke these tools when needed.');
-    buffer.writeln('Always check the parameter schemas and provide the correct types and required fields.\n');
+    buffer.writeln('When you call call_tool, always include a params object and populate every required field exactly as defined by the schema.');
+    buffer.writeln('If a required value is missing, ask the user for it instead of guessing or omitting it.');
+    buffer.writeln('Validate that types match the schema before calling the tool.\n');
 
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
