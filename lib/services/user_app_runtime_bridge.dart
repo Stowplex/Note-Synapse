@@ -61,7 +61,7 @@ class UserAppRuntimeBridge {
             } catch (_) {
               return String(arg);
             }
-          }).join('\n');
+          }).join('\\n');
           originalConsoleLog(msg);
           window.flutter_inappwebview.callHandler('log', msg, 'LOG');
         };
@@ -74,7 +74,7 @@ class UserAppRuntimeBridge {
             } catch (_) {
               return String(arg);
             }
-          }).join('\n');
+          }).join('\\n');
           originalConsoleError(msg);
           window.flutter_inappwebview.callHandler('log', msg, 'ERROR');
         };
@@ -87,7 +87,7 @@ class UserAppRuntimeBridge {
             } catch (_) {
               return String(arg);
             }
-          }).join('\n');
+          }).join('\\n');
           originalConsoleWarn(msg);
           window.flutter_inappwebview.callHandler('log', msg, 'WARN');
         };
@@ -134,7 +134,7 @@ class UserAppRuntimeBridge {
         window.Synapse.tool.invoke = async (toolName, params = {}) => {
           const fn = window.Synapse.tool.registered?.[toolName];
           if (typeof fn !== 'function') {
-            throw new Error(`Tool not found: \${toolName}`);
+            throw new Error('Tool not found: ' + toolName);
           }
           const result = fn(params) ?? null;
           if (result && typeof result.then === 'function') {
@@ -143,7 +143,6 @@ class UserAppRuntimeBridge {
           return result;
         };
       ''';
-
     return UserScript(
       source: script,
       injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
