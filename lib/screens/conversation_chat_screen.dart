@@ -861,8 +861,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
               if (currentModelType == ModelType.openaiCompatible) {
+                final timestamp = DateTime.now()
+                    .millisecondsSinceEpoch
+                    .toRadixString(36);
+                final shortName = toolName.length > 10
+                    ? toolName.substring(0, 10)
+                    : toolName;
                 final toolCallId =
-                    'call_${DateTime.now().millisecondsSinceEpoch}_${toolName}_$i';
+                    't_${timestamp}_${shortName}_$i';
                 toolCallsWithResults.add({
                   'id': toolCallId,
                   'function_call': functionCall,
