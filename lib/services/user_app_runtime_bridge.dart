@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:uuid/uuid.dart';
@@ -42,6 +41,8 @@ class UserAppRuntimeBridge {
   final OpenNoteCallback? onOpenNote;
 
   final DatabaseService _databaseService = DatabaseService();
+  static final HttpClient _proxyHttpClient = HttpClient()
+    ..autoUncompress = true;
 
   /// Creates the bootstrap user script that initialises the Synapse namespace.
   UserScript buildBootstrapScript() {
@@ -107,6 +108,10 @@ class UserAppRuntimeBridge {
           },
           chatAI: async (prompt, options = {}) => {
             const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, options);
+            return result;
+          },
+          proxyFetch: async (url, headers = {}) => {
+            const result = await window.flutter_inappwebview.callHandler('proxyFetch', url, headers ?? {});
             return result;
           },
           readAttachment: async (attachmentPath) => {
@@ -207,6 +212,82 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error('[Synapse.loadAppState] Error after ${duration.inMilliseconds}ms: $e', error: e);
           return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'proxyFetch',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (args.isEmpty || args.first == null || (args.first as String).trim().isEmpty) {
+            throw ArgumentError('URL is required');
+          }
+
+          final urlRaw = (args.first as String).trim();
+          final uri = Uri.parse(urlRaw);
+
+          final rawHeaders = args.length > 1 ? args[1] : null;
+          final headers = <String, String>{};
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((key, value) {
+              if (key == null || value == null) {
+                return;
+              }
+              final keyStr = key.toString().trim();
+              if (keyStr.isEmpty) {
+                return;
+              }
+              headers[keyStr] = value.toString();
+            });
+          }
+
+          LoggerService.debug('[Synapse.proxyFetch] Fetching $urlRaw with headers: ${headers.keys.toList()}');
+
+          final request = await _proxyHttpClient.getUrl(uri);
+          headers.forEach((key, value) {
+            try {
+              request.headers.set(key, value);
+            } catch (e) {
+              LoggerService.warning('[Synapse.proxyFetch] Failed to set header "$key": $e');
+            }
+          });
+
+          final response = await request.close();
+          final bytesBuilder = BytesBuilder(copy: false);
+          await for (final chunk in response) {
+            bytesBuilder.add(chunk);
+          }
+          final bytes = bytesBuilder.takeBytes();
+
+          final mime = response.headers.value(HttpHeaders.contentTypeHeader) ?? 'application/octet-stream';
+          final normalizedMime = mime.split(';').first.trim().isNotEmpty
+              ? mime.split(';').first.trim()
+              : 'application/octet-stream';
+          final isText = normalizedMime.toLowerCase().startsWith('text/');
+          final data = isText
+              ? utf8.decode(bytes, allowMalformed: true)
+              : base64Encode(bytes);
+
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug('[Synapse.proxyFetch] Success (${response.statusCode}) in ${duration.inMilliseconds}ms');
+
+          return {
+            'status': 'success',
+            'statusCode': response.statusCode,
+            'content': {
+              'mime': normalizedMime,
+              'data': data,
+            },
+          };
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error('[Synapse.proxyFetch] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          return {
+            'status': 'error',
+            'error': e.toString(),
+          };
         }
       },
     );

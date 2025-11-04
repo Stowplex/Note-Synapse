@@ -632,6 +632,23 @@ IMPORTANT - REQUIREMENTS:
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.proxyFetch(url: string, headers?: object) - Perform an HTTP GET request via the Synapse backend proxy to bypass browser CORS restrictions.
+     Param format:
+       * url: string (required) - Absolute HTTP/HTTPS URL to fetch
+       * headers: object (optional) - Key/value pairs of request headers (values must be strings)
+     Response format:
+       {
+         status: 'success' | 'error',
+         statusCode?: number,      // Present when the request reached the server
+         error?: string,           // Present when status === 'error'
+         content?: {
+           mime: string,           // MIME type returned by the server
+           data: string            // UTF-8 text when mime starts with 'text/', otherwise base64 encoded string
+         }
+       }
+     Usage notes:
+       * Always handle the possibility of status === 'error'.
+       * When content.mime does not start with "text/", decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format: 
@@ -941,6 +958,23 @@ IMPORTANT - REQUIREMENTS:
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.proxyFetch(url: string, headers?: object) - Perform an HTTP GET request via the Synapse backend proxy to bypass browser CORS restrictions.
+     Param format:
+       * url: string (required) - Absolute HTTP/HTTPS URL to fetch
+       * headers: object (optional) - Key/value pairs of request headers (values must be strings)
+     Response format:
+       {
+         status: 'success' | 'error',
+         statusCode?: number,      // Present when the request reached the server
+         error?: string,           // Present when status === 'error'
+         content?: {
+           mime: string,           // MIME type returned by the server
+           data: string            // UTF-8 text when mime starts with 'text/', otherwise base64 encoded string
+         }
+       }
+     Usage notes:
+       * Always handle the possibility of status === 'error'.
+       * When content.mime does not start with "text/", decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format:
@@ -1417,6 +1451,7 @@ Here's the complete HTML application:
  - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
  - Validate user inputs, surface errors gracefully, and ensure return objects never throw.
  - Document tool usage and parameter expectations in comments or the interactive UI.
+ - Use `Synapse.proxyFetch` when you must contact external HTTP APIs; remember to decode base64 results for non-text MIME types.
  ''';
   }
   
