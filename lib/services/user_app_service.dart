@@ -1410,6 +1410,8 @@ Here's the complete HTML application:
     - When `true`, render a UI playground that lets the user call the tools manually (forms, buttons, result display, etc.).
     - When `false`, skip the UI and only expose the tool functions for headless execution.
  4. Use `console` logging judiciously for debugging key steps.
+ 5. If user's intention requires manual configurations, such as setting up an API KEY, the playground is the right place to allow the
+    uesr to set it up, and save to the application state, so that in AI headless calls, it can be loaded and used.
 
  GENERAL REQUIREMENTS:
  - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
