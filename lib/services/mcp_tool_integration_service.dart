@@ -107,10 +107,8 @@ class McpToolIntegrationService {
     return {
       'name': 'call_tool',
       'description': toolsDescription.toString(),
-      'strict': true,
       'parameters': {
         'type': 'object',
-        'additionalProperties': true,
         'properties': {
           'service_name': {
             'type': 'string',
@@ -125,7 +123,6 @@ class McpToolIntegrationService {
             'type': 'object',
             'description':
                 'The parameters to pass to the tool. Provide each parameter as a direct field inside this object. Do not wrap values inside additional objects such as "param" or "parameters".',
-            'additionalProperties': true,
           },
         },
         'required': ['service_name', 'tool_name'],
