@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
@@ -378,7 +381,7 @@ class _InteractiveCheckboxMarkdownState
   }
 
   /// Creates an HTML wrapper for SVG content to render in WebView.
-  /// This ensures proper scaling and responsive behavior.
+  /// This ensures proper scaling and responsive behavior with pan and zoom support.
   String _createSvgHtmlWrapper(String svgContent) {
     return '''
 <!DOCTYPE html>
@@ -401,6 +404,13 @@ class _InteractiveCheckboxMarkdownState
       align-items: center;
       justify-content: center;
     }
+    #svg-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
     svg {
       max-width: 100%;
       max-height: 100%;
@@ -409,15 +419,38 @@ class _InteractiveCheckboxMarkdownState
       display: block;
     }
   </style>
+  <script src="synapse://svg.pan-zoom.min.js"></script>
 </head>
 <body>
-  $svgContent
+  <div id="svg-container">
+    $svgContent
+  </div>
+  <script>
+    // Initialize svg-pan-zoom after the DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      const svgElement = document.querySelector('svg');
+      if (svgElement && typeof svgPanZoom !== 'undefined') {
+        svgPanZoom(svgElement, {
+          zoomEnabled: true,
+          controlIconsEnabled: false,
+          fit: true,
+          center: true,
+          minZoom: 0.1,
+          maxZoom: 10,
+          zoomScaleSensitivity: 0.3,
+          dblClickZoomEnabled: true,
+          mouseWheelZoomEnabled: true,
+          preventMouseEventsDefault: true,
+        });
+      }
+    });
+  </script>
 </body>
 </html>
 ''';
   }
 
-  /// Builds an InAppWebView widget to render SVG content.
+  /// Builds an InAppWebView widget to render SVG content with pan and zoom support.
   Widget _buildSvgWebView(String svgContent, double? width, double? height) {
     final htmlContent = _createSvgHtmlWrapper(svgContent);
     
@@ -435,13 +468,42 @@ class _InteractiveCheckboxMarkdownState
           encoding: 'utf8',
         ),
         initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: false,
-          supportZoom: false,
+          javaScriptEnabled: true,
+          supportZoom: true,
           transparentBackground: true,
-          disableContextMenu: true,
+          disableContextMenu: false,
           horizontalScrollBarEnabled: false,
           verticalScrollBarEnabled: false,
+          resourceCustomSchemes: ['synapse'],
+          useHybridComposition: true,
         ),
+        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+          Factory<VerticalDragGestureRecognizer>(
+            () => VerticalDragGestureRecognizer(),
+          ),
+          Factory<HorizontalDragGestureRecognizer>(
+            () => HorizontalDragGestureRecognizer(),
+          ),
+          Factory<ScaleGestureRecognizer>(
+            () => ScaleGestureRecognizer(),
+          ),
+          Factory<TapGestureRecognizer>(
+            () => TapGestureRecognizer(),
+          ),
+          Factory<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(),
+          ),
+        },
+        onLoadResourceWithCustomScheme: (controller, request) async {
+          if (request.url.scheme.toLowerCase() == 'synapse') {
+            final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+            return CustomSchemeResponse(
+              contentType: 'application/javascript',
+              data: Uint8List.fromList(utf8.encode(data)),
+            );
+          }
+          return null;
+        },
       ),
     );
   }
