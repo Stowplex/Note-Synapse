@@ -458,52 +458,48 @@ class _InteractiveCheckboxMarkdownState
     // If height is not provided, calculate based on width with a reasonable aspect ratio
     final webViewHeight = height ?? (width != null ? width * 0.75 : 300.0);
     
-    return SizedBox(
-      width: width,
-      height: webViewHeight,
-      child: InAppWebView(
-        initialData: InAppWebViewInitialData(
-          data: htmlContent,
-          mimeType: 'text/html',
-          encoding: 'utf8',
+    // Wrap in GestureDetector to capture touches and prevent parent scroll
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) {},
+      onHorizontalDragStart: (_) {},
+      child: SizedBox(
+        width: width,
+        height: webViewHeight,
+        child: InAppWebView(
+          initialData: InAppWebViewInitialData(
+            data: htmlContent,
+            mimeType: 'text/html',
+            encoding: 'utf8',
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            supportZoom: true,
+            transparentBackground: true,
+            disableContextMenu: false,
+            horizontalScrollBarEnabled: false,
+            verticalScrollBarEnabled: false,
+            resourceCustomSchemes: ['synapse'],
+            useHybridComposition: true,
+            disableVerticalScroll: false,
+            disableHorizontalScroll: false,
+          ),
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<EagerGestureRecognizer>(
+              () => EagerGestureRecognizer(),
+            ),
+          },
+          onLoadResourceWithCustomScheme: (controller, request) async {
+            if (request.url.scheme.toLowerCase() == 'synapse') {
+              final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+              return CustomSchemeResponse(
+                contentType: 'application/javascript',
+                data: Uint8List.fromList(utf8.encode(data)),
+              );
+            }
+            return null;
+          },
         ),
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          supportZoom: true,
-          transparentBackground: true,
-          disableContextMenu: false,
-          horizontalScrollBarEnabled: false,
-          verticalScrollBarEnabled: false,
-          resourceCustomSchemes: ['synapse'],
-          useHybridComposition: true,
-        ),
-        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-          Factory<VerticalDragGestureRecognizer>(
-            () => VerticalDragGestureRecognizer(),
-          ),
-          Factory<HorizontalDragGestureRecognizer>(
-            () => HorizontalDragGestureRecognizer(),
-          ),
-          Factory<ScaleGestureRecognizer>(
-            () => ScaleGestureRecognizer(),
-          ),
-          Factory<TapGestureRecognizer>(
-            () => TapGestureRecognizer(),
-          ),
-          Factory<LongPressGestureRecognizer>(
-            () => LongPressGestureRecognizer(),
-          ),
-        },
-        onLoadResourceWithCustomScheme: (controller, request) async {
-          if (request.url.scheme.toLowerCase() == 'synapse') {
-            final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
-            return CustomSchemeResponse(
-              contentType: 'application/javascript',
-              data: Uint8List.fromList(utf8.encode(data)),
-            );
-          }
-          return null;
-        },
       ),
     );
   }
