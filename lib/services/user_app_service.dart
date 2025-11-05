@@ -626,6 +626,7 @@ IMPORTANT - REQUIREMENTS:
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
          * attachments: array of mixed attachment types (strings or objects):
            - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
            - Base64 data: object with:
              * type: 'base64' (required)
              * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
@@ -663,6 +664,11 @@ IMPORTANT - REQUIREMENTS:
             mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
             error?: string      // Optional, present when failed. The error message.
         }
+  - Synapse.saveTemp(data: object, mimeType: string) - Store temporary content in the cache and receive a synapsetemp:/// URI
+    Param format:
+      * data: object with either `text` (UTF-8 string) or `binary` (base64 string, data URI supported)
+      * mimeType: string - MIME type describing the data (e.g., 'image/png')
+    Response format: {success: boolean, uri?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -674,6 +680,7 @@ IMPORTANT - REQUIREMENTS:
          * isCompleted: boolean (optional, default: false) - Completion status
        - attachments: array (optional) - Array of attachment objects:
          * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+        * synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
          * Base64: object with:
            - type: 'base64' (required)
            - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
@@ -724,6 +731,19 @@ IMPORTANT - REQUIREMENTS:
        attachments: ['/path/to/existing/file.pdf']
      }
    ]);
+
+  // Save a note using a temporary attachment created at runtime
+  const tempImage = await Synapse.saveTemp({ binary: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...' }, 'image/png');
+  if (tempImage.success) {
+    await Synapse.saveNotes([
+      {
+        title: 'Whiteboard Snapshot',
+        content: 'Automatically captured whiteboard image',
+        type: 'note',
+        attachments: [tempImage.uri]
+      }
+    ]);
+  }
    
    // Task with base64 attachment
    const result3 = await Synapse.saveNotes([
@@ -779,6 +799,14 @@ IMPORTANT - REQUIREMENTS:
        }
      ]
    });
+
+  // With a temporary file created via Synapse.saveTemp
+  const tempSnapshot = await Synapse.saveTemp({ binary: 'data:audio/mpeg;base64,//uQZAAAAAAAAAAA...' }, 'audio/mpeg');
+  if (tempSnapshot.success) {
+    const resultTemp = await Synapse.chatAI('Transcribe this snippet', {
+      attachments: [tempSnapshot.uri]
+    });
+  }
    
    // WRONG - will cause parameter validation errors:
    // const result3 = await Synapse.chatAI('Test', {
@@ -957,6 +985,7 @@ IMPORTANT - REQUIREMENTS:
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
          * attachments: array of mixed attachment types (strings or objects):
            - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+          - synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
            - Base64 data: object with:
              * type: 'base64' (required)
              * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
@@ -994,6 +1023,11 @@ IMPORTANT - REQUIREMENTS:
             mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
             error?: string      // Optional, present when failed. The error message.
         }
+  - Synapse.saveTemp(data: object, mimeType: string) - Store temporary content in the cache and receive a synapsetemp:/// URI
+    Param format:
+      * data: object with either `text` (UTF-8 string) or `binary` (base64 string, data URI supported)
+      * mimeType: string - MIME type describing the data (e.g., 'image/png')
+    Response format: {success: boolean, uri?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -1005,6 +1039,7 @@ IMPORTANT - REQUIREMENTS:
          * isCompleted: boolean (optional, default: false) - Completion status
        - attachments: array (optional) - Array of attachment objects:
          * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+        * synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
          * Base64: object with:
            - type: 'base64' (required)
            - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
@@ -1055,6 +1090,19 @@ IMPORTANT - REQUIREMENTS:
        attachments: ['/path/to/existing/file.pdf']
      }
    ]);
+
+  // Save a note using a temporary attachment created at runtime
+  const tempImage = await Synapse.saveTemp({ binary: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...' }, 'image/png');
+  if (tempImage.success) {
+    await Synapse.saveNotes([
+      {
+        title: 'Whiteboard Snapshot',
+        content: 'Automatically captured whiteboard image',
+        type: 'note',
+        attachments: [tempImage.uri]
+      }
+    ]);
+  }
    
    // Task with base64 attachment
    const result3 = await Synapse.saveNotes([
@@ -1110,6 +1158,14 @@ IMPORTANT - REQUIREMENTS:
        }
      ]
    });
+
+  // With a temporary file created via Synapse.saveTemp
+  const tempSnapshot = await Synapse.saveTemp({ binary: 'data:audio/mpeg;base64,//uQZAAAAAAAAAAA...' }, 'audio/mpeg');
+  if (tempSnapshot.success) {
+    const resultTemp = await Synapse.chatAI('Transcribe this snippet', {
+      attachments: [tempSnapshot.uri]
+    });
+  }
    
    // WRONG - will cause parameter validation errors:
    // const result3 = await Synapse.chatAI('Test', {

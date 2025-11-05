@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
+
+import '../utils/synapse_temp_utils.dart';
 import 'interactive_checkbox_component.dart';
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
@@ -184,120 +187,159 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
-  /// Custom image builder that handles data URLs
-  /// For non-data URLs, uses the default image loading from gpt_markdown
-  /// For data URLs, checks the mimetype and renders accordingly:
-  /// - image/svg+xml: uses flutter_svg
-  /// - other image types: uses Memory.image
-  /// - unsupported types: shows placeholder
+  /// Custom image builder that handles data URLs and synapsetemp:/// URIs.
+  ///
+  /// - synapsetemp:/// URIs load files from the app's cache directory
+  /// - data: URIs are decoded and rendered from memory
+  /// - all other URIs fall back to network loading
   Widget _customImageBuilder(
     BuildContext context,
     String url, {
     double? width,
     double? height,
   }) {
-    // Check if this is a data URL
-    if (!url.startsWith('data:')) {
-      // Use default image loading from gpt_markdown
-      return SizedBox(
-        width: width,
-        height: height,
-        child: Image(
-          image: NetworkImage(url),
-          loadingBuilder: (
-            BuildContext context,
-            Widget child,
-            ImageChunkEvent? loadingProgress,
-          ) {
-            if (loadingProgress == null) {
-              return child;
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return FutureBuilder<SynapseTempFile>(
+        future: SynapseTempUtils.loadFile(url),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return _buildLoadingPlaceholder(width, height);
+          }
+
+          if (snapshot.hasError || !snapshot.hasData) {
+            if (snapshot.hasError && kDebugMode) {
+              debugPrint('SynapseTemp image load error: ${snapshot.error}');
             }
-            return Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
+            return _buildPlaceholder(width, height, 'Unable to load temporary image');
+          }
+
+          final tempFile = snapshot.data!;
+          final mime = tempFile.mimeType.toLowerCase();
+
+          if (mime == 'image/svg+xml') {
+            return SizedBox(
+              width: width,
+              height: height,
+              child: SvgPicture.memory(
+                tempFile.bytes,
+                fit: BoxFit.contain,
+                placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
               ),
             );
-          },
-          fit: BoxFit.fill,
-          errorBuilder: (context, error, stackTrace) {
-            return const Icon(Icons.broken_image, size: 48);
-          },
-        ),
+          }
+
+          if (mime.startsWith('image/')) {
+            return SizedBox(
+              width: width,
+              height: height,
+              child: Image.memory(
+                tempFile.bytes,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholder(width, height, 'Failed to render image');
+                },
+              ),
+            );
+          }
+
+          return _buildPlaceholder(width, height, 'Unsupported image type: ${tempFile.mimeType}');
+        },
       );
     }
 
-    // Handle data URL
-    try {
-      // Parse data URL format: data:[<mediatype>][;base64],<data>
-      final uri = Uri.parse(url);
-      final dataString = uri.toString();
-      
-      // Extract mimetype and data
-      final commaIndex = dataString.indexOf(',');
-      if (commaIndex == -1) {
-        return _buildPlaceholder(width, height, 'Invalid data URL format');
-      }
-      
-      final header = dataString.substring(5, commaIndex); // Skip 'data:'
-      final data = dataString.substring(commaIndex + 1);
-      
-      // Parse header for mimetype and encoding
-      String mimetype = 'text/plain';
-      bool isBase64 = false;
-      
-      if (header.isNotEmpty) {
-        final parts = header.split(';');
-        if (parts.isNotEmpty && parts[0].isNotEmpty) {
-          mimetype = parts[0];
+    if (url.startsWith('data:')) {
+      try {
+        final uri = Uri.parse(url);
+        final dataString = uri.toString();
+
+        final commaIndex = dataString.indexOf(',');
+        if (commaIndex == -1) {
+          return _buildPlaceholder(width, height, 'Invalid data URL format');
         }
-        isBase64 = parts.any((p) => p.toLowerCase() == 'base64');
-      }
 
-      // Handle SVG images
-      if (mimetype.toLowerCase() == 'image/svg+xml') {
-        final svgData = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
-        return SizedBox(
-          width: width,
-          height: height,
-          child: SvgPicture.string(
-            svgData,
-            fit: BoxFit.fill,
-            placeholderBuilder: (context) => _buildPlaceholder(width, height, 'Loading SVG...'),
-          ),
-        );
-      }
+        final header = dataString.substring(5, commaIndex); // Skip 'data:'
+        final data = dataString.substring(commaIndex + 1);
 
-      // Handle other image types (png, jpg, gif, etc.) using memory image
-      if (mimetype.startsWith('image/')) {
-        if (!isBase64) {
-          return _buildPlaceholder(width, height, 'Only base64 encoded images are supported');
+        String mimetype = 'text/plain';
+        bool isBase64 = false;
+
+        if (header.isNotEmpty) {
+          final parts = header.split(';');
+          if (parts.isNotEmpty && parts[0].isNotEmpty) {
+            mimetype = parts[0];
+          }
+          isBase64 = parts.any((p) => p.toLowerCase() == 'base64');
         }
-        
-        final bytes = base64.decode(data);
-        return SizedBox(
-          width: width,
-          height: height,
-          child: Image.memory(
-            bytes,
-            fit: BoxFit.fill,
-            errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.broken_image, size: 48);
-            },
-          ),
-        );
-      }
 
-      // Unsupported mimetype
-      return _buildPlaceholder(width, height, 'Unsupported image type: $mimetype');
-    } catch (e) {
-      return _buildPlaceholder(width, height, 'Error loading image: $e');
+        if (mimetype.toLowerCase() == 'image/svg+xml') {
+          final svgData = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+          return SizedBox(
+            width: width,
+            height: height,
+            child: SvgPicture.string(
+              svgData,
+              fit: BoxFit.contain,
+              placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
+            ),
+          );
+        }
+
+        if (mimetype.startsWith('image/')) {
+          if (!isBase64) {
+            return _buildPlaceholder(width, height, 'Only base64 encoded images are supported');
+          }
+
+          final bytes = base64.decode(data);
+          return SizedBox(
+            width: width,
+            height: height,
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildPlaceholder(width, height, 'Failed to render image');
+              },
+            ),
+          );
+        }
+
+        return _buildPlaceholder(width, height, 'Unsupported image type: $mimetype');
+      } catch (e) {
+        return _buildPlaceholder(width, height, 'Error loading image: $e');
+      }
     }
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Image(
+        image: NetworkImage(url),
+        loadingBuilder: (
+          BuildContext context,
+          Widget child,
+          ImageChunkEvent? loadingProgress,
+        ) {
+          if (loadingProgress == null) {
+            return child;
+          }
+          return Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                      loadingProgress.expectedTotalBytes!
+                  : null,
+            ),
+          );
+        },
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.broken_image, size: 48);
+        },
+      ),
+    );
   }
 
-  /// Builds a placeholder widget for unsupported or error cases
+  /// Builds a placeholder widget for unsupported or error cases.
   Widget _buildPlaceholder(double? width, double? height, String message) {
     return SizedBox(
       width: width,
@@ -320,6 +362,16 @@ class _InteractiveCheckboxMarkdownState
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingPlaceholder(double? width, double? height) {
+    return SizedBox(
+      width: width,
+      height: height ?? 100,
+      child: const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
       ),
     );
   }

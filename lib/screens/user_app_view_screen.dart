@@ -482,7 +482,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
               supportZoom: true,
               builtInZoomControls: true,
               displayZoomControls: false,
-              resourceCustomSchemes: ['synapse', 'synapseuser'],
+              resourceCustomSchemes: ['synapse', 'synapseuser', 'synapsetemp'],
             ),
             onLoadResourceWithCustomScheme: (controller, request) async {
               LoggerService.debug('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}');
@@ -494,6 +494,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                 );
               } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
                 return await bridge.handleSynapseUserScheme(request.url);
+              } else if (request.url.scheme.toLowerCase() == 'synapsetemp') {
+                return await bridge.handleSynapseTempScheme(request.url);
               }
               return null;            
             },
