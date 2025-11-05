@@ -653,11 +653,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       'Treat all prior messages as immutable history for KV-cache friendly reuse.',
       'Incorporate note relationships and hierarchies when citing evidence.',
       'Use your own knowledge to clarify or extend when the notes are insufficient.',
+      'You should format your response as markdown for best reading experience.',
     ];
 
     if (_hasAnyTools) {
       lines.add(
         'The user has enabled external tools (MCP services or user-defined AI tools). Prefer calling them when they can improve accuracy before responding.',
+      );
+      lines.add(
+        'If the user provides tools that can render your diagram code, use it. If the diagram returns a URL, use a markdown image component to present it.',
+      );
+      lines.add(
+        'You should also use code block to present the diagram code as is for future reference right below the image component.',
       );
     }
 
@@ -678,6 +685,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         AIPrompts.relationshipGuidelines,
       ],
       now: _conversationStartTime,
+      needTimeInContext: false,  // Precise time comes with user message.
     );
   }
 

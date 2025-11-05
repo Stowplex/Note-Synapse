@@ -18,12 +18,16 @@ class SystemPromptBuilder {
     String? taskContext,
     List<String> guidelines = const [],
     DateTime? now,
+    bool needTimeInContext = true,
   }) {
     final buffer = StringBuffer();
 
     buffer.writeln('Persona: ${persona ?? defaultPersona}');
 
-    final timestamp = formatTimestamp(now ?? DateTime.now());
+    final timestamp = formatTimestamp(
+      now ?? DateTime.now(),
+      needTimeInContext: needTimeInContext,
+    );
     buffer.writeln('Conversation start at: $timestamp');
 
     if ((taskContext ?? '').trim().isNotEmpty) {
@@ -52,7 +56,10 @@ class SystemPromptBuilder {
     );
   }
 
-  static String formatTimestamp(DateTime dateTime) {
+  static String formatTimestamp(
+    DateTime dateTime, {
+    bool needTimeInContext = true,
+  }) {
     final local = dateTime.toLocal();
     final datePart = DateFormat('yyyy-MM-dd (EEEE)').format(local);
     final timePart = DateFormat('HH:mm:ss').format(local);
@@ -62,7 +69,11 @@ class SystemPromptBuilder {
     final hours = offset.inHours.abs().toString().padLeft(2, '0');
     final minutes = offset.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
 
-    return '$datePart $timePart UTC$sign$hours:$minutes';
+    if (needTimeInContext) {
+      return '$datePart $timePart UTC$sign$hours:$minutes';
+    } else {
+      return '$datePart (${local.timeZoneName})';
+    }
   }
 }
 
