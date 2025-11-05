@@ -21,11 +21,13 @@ class AiToolDefinition {
     required this.toolName,
     required this.description,
     required this.parameterSchema,
+    this.outputSchema,
   });
 
   final String toolName;
   final String description;
   final Map<String, dynamic> parameterSchema;
+  final Map<String, dynamic>? outputSchema;
 }
 
 class AiToolAppBundle {
@@ -50,6 +52,7 @@ class AiToolAppBundle {
             name: def.toolName,
             description: def.description,
             inputSchema: def.parameterSchema,
+            outputSchema: def.outputSchema,
           ),
         )
         .toList();
@@ -214,20 +217,23 @@ class AiToolService {
     required AppRevision revision,
   }) async {
     final html = revision.appCode;
-    final commentMatch = RegExp(r'<!--(.*?)-->', dotAll: true).firstMatch(html);
-    if (commentMatch == null) {
-      LoggerService.warning('AI tool "${app.name}" is missing YAML header comment.');
+    final toolSpecPattern = RegExp(r'<!\[CDATA\[\s*tool_spec\s*(.*?)\]\]>', dotAll: true);
+    final toolSpecMatch = toolSpecPattern.firstMatch(html);
+    if (toolSpecMatch == null) {
+      LoggerService.warning('AI tool "${app.name}" is missing CDATA tool_spec block.');
       return null;
     }
 
-    final commentBody = commentMatch.group(1)!;
-    final yamlStartIndex = commentBody.indexOf(RegExp(r'-\s*name\s*:'));
-    if (yamlStartIndex == -1) {
-      LoggerService.warning('AI tool "${app.name}" YAML header is invalid.');
+    final yamlText = toolSpecMatch.group(1)!.trim();
+    if (yamlText.isEmpty) {
+      LoggerService.warning('AI tool "${app.name}" CDATA tool_spec block is empty.');
       return null;
     }
 
-    final yamlText = commentBody.substring(yamlStartIndex).trim();
+    if (!RegExp(r'-\s*name\s*:').hasMatch(yamlText)) {
+      LoggerService.warning('AI tool "${app.name}" tool_spec block does not contain any tool definitions.');
+      return null;
+    }
     dynamic parsedYaml;
     try {
       parsedYaml = loadYaml(yamlText);
@@ -252,6 +258,7 @@ class AiToolService {
 
       final description = entry['description']?.toString().trim() ?? '';
       final parameterSchema = _buildParameterSchema(entry['input_params']);
+      final outputSchema = _buildOptionalParameterSchema(entry['output_params']);
 
       toolDefinitions.add(
         AiToolDefinition(
@@ -260,6 +267,7 @@ class AiToolService {
               ? 'User-defined tool generated from ${app.name}'
               : description,
           parameterSchema: parameterSchema,
+          outputSchema: outputSchema,
         ),
       );
     }
@@ -341,6 +349,18 @@ class AiToolService {
       result['required'] = requiredFields;
     }
     return result;
+  }
+
+  static Map<String, dynamic>? _buildOptionalParameterSchema(dynamic params) {
+    if (params == null) {
+      return null;
+    }
+    final schema = _buildParameterSchema(params);
+    final properties = schema['properties'];
+    if (properties is Map && properties.isNotEmpty) {
+      return schema;
+    }
+    return null;
   }
 
   static Map<String, dynamic> _schemaFromSpec(YamlMap spec) {

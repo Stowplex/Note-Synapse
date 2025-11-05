@@ -1496,12 +1496,26 @@ Here's the complete HTML application:
  This application must expose reusable tools that the AI can call headlessly and that users can try in an interactive playground.
 
  REQUIRED STRUCTURE:
- 1. Prepend the HTML with a comment block containing a YAML array describing each tool. For every tool include:
+ 1. Prepend the HTML with a CDATA block that starts with `<![CDATA[tool_spec` and ends with `]]>`. Place the YAML array that describes every tool inside this block so that any characters (even `-->` or backticks) are preserved verbatim.
+    Example:
+    <![CDATA[tool_spec
+    - name: example_tool
+      description: Describe what the tool does succinctly
+      input_params:
+        - query:
+            type: string
+            description: The search text
+      output_params:
+        - results:
+            type: array
+            items: string
+    ]]>
+ 2. For every tool include:
     - name: Tool identifier (string, snake_case recommended)
     - description: Concise explanation of what the tool does
     - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
     - output_params: Keys and schemas for returned fields the tool produces
- 2. The YAML must be valid and free of extra commentary so it can be parsed automatically.
+ 3. The YAML must be valid and free of extra commentary so it can be parsed automatically.
 
  RUNTIME BEHAVIOUR:
  1. Register each tool implementation in JavaScript as `window.Synapse.tool.registered.<tool_name> = (params) => { ... }`.

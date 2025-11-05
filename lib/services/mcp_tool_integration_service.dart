@@ -81,6 +81,24 @@ class McpToolIntegrationService {
             }
           }
         }
+
+        if (tool.outputSchema != null) {
+          final outputSchema = tool.outputSchema!;
+          final outputProperties = outputSchema['properties'] as Map<String, dynamic>?;
+          if (outputProperties != null && outputProperties.isNotEmpty) {
+            toolsDescription.writeln('Outputs:');
+            outputProperties.forEach((outputName, outputDetails) {
+              final details = outputDetails as Map<String, dynamic>;
+              final outputType = details['type'] ?? 'any';
+              final outputDesc = details['description'] ?? '';
+              toolsDescription.writeln('  - $outputName ($outputType): $outputDesc');
+
+              if (details.containsKey('enum')) {
+                toolsDescription.writeln('    Possible values: ${details['enum']}');
+              }
+            });
+          }
+        }
         
         toolsDescription.writeln('');
       }
@@ -169,6 +187,24 @@ class McpToolIntegrationService {
             if (required != null && required.isNotEmpty) {
               toolsDescription.writeln('Required parameters: ${required.join(", ")}');
             }
+          }
+        }
+
+        if (tool.outputSchema != null) {
+          final outputSchema = tool.outputSchema!;
+          final outputProperties = outputSchema['properties'] as Map<String, dynamic>?;
+          if (outputProperties != null && outputProperties.isNotEmpty) {
+            toolsDescription.writeln('Outputs:');
+            outputProperties.forEach((outputName, outputDetails) {
+              final details = outputDetails as Map<String, dynamic>;
+              final outputType = details['type'] ?? 'any';
+              final outputDesc = details['description'] ?? '';
+              toolsDescription.writeln('  - $outputName ($outputType): $outputDesc');
+
+              if (details.containsKey('enum')) {
+                toolsDescription.writeln('    Possible values: ${details['enum']}');
+              }
+            });
           }
         }
         
