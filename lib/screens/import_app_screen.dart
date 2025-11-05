@@ -209,16 +209,43 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   }
 
   Map<String, dynamic> _extractAppData(Map<String, dynamic> yamlData) {
+    // Determine app type: support both old format (note_action: true/false) and new format (app_type: string)
+    UserAppType appType;
+    if (yamlData.containsKey('app_type')) {
+      // New format: app_type: normal | note_action | ai_tool
+      appType = _stringToAppType(yamlData['app_type']?.toString() ?? 'normal');
+    } else if (yamlData.containsKey('note_action')) {
+      // Old format: note_action: true/false (backward compatibility)
+      appType = yamlData['note_action'] == true ? UserAppType.noteAction : UserAppType.normal;
+    } else {
+      // Default to normal if neither field exists
+      appType = UserAppType.normal;
+    }
+
     return {
       'name': yamlData['name']?.toString() ?? '',
       'uuid': yamlData['uuid']?.toString() ?? '',
       'description': yamlData['description']?.toString() ?? '',
       'author': yamlData['author']?.toString() ?? '',
       'license': yamlData['license']?.toString() ?? '',
-      'note_action': yamlData['note_action'] == true,
+      'app_type': appType,
       'code': yamlData['code']?.toString() ?? '',
       'libraries': _convertLibraries(yamlData['libraries']),
     };
+  }
+
+  /// Converts string representation to UserAppType enum for YAML import.
+  UserAppType _stringToAppType(String typeString) {
+    switch (typeString.toLowerCase()) {
+      case 'normal':
+        return UserAppType.normal;
+      case 'note_action':
+        return UserAppType.noteAction;
+      case 'ai_tool':
+        return UserAppType.aiTool;
+      default:
+        return UserAppType.normal;
+    }
   }
 
   List<dynamic> _convertLibraries(dynamic libraries) {
@@ -276,7 +303,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       description: appData['description'],
       steps: ['Imported from YAML'],
       htmlContent: '', // No longer used - code is stored in revisions
-      type: appData['note_action'] ? UserAppType.noteAction : UserAppType.normal,
+      type: appData['app_type'] as UserAppType,
       createdAt: now,
       updatedAt: now,
     );
