@@ -110,8 +110,43 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('chatAI', prompt, options);
             return result;
           },
-          proxyFetch: async (url, headers = {}) => {
-            const result = await window.flutter_inappwebview.callHandler('proxyFetch', url, headers ?? {});
+          proxyFetch: async (url, options = {}) => {
+            const normalizedOptions = options ?? {};
+            const hasExplicitOptions =
+              normalizedOptions &&
+              typeof normalizedOptions === 'object' &&
+              !Array.isArray(normalizedOptions) &&
+              (
+                Object.prototype.hasOwnProperty.call(normalizedOptions, 'method') ||
+                Object.prototype.hasOwnProperty.call(normalizedOptions, 'body') ||
+                Object.prototype.hasOwnProperty.call(normalizedOptions, 'json') ||
+                Object.prototype.hasOwnProperty.call(normalizedOptions, 'headers')
+              );
+
+            let headers = {};
+            if (
+              normalizedOptions &&
+              typeof normalizedOptions === 'object' &&
+              !Array.isArray(normalizedOptions)
+            ) {
+              if (hasExplicitOptions) {
+                if (normalizedOptions.headers && typeof normalizedOptions.headers === 'object') {
+                  headers = normalizedOptions.headers;
+                }
+              } else {
+                headers = normalizedOptions;
+              }
+            }
+
+            const payload = {
+              url,
+              method: hasExplicitOptions && normalizedOptions.method ? normalizedOptions.method : 'GET',
+              headers,
+              body: hasExplicitOptions ? normalizedOptions.body ?? null : null,
+              json: hasExplicitOptions ? normalizedOptions.json ?? null : null,
+            };
+
+            const result = await window.flutter_inappwebview.callHandler('proxyFetch', payload);
             return result;
           },
           readAttachment: async (attachmentPath) => {
@@ -221,15 +256,21 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          if (args.isEmpty || args.first == null || (args.first as String).trim().isEmpty) {
+          if (args.isEmpty || args.first == null || args.first is! Map) {
+            throw ArgumentError('Request options are required');
+          }
+
+          final rawOptions = Map<String, dynamic>.from(args.first as Map);
+          final urlRaw = (rawOptions['url'] as String?)?.trim() ?? '';
+          if (urlRaw.isEmpty) {
             throw ArgumentError('URL is required');
           }
 
-          final urlRaw = (args.first as String).trim();
           final uri = Uri.parse(urlRaw);
+          final method = (rawOptions['method'] as String?)?.toUpperCase() ?? 'GET';
 
-          final rawHeaders = args.length > 1 ? args[1] : null;
           final headers = <String, String>{};
+          final rawHeaders = rawOptions['headers'];
           if (rawHeaders is Map) {
             rawHeaders.forEach((key, value) {
               if (key == null || value == null) {
@@ -243,9 +284,35 @@ class UserAppRuntimeBridge {
             });
           }
 
-          LoggerService.debug('[Synapse.proxyFetch] Fetching $urlRaw with headers: ${headers.keys.toList()}');
+          String? requestBody;
+          final jsonBody = rawOptions['json'];
+          if (jsonBody != null) {
+            try {
+              requestBody = jsonEncode(jsonBody);
+              final contentTypeKey = headers.keys.firstWhere(
+                (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
+                orElse: () => '',
+              );
+              if (contentTypeKey.isEmpty) {
+                headers[HttpHeaders.contentTypeHeader] = 'application/json; charset=utf-8';
+              }
+            } catch (e) {
+              throw ArgumentError('Failed to encode JSON body: $e');
+            }
+          } else if (rawOptions['body'] != null) {
+            requestBody = rawOptions['body'].toString();
+            final contentTypeKey = headers.keys.firstWhere(
+              (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
+              orElse: () => '',
+            );
+            if (contentTypeKey.isEmpty) {
+              headers[HttpHeaders.contentTypeHeader] = 'text/plain; charset=utf-8';
+            }
+          }
 
-          final request = await _proxyHttpClient.getUrl(uri);
+          LoggerService.debug('[Synapse.proxyFetch] $method $urlRaw with headers: ${headers.keys.toList()}');
+
+          final request = await _proxyHttpClient.openUrl(method, uri);
           headers.forEach((key, value) {
             try {
               request.headers.set(key, value);
@@ -253,6 +320,10 @@ class UserAppRuntimeBridge {
               LoggerService.warning('[Synapse.proxyFetch] Failed to set header "$key": $e');
             }
           });
+
+          if (requestBody != null && method != 'GET' && method != 'HEAD') {
+            request.add(utf8.encode(requestBody));
+          }
 
           final response = await request.close();
           final bytesBuilder = BytesBuilder(copy: false);
@@ -265,7 +336,19 @@ class UserAppRuntimeBridge {
           final normalizedMime = mime.split(';').first.trim().isNotEmpty
               ? mime.split(';').first.trim()
               : 'application/octet-stream';
-          final isText = normalizedMime.toLowerCase().startsWith('text/');
+          var isText = normalizedMime.toLowerCase().startsWith('text/');
+          switch (normalizedMime.toLowerCase()) {
+            case 'application/json':
+              isText = true;
+              break;
+            case 'application/javascript':
+              isText = true;
+              break;
+            case 'application/xml':
+              isText = true;
+            default:
+              break;
+          }
           final data = isText
               ? utf8.decode(bytes, allowMalformed: true)
               : base64Encode(bytes);

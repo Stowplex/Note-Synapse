@@ -632,10 +632,12 @@ IMPORTANT - REQUIREMENTS:
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
-   - Synapse.proxyFetch(url: string, headers?: object) - Perform an HTTP GET request via the Synapse backend proxy to bypass browser CORS restrictions.
-     Param format:
-       * url: string (required) - Absolute HTTP/HTTPS URL to fetch
-       * headers: object (optional) - Key/value pairs of request headers (values must be strings)
+   - Synapse.proxyFetch(url: string, options?: object) - Perform an HTTP request via the Synapse backend proxy to bypass browser CORS restrictions (supports GET and POST).
+     Options format (all fields optional):
+       * method: string - HTTP method (defaults to 'GET'; set to 'POST' when sending data)
+       * headers: object - Key/value pairs of request headers (values must be strings)
+       * body: string - Raw text payload (used when `json` is not provided)
+       * json: any - JavaScript object/array automatically JSON-encoded; takes precedence over `body`
      Response format:
        {
          status: 'success' | 'error',
@@ -647,8 +649,11 @@ IMPORTANT - REQUIREMENTS:
          }
        }
      Usage notes:
-       * Always handle the possibility of status === 'error'.
-       * When content.mime does not start with "text/", decode the base64 string before using binary data.
+       * Passing a plain headers object as the second argument is still supported; it will be treated as `{headers: ...}`.
+       * When sending JSON, the Content-Type defaults to `application/json; charset=utf-8` unless you override it.
+       * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
+       * Always handle the possibility of `status === 'error'`.
+       * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format: 
@@ -958,10 +963,12 @@ IMPORTANT - REQUIREMENTS:
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
-   - Synapse.proxyFetch(url: string, headers?: object) - Perform an HTTP GET request via the Synapse backend proxy to bypass browser CORS restrictions.
-     Param format:
-       * url: string (required) - Absolute HTTP/HTTPS URL to fetch
-       * headers: object (optional) - Key/value pairs of request headers (values must be strings)
+   - Synapse.proxyFetch(url: string, options?: object) - Perform an HTTP request via the Synapse backend proxy to bypass browser CORS restrictions (supports GET and POST).
+     Options format (all fields optional):
+       * method: string - HTTP method (defaults to 'GET'; set to 'POST' when sending data)
+       * headers: object - Key/value pairs of request headers (values must be strings)
+       * body: string - Raw text payload (used when `json` is not provided)
+       * json: any - JavaScript object/array automatically JSON-encoded; takes precedence over `body`
      Response format:
        {
          status: 'success' | 'error',
@@ -973,8 +980,11 @@ IMPORTANT - REQUIREMENTS:
          }
        }
      Usage notes:
-       * Always handle the possibility of status === 'error'.
-       * When content.mime does not start with "text/", decode the base64 string before using binary data.
+       * Passing a plain headers object as the second argument is still supported; it will be treated as `{headers: ...}`.
+       * When sending JSON, the Content-Type defaults to `application/json; charset=utf-8` unless you override it.
+       * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
+       * Always handle the possibility of `status === 'error'`.
+       * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format:
