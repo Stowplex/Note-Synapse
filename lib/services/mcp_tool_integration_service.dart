@@ -40,6 +40,8 @@ class McpToolIntegrationService {
       ..writeln(
           'Provide them either inside the params object or as additional top-level fields.')
       ..writeln(
+          'Arguments are named; order does not matter as long as you supply the correct keys.')
+      ..writeln(
           'Do not wrap arguments inside an extra object named "param" or "parameters".');
     
     for (final entry in toolsByEndpoint.entries) {
@@ -290,13 +292,62 @@ class McpToolIntegrationService {
   }
 
   /// Parse call_tool function arguments
-  /// Handles both nested format (with 'params' key) and flat format (all at top level)
+  /// Handles named (object) format, key/value lists, and positional fallbacks
   static Map<String, dynamic>? parseCallToolArguments(
-    Map<String, dynamic> arguments,
+    dynamic argumentsRaw,
   ) {
     try {
-      final serviceName = arguments['service_name'] as String?;
-      final toolName = arguments['tool_name'] as String?;
+      late final Map<String, dynamic> arguments;
+
+      if (argumentsRaw is Map) {
+        arguments = argumentsRaw.map((key, value) => MapEntry(key.toString(), value));
+      } else if (argumentsRaw is List) {
+        final listArguments = <String, dynamic>{};
+        for (final entry in argumentsRaw) {
+          if (entry is Map) {
+            final key = entry['name'] ?? entry['key'] ?? entry['field'] ?? entry['param'];
+            if (key != null) {
+              listArguments[key.toString()] = entry.containsKey('value')
+                  ? entry['value']
+                  : entry.containsKey('data')
+                      ? entry['data']
+                      : entry['argument'];
+              continue;
+            }
+          }
+
+          if (entry is List && entry.length == 2) {
+            listArguments[entry[0].toString()] = entry[1];
+            continue;
+          }
+
+          // Fallback: treat the list as positional [serviceName, toolName, params]
+          if (entry == argumentsRaw.first && argumentsRaw.length >= 3) {
+            listArguments['service_name'] = argumentsRaw[0];
+            listArguments['tool_name'] = argumentsRaw[1];
+            listArguments['params'] = argumentsRaw[2];
+            break;
+          }
+        }
+        arguments = listArguments;
+      } else {
+        LoggerService.error(
+          'Unsupported call_tool argument format: ${argumentsRaw.runtimeType}',
+        );
+        return null;
+      }
+
+      if (arguments.isEmpty) {
+        LoggerService.error('Empty call_tool arguments');
+        return null;
+      }
+
+      final serviceName = arguments['service_name'] as String? ??
+          arguments['serviceName'] as String? ??
+          arguments['service'] as String?;
+      final toolName = arguments['tool_name'] as String? ??
+          arguments['toolName'] as String? ??
+          arguments['tool'] as String?;
 
       if (serviceName == null || toolName == null) {
         LoggerService.error('Missing required fields: service_name or tool_name');
@@ -328,6 +379,10 @@ class McpToolIntegrationService {
         arguments.forEach((key, value) {
           if (key != 'service_name' &&
               key != 'tool_name' &&
+              key != 'serviceName' &&
+              key != 'toolName' &&
+              key != 'service' &&
+              key != 'tool' &&
               key != 'params' &&
               key != 'param') {
             params![key] = value;

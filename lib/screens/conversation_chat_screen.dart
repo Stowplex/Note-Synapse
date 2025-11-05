@@ -660,12 +660,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       lines.add(
         'The user has enabled external tools (MCP services or user-defined AI tools). Prefer calling them when they can improve accuracy before responding.',
       );
-      lines.add(
-        'If the user provides tools that can render your diagram code, use it. If the diagram returns a URL, use a markdown image component to present it.',
-      );
-      lines.add(
-        'You should also use code block to present the diagram code as is for future reference right below the image component.',
-      );
     }
 
     if (_notes.isEmpty) {
@@ -817,11 +811,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
             final functionCall = functionCalls[i] as Map<String, dynamic>;
             final functionName = functionCall['name'] as String;
-            final args = functionCall['args'] as Map<String, dynamic>;
+            final rawArgs = functionCall['args'];
 
             LoggerService.debug(
               'Processing function call',
-              error: {'functionName': functionName, 'args': args},
+              error: {'functionName': functionName, 'args': rawArgs},
             );
 
             if (functionName != 'call_tool') {
@@ -829,12 +823,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             }
 
             final parsedArgs = McpToolIntegrationService.parseCallToolArguments(
-              args,
+              rawArgs,
             );
             if (parsedArgs == null) {
               LoggerService.error(
                 'Failed to parse call_tool arguments',
-                error: {'args': args},
+                error: {'args': rawArgs},
               );
               continue;
             }
