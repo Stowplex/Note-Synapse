@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
@@ -217,47 +217,16 @@ class _InteractiveCheckboxMarkdownState
           final mime = tempFile.mimeType.toLowerCase();
 
           if (mime == 'image/svg+xml') {
-            // For SVG, when height is null, we need to prevent excessive vertical expansion.
-            // Unlike Image widgets that naturally constrain based on their decoded dimensions,
-            // SVG can have very large or unbounded intrinsic sizes.
-            if (height == null && width != null) {
-              // When only width is specified, constrain the SVG tightly to prevent vertical expansion
-              return SizedBox(
-                width: width,
-                child: SvgPicture.memory(
-                  tempFile.bytes,
-                  fit: BoxFit.contain,
-                  width: width,
-                  placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-                ),
-              );
-            } else if (height == null && width == null) {
-              // When neither is specified, use LayoutBuilder to constrain based on available space
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
-                  return SizedBox(
-                    width: availableWidth,
-                    child: SvgPicture.memory(
-                      tempFile.bytes,
-                      fit: BoxFit.contain,
-                      width: availableWidth,
-                      placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-                    ),
-                  );
-                },
-              );
+            // Render SVG using InAppWebView for better compatibility and edge case handling
+            try {
+              final svgContent = utf8.decode(tempFile.bytes);
+              return _buildSvgWebView(svgContent, width, height);
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('Error decoding SVG content: $e');
+              }
+              return _buildPlaceholder(width, height, 'Failed to decode SVG');
             }
-            // When height is provided, use SizedBox with explicit dimensions
-            return SizedBox(
-              width: width,
-              height: height,
-              child: SvgPicture.memory(
-                tempFile.bytes,
-                fit: BoxFit.contain,
-                placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-              ),
-            );
           }
 
           if (mime.startsWith('image/')) {
@@ -304,48 +273,16 @@ class _InteractiveCheckboxMarkdownState
         }
 
         if (mimetype.toLowerCase() == 'image/svg+xml') {
-          final svgData = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
-          // For SVG, when height is null, we need to prevent excessive vertical expansion.
-          // Unlike Image widgets that naturally constrain based on their decoded dimensions,
-          // SVG can have very large or unbounded intrinsic sizes.
-          if (height == null && width != null) {
-            // When only width is specified, constrain the SVG tightly to prevent vertical expansion
-            return SizedBox(
-              width: width,
-              child: SvgPicture.string(
-                svgData,
-                fit: BoxFit.contain,
-                width: width,
-                placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-              ),
-            );
-          } else if (height == null && width == null) {
-            // When neither is specified, use LayoutBuilder to constrain based on available space
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
-                return SizedBox(
-                  width: availableWidth,
-                  child: SvgPicture.string(
-                    svgData,
-                    fit: BoxFit.contain,
-                    width: availableWidth,
-                    placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-                  ),
-                );
-              },
-            );
+          // Render SVG using InAppWebView for better compatibility and edge case handling
+          try {
+            final svgContent = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+            return _buildSvgWebView(svgContent, width, height);
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('Error decoding SVG from data URL: $e');
+            }
+            return _buildPlaceholder(width, height, 'Failed to decode SVG');
           }
-          // When height is provided, use SizedBox with explicit dimensions
-          return SizedBox(
-            width: width,
-            height: height,
-            child: SvgPicture.string(
-              svgData,
-              fit: BoxFit.contain,
-              placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
-            ),
-          );
         }
 
         if (mimetype.startsWith('image/')) {
@@ -436,6 +373,75 @@ class _InteractiveCheckboxMarkdownState
       height: height ?? 100,
       child: const Center(
         child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+
+  /// Creates an HTML wrapper for SVG content to render in WebView.
+  /// This ensures proper scaling and responsive behavior.
+  String _createSvgHtmlWrapper(String svgContent) {
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    svg {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  $svgContent
+</body>
+</html>
+''';
+  }
+
+  /// Builds an InAppWebView widget to render SVG content.
+  Widget _buildSvgWebView(String svgContent, double? width, double? height) {
+    final htmlContent = _createSvgHtmlWrapper(svgContent);
+    
+    // Determine the height for the WebView
+    // If height is not provided, calculate based on width with a reasonable aspect ratio
+    final webViewHeight = height ?? (width != null ? width * 0.75 : 300.0);
+    
+    return SizedBox(
+      width: width,
+      height: webViewHeight,
+      child: InAppWebView(
+        initialData: InAppWebViewInitialData(
+          data: htmlContent,
+          mimeType: 'text/html',
+          encoding: 'utf8',
+        ),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: false,
+          supportZoom: false,
+          transparentBackground: true,
+          disableContextMenu: true,
+          horizontalScrollBarEnabled: false,
+          verticalScrollBarEnabled: false,
+        ),
       ),
     );
   }
