@@ -33,7 +33,14 @@ class McpToolIntegrationService {
     
     // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
-    toolsDescription.writeln('Call an MCP tool. Available tools:\n');
+    toolsDescription
+      ..writeln('Call an MCP tool. Available tools:\n')
+      ..writeln(
+          'When you call this function, include the exact parameters required by the tool.')
+      ..writeln(
+          'Provide them either inside the params object or as additional top-level fields.')
+      ..writeln(
+          'Do not wrap arguments inside an extra object named "param" or "parameters".');
     
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
@@ -82,8 +89,10 @@ class McpToolIntegrationService {
     return {
       'name': 'call_tool',
       'description': toolsDescription.toString(),
+      'strict': true,
       'parameters': {
         'type': 'object',
+        'additionalProperties': true,
         'properties': {
           'service_name': {
             'type': 'string',
@@ -96,10 +105,12 @@ class McpToolIntegrationService {
           },
           'params': {
             'type': 'object',
-            'description': 'The parameters to pass to the tool (as a JSON object matching the tool\'s schema)',
+            'description':
+                'The parameters to pass to the tool. Provide each parameter as a direct field inside this object. Do not wrap values inside additional objects such as "param" or "parameters".',
+            'additionalProperties': true,
           },
         },
-        'required': ['service_name', 'tool_name', 'params'],
+        'required': ['service_name', 'tool_name'],
       },
     };
   }
@@ -260,14 +271,32 @@ class McpToolIntegrationService {
       }
 
       // Try to get params in nested format first
-      Map<String, dynamic>? params = arguments['params'] as Map<String, dynamic>?;
+      Map<String, dynamic>? params;
+      final rawParams = arguments['params'];
+      if (rawParams is Map) {
+        params = rawParams.map((key, value) => MapEntry(key.toString(), value));
+      }
+
+      // Some Gemini responses incorrectly wrap arguments under a single
+      // "param" (or "parameters") key. Unwrap that automatically.
+      if (params != null && params.length == 1) {
+        final soleKey = params.keys.first;
+        final soleValue = params.values.first;
+        if ((soleKey == 'param' || soleKey == 'params') &&
+            soleValue is Map<String, dynamic>) {
+          params = soleValue.map((key, value) => MapEntry(key.toString(), value));
+        }
+      }
       
       // If params is not in nested format, check if all other fields are at top level
       if (params == null || params.isEmpty) {
         // Extract everything except service_name and tool_name as params
         params = <String, dynamic>{};
         arguments.forEach((key, value) {
-          if (key != 'service_name' && key != 'tool_name') {
+          if (key != 'service_name' &&
+              key != 'tool_name' &&
+              key != 'params' &&
+              key != 'param') {
             params![key] = value;
           }
         });
