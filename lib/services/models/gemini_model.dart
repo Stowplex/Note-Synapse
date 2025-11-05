@@ -222,52 +222,134 @@ class GeminiModel implements AIModel {
           }
           break;
         case PromptRole.user:
-          final parts = <Map<String, dynamic>>[
-            {'text': message.content},
-          ];
-
-          if (message.attachments.isNotEmpty) {
-            for (final file in message.attachments) {
-              final bytes = _readPlatformFileBytes(file);
-              if (bytes == null) continue;
-
-              final extension = FileTypeUtils.getFileExtension(file.name);
-              final mimeType = FileTypeUtils.getMimeTypeForBytes(
-                bytes,
-                extension: extension.isEmpty ? null : extension,
-              );
-
-              parts.add({
-                'inline_data': {
-                  'mime_type': mimeType,
-                  'data': base64Encode(bytes),
+          // Check if this is a function response (tool result)
+          if (message.metadata != null && message.metadata!['function_name'] != null) {
+            final functionName = message.metadata!['function_name'] as String;
+            
+            // Parse the tool result content to extract the actual result
+            // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
+            final content = message.content;
+            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
+            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
+            
+            final responseData = <String, dynamic>{};
+            if (resultMatch != null) {
+              responseData['result'] = resultMatch.group(1)?.trim() ?? '';
+            } else if (errorMatch != null) {
+              responseData['error'] = errorMatch.group(1)?.trim() ?? '';
+            } else {
+              responseData['result'] = content;
+            }
+            
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'functionResponse': {
+                    'name': functionName,
+                    'response': responseData,
+                  }
                 }
+              ],
+            });
+          } else {
+            // Regular user message with optional attachments
+            final parts = <Map<String, dynamic>>[
+              {'text': message.content},
+            ];
+
+            if (message.attachments.isNotEmpty) {
+              for (final file in message.attachments) {
+                final bytes = _readPlatformFileBytes(file);
+                if (bytes == null) continue;
+
+                final extension = FileTypeUtils.getFileExtension(file.name);
+                final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                  bytes,
+                  extension: extension.isEmpty ? null : extension,
+                );
+
+                parts.add({
+                  'inline_data': {
+                    'mime_type': mimeType,
+                    'data': base64Encode(bytes),
+                  }
+                });
+              }
+            }
+
+            contents.add({
+              'role': 'user',
+              'parts': parts,
+            });
+          }
+          break;
+        case PromptRole.assistant:
+          final parts = <Map<String, dynamic>>[];
+          
+          // Add text content if present
+          if (message.content.trim().isNotEmpty) {
+            parts.add({'text': message.content});
+          }
+          
+          // Add function calls if present in metadata
+          if (message.metadata != null && message.metadata!['function_calls'] != null) {
+            final functionCalls = message.metadata!['function_calls'] as List;
+            for (final functionCall in functionCalls) {
+              parts.add({
+                'functionCall': functionCall,
               });
             }
           }
-
+          
           contents.add({
-            'role': 'user',
+            'role': 'model',
             'parts': parts,
           });
           break;
-        case PromptRole.assistant:
-          contents.add({
-            'role': 'model',
-            'parts': [
-              {'text': message.content},
-            ],
-          });
-          break;
         case PromptRole.tool:
-          contents.add({
-            'role': 'user',
-            'parts': [
-              {
-                'text': 'Tool result:\n${message.content}',
-              }
-            ],
-          });
+          // For Gemini, tool results should use functionResponse format
+          // Check if we have function metadata to construct proper response
+          if (message.metadata != null && message.metadata!['function_name'] != null) {
+            final functionName = message.metadata!['function_name'] as String;
+            
+            // Parse the tool result content to extract the actual result
+            // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
+            final content = message.content;
+            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
+            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
+            
+            final responseData = <String, dynamic>{};
+            if (resultMatch != null) {
+              responseData['result'] = resultMatch.group(1)?.trim() ?? '';
+            } else if (errorMatch != null) {
+              responseData['error'] = errorMatch.group(1)?.trim() ?? '';
+            } else {
+              responseData['result'] = content;
+            }
+            
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'functionResponse': {
+                    'name': functionName,
+                    'response': responseData,
+                  }
+                }
+              ],
+            });
+          } else {
+            // Fallback to text format if no metadata
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'text': 'Tool result:\n${message.content}',
+                }
+              ],
+            });
+          }
           break;
       }
     }

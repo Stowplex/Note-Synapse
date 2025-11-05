@@ -912,12 +912,22 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ...toolMessages,
               ];
             } else {
-              final toolMessages = toolResults
-                  .map(
-                    (result) =>
-                        PromptMessage(role: PromptRole.user, content: result),
-                  )
-                  .toList();
+              // For Gemini, we need to store function call info in metadata
+              // so we can properly format the functionResponse
+              final toolMessages = <PromptMessage>[];
+              for (int i = 0; i < toolResults.length; i++) {
+                final functionCall = i < functionCalls.length ? functionCalls[i] : null;
+                toolMessages.add(
+                  PromptMessage(
+                    role: PromptRole.user,
+                    content: toolResults[i],
+                    metadata: functionCall != null ? {
+                      'function_name': functionCall['name'],
+                      'function_args': functionCall['args'],
+                    } : null,
+                  ),
+                );
+              }
 
               currentMessages = [
                 ...currentMessages,
