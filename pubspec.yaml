@@ -129,6 +129,9 @@ dependencies:
   re_editor: ^0.8.0
   re_highlight: ^0.0.3
 
+  # Flutter SVG for displaying SVG image
+  flutter_svg: ^2.2.1
+
 
 dev_dependencies:
   flutter_test:

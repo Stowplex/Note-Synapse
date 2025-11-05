@@ -3,6 +3,8 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:convert';
 import 'interactive_checkbox_component.dart';
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
@@ -182,6 +184,146 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  /// Custom image builder that handles data URLs
+  /// For non-data URLs, uses the default image loading from gpt_markdown
+  /// For data URLs, checks the mimetype and renders accordingly:
+  /// - image/svg+xml: uses flutter_svg
+  /// - other image types: uses Memory.image
+  /// - unsupported types: shows placeholder
+  Widget _customImageBuilder(
+    BuildContext context,
+    String url, {
+    double? width,
+    double? height,
+  }) {
+    // Check if this is a data URL
+    if (!url.startsWith('data:')) {
+      // Use default image loading from gpt_markdown
+      return SizedBox(
+        width: width,
+        height: height,
+        child: Image(
+          image: NetworkImage(url),
+          loadingBuilder: (
+            BuildContext context,
+            Widget child,
+            ImageChunkEvent? loadingProgress,
+          ) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            return Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                    : null,
+              ),
+            );
+          },
+          fit: BoxFit.fill,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(Icons.broken_image, size: 48);
+          },
+        ),
+      );
+    }
+
+    // Handle data URL
+    try {
+      // Parse data URL format: data:[<mediatype>][;base64],<data>
+      final uri = Uri.parse(url);
+      final dataString = uri.toString();
+      
+      // Extract mimetype and data
+      final commaIndex = dataString.indexOf(',');
+      if (commaIndex == -1) {
+        return _buildPlaceholder(width, height, 'Invalid data URL format');
+      }
+      
+      final header = dataString.substring(5, commaIndex); // Skip 'data:'
+      final data = dataString.substring(commaIndex + 1);
+      
+      // Parse header for mimetype and encoding
+      String mimetype = 'text/plain';
+      bool isBase64 = false;
+      
+      if (header.isNotEmpty) {
+        final parts = header.split(';');
+        if (parts.isNotEmpty && parts[0].isNotEmpty) {
+          mimetype = parts[0];
+        }
+        isBase64 = parts.any((p) => p.toLowerCase() == 'base64');
+      }
+
+      // Handle SVG images
+      if (mimetype.toLowerCase() == 'image/svg+xml') {
+        final svgData = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+        return SizedBox(
+          width: width,
+          height: height,
+          child: SvgPicture.string(
+            svgData,
+            fit: BoxFit.fill,
+            placeholderBuilder: (context) => _buildPlaceholder(width, height, 'Loading SVG...'),
+          ),
+        );
+      }
+
+      // Handle other image types (png, jpg, gif, etc.) using memory image
+      if (mimetype.startsWith('image/')) {
+        if (!isBase64) {
+          return _buildPlaceholder(width, height, 'Only base64 encoded images are supported');
+        }
+        
+        final bytes = base64.decode(data);
+        return SizedBox(
+          width: width,
+          height: height,
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.fill,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(Icons.broken_image, size: 48);
+            },
+          ),
+        );
+      }
+
+      // Unsupported mimetype
+      return _buildPlaceholder(width, height, 'Unsupported image type: $mimetype');
+    } catch (e) {
+      return _buildPlaceholder(width, height, 'Error loading image: $e');
+    }
+  }
+
+  /// Builds a placeholder widget for unsupported or error cases
+  Widget _buildPlaceholder(double? width, double? height, String message) {
+    return SizedBox(
+      width: width,
+      height: height ?? 100,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Create custom components list with our safe HTag and optional interactive checkbox component
@@ -213,6 +355,7 @@ class _InteractiveCheckboxMarkdownState
       maxLines: widget.maxLines,
       overflow: widget.overflow,
       latexBuilder: _customLatexBuilder,
+      imageBuilder: _customImageBuilder,
       components: components,
     );
   }
