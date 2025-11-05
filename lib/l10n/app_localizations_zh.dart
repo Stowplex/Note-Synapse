@@ -103,7 +103,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupRequired => '需要设置';
 
   @override
-  String get setupRequiredDescription => '要使用AI功能，您需要来自Google AI Studio的Gemini API密钥。';
+  String get setupRequiredDescription =>
+      '要使用AI功能，您需要来自Google AI Studio的Gemini API密钥。';
 
   @override
   String get getApiKey => '获取API密钥';
@@ -183,7 +184,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToStartRecording => '开始录音失败。请检查麦克风权限。';
 
   @override
-  String get failedToStartRecordingLinux => '开始录音失败。请检查是否安装了gstreamer和PulseAudio。';
+  String get failedToStartRecordingLinux =>
+      '开始录音失败。请检查是否安装了gstreamer和PulseAudio。';
 
   @override
   String errorStartingRecording(Object error) {
@@ -1765,7 +1767,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelName => '模型名称';
 
   @override
-  String get modelNameDescription => '输入要使用的模型名称（例如：gpt-4、gpt-3.5-turbo、claude-3-sonnet）';
+  String get modelNameDescription =>
+      '输入要使用的模型名称（例如：gpt-4、gpt-3.5-turbo、claude-3-sonnet）';
 
   @override
   String get modelNameHint => 'gpt-4';
@@ -1843,10 +1846,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openaiCompatibleModelDescription => '兼容OpenAI API端点，具有可配置功能';
 
   @override
-  String get geminiModelDescriptionDetailed => 'Google最先进的模型，具有完整的多模态功能，包括文档理解。';
+  String get geminiModelDescriptionDetailed =>
+      'Google最先进的模型，具有完整的多模态功能，包括文档理解。';
 
   @override
-  String get openaiCompatibleModelDescriptionDetailed => '兼容OpenAI API端点。配置端点URL并选择支持的功能。';
+  String get openaiCompatibleModelDescriptionDetailed =>
+      '兼容OpenAI API端点。配置端点URL并选择支持的功能。';
 
   @override
   String get geminiApiKeyDescription => '从Google AI Studio获取您的API密钥';
@@ -2109,7 +2114,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get baseUrl => '基础URL';
 
   @override
-  String get baseUrlHint => 'https://api.example.com 或 https://server.smithery.ai/@user/server/mcp?api_key=xxx';
+  String get baseUrlHint =>
+      'https://api.example.com 或 https://server.smithery.ai/@user/server/mcp?api_key=xxx';
 
   @override
   String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
@@ -2504,7 +2510,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiNoteCreator => 'AI笔记创建器';
 
   @override
-  String get aiNoteCreatorInstructions => 'AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。';
+  String get aiNoteCreatorInstructions =>
+      'AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。';
 
   @override
   String get prompt => '提示';
@@ -2513,7 +2520,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get promptHint => '描述您希望AI执行的操作...';
 
   @override
-  String get promptTip => '提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。';
+  String get promptTip =>
+      '提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。';
 
   @override
   String additionalContextNotes(num count) {
@@ -2593,7 +2601,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webContentExtractionNotSupportedLinux => 'Linux不支持网页内容提取。';
 
   @override
-  String get pleaseUseOtherPlatformsForWebExtraction => '请使用Android、iOS或Web版本来提取网页内容。';
+  String get pleaseUseOtherPlatformsForWebExtraction =>
+      '请使用Android、iOS或Web版本来提取网页内容。';
 
   @override
   String get extractWebContent => '提取网页内容';
@@ -2852,7 +2861,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConversationCreator => 'AI对话创建器';
 
   @override
-  String get aiConversationCreatorInstructions => 'AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。';
+  String get aiConversationCreatorInstructions =>
+      'AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。';
 
   @override
   String get selectRelationshipType => '选择关系类型';

@@ -78,7 +78,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reset => 'Reset';
 
   @override
-  String get resetApiKeyConfirmation => 'This will clear your current API key and return you to the setup screen. Are you sure?';
+  String get resetApiKeyConfirmation =>
+      'This will clear your current API key and return you to the setup screen. Are you sure?';
 
   @override
   String get apiKeyUpdatedSuccessfully => 'API key updated successfully';
@@ -103,7 +104,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupRequired => 'Setup Required';
 
   @override
-  String get setupRequiredDescription => 'To use AI features, you need a Gemini API key from Google AI Studio.';
+  String get setupRequiredDescription =>
+      'To use AI features, you need a Gemini API key from Google AI Studio.';
 
   @override
   String get getApiKey => 'Get API Key';
@@ -115,7 +117,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get continueButton => 'Continue';
 
   @override
-  String get apiKeySecurityNote => 'Your API key is stored securely on your device and never shared.';
+  String get apiKeySecurityNote =>
+      'Your API key is stored securely on your device and never shared.';
 
   @override
   String get pleaseEnterApiKey => 'Please enter an API key';
@@ -174,16 +177,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newNoteFromClipboard => 'New Note from Clipboard';
 
   @override
-  String get newNoteFromClipboardSubtitle => 'Create note from clipboard content';
+  String get newNoteFromClipboardSubtitle =>
+      'Create note from clipboard content';
 
   @override
   String get recordingStarted => 'Recording started';
 
   @override
-  String get failedToStartRecording => 'Failed to start recording. Please check microphone permissions.';
+  String get failedToStartRecording =>
+      'Failed to start recording. Please check microphone permissions.';
 
   @override
-  String get failedToStartRecordingLinux => 'Failed to start recording. Please check if gstreamer and PulseAudio are installed.';
+  String get failedToStartRecordingLinux =>
+      'Failed to start recording. Please check if gstreamer and PulseAudio are installed.';
 
   @override
   String errorStartingRecording(Object error) {
@@ -260,7 +266,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordingTapStop => 'Recording... Tap stop when done';
 
   @override
-  String get recordingWillContinue => 'Recording will continue until you tap \"Stop Recording\"';
+  String get recordingWillContinue =>
+      'Recording will continue until you tap \"Stop Recording\"';
 
   @override
   String get startRecordingVoiceNote => 'Start recording your voice note';
@@ -442,19 +449,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transformNote => 'Transform Note';
 
   @override
-  String get transformNoteDescription => 'Rewrite, reorganize, or modify your note';
+  String get transformNoteDescription =>
+      'Rewrite, reorganize, or modify your note';
 
   @override
   String get createNewNotes => 'Create New Notes';
 
   @override
-  String get createNewNotesDescription => 'Generate new notes based on your prompt and context';
+  String get createNewNotesDescription =>
+      'Generate new notes based on your prompt and context';
 
   @override
-  String get transformNoteHint => 'Describe how you want to transform this note...';
+  String get transformNoteHint =>
+      'Describe how you want to transform this note...';
 
   @override
-  String get createNewNotesHint => 'Describe what new notes you want to create...';
+  String get createNewNotesHint =>
+      'Describe what new notes you want to create...';
 
   @override
   String get enterYourPrompt => 'Enter your prompt:';
@@ -668,7 +679,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteSubNote => 'Delete Sub-Note';
 
   @override
-  String get confirmDeleteSubNote => 'Are you sure you want to delete this sub-note?';
+  String get confirmDeleteSubNote =>
+      'Are you sure you want to delete this sub-note?';
 
   @override
   String get subNoteAddedSuccessfully => 'Sub-note added successfully!';
@@ -701,7 +713,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get completeBy => 'Complete By';
 
   @override
-  String get dateValidationError => 'Complete by date must be after scheduled date';
+  String get dateValidationError =>
+      'Complete by date must be after scheduled date';
 
   @override
   String get relationships => 'Relationships';
@@ -719,13 +732,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get removeRelationship => 'Remove Relationship';
 
   @override
-  String get confirmRemoveRelationship => 'Are you sure you want to remove this relationship?';
+  String get confirmRemoveRelationship =>
+      'Are you sure you want to remove this relationship?';
 
   @override
-  String get relationshipAddedSuccessfully => 'Relationship added successfully!';
+  String get relationshipAddedSuccessfully =>
+      'Relationship added successfully!';
 
   @override
-  String get relationshipRemovedSuccessfully => 'Relationship removed successfully!';
+  String get relationshipRemovedSuccessfully =>
+      'Relationship removed successfully!';
 
   @override
   String errorAddingRelationship(Object error) {
@@ -790,7 +806,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unsavedChanges => 'Unsaved changes';
 
   @override
-  String get confirmDiscardChanges => 'You have unsaved changes. Are you sure you want to discard them?';
+  String get confirmDiscardChanges =>
+      'You have unsaved changes. Are you sure you want to discard them?';
 
   @override
   String get yes => 'Yes';
@@ -921,10 +938,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noNotesWithSelectedTags => 'No notes with selected tags';
 
   @override
-  String get noTasksWithSelectedTagsForThisDay => 'No tasks with selected tags for this day';
+  String get noTasksWithSelectedTagsForThisDay =>
+      'No tasks with selected tags for this day';
 
   @override
-  String get noNotesWithSelectedTagsForThisDay => 'No notes with selected tags for this day';
+  String get noNotesWithSelectedTagsForThisDay =>
+      'No notes with selected tags for this day';
 
   @override
   String get trySelectingDifferentTags => 'Try selecting different tags';
@@ -1007,7 +1026,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareDialogTitle => 'Share Notes';
 
   @override
-  String get shareDialogDescription => 'Choose how you want to share the selected notes';
+  String get shareDialogDescription =>
+      'Choose how you want to share the selected notes';
 
   @override
   String get textCopiedToClipboard => 'Text copied to clipboard';
@@ -1244,7 +1264,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get dedupRulesExecutedSuccessfully => 'Dedup rules executed successfully!';
+  String get dedupRulesExecutedSuccessfully =>
+      'Dedup rules executed successfully!';
 
   @override
   String errorExecutingDedupRules(Object error) {
@@ -1260,13 +1281,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get confirmExecuteDedupRules => 'Are you sure you want to execute these dedup rules? This will replace all left tags with right tags and cannot be undone.';
+  String get confirmExecuteDedupRules =>
+      'Are you sure you want to execute these dedup rules? This will replace all left tags with right tags and cannot be undone.';
 
   @override
   String get dedupRuleLeftTagDuplicate => 'Left tag appears in multiple rules';
 
   @override
-  String get dedupRuleRightTagDuplicate => 'Right tag appears in multiple rules';
+  String get dedupRuleRightTagDuplicate =>
+      'Right tag appears in multiple rules';
 
   @override
   String get dedupRuleCircularReference => 'Circular reference detected';
@@ -1361,7 +1384,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get webViewNotSupported => 'WebView is not supported on Linux';
 
   @override
-  String get webViewNotSupportedDescription => 'User-defined apps require WebView which is not available on Linux platform';
+  String get webViewNotSupportedDescription =>
+      'User-defined apps require WebView which is not available on Linux platform';
 
   @override
   String get editApp => 'Edit App';
@@ -1544,7 +1568,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportApp => 'Export App';
 
   @override
-  String get exportAppDescription => 'Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.';
+  String get exportAppDescription =>
+      'Review and update the app information before exporting. The app will be saved as a YAML file that can be shared or imported by others.';
 
   @override
   String get nameRequired => 'Name is required';
@@ -1664,13 +1689,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errorYamlFilePathEmpty => 'Error: YAML file path is empty';
 
   @override
-  String get errorInvalidYamlFormat => 'Error: Invalid YAML format - expected a map';
+  String get errorInvalidYamlFormat =>
+      'Error: Invalid YAML format - expected a map';
 
   @override
-  String get errorMissingRequiredFields => 'Error: Missing required fields in YAML';
+  String get errorMissingRequiredFields =>
+      'Error: Missing required fields in YAML';
 
   @override
-  String get errorAppAlreadyExists => 'Error: App with this UUID already exists';
+  String get errorAppAlreadyExists =>
+      'Error: App with this UUID already exists';
 
   @override
   String errorCreatingApp(Object error) {
@@ -1765,7 +1793,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get apiEndpoint => 'API Endpoint';
 
   @override
-  String get apiEndpointDescription => 'Enter the OpenAI-compatible API endpoint URL';
+  String get apiEndpointDescription =>
+      'Enter the OpenAI-compatible API endpoint URL';
 
   @override
   String get endpointUrl => 'Endpoint URL';
@@ -1783,7 +1812,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelName => 'Model Name';
 
   @override
-  String get modelNameDescription => 'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)';
+  String get modelNameDescription =>
+      'Enter the model name to use (e.g., gpt-4, gpt-3.5-turbo, claude-3-sonnet)';
 
   @override
   String get modelNameHint => 'gpt-4';
@@ -1795,7 +1825,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get displayName => 'Display Name';
 
   @override
-  String get displayNameDescription => 'A custom name to display in the app for this model';
+  String get displayNameDescription =>
+      'A custom name to display in the app for this model';
 
   @override
   String get displayNameHint => 'My Custom Model';
@@ -1804,7 +1835,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tokenLimits => 'Token Limits';
 
   @override
-  String get tokenLimitsDescription => 'Configure the maximum input and output tokens for this model';
+  String get tokenLimitsDescription =>
+      'Configure the maximum input and output tokens for this model';
 
   @override
   String get maxInputTokens => 'Max Input Tokens';
@@ -1828,7 +1860,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelCapabilities => 'Model Capabilities';
 
   @override
-  String get modelCapabilitiesDescription => 'Select which capabilities this model supports';
+  String get modelCapabilitiesDescription =>
+      'Select which capabilities this model supports';
 
   @override
   String get imageProcessing => 'Image Processing';
@@ -1840,7 +1873,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get documentUnderstanding => 'Document Understanding';
 
   @override
-  String get documentUnderstandingDescription => 'Can process PDFs and documents';
+  String get documentUnderstandingDescription =>
+      'Can process PDFs and documents';
 
   @override
   String get audioProcessing => 'Audio Processing';
@@ -1855,22 +1889,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get videoProcessingDescription => 'Can analyze video content';
 
   @override
-  String get geminiModelDescription => 'Google\'s most advanced model with full multimodal capabilities';
+  String get geminiModelDescription =>
+      'Google\'s most advanced model with full multimodal capabilities';
 
   @override
-  String get openaiCompatibleModelDescription => 'Compatible with OpenAI API endpoints with configurable capabilities';
+  String get openaiCompatibleModelDescription =>
+      'Compatible with OpenAI API endpoints with configurable capabilities';
 
   @override
-  String get geminiModelDescriptionDetailed => 'Google\'s most advanced model with full multimodal capabilities including document understanding.';
+  String get geminiModelDescriptionDetailed =>
+      'Google\'s most advanced model with full multimodal capabilities including document understanding.';
 
   @override
-  String get openaiCompatibleModelDescriptionDetailed => 'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
+  String get openaiCompatibleModelDescriptionDetailed =>
+      'Compatible with OpenAI API endpoints. Configure the endpoint URL and select supported capabilities.';
 
   @override
-  String get geminiApiKeyDescription => 'Get your API key from Google AI Studio';
+  String get geminiApiKeyDescription =>
+      'Get your API key from Google AI Studio';
 
   @override
-  String get openaiCompatibleApiKeyDescription => 'Get your API key from your OpenAI-compatible service provider';
+  String get openaiCompatibleApiKeyDescription =>
+      'Get your API key from your OpenAI-compatible service provider';
 
   @override
   String errorConfiguringModel(Object error) {
@@ -1887,7 +1927,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportAllNotes => 'Export All Notes';
 
   @override
-  String get exportAllNotesDescription => 'Create a complete backup of all your notes and attachments';
+  String get exportAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments';
 
   @override
   String get exporting => 'Exporting...';
@@ -1905,7 +1946,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupAllNotes => 'Backup All Notes';
 
   @override
-  String get backupAllNotesDescription => 'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.';
+  String get backupAllNotesDescription =>
+      'Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.';
 
   @override
   String get creatingBackup => 'Creating Backup...';
@@ -1937,13 +1979,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get databaseFileNotFound => 'Database file not found';
 
   @override
-  String get attachmentsDirectoryCopiedSuccessfully => 'Attachments directory copied successfully';
+  String get attachmentsDirectoryCopiedSuccessfully =>
+      'Attachments directory copied successfully';
 
   @override
-  String get noAttachmentsDirectoryFound => 'No attachments directory found, creating empty one';
+  String get noAttachmentsDirectoryFound =>
+      'No attachments directory found, creating empty one';
 
   @override
-  String get updatingAttachmentPathsInCopiedDatabase => 'Updating attachment paths in copied database...';
+  String get updatingAttachmentPathsInCopiedDatabase =>
+      'Updating attachment paths in copied database...';
 
   @override
   String get databaseConsistencyVerified => 'Database consistency verified';
@@ -2012,7 +2057,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectBackupFile => 'Select Backup File';
 
   @override
-  String get selectBackupFileDescription => 'Choose a backup zip file to restore from';
+  String get selectBackupFileDescription =>
+      'Choose a backup zip file to restore from';
 
   @override
   String importFailed(Object error) {
@@ -2023,22 +2069,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invalidBackupFile => 'Invalid backup file format';
 
   @override
-  String get backupVersionTooNew => 'Backup is from a newer version of the app. Please update the app first.';
+  String get backupVersionTooNew =>
+      'Backup is from a newer version of the app. Please update the app first.';
 
   @override
   String get checkpointingDatabase => 'Checkpointing current database...';
 
   @override
-  String get copyingDatabaseToStaging => 'Copying database to staging directory...';
+  String get copyingDatabaseToStaging =>
+      'Copying database to staging directory...';
 
   @override
   String get extractingBackupFile => 'Extracting backup file...';
 
   @override
-  String get validatingBackupDatabase => 'Validating backup database version...';
+  String get validatingBackupDatabase =>
+      'Validating backup database version...';
 
   @override
-  String get migratingBackupDatabase => 'Migrating backup database to current version...';
+  String get migratingBackupDatabase =>
+      'Migrating backup database to current version...';
 
   @override
   String get mergingNotes => 'Merging notes...';
@@ -2074,7 +2124,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get undoBackupDescription => 'Restore the original database';
 
   @override
-  String get undoBackupConfirmation => 'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
+  String get undoBackupConfirmation =>
+      'Are you sure you want to undo the backup? This will restore your original database and lose any changes made since the import.';
 
   @override
   String get undoBackupCompleted => 'Backup undone successfully!';
@@ -2107,7 +2158,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mcpSettings => 'MCP Settings';
 
   @override
-  String get mcpSettingsSubtitle => 'Configure Model Context Protocol endpoints';
+  String get mcpSettingsSubtitle =>
+      'Configure Model Context Protocol endpoints';
 
   @override
   String errorLoadingEndpoints(Object error) {
@@ -2127,10 +2179,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get baseUrl => 'Base URL';
 
   @override
-  String get baseUrlHint => 'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx';
+  String get baseUrlHint =>
+      'https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx';
 
   @override
-  String get baseUrlHelperText => 'Include query params for auth if needed (e.g., Smithery)';
+  String get baseUrlHelperText =>
+      'Include query params for auth if needed (e.g., Smithery)';
 
   @override
   String get transportType => 'Transport Type';
@@ -2142,7 +2196,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bearerTokenHint => 'Leave empty if auth is in URL params';
 
   @override
-  String get bearerTokenHelperText => 'Optional: For header-based authentication';
+  String get bearerTokenHelperText =>
+      'Optional: For header-based authentication';
 
   @override
   String get pleaseProvideNameAndUrl => 'Please provide name and URL';
@@ -2219,13 +2274,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noMcpEndpointsConfigured => 'No MCP endpoints configured';
 
   @override
-  String get clickAddMcpEndpointToGetStarted => 'Click \"Add MCP Endpoint\" to get started';
+  String get clickAddMcpEndpointToGetStarted =>
+      'Click \"Add MCP Endpoint\" to get started';
 
   @override
   String get noteActionApp => 'Note Action App';
 
   @override
-  String get noteActionAppSubtitle => 'This type of app will operate specifically on pre-selected notes';
+  String get noteActionAppSubtitle =>
+      'This type of app will operate specifically on pre-selected notes';
 
   @override
   String get appType => 'Type';
@@ -2243,7 +2300,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTypeAiTool => 'AI Tool';
 
   @override
-  String get aiToolAppSubtitle => 'Expose custom JavaScript functions that the AI can call or you can test in a playground';
+  String get aiToolAppSubtitle =>
+      'Expose custom JavaScript functions that the AI can call or you can test in a playground';
 
   @override
   String get aiTools => 'AI Tools';
@@ -2254,22 +2312,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get aiToolMissingRevision => 'This AI tool does not have a selected revision yet.';
+  String get aiToolMissingRevision =>
+      'This AI tool does not have a selected revision yet.';
 
   @override
-  String get aiToolDefinitionParseError => 'The selected revision does not contain a valid AI tool specification.';
+  String get aiToolDefinitionParseError =>
+      'The selected revision does not contain a valid AI tool specification.';
 
   @override
   String get imageAttachmentsOptional => 'Image Attachments (Optional)';
 
   @override
-  String get imageAttachmentsSubtitle => 'Attach images to help explain what you want the AI to create';
+  String get imageAttachmentsSubtitle =>
+      'Attach images to help explain what you want the AI to create';
 
   @override
   String get addImage => 'Add Image';
 
   @override
-  String get noLibrariesAddedYet => 'No libraries added yet. Click \"Add Library\" to get started.';
+  String get noLibrariesAddedYet =>
+      'No libraries added yet. Click \"Add Library\" to get started.';
 
   @override
   String get conversation => 'Conversation';
@@ -2278,7 +2340,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConversation => 'AI Conversation';
 
   @override
-  String get aiConversationDescription => 'Start a conversation with AI about your notes';
+  String get aiConversationDescription =>
+      'Start a conversation with AI about your notes';
 
   @override
   String get startConversation => 'Start Conversation';
@@ -2415,10 +2478,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get missingNotes => 'Missing Notes';
 
   @override
-  String get missingNotesMessage => 'This conversation references notes that no longer exist:';
+  String get missingNotesMessage =>
+      'This conversation references notes that no longer exist:';
 
   @override
-  String get missingNotesWillCleanup => 'These references will be automatically cleaned up.';
+  String get missingNotesWillCleanup =>
+      'These references will be automatically cleaned up.';
 
   @override
   String get cleanUp => 'Clean Up';
@@ -2430,7 +2495,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get refreshTree => 'Refresh tree';
 
   @override
-  String get noConversationsFound => 'No conversations found. Start a new conversation to see the tree.';
+  String get noConversationsFound =>
+      'No conversations found. Start a new conversation to see the tree.';
 
   @override
   String get treeRefreshedSuccessfully => 'Tree refreshed successfully';
@@ -2441,16 +2507,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get selectInteractionToViewDetails => 'Select an interaction to view details';
+  String get selectInteractionToViewDetails =>
+      'Select an interaction to view details';
 
   @override
   String get deleteInteraction => 'Delete Interaction';
 
   @override
-  String get deleteInteractionConfirm => 'Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.';
+  String get deleteInteractionConfirm =>
+      'Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.';
 
   @override
-  String get interactionDeletedSuccessfully => 'Interaction deleted successfully';
+  String get interactionDeletedSuccessfully =>
+      'Interaction deleted successfully';
 
   @override
   String errorDeletingInteraction(Object error) {
@@ -2467,10 +2536,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteConversation => 'Delete Conversation';
 
   @override
-  String get confirmDeleteConversation => 'Are you sure you want to delete this conversation? This action cannot be undone.';
+  String get confirmDeleteConversation =>
+      'Are you sure you want to delete this conversation? This action cannot be undone.';
 
   @override
-  String get conversationDeletedSuccessfully => 'Conversation deleted successfully';
+  String get conversationDeletedSuccessfully =>
+      'Conversation deleted successfully';
 
   @override
   String errorDeletingConversation(Object error) {
@@ -2508,19 +2579,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addNoteDialogTitle => 'Add to Note';
 
   @override
-  String get addNoteDialogMessage => 'How would you like to add this content to your notes?';
+  String get addNoteDialogMessage =>
+      'How would you like to add this content to your notes?';
 
   @override
   String get addAsIs => 'Add as-is';
 
   @override
-  String get addAsIsDescription => 'Add the content directly without modification';
+  String get addAsIsDescription =>
+      'Add the content directly without modification';
 
   @override
   String get letAICreateNote => 'Let AI create note';
 
   @override
-  String get letAICreateNoteDescription => 'Use AI to summarize or transform the content';
+  String get letAICreateNoteDescription =>
+      'Use AI to summarize or transform the content';
 
   @override
   String get noteTitle => 'Note Title';
@@ -2540,7 +2614,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiNoteCreator => 'AI Note Creator';
 
   @override
-  String get aiNoteCreatorInstructions => 'The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.';
+  String get aiNoteCreatorInstructions =>
+      'The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.';
 
   @override
   String get prompt => 'Prompt';
@@ -2549,7 +2624,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get promptHint => 'Describe what you want the AI to do...';
 
   @override
-  String get promptTip => 'Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.';
+  String get promptTip =>
+      'Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.';
 
   @override
   String additionalContextNotes(num count) {
@@ -2557,7 +2633,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get noAdditionalNotesSelected => 'No additional notes selected. The AI will only use the conversation content.';
+  String get noAdditionalNotesSelected =>
+      'No additional notes selected. The AI will only use the conversation content.';
 
   @override
   String get proceed => 'Proceed';
@@ -2600,10 +2677,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatWouldYouLikeToDo => 'What would you like to do?';
 
   @override
-  String get createNewNoteWithThisContent => 'Create a new note with this content';
+  String get createNewNoteWithThisContent =>
+      'Create a new note with this content';
 
   @override
-  String get addThisContentToExistingNote => 'Add this content to an existing note';
+  String get addThisContentToExistingNote =>
+      'Add this content to an existing note';
 
   @override
   String get selectNote => 'Select a note...';
@@ -2626,10 +2705,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get availableTags => 'Available tags:';
 
   @override
-  String get webContentExtractionNotSupportedLinux => 'Web content extraction is not supported on Linux.';
+  String get webContentExtractionNotSupportedLinux =>
+      'Web content extraction is not supported on Linux.';
 
   @override
-  String get pleaseUseOtherPlatformsForWebExtraction => 'Please use Android, iOS, or Web to extract web content.';
+  String get pleaseUseOtherPlatformsForWebExtraction =>
+      'Please use Android, iOS, or Web to extract web content.';
 
   @override
   String get extractWebContent => 'Extract Web Content';
@@ -2638,7 +2719,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get extracting => 'Extracting...';
 
   @override
-  String get extractContentUsingAiForBetterResults => 'Extract content using AI for better results';
+  String get extractContentUsingAiForBetterResults =>
+      'Extract content using AI for better results';
 
   @override
   String get extractWithAi => 'Extract with AI (Slower)';
@@ -2715,7 +2797,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get failedToExtractContentFromWebPage => 'Failed to extract content from the web page';
+  String get failedToExtractContentFromWebPage =>
+      'Failed to extract content from the web page';
 
   @override
   String get processingWithAi => 'Processing with AI...';
@@ -2818,7 +2901,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get usePkceNoClientSecret => 'Use PKCE (no client secret)';
 
   @override
-  String get oauthDiscoveryMetadataUrlOptional => 'OAuth Discovery Page: Metadata URL (optional)';
+  String get oauthDiscoveryMetadataUrlOptional =>
+      'OAuth Discovery Page: Metadata URL (optional)';
 
   @override
   String get discover => 'Discover';
@@ -2836,7 +2920,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metadataUrlOptional => 'Metadata URL (optional)';
 
   @override
-  String get metadataUrlOptionalHint => 'Leave blank to auto-detect using RFC 9728';
+  String get metadataUrlOptionalHint =>
+      'Leave blank to auto-detect using RFC 9728';
 
   @override
   String get oauthDiscovery => 'OAuth Discovery';
@@ -2848,25 +2933,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addConversationDialogTitle => 'Add Conversation';
 
   @override
-  String get addConversationDialogMessage => 'How would you like to create this conversation?';
+  String get addConversationDialogMessage =>
+      'How would you like to create this conversation?';
 
   @override
   String get addDirectly => 'Add directly';
 
   @override
-  String get addDirectlyDescription => 'Create the conversation directly with selected nodes as context';
+  String get addDirectlyDescription =>
+      'Create the conversation directly with selected nodes as context';
 
   @override
   String get addWithAIProcessing => 'Add with AI processing';
 
   @override
-  String get addWithAIProcessingDescription => 'Use AI to process the content first (e.g., summarize) then create the conversation';
+  String get addWithAIProcessingDescription =>
+      'Use AI to process the content first (e.g., summarize) then create the conversation';
 
   @override
   String get conversationTitle => 'Conversation Title';
 
   @override
-  String get enterConversationTitlePrompt => 'Enter a title for the new conversation:';
+  String get enterConversationTitlePrompt =>
+      'Enter a title for the new conversation:';
 
   @override
   String get conversationTitleHint => 'Conversation title';
@@ -2888,7 +2977,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConversationCreator => 'AI Conversation Creator';
 
   @override
-  String get aiConversationCreatorInstructions => 'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.';
+  String get aiConversationCreatorInstructions =>
+      'The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.';
 
   @override
   String get selectRelationshipType => 'Select Relationship Type';
