@@ -529,15 +529,16 @@ class OpenAIModel implements AIModel {
       final data = jsonDecode(response.body);
       if (data['choices'] != null && data['choices'].isNotEmpty) {
         final choice = data['choices'][0];
-        final content = choice['message']['content'];
+        final rawContent = choice['message']['content'];
+        final textContent = _extractTextContent(rawContent);
 
-        if (content != null) {
+        if (textContent != null && textContent.isNotEmpty) {
           LoggerService.debug('OpenAI API request completed successfully', error: {
-            'responseLength': content.length,
+            'responseLength': textContent.length,
             'requestId': requestId,
             'duration': '${duration.inMilliseconds}ms',
           });
-          return content;
+          return textContent;
         }
       }
       LoggerService.error('No content in OpenAI API response', error: {

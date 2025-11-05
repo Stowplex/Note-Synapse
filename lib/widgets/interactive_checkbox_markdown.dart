@@ -436,7 +436,7 @@ class _InteractiveCheckboxMarkdownState
           fit: true,
           center: true,
           minZoom: 0.1,
-          maxZoom: 10,
+          maxZoom: 15,
           zoomScaleSensitivity: 0.3,
           dblClickZoomEnabled: true,
           mouseWheelZoomEnabled: true,

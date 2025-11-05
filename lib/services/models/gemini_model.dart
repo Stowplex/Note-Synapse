@@ -517,16 +517,32 @@ class GeminiModel implements AIModel {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
 
-        if (content != null &&
-            content['parts'] != null &&
-            content['parts'].isNotEmpty) {
-          final responseText = content['parts'][0]['text'];
-          LoggerService.debug('Gemini API request completed successfully', error: {
-            'responseLength': responseText.length,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-          return responseText;
+        if (content is Map<String, dynamic>) {
+          final parts = content['parts'];
+          if (parts is List && parts.isNotEmpty) {
+            final buffer = StringBuffer();
+
+            for (final part in parts) {
+              if (part is Map<String, dynamic>) {
+                final text = part['text'];
+                if (text is String && text.isNotEmpty) {
+                  buffer.write(text);
+                }
+              } else if (part is String && part.isNotEmpty) {
+                buffer.write(part);
+              }
+            }
+
+            final responseText = buffer.toString();
+            if (responseText.isNotEmpty) {
+              LoggerService.debug('Gemini API request completed successfully', error: {
+                'responseLength': responseText.length,
+                'requestId': actualRequestId,
+                'duration': '${duration.inMilliseconds}ms',
+              });
+              return responseText;
+            }
+          }
         }
       }
       LoggerService.error('No content in Gemini API response', error: {
@@ -638,33 +654,46 @@ class GeminiModel implements AIModel {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
 
-        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-          final parts = content['parts'] as List;
-          
-          // Check for function calls
-          final functionCalls = <Map<String, dynamic>>[];
-          String? textResponse;
+        if (content is Map<String, dynamic>) {
+          final parts = content['parts'];
+          if (parts is List && parts.isNotEmpty) {
+            final functionCalls = <Map<String, dynamic>>[];
+            final textBuffer = StringBuffer();
 
-          for (final part in parts) {
-            if (part.containsKey('functionCall')) {
-              functionCalls.add(part['functionCall'] as Map<String, dynamic>);
-            } else if (part.containsKey('text')) {
-              textResponse = part['text'];
+            for (final part in parts) {
+              if (part is Map<String, dynamic>) {
+                if (part.containsKey('functionCall')) {
+                  final fnCall = part['functionCall'];
+                  if (fnCall is Map<String, dynamic>) {
+                    functionCalls.add(fnCall);
+                  }
+                  continue;
+                }
+
+                final text = part['text'];
+                if (text is String && text.isNotEmpty) {
+                  textBuffer.write(text);
+                }
+              } else if (part is String && part.isNotEmpty) {
+                textBuffer.write(part);
+              }
             }
+
+            final textResponse = textBuffer.toString();
+
+            LoggerService.debug('Gemini API request completed', error: {
+              'hasFunctionCalls': functionCalls.isNotEmpty,
+              'hasText': textResponse.isNotEmpty,
+              'requestId': actualRequestId,
+              'duration': '${duration.inMilliseconds}ms',
+            });
+
+            return {
+              'text': textResponse.isEmpty ? null : textResponse,
+              'function_calls': functionCalls.isEmpty ? null : functionCalls,
+              'raw_data': data,
+            };
           }
-
-          LoggerService.debug('Gemini API request completed', error: {
-            'hasFunctionCalls': functionCalls.isNotEmpty,
-            'hasText': textResponse != null,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-
-          return {
-            'text': textResponse,
-            'function_calls': functionCalls.isEmpty ? null : functionCalls,
-            'raw_data': data,
-          };
         }
       }
       LoggerService.error('No content in Gemini API response', error: {
