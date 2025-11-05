@@ -217,6 +217,38 @@ class _InteractiveCheckboxMarkdownState
           final mime = tempFile.mimeType.toLowerCase();
 
           if (mime == 'image/svg+xml') {
+            // For SVG, when height is null, we need to prevent excessive vertical expansion.
+            // Unlike Image widgets that naturally constrain based on their decoded dimensions,
+            // SVG can have very large or unbounded intrinsic sizes.
+            if (height == null && width != null) {
+              // When only width is specified, constrain the SVG tightly to prevent vertical expansion
+              return SizedBox(
+                width: width,
+                child: SvgPicture.memory(
+                  tempFile.bytes,
+                  fit: BoxFit.contain,
+                  width: width,
+                  placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
+                ),
+              );
+            } else if (height == null && width == null) {
+              // When neither is specified, use LayoutBuilder to constrain based on available space
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
+                  return SizedBox(
+                    width: availableWidth,
+                    child: SvgPicture.memory(
+                      tempFile.bytes,
+                      fit: BoxFit.contain,
+                      width: availableWidth,
+                      placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
+                    ),
+                  );
+                },
+              );
+            }
+            // When height is provided, use SizedBox with explicit dimensions
             return SizedBox(
               width: width,
               height: height,
@@ -273,6 +305,38 @@ class _InteractiveCheckboxMarkdownState
 
         if (mimetype.toLowerCase() == 'image/svg+xml') {
           final svgData = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+          // For SVG, when height is null, we need to prevent excessive vertical expansion.
+          // Unlike Image widgets that naturally constrain based on their decoded dimensions,
+          // SVG can have very large or unbounded intrinsic sizes.
+          if (height == null && width != null) {
+            // When only width is specified, constrain the SVG tightly to prevent vertical expansion
+            return SizedBox(
+              width: width,
+              child: SvgPicture.string(
+                svgData,
+                fit: BoxFit.contain,
+                width: width,
+                placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
+              ),
+            );
+          } else if (height == null && width == null) {
+            // When neither is specified, use LayoutBuilder to constrain based on available space
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
+                return SizedBox(
+                  width: availableWidth,
+                  child: SvgPicture.string(
+                    svgData,
+                    fit: BoxFit.contain,
+                    width: availableWidth,
+                    placeholderBuilder: (context) => _buildLoadingPlaceholder(width, height),
+                  ),
+                );
+              },
+            );
+          }
+          // When height is provided, use SizedBox with explicit dimensions
           return SizedBox(
             width: width,
             height: height,
