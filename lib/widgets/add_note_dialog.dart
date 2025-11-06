@@ -1,42 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import '../models/add_note_result.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../screens/note_selection_dialog.dart';
 import 'ai_note_creator_dialog.dart';
 
-/// Dialog for choosing how to add a note from conversation messages
-/// Options: Add as-is or Let AI create note
-class AddNoteDialog extends StatelessWidget {
+/// Dialog for choosing how to add or append a note from conversation messages
+class AddNoteDialog extends StatefulWidget {
   final String content;
   final List<Note> contextNotes;
-  
+
   const AddNoteDialog({
     super.key,
     required this.content,
     this.contextNotes = const [],
   });
-  
-  /// Show the dialog and return the created note(s) if any
-  static Future<List<Note>?> show({
+
+  /// Show the dialog and return the resulting action if any
+  static Future<AddNoteResult?> show({
     required BuildContext context,
     required String content,
     List<Note> contextNotes = const [],
   }) async {
-    return await showDialog<List<Note>?>(
+    return await showDialog<AddNoteResult?>(
       context: context,
-      builder: (context) => AddNoteDialog(
+      builder: (dialogContext) => AddNoteDialog(
         content: content,
         contextNotes: contextNotes,
       ),
     );
   }
-  
+
+  @override
+  State<AddNoteDialog> createState() => _AddNoteDialogState();
+}
+
+class _AddNoteDialogState extends State<AddNoteDialog> {
+  Note? _appendTarget;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return AlertDialog(
       title: Text(l10n.addNoteDialogTitle),
       content: Column(
@@ -45,12 +53,14 @@ class AddNoteDialog extends StatelessWidget {
         children: [
           Text(l10n.addNoteDialogMessage),
           const SizedBox(height: 16),
+          _buildAppendSelection(l10n),
+          const SizedBox(height: 16),
           _buildOptionCard(
             context: context,
             icon: Icons.note_add,
             title: l10n.addAsIs,
             description: l10n.addAsIsDescription,
-            onTap: () => _addAsIs(context),
+            onTap: _addAsIs,
           ),
           const SizedBox(height: 12),
           _buildOptionCard(
@@ -58,7 +68,7 @@ class AddNoteDialog extends StatelessWidget {
             icon: Icons.psychology,
             title: l10n.letAICreateNote,
             description: l10n.letAICreateNoteDescription,
-            onTap: () => _letAICreate(context),
+            onTap: _letAICreate,
           ),
         ],
       ),
@@ -70,7 +80,82 @@ class AddNoteDialog extends StatelessWidget {
       ],
     );
   }
-  
+
+  Widget _buildAppendSelection(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final hasSelection = _appendTarget != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l10n.appendToNote,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: _selectAppendNote,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasSelection
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outline.withOpacity(0.3),
+              ),
+              color: hasSelection
+                  ? theme.colorScheme.primaryContainer.withOpacity(0.4)
+                  : theme.colorScheme.surface,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasSelection ? Icons.note_alt : Icons.add,
+                  color: hasSelection
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    hasSelection
+                        ? _appendTarget!.title
+                        : l10n.pleaseSelectNoteToAppend,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: hasSelection
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (hasSelection) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: l10n.clearFilters,
+                    splashRadius: 18,
+                    onPressed: _clearAppendTarget,
+                  ),
+                ] else
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildOptionCard({
     required BuildContext context,
     required IconData icon,
@@ -114,8 +199,11 @@ class AddNoteDialog extends StatelessWidget {
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                      ),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.7),
+                          ),
                     ),
                   ],
                 ),
@@ -131,12 +219,16 @@ class AddNoteDialog extends StatelessWidget {
       ),
     );
   }
-  
-  Future<void> _addAsIs(BuildContext context) async {
+
+  Future<void> _addAsIs() async {
+    if (_appendTarget != null) {
+      await _appendContentToExistingNote(_appendTarget!);
+      return;
+    }
+
     final l10n = AppLocalizations.of(context)!;
-    
-    // Show title input dialog (don't close the main dialog yet)
     final titleController = TextEditingController();
+
     final title = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -173,78 +265,164 @@ class AddNoteDialog extends StatelessWidget {
         ],
       ),
     );
-    
-    // If user cancelled the title dialog, close the main dialog without creating a note
+
+    if (!mounted) return;
+
     if (title == null || title.isEmpty) {
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
+      Navigator.of(context).pop();
       return;
     }
-    
+
     try {
-      // Get the AppProvider reference before any async operations
       final appProvider = context.read<AppProvider>();
-      
-      // Create the note
+
       final newNote = Note(
         id: const Uuid().v4(),
         title: title,
-        content: content,
+        content: widget.content,
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        subNotes: [],
-        tags: [],
-        attachmentPaths: [],
+        subNotes: const [],
+        tags: const [],
+        attachmentPaths: const [],
         scheduledAt: null,
         completeBy: null,
         status: null,
         pinned: false,
         isArchived: false,
       );
-      
-      // Save to database
+
       await appProvider.addNote(newNote);
-      
-      if (context.mounted) {
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.noteCreatedSuccessfully(title)),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Close the main dialog and return the created note to the caller
-        Navigator.of(context).pop([newNote]);
-      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.noteCreatedSuccessfully(title)),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pop(AddNoteResult.created([newNote]));
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.errorCreatingNote(e.toString())),
-            backgroundColor: Colors.red,
-          ),
-        );
-        // Close the main dialog without returning anything on error
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorCreatingNote(e.toString())),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.of(context).pop();
     }
   }
-  
-  Future<void> _letAICreate(BuildContext context) async {
-    // Show AI note creator dialog (don't close the main dialog yet)
-    final createdNotes = await AINoteCreatorDialog.show(
-      context: context,
-      conversationContent: content,
-      contextNotes: contextNotes,
-    );
-    
-    // Close the main dialog and return the created notes to the caller
-    if (context.mounted) {
-      Navigator.of(context).pop(createdNotes);
+
+  Future<void> _appendContentToExistingNote(Note target) async {
+    final l10n = AppLocalizations.of(context)!;
+
+    try {
+      final appProvider = context.read<AppProvider>();
+
+      final existingNote = appProvider.notes.firstWhere(
+        (note) => note.id == target.id,
+        orElse: () => target,
+      );
+
+      final combinedContent = _combineContent(existingNote.content, widget.content);
+
+      final updatedNote = existingNote.copyWith(
+        content: combinedContent,
+        updatedAt: DateTime.now(),
+      );
+
+      await appProvider.updateNote(updatedNote);
+
+      if (!mounted) return;
+
+      final refreshedNote = appProvider.notes.firstWhere(
+        (note) => note.id == updatedNote.id,
+        orElse: () => updatedNote,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pop(AddNoteResult.appended(refreshedNote));
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorUpdatingNote(e.toString())),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _letAICreate() async {
+    final result = await AINoteCreatorDialog.show(
+      context: context,
+      conversationContent: widget.content,
+      contextNotes: widget.contextNotes,
+      appendTarget: _appendTarget,
+    );
+
+    if (!mounted) return;
+
+    Navigator.of(context).pop(result);
+  }
+
+  Future<void> _selectAppendNote() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final selectedNotes = await showDialog<List<Note>>(
+      context: context,
+      builder: (dialogContext) => NoteSelectionDialog(
+        onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+        title: l10n.selectNoteToAppend,
+        singleSelection: true,
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (selectedNotes == null || selectedNotes.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _appendTarget = selectedNotes.first;
+    });
+  }
+
+  void _clearAppendTarget() {
+    setState(() {
+      _appendTarget = null;
+    });
+  }
+
+  String _combineContent(String existing, String addition) {
+    final existingTrimmed = existing.trimRight();
+    final additionTrimmed = addition.trim();
+
+    if (existingTrimmed.isEmpty) {
+      return additionTrimmed;
+    }
+
+    if (additionTrimmed.isEmpty) {
+      return existingTrimmed;
+    }
+
+    return '$existingTrimmed\n\n$additionTrimmed';
   }
 }
 

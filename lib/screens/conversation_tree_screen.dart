@@ -12,6 +12,7 @@ import '../widgets/add_note_dialog.dart';
 import '../widgets/add_conversation_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import 'note_detail_screen.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
@@ -560,14 +561,39 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       final contextNotes = await _collectContextNotesFromNodes();
 
       // Show the unified add note dialog
-      final createdNotes = await AddNoteDialog.show(
+      final result = await AddNoteDialog.show(
         context: currentContext,
         content: conversationContent,
         contextNotes: contextNotes,
       );
 
-      // If notes were created, show success message
-      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+      if (!mounted || result == null) return;
+
+      if (result.isAppend) {
+        final appendedNote = result.appendedNote!;
+        ScaffoldMessenger.of(currentContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
+            ),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: l10n.view,
+              onPressed: () {
+                Navigator.of(currentContext).push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(note: appendedNote),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (result.hasCreatedNotes) {
+        final createdNotes = result.createdNotes;
         ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
             content: Text(

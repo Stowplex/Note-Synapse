@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import '../models/add_note_result.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -13,25 +14,29 @@ import '../screens/note_selection_dialog.dart';
 class AINoteCreatorDialog extends StatefulWidget {
   final String conversationContent;
   final List<Note> contextNotes;
+  final Note? appendTarget;
   
   const AINoteCreatorDialog({
     super.key,
     required this.conversationContent,
     this.contextNotes = const [],
+    this.appendTarget,
   });
   
-  /// Show the dialog and return the created notes if any
-  static Future<List<Note>?> show({
+  /// Show the dialog and return the result if any
+  static Future<AddNoteResult?> show({
     required BuildContext context,
     required String conversationContent,
     List<Note> contextNotes = const [],
+    Note? appendTarget,
   }) async {
-    return await showDialog<List<Note>?>(
+    return await showDialog<AddNoteResult?>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AINoteCreatorDialog(
         conversationContent: conversationContent,
         contextNotes: contextNotes,
+        appendTarget: appendTarget,
       ),
     );
   }
@@ -448,68 +453,158 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
   
   Future<void> _proceed() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (_promptController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.pleaseEnterPrompt)),
       );
       return;
     }
-    
+
     setState(() {
       _isProcessing = true;
     });
-    
+
     try {
-      // Build the complete prompt with conversation content
       final fullPrompt = '''
 ${_promptController.text.trim()}
 
 Conversation content to process:
 ${widget.conversationContent}
 ''';
-      
-      // Use the app provider to create notes
+
       final appProvider = context.read<AppProvider>();
+      final appendTarget = widget.appendTarget;
+
       final createdNotes = await appProvider.createNewNotes(
         fullPrompt,
         _selectedNotes,
         attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+        persist: appendTarget == null,
       );
-      
-      if (mounted) {
-        final l10n = AppLocalizations.of(context)!;
+
+      if (!mounted) return;
+
+      if (appendTarget != null) {
+        final appendContent = _formatGeneratedNotesForAppend(createdNotes);
+
+        if (appendContent.trim().isEmpty) {
+          throw Exception('No content generated to append.');
+        }
+
+        final updatedNote = await _appendGeneratedContentToNote(
+          appendTarget,
+          appendContent,
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              createdNotes.length == 1
-                  ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
-                  : l10n.multipleNotesCreatedSuccessfully(createdNotes.length)
+              '${l10n.contentAppendedSuccessfully} "${updatedNote.title}"',
             ),
             backgroundColor: Colors.green,
           ),
         );
-        
-        // Return the created notes
-        Navigator.of(context).pop(createdNotes);
+
+        Navigator.of(context).pop(AddNoteResult.appended(updatedNote));
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-        
-        final l10n = AppLocalizations.of(context)!;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.errorCreatingNote(e.toString())),
-            backgroundColor: Colors.red,
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            createdNotes.length == 1
+                ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
+                : l10n.multipleNotesCreatedSuccessfully(createdNotes.length),
           ),
-        );
-      }
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pop(AddNoteResult.created(createdNotes));
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorCreatingNote(e.toString())),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
   
+  Future<Note> _appendGeneratedContentToNote(Note target, String addition) async {
+    final appProvider = context.read<AppProvider>();
+
+    final existingNote = appProvider.notes.firstWhere(
+      (note) => note.id == target.id,
+      orElse: () => target,
+    );
+
+    final combinedContent = _combineContent(existingNote.content, addition);
+
+    final updatedNote = existingNote.copyWith(
+      content: combinedContent,
+      updatedAt: DateTime.now(),
+    );
+
+    await appProvider.updateNote(updatedNote);
+
+    final refreshedNote = appProvider.notes.firstWhere(
+      (note) => note.id == updatedNote.id,
+      orElse: () => updatedNote,
+    );
+
+    return refreshedNote;
+  }
+
+  String _formatGeneratedNotesForAppend(List<Note> notes) {
+    if (notes.isEmpty) {
+      return '';
+    }
+
+    final segments = <String>[];
+
+    for (final note in notes) {
+      final title = note.title.trim();
+      final content = note.content.trim();
+
+      if (title.isEmpty && content.isEmpty) {
+        continue;
+      }
+
+      if (title.isNotEmpty && content.isNotEmpty) {
+        segments.add('**$title**\n\n$content');
+      } else if (title.isNotEmpty) {
+        segments.add('**$title**');
+      } else {
+        segments.add(content);
+      }
+    }
+
+    return segments.join('\n\n');
+  }
+
+  String _combineContent(String existing, String addition) {
+    final existingTrimmed = existing.trimRight();
+    final additionTrimmed = addition.trim();
+
+    if (existingTrimmed.isEmpty) {
+      return additionTrimmed;
+    }
+
+    if (additionTrimmed.isEmpty) {
+      return existingTrimmed;
+    }
+
+    return '$existingTrimmed\n\n$additionTrimmed';
+  }
+
   IconData _getFileIcon(String? extension) {
     if (extension == null) return Icons.insert_drive_file;
     

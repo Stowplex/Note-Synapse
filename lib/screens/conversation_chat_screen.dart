@@ -1368,15 +1368,40 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Future<void> _addResponseToNote(String responseContent) async {
     try {
-      // Show the unified add note dialog
-      final createdNotes = await AddNoteDialog.show(
+      final l10n = AppLocalizations.of(context)!;
+      final result = await AddNoteDialog.show(
         context: context,
         content: responseContent,
         contextNotes: _notes,
       );
 
-      // If notes were created through AI, show success message with view action
-      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+      if (!mounted || result == null) return;
+
+      if (result.isAppend) {
+        final appendedNote = result.appendedNote!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
+            ),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(note: appendedNote),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (result.hasCreatedNotes) {
+        final createdNotes = result.createdNotes;
         final firstNote = createdNotes.first;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1389,7 +1414,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             action: SnackBarAction(
               label: 'View',
               onPressed: () {
-                // Navigate to the first created note
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => NoteDetailScreen(note: firstNote),

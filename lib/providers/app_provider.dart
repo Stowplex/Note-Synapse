@@ -329,6 +329,7 @@ class AppProvider extends ChangeNotifier {
     String prompt,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
+    bool persist = true,
   }) async {
     try {
       final newNotes = await AIService.createNewNotes(
@@ -336,6 +337,10 @@ class AppProvider extends ChangeNotifier {
         contextNotes,
         attachedFiles: attachedFiles,
       );
+
+      if (!persist) {
+        return newNotes;
+      }
 
       // Save all new notes and reload them from database
       final List<Note> addedNotes = [];
