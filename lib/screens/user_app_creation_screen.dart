@@ -630,6 +630,8 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                             hintText: '${l10n.stepHint} ${index + 1}',
                             border: const OutlineInputBorder(),
                           ),
+                          maxLines: 3,
+                          keyboardType: TextInputType.multiline,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Step cannot be empty';
