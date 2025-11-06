@@ -15,6 +15,7 @@ import '../widgets/interactive_checkbox_markdown.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
+
   /// When true, activeConversationIds are used to filter the tree (from note detail view)
   /// When false, activeConversationIds are only used for highlighting (from conversation view)
   final bool filterByActiveConversations;
@@ -53,10 +54,49 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     super.initState();
     // Set highlighted conversation from widget parameter
     // Only highlight if NOT filtering (when filtering, we don't want highlights)
-    if (widget.activeConversationIds != null && !widget.filterByActiveConversations) {
+    if (widget.activeConversationIds != null &&
+        !widget.filterByActiveConversations) {
       _highlightedConversationIds = widget.activeConversationIds!;
     }
-    _loadTree();
+    _initializeTree();
+  }
+
+  Future<void> _initializeTree() async {
+    await _ensureActiveConversationVisibility();
+    await _loadTree();
+  }
+
+  Future<void> _ensureActiveConversationVisibility() async {
+    if (!mounted) return;
+    if (widget.filterByActiveConversations) return;
+    final activeIds = widget.activeConversationIds;
+    if (activeIds == null || activeIds.isEmpty) return;
+
+    Duration requiredRange = _selectedTimeRange;
+    final now = DateTime.now();
+
+    for (final conversationId in activeIds) {
+      final conversation = await _databaseService.getConversation(
+        conversationId,
+      );
+      if (conversation == null) continue;
+
+      final ageSinceUpdate = now.difference(conversation.updatedAt);
+      if (ageSinceUpdate.isNegative) {
+        continue;
+      }
+
+      final desiredRange = ageSinceUpdate + const Duration(hours: 3);
+      if (desiredRange > requiredRange) {
+        requiredRange = desiredRange;
+      }
+    }
+
+    if (requiredRange > _selectedTimeRange && mounted) {
+      setState(() {
+        _selectedTimeRange = requiredRange;
+      });
+    }
   }
 
   @override
@@ -99,10 +139,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     try {
       // If filterByActiveConversations is true, use activeConversationIds as a filter
       // This overrides the default time range and tag filters
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
-      
+
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
@@ -166,10 +207,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       // If filterByActiveConversations is true, use activeConversationIds as a filter
       // This overrides the default time range and tag filters
       // Don't clear the filter when clearHighlight is false (automatic refresh)
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
-      
+
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
@@ -436,14 +478,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         try {
           ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
-              content: Text(l10n.conversationCreatedSuccessfully(newConversation.title)),
+              content: Text(
+                l10n.conversationCreatedSuccessfully(newConversation.title),
+              ),
               backgroundColor: Colors.green,
             ),
           );
         } catch (_) {
           // Context may have been deactivated, skip snackbar
         }
-        
+
         // Clear selected nodes and exit multi-select mode
         setState(() {
           _selectedNodes.clear();
@@ -555,52 +599,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   /// Build conversation content from selected nodes
   Future<String> _buildConversationContentFromNodes() async {
     if (_tree == null || _selectedNodes.isEmpty) return '';
+    final snippets = await _conversationService.buildInteractionSnippets(
+      existingTree: _tree!,
+      nodeIds: _selectedNodes,
+    );
 
-    final conversationIds = <String>{};
-
-    for (final nodeId in _selectedNodes) {
-      final node = _tree!.nodes[nodeId];
-      if (node != null && node.conversationId.isNotEmpty) {
-        conversationIds.add(node.conversationId);
-      }
-    }
-
-    if (conversationIds.isEmpty) {
-      return '';
-    }
-
-    // Build context messages from conversations
-    final contextMessages = <String>[];
-
-    for (final sourceConvId in conversationIds) {
-      final messages = await _databaseService.getConversationMessages(
-        sourceConvId,
-      );
-      if (messages.isNotEmpty) {
-        // Add a header for this conversation's context
-        contextMessages.add(
-          '--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---',
-        );
-
-        // Add key messages (first few and last few)
-        final keyMessages = <ConversationMessage>[];
-        if (messages.length <= 4) {
-          keyMessages.addAll(messages);
-        } else {
-          // First 2 and last 2 messages
-          keyMessages.addAll(messages.take(2));
-          keyMessages.addAll(messages.skip(messages.length - 2));
-        }
-
-        for (final message in keyMessages) {
-          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-          contextMessages.add('$prefix${message.content}');
-        }
-        contextMessages.add(''); // Empty line between conversations
-      }
-    }
-
-    return contextMessages.join('\n');
+    return _conversationService.formatInteractionSnippets(snippets);
   }
 
   /// Collect context notes from selected nodes
@@ -641,7 +645,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
 
     if (_tree == null) {
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
       return Scaffold(
@@ -1274,7 +1279,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                                         ? null
                                         : TextOverflow.ellipsis,
                                   )
-                                : InteractiveCheckboxMarkdown(originalContent: message.content),
+                                : InteractiveCheckboxMarkdown(
+                                    originalContent: message.content,
+                                  ),
                           ],
                         ),
                       ),
@@ -1501,7 +1508,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            InteractiveCheckboxMarkdown(originalContent: aiMessage.content),
+                            InteractiveCheckboxMarkdown(
+                              originalContent: aiMessage.content,
+                            ),
                           ],
                         ),
                       ),

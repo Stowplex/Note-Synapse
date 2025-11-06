@@ -20,27 +20,37 @@ class ForkService {
   }) async {
     try {
       // Prepare context selection
-      final selection = await _conversationService.prepareForkContextSelection(forkFromMessageId);
-      
-      LoggerService.info('Fork context selection prepared: ${selection.availableContexts.length} contexts found');
-      
+      final selection = await _conversationService.prepareForkContextSelection(
+        forkFromMessageId,
+      );
+
+      LoggerService.info(
+        'Fork context selection prepared: ${selection.availableContexts.length} contexts found',
+      );
+
       // If no conflicts, use the first (and only) context
       if (!selection.requiresUserSelection) {
-        final context = selection.availableContexts.first;
+        final context =
+            selection.selectedContext ??
+            (selection.availableContexts.isNotEmpty
+                ? selection.availableContexts.first
+                : null);
+        if (context == null) {
+          return null;
+        }
         return await _conversationService.forkConversationWithContext(
           forkFromMessageId: forkFromMessageId,
           selectedContext: context,
           newTitle: suggestedTitle ?? 'Fork from ${context.title}',
         );
       }
-      
+
       // Show selection dialog for conflicting contexts
       return await _showContextSelectionDialog(
         context: context,
         selection: selection,
         suggestedTitle: suggestedTitle,
       );
-      
     } catch (e) {
       LoggerService.error('Error during fork: $e', error: e);
       _showErrorDialog(context, 'Failed to fork conversation: $e');
@@ -103,23 +113,26 @@ class ForkService {
     required String newTitle,
   }) async {
     try {
-      final selection = await _conversationService.prepareForkContextSelection(forkFromMessageId);
-      
+      final selection = await _conversationService.prepareForkContextSelection(
+        forkFromMessageId,
+      );
+
       if (selection.availableContexts.isEmpty) {
         throw Exception('No conversations found containing this message');
       }
-      
+
       if (selection.requiresUserSelection) {
-        throw Exception('Context selection required - use forkFromMessage with BuildContext');
+        throw Exception(
+          'Context selection required - use forkFromMessage with BuildContext',
+        );
       }
-      
+
       final context = selection.availableContexts.first;
       return await _conversationService.forkConversationWithContext(
         forkFromMessageId: forkFromMessageId,
         selectedContext: context,
         newTitle: newTitle,
       );
-      
     } catch (e) {
       LoggerService.error('Error during quick fork: $e', error: e);
       return null;

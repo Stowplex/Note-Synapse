@@ -28,7 +28,7 @@ class ConversationService {
     required String title,
     List<String> noteIds = const [],
   }) async {
-    final conversation = Conversation(
+    var conversation = Conversation(
       id: _uuid.v4(),
       title: title,
       noteIds: const [], // Will be managed by mapping table
@@ -41,6 +41,7 @@ class ConversationService {
     // Add note mappings if provided
     if (noteIds.isNotEmpty) {
       await addNotesToConversation(conversation.id, noteIds);
+      conversation = conversation.copyWith(noteIds: noteIds.toList());
     }
 
     LoggerService.info('Created new conversation: ${conversation.id}');
@@ -85,8 +86,10 @@ class ConversationService {
     final originalNoteIds = await _databaseService.getConversationNoteIds(
       originalConversationId,
     );
+    final copiedNoteIds = <String>[];
     if (originalNoteIds.isNotEmpty) {
       await addNotesToConversation(forkedConversation.id, originalNoteIds);
+      copiedNoteIds.addAll(originalNoteIds);
     }
 
     // Copy message IDs from root to fork point (inclusive)
@@ -108,7 +111,7 @@ class ConversationService {
     // Refresh the conversation tree to include the new forked conversation
     await refreshConversationTree();
 
-    return forkedConversation;
+    return forkedConversation.copyWith(noteIds: copiedNoteIds);
   }
 
   // Prepare fork context selection - checks for conflicts and returns selection info
@@ -159,9 +162,22 @@ class ConversationService {
       contexts.add(context);
     }
 
+    ConversationContext? defaultContext;
+    if (contexts.isNotEmpty) {
+      final hasConflicts = contexts.any(
+        (context) => contexts.any(
+          (other) => context != other && context.hasConflictingNotes(other),
+        ),
+      );
+      if (!hasConflicts) {
+        defaultContext = contexts.first;
+      }
+    }
+
     return ForkContextSelection(
       forkMessageId: forkFromMessageId,
       availableContexts: contexts,
+      selectedContext: defaultContext,
     );
   }
 
@@ -728,25 +744,21 @@ class ConversationService {
       throw Exception('No conversation tree found');
     }
 
-    // Collect all conversation IDs and note IDs from selected nodes
-    final conversationIds = <String>{};
-    final allNoteIds = <String>{};
+    final snippets = await buildInteractionSnippets(
+      existingTree: tree,
+      nodeIds: selectedNodeIds,
+    );
 
-    for (final nodeId in selectedNodeIds) {
-      final node = tree.nodes[nodeId];
-      if (node != null && node.conversationId.isNotEmpty) {
-        conversationIds.add(node.conversationId);
-
-        // Get notes from this conversation
-        final noteIds = await _databaseService.getConversationNoteIds(
-          node.conversationId,
-        );
-        allNoteIds.addAll(noteIds);
-      }
+    if (snippets.isEmpty) {
+      throw Exception('No valid conversations selected');
     }
 
-    if (conversationIds.isEmpty) {
-      throw Exception('No valid conversations selected');
+    final allNoteIds = <String>{};
+    for (final snippet in snippets) {
+      final noteIds = await _databaseService.getConversationNoteIds(
+        snippet.conversation.id,
+      );
+      allNoteIds.addAll(noteIds);
     }
 
     // Create new conversation with all selected conversations' notes
@@ -755,8 +767,7 @@ class ConversationService {
       noteIds: allNoteIds.toList(),
     );
 
-    // Add context from selected conversations as initial messages
-    await _addConversationContext(newConversation.id, conversationIds.toList());
+    await _addConversationContextFromSnippets(newConversation.id, snippets);
 
     LoggerService.info(
       'Created conversation from ${selectedNodeIds.length} selected nodes with ${allNoteIds.length} notes',
@@ -764,47 +775,140 @@ class ConversationService {
     return newConversation;
   }
 
-  // Add conversation context as initial messages
-  Future<void> _addConversationContext(
+  Future<void> _addConversationContextFromSnippets(
     String conversationId,
-    List<String> sourceConversationIds,
+    List<ConversationInteractionSnippet> snippets,
   ) async {
-    final contextMessages = <String>[];
+    final contextText = formatInteractionSnippets(snippets);
+    if (contextText.isEmpty) {
+      return;
+    }
 
-    for (final sourceConvId in sourceConversationIds) {
-      final messages = await _databaseService.getConversationMessages(
-        sourceConvId,
-      );
-      if (messages.isNotEmpty) {
-        // Add a header for this conversation's context
-        contextMessages.add('--- Context from previous conversation ---');
+    await addUserMessage(
+      conversationId: conversationId,
+      content: 'Context from selected interactions:\n\n$contextText',
+    );
+  }
 
-        // Add key messages (first few and last few)
-        final keyMessages = <ConversationMessage>[];
-        if (messages.length <= 4) {
-          keyMessages.addAll(messages);
-        } else {
-          // First 2 and last 2 messages
-          keyMessages.addAll(messages.take(2));
-          keyMessages.addAll(messages.skip(messages.length - 2));
-        }
+  Future<List<ConversationInteractionSnippet>> buildInteractionSnippets({
+    ConversationTree? existingTree,
+    required List<String> nodeIds,
+  }) async {
+    if (nodeIds.isEmpty) {
+      return [];
+    }
 
-        for (final message in keyMessages) {
-          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-          contextMessages.add('$prefix${message.content}');
-        }
-        contextMessages.add(''); // Empty line between conversations
+    final tree = existingTree ?? await getConversationTree();
+    if (tree == null) {
+      return [];
+    }
+
+    return await _collectInteractionSnippets(tree, nodeIds);
+  }
+
+  Future<List<ConversationInteractionSnippet>> _collectInteractionSnippets(
+    ConversationTree tree,
+    List<String> nodeIds,
+  ) async {
+    final uniqueNodeIds = nodeIds.toSet();
+    final snippets = <ConversationInteractionSnippet>[];
+    final conversationCache = <String, Conversation>{};
+    final messageCache = <String, ConversationMessage?>{};
+
+    for (final nodeId in uniqueNodeIds) {
+      final node = tree.nodes[nodeId];
+      if (node == null) {
+        continue;
       }
-    }
 
-    if (contextMessages.isNotEmpty) {
-      // Add context as a single user message
-      final contextText = contextMessages.join('\n');
-      await addUserMessage(
-        conversationId: conversationId,
-        content: 'Context from selected conversations:\n\n$contextText',
+      if (node.conversationId.isEmpty) {
+        continue;
+      }
+
+      final messageId = node.messageId;
+      if (messageId == null) {
+        continue;
+      }
+
+      ConversationMessage? resolvedAiMessage = messageCache[messageId];
+      if (resolvedAiMessage == null) {
+        resolvedAiMessage = await _databaseService.getConversationMessage(
+          messageId,
+        );
+        messageCache[messageId] = resolvedAiMessage;
+      }
+      if (resolvedAiMessage == null) {
+        continue;
+      }
+
+      Conversation? conversation = conversationCache[node.conversationId];
+      if (conversation == null) {
+        conversation = await _databaseService.getConversation(
+          node.conversationId,
+        );
+        if (conversation == null) {
+          continue;
+        }
+        conversationCache[node.conversationId] = conversation;
+      }
+
+      ConversationMessage? userMessage;
+      final parentMessageId = await _databaseService.getMessageParent(
+        messageId,
+      );
+      if (parentMessageId != null) {
+        userMessage = messageCache[parentMessageId];
+        if (userMessage == null) {
+          userMessage = await _databaseService.getConversationMessage(
+            parentMessageId,
+          );
+          messageCache[parentMessageId] = userMessage;
+        }
+        if (userMessage?.type != MessageType.user) {
+          userMessage = null;
+        }
+      }
+
+      snippets.add(
+        ConversationInteractionSnippet(
+          conversation: conversation,
+          node: node,
+          aiMessage: resolvedAiMessage,
+          userMessage: userMessage,
+        ),
       );
     }
+
+    snippets.sort(
+      (a, b) => a.aiMessage.timestamp.compareTo(b.aiMessage.timestamp),
+    );
+
+    return snippets;
+  }
+
+  String formatInteractionSnippets(
+    List<ConversationInteractionSnippet> snippets,
+  ) {
+    if (snippets.isEmpty) {
+      return '';
+    }
+
+    final buffer = StringBuffer();
+
+    for (final snippet in snippets) {
+      buffer.writeln(
+        '--- Interaction from "${snippet.conversation.title}" ---',
+      );
+      buffer.writeln('Node summary: ${snippet.node.summary}');
+      final userMessage = snippet.userMessage?.content.trim();
+      if (userMessage != null && userMessage.isNotEmpty) {
+        buffer.writeln('User: $userMessage');
+      }
+      buffer.writeln('AI: ${snippet.aiMessage.content.trim()}');
+      buffer.writeln('');
+    }
+
+    return buffer.toString().trimRight();
   }
 
   // Conversation tags helpers
@@ -935,5 +1039,19 @@ class ConversationWithMessages {
   ConversationWithMessages({
     required this.conversation,
     required this.messages,
+  });
+}
+
+class ConversationInteractionSnippet {
+  final Conversation conversation;
+  final ConversationTreeNode node;
+  final ConversationMessage aiMessage;
+  final ConversationMessage? userMessage;
+
+  ConversationInteractionSnippet({
+    required this.conversation,
+    required this.node,
+    required this.aiMessage,
+    required this.userMessage,
   });
 }
