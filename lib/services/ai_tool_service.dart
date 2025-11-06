@@ -231,19 +231,34 @@ class AiToolService {
     }
 
     if (!RegExp(r'-\s*name\s*:').hasMatch(yamlText)) {
-      LoggerService.warning('AI tool "${app.name}" tool_spec block does not contain any tool definitions.');
+      final errorMessage = 'AI tool "${app.name}" tool_spec block does not contain any tool definitions.';
+      LoggerService.warning(errorMessage);
+      LoggerService.logAiError(
+        error: errorMessage,
+        endpoint: 'AI Tool Load: ${app.name}',
+      );
       return null;
     }
     dynamic parsedYaml;
     try {
       parsedYaml = loadYaml(yamlText);
     } catch (e) {
-      LoggerService.error('Failed to parse YAML for AI tool "${app.name}": $e');
+      final errorMessage = 'Failed to parse YAML for AI tool "${app.name}": $e';
+      LoggerService.error(errorMessage);
+      LoggerService.logAiError(
+        error: errorMessage,
+        endpoint: 'AI Tool Load: ${app.name}',
+      );
       return null;
     }
 
     if (parsedYaml is! YamlList) {
-      LoggerService.warning('AI tool "${app.name}" YAML header must be a list of tools.');
+      final errorMessage = 'AI tool "${app.name}" YAML header must be a list of tools.';
+      LoggerService.warning(errorMessage);
+      LoggerService.logAiError(
+        error: errorMessage,
+        endpoint: 'AI Tool Load: ${app.name}',
+      );
       return null;
     }
 

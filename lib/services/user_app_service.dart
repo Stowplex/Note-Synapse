@@ -1596,24 +1596,44 @@ Here's the complete HTML application:
 
  REQUIRED STRUCTURE:
  1. Prepend the HTML with a CDATA block that starts with `<![CDATA[tool_spec` and ends with `]]>`. Place the YAML array that describes every tool inside this block so that any characters (even `-->` or backticks) are preserved verbatim.
+
     Example:
     <![CDATA[tool_spec
     - name: example_tool
-      description: Describe what the tool does succinctly
+      description: |
+        Describe what the tool does succinctly
       input_params:
         - query:
             type: string
-            description: The search text
+            description: |
+              The search text
       output_params:
         - results:
             type: array
             items: string
     ]]>
+    <!DOCTYPE HTML>
+    <html>
+      <!-- The HTML, css and JavaScript goes there -->
+    </html>
+
+    IMPORTANT: the <![CDATA[tool_spec ]]> block MUST come before the <!DOCTYPE html> marker.
+
  2. For every tool include:
     - name: Tool identifier (string, snake_case recommended)
-    - description: Concise explanation of what the tool does
+    - description: Concise explanation of what the tool does. IMPORTANT: Description should be placed with YAML quotation block. For example:
+      <example>
+      Good:
+      description: |
+        this is the descirption line so that I don't need to worry about special characters.
+
+      Bad:
+      description: the content is on the same line. Special character like {}, [] is a concern to the parser.
+      </example>
+    
     - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
     - output_params: Keys and schemas for returned fields the tool produces
+
  3. The YAML must be valid and free of extra commentary so it can be parsed automatically.
 
  RUNTIME BEHAVIOUR:
@@ -1624,13 +1644,16 @@ Here's the complete HTML application:
     - When `false`, skip the UI and only expose the tool functions for headless execution.
  4. Use `console` logging judiciously for debugging key steps.
  5. If user's intention requires manual configurations, such as setting up an API KEY, the playground is the right place to allow the
-    uesr to set it up, and save to the application state, so that in AI headless calls, it can be loaded and used.
+    uesr to set it up, and save to the application state, so that in AI headless calls, it can be loaded and used. AI tool call
+    should NOT require user to input API KEY, unless directed by user.
 
  GENERAL REQUIREMENTS:
  - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
  - Validate user inputs, surface errors gracefully, and ensure return objects never throw.
  - Document tool usage and parameter expectations in comments or the interactive UI.
  - Use `Synapse.proxyFetch` when you must contact external HTTP APIs; remember to decode base64 results for non-text MIME types.
+ - Tools should prefer single parameter object function over multiple parameters. The single parameter MUST NOT be named `param` or `params`
+   to avoid confusion to the caller.
  ''';
   }
   
