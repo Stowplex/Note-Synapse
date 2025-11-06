@@ -318,14 +318,56 @@
   "share": "分享",
   "shareNote": "分享笔记",
   "shareNotes": "分享笔记",
+  "shareAsPdf": "分享为 PDF",
   "shareAsText": "分享为文本",
   "copyToClipboard": "复制到剪贴板",
   "shareSubNotesAndLinkedNotes": "分享子笔记和关联笔记",
   "shareDialogTitle": "分享笔记",
   "shareDialogDescription": "选择您想要分享选中笔记的方式",
+  "notesToShare": "待分享 {count} {count, plural, =1{个笔记} other{个笔记}}",
+  "@notesToShare": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "textCopiedToClipboard": "文本已复制到剪贴板",
   "errorCopyingToClipboard": "复制到剪贴板时出错：{error}",
+  "@errorCopyingToClipboard": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "errorSharingText": "分享文本时出错：{error}",
+  "@errorSharingText": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pdfSavedToCache": "PDF 已保存到缓存：{fileName}",
+  "@pdfSavedToCache": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGeneratingPdf": "生成 PDF 时出错：{error}",
+  "@errorGeneratingPdf": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentMissing": "附件缺失",
+  "attachmentUnavailable": "附件不可用",
+  "pdfPreviewUnavailable": "暂不支持预览 PDF，请通过已保存的附件查看。",
   "selectFileLocation": "选择文件位置",
   "saveAsMarkdown": "保存为Markdown",
   "fileSavedSuccessfully": "文件保存成功",

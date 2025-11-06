@@ -1946,6 +1946,12 @@ abstract class AppLocalizations {
   /// **'Share Notes'**
   String get shareNotes;
 
+  /// No description provided for @shareAsPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Share as PDF'**
+  String get shareAsPdf;
+
   /// No description provided for @shareAsText.
   ///
   /// In en, this message translates to:
@@ -1976,6 +1982,12 @@ abstract class AppLocalizations {
   /// **'Choose how you want to share the selected notes'**
   String get shareDialogDescription;
 
+  /// No description provided for @notesToShare.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{Note} other{Notes}} to share'**
+  String notesToShare(int count);
+
   /// No description provided for @textCopiedToClipboard.
   ///
   /// In en, this message translates to:
@@ -1986,13 +1998,43 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Error copying to clipboard: {error}'**
-  String errorCopyingToClipboard(Object error);
+  String errorCopyingToClipboard(String error);
 
   /// No description provided for @errorSharingText.
   ///
   /// In en, this message translates to:
   /// **'Error sharing text: {error}'**
-  String errorSharingText(Object error);
+  String errorSharingText(String error);
+
+  /// No description provided for @pdfSavedToCache.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF saved to cache: {fileName}'**
+  String pdfSavedToCache(String fileName);
+
+  /// No description provided for @errorGeneratingPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Error generating PDF: {error}'**
+  String errorGeneratingPdf(String error);
+
+  /// No description provided for @attachmentMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment missing'**
+  String get attachmentMissing;
+
+  /// No description provided for @attachmentUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment unavailable'**
+  String get attachmentUnavailable;
+
+  /// No description provided for @pdfPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF preview not available. Use the saved attachment to view.'**
+  String get pdfPreviewUnavailable;
 
   /// No description provided for @selectFileLocation.
   ///

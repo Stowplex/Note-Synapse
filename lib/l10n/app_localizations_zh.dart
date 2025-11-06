@@ -997,6 +997,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareNotes => '分享笔记';
 
   @override
+  String get shareAsPdf => '分享为 PDF';
+
+  @override
   String get shareAsText => '分享为文本';
 
   @override
@@ -1012,17 +1015,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareDialogDescription => '选择您想要分享选中笔记的方式';
 
   @override
+  String notesToShare(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '个笔记',
+      one: '个笔记',
+    );
+    return '待分享 $count $_temp0';
+  }
+
+  @override
   String get textCopiedToClipboard => '文本已复制到剪贴板';
 
   @override
-  String errorCopyingToClipboard(Object error) {
+  String errorCopyingToClipboard(String error) {
     return '复制到剪贴板时出错：$error';
   }
 
   @override
-  String errorSharingText(Object error) {
+  String errorSharingText(String error) {
     return '分享文本时出错：$error';
   }
+
+  @override
+  String pdfSavedToCache(String fileName) {
+    return 'PDF 已保存到缓存：$fileName';
+  }
+
+  @override
+  String errorGeneratingPdf(String error) {
+    return '生成 PDF 时出错：$error';
+  }
+
+  @override
+  String get attachmentMissing => '附件缺失';
+
+  @override
+  String get attachmentUnavailable => '附件不可用';
+
+  @override
+  String get pdfPreviewUnavailable => '暂不支持预览 PDF，请通过已保存的附件查看。';
 
   @override
   String get selectFileLocation => '选择文件位置';

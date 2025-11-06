@@ -318,14 +318,56 @@
   "share": "Share",
   "shareNote": "Share Note",
   "shareNotes": "Share Notes",
+  "shareAsPdf": "Share as PDF",
   "shareAsText": "Share as Text",
   "copyToClipboard": "Copy to Clipboard",
   "shareSubNotesAndLinkedNotes": "Share sub-notes and linked notes",
   "shareDialogTitle": "Share Notes",
   "shareDialogDescription": "Choose how you want to share the selected notes",
+  "notesToShare": "{count} {count, plural, =1{Note} other{Notes}} to share",
+  "@notesToShare": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "textCopiedToClipboard": "Text copied to clipboard",
   "errorCopyingToClipboard": "Error copying to clipboard: {error}",
+  "@errorCopyingToClipboard": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "errorSharingText": "Error sharing text: {error}",
+  "@errorSharingText": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pdfSavedToCache": "PDF saved to cache: {fileName}",
+  "@pdfSavedToCache": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGeneratingPdf": "Error generating PDF: {error}",
+  "@errorGeneratingPdf": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentMissing": "Attachment missing",
+  "attachmentUnavailable": "Attachment unavailable",
+  "pdfPreviewUnavailable": "PDF preview not available. Use the saved attachment to view.",
   "selectFileLocation": "Select file location",
   "saveAsMarkdown": "Save as Markdown",
   "fileSavedSuccessfully": "File saved successfully",

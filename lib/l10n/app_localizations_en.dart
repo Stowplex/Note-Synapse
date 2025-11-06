@@ -1014,6 +1014,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareNotes => 'Share Notes';
 
   @override
+  String get shareAsPdf => 'Share as PDF';
+
+  @override
   String get shareAsText => 'Share as Text';
 
   @override
@@ -1030,17 +1033,48 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose how you want to share the selected notes';
 
   @override
+  String notesToShare(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return '$count $_temp0 to share';
+  }
+
+  @override
   String get textCopiedToClipboard => 'Text copied to clipboard';
 
   @override
-  String errorCopyingToClipboard(Object error) {
+  String errorCopyingToClipboard(String error) {
     return 'Error copying to clipboard: $error';
   }
 
   @override
-  String errorSharingText(Object error) {
+  String errorSharingText(String error) {
     return 'Error sharing text: $error';
   }
+
+  @override
+  String pdfSavedToCache(String fileName) {
+    return 'PDF saved to cache: $fileName';
+  }
+
+  @override
+  String errorGeneratingPdf(String error) {
+    return 'Error generating PDF: $error';
+  }
+
+  @override
+  String get attachmentMissing => 'Attachment missing';
+
+  @override
+  String get attachmentUnavailable => 'Attachment unavailable';
+
+  @override
+  String get pdfPreviewUnavailable =>
+      'PDF preview not available. Use the saved attachment to view.';
 
   @override
   String get selectFileLocation => 'Select file location';
