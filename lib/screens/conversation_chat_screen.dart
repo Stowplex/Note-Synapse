@@ -61,6 +61,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
 
   Conversation? _conversation;
   List<ConversationMessage> _messages = [];
@@ -1835,6 +1836,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    focusNode: _messageFocusNode,
                     enabled: !_isSending || _isAborting,
                     decoration: InputDecoration(
                       hintText: _isAborting
@@ -1977,6 +1979,33 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                   _formatTimestamp(message.timestamp),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (isUser) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit,
+                      size: 16,
+                      color: Theme.of(context)
+                          .colorScheme.onSurface
+                          .withOpacity(0.5),
+                    ),
+                    onPressed: () {
+                      _messageController.text = message.content;
+                      // Scroll to bottom to show the input field
+                      _scrollToBottom();
+                      // Focus the text field after a short delay to ensure it's visible
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        _messageFocusNode.requestFocus();
+                      });
+                    },
+                    tooltip: 'Use this message',
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
                 if (!isUser) ...[
                   const SizedBox(width: 8),
                   IconButton(
@@ -2179,6 +2208,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _messageFocusNode.dispose();
     for (final runtime in _aiToolRuntimes.values) {
       runtime.dispose();
     }
