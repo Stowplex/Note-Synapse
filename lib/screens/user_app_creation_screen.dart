@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../l10n/app_localizations.dart';
-import '../providers/app_provider.dart';
+import '../models/note.dart';
 import '../models/user_app.dart';
+import '../providers/app_provider.dart';
+import 'note_selection_dialog.dart';
 import 'user_app_result_screen.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
@@ -22,6 +24,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
   bool _isCreating = false;
   UserAppType _selectedAppType = UserAppType.normal;
   final List<String> _attachmentPaths = [];
+  final List<Note> _selectedNotes = [];
   
   // Tab management
   late TabController _tabController;
@@ -216,6 +219,44 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
     });
   }
 
+  void _showNoteSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        return NoteSelectionDialog(
+          title: l10n.selectNotesToAddToContext,
+          onNotesSelected: (notes) {
+            Navigator.of(dialogContext).pop();
+            if (!mounted) return;
+            setState(() {
+              final noteMap = {for (final note in _selectedNotes) note.id: note};
+              for (final note in notes) {
+                noteMap[note.id] = note;
+              }
+              _selectedNotes
+                ..clear()
+                ..addAll(noteMap.values);
+            });
+          },
+        );
+      },
+    );
+  }
+
+  void _removeSelectedNote(String noteId) {
+    setState(() {
+      _selectedNotes.removeWhere((note) => note.id == noteId);
+    });
+  }
+
+  void _clearSelectedNotes() {
+    if (_selectedNotes.isEmpty) return;
+    setState(() {
+      _selectedNotes.clear();
+    });
+  }
+
   void _showImageSourceDialog() {
     showDialog(
       context: context,
@@ -275,6 +316,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
         steps: steps,
         type: _selectedAppType,
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        contextNotes: _selectedNotes.isNotEmpty ? List<Note>.from(_selectedNotes) : null,
         libraries: _libraries.isNotEmpty ? _libraries : null,
       );
       
@@ -499,6 +541,68 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                             ),
                           );
                         }),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Note Context Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            l10n.addNotes,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_selectedNotes.isNotEmpty)
+                                IconButton(
+                                  onPressed: _clearSelectedNotes,
+                                  icon: const Icon(Icons.clear_all),
+                                  tooltip: l10n.clearFilters,
+                                ),
+                              IconButton(
+                                onPressed: _showNoteSelectionDialog,
+                                icon: const Icon(Icons.note_add),
+                                tooltip: l10n.addNotes,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.selectNotesToAddToContext,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                      ),
+                      if (_selectedNotes.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _selectedNotes.map((note) {
+                            return InputChip(
+                              label: Text(note.title),
+                              avatar: Icon(
+                                note.isTask ? Icons.check_circle : Icons.notes,
+                                size: 18,
+                              ),
+                              onDeleted: () => _removeSelectedNote(note.id),
+                            );
+                          }).toList(),
+                        ),
                       ],
                     ],
                   ),

@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
-import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/note.dart';
+import '../models/user_app.dart';
 import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'prompts/note_prompt_builder.dart';
 import 'user_app_library_service.dart';
 
 class UserAppService {
@@ -172,11 +174,20 @@ class UserAppService {
     UserAppType type = UserAppType.normal,
     String? userPrompt,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate the app using AI
-      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths, libraries: libraries);
+      final aiResponse = await _generateAppWithAI(
+        name,
+        description,
+        steps,
+        type,
+        attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
+        libraries: libraries,
+      );
       
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
@@ -312,6 +323,7 @@ class UserAppService {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
@@ -324,6 +336,7 @@ class UserAppService {
         editSuggestion,
         originalApp.type,
         attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
         libraries: libraries,
       );
       
@@ -396,29 +409,31 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths, List<UserAppLibraryInfo>? libraries}) async {
+  static Future<String> _generateAppWithAI(
+    String name,
+    String description,
+    List<String> steps,
+    UserAppType type, {
+    List<String>? attachmentPaths,
+    List<Note>? contextNotes,
+    List<UserAppLibraryInfo>? libraries,
+  }) async {
     try {
-      final prompt = _buildAppGenerationPrompt(name, description, steps, type, libraries: libraries);
-      
-      // Convert attachment paths to PlatformFile objects for the AI service
-      List<PlatformFile>? attachedFiles;
-      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
-        attachedFiles = [];
-        for (final path in attachmentPaths) {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final fileName = path.split('/').last;
-            attachedFiles.add(PlatformFile(
-              name: fileName,
-              size: bytes.length,
-              bytes: bytes,
-              path: path,
-            ));
-          }
-        }
-      }
-      
+      final noteContextPayload = await _buildNoteContextPayload(contextNotes);
+      final prompt = _buildAppGenerationPrompt(
+        name,
+        description,
+        steps,
+        type,
+        libraries: libraries,
+        noteContext: noteContextPayload?.text,
+      );
+
+      final attachedFiles = await _prepareAttachments(
+        attachmentPaths: attachmentPaths,
+        noteAttachments: noteContextPayload?.attachments,
+      );
+
       final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -436,9 +451,11 @@ class UserAppService {
     String editSuggestion,
     UserAppType type, {
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
+      final noteContextPayload = await _buildNoteContextPayload(contextNotes);
       final librariesSection = libraries != null && libraries.isNotEmpty ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
@@ -446,6 +463,15 @@ ${libraries.map((lib) => '''
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
 ''' : '';
+
+      final noteContextSection = (noteContextPayload?.text?.trim().isNotEmpty ?? false)
+          ? '''
+Additional Note Context:
+${noteContextPayload!.text}
+
+Use these notes (including linked relationships) to ground the edits and incorporate relevant data or behaviours.
+'''
+          : '';
 
       final prompt = '''
 Edit the following HTML application based on the user's suggestion:
@@ -455,6 +481,7 @@ Description: $description
 Steps: ${steps.join(', ')}
 
 $librariesSection
+$noteContextSection
 
 Original HTML:
 $originalHtml
@@ -917,25 +944,11 @@ Here's the updated application with your requested changes:
 ```
 ''';
       
-      // Convert attachment paths to PlatformFile objects for the AI service
-      List<PlatformFile>? attachedFiles;
-      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
-        attachedFiles = [];
-        for (final path in attachmentPaths) {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final fileName = path.split('/').last;
-            attachedFiles.add(PlatformFile(
-              name: fileName,
-              size: bytes.length,
-              bytes: bytes,
-              path: path,
-            ));
-          }
-        }
-      }
-      
+      final attachedFiles = await _prepareAttachments(
+        attachmentPaths: attachmentPaths,
+        noteAttachments: noteContextPayload?.attachments,
+      );
+
       final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -945,7 +958,14 @@ Here's the updated application with your requested changes:
   }
   
   // Build the app generation prompt
-  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type, {List<UserAppLibraryInfo>? libraries}) {
+  static String _buildAppGenerationPrompt(
+    String name,
+    String description,
+    List<String> steps,
+    UserAppType type, {
+    List<UserAppLibraryInfo>? libraries,
+    String? noteContext,
+  }) {
     final librariesSection = libraries != null && libraries.isNotEmpty ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
@@ -953,6 +973,15 @@ ${libraries.map((lib) => '''
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
 ''' : '';
+
+    final noteContextSection = (noteContext != null && noteContext.trim().isNotEmpty)
+        ? '''
+Additional Note Context:
+$noteContext
+
+Use these notes (including linked relationships) to shape the app's functionality, data access patterns, and UI examples.
+'''
+        : '';
     
     final basePrompt = '''
 Create a single-page self-contained HTML application based on the following requirements:
@@ -963,6 +992,7 @@ Steps:
 - ${steps.join('\n - ')}
 
 $librariesSection
+$noteContextSection
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
@@ -1427,7 +1457,76 @@ Here's the complete HTML application:
 ```
 ''';
     
-    return basePrompt + librariesSection;
+    return basePrompt;
+  }
+
+  static Future<_NoteContextPayload?> _buildNoteContextPayload(List<Note>? contextNotes) async {
+    if (contextNotes == null || contextNotes.isEmpty) {
+      return null;
+    }
+
+    try {
+      final builder = NotePromptBuilder(DatabaseService());
+      final context = await builder.buildNoteContext(contextNotes);
+      final attachments = await builder.loadNoteAttachments(contextNotes);
+      final formattedContext = context.trim().isEmpty
+          ? null
+          : 'Note context with linked relationships:\n$context';
+
+      return _NoteContextPayload(
+        text: formattedContext,
+        attachments: attachments,
+      );
+    } catch (e) {
+      LoggerService.warning('Failed to build note context for user app prompts: $e');
+      return null;
+    }
+  }
+
+  static Future<List<PlatformFile>?> _prepareAttachments({
+    List<String>? attachmentPaths,
+    List<PlatformFile>? noteAttachments,
+  }) async {
+    final attachments = <PlatformFile>[];
+    final seenKeys = <String>{};
+
+    void addFile(PlatformFile file) {
+      final key = file.path ?? '${file.name}_${file.size}';
+      if (seenKeys.add(key)) {
+        attachments.add(file);
+      }
+    }
+
+    if (noteAttachments != null) {
+      for (final file in noteAttachments) {
+        addFile(file);
+      }
+    }
+
+    if (attachmentPaths != null) {
+      for (final path in attachmentPaths) {
+        try {
+          final file = File(path);
+          if (!await file.exists()) {
+            continue;
+          }
+
+          final bytes = await file.readAsBytes();
+          addFile(
+            PlatformFile(
+              name: path.split('/').last,
+              size: bytes.length,
+              bytes: bytes,
+              path: path,
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning('Failed to read attachment $path: $e');
+        }
+      }
+    }
+
+    return attachments.isEmpty ? null : attachments;
   }
 
   // Get Note Action App specific instructions
@@ -1789,4 +1888,14 @@ Here's the complete HTML application:
     }
   }
 
+}
+
+class _NoteContextPayload {
+  final String? text;
+  final List<PlatformFile> attachments;
+
+  const _NoteContextPayload({
+    this.text,
+    this.attachments = const [],
+  });
 }
