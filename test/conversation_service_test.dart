@@ -761,6 +761,47 @@ void main() {
           expect(selection.requiresUserSelection, isFalse);
         },
       );
+
+      test(
+        'formatInteractionSnippets includes initial context for level 1 nodes',
+        () async {
+          final data = await _buildSelectionScenario();
+
+          final snippets = await conversationService.buildInteractionSnippets(
+            existingTree: data.tree,
+            nodeIds: [data.aiA.id],
+          );
+
+          final formatted = conversationService.formatInteractionSnippets(
+            snippets,
+          );
+
+          expect(formatted, contains('Initial context:'));
+          expect(formatted, contains('Prompt A'));
+        },
+      );
+
+      test(
+        'formatInteractionSnippets does not add initial context for deeper nodes',
+        () async {
+          final data = await _buildSelectionScenario();
+
+          final deeperNode = data.tree.nodes.values.firstWhere(
+            (node) => node.messageId != null && node.level > 1,
+          );
+
+          final snippets = await conversationService.buildInteractionSnippets(
+            existingTree: data.tree,
+            nodeIds: [deeperNode.id],
+          );
+
+          final formatted = conversationService.formatInteractionSnippets(
+            snippets,
+          );
+
+          expect(formatted.contains('Initial context:'), isFalse);
+        },
+      );
     });
   });
 }

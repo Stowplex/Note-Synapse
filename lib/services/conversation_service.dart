@@ -814,6 +814,8 @@ class ConversationService {
     final snippets = <ConversationInteractionSnippet>[];
     final conversationCache = <String, Conversation>{};
     final messageCache = <String, ConversationMessage?>{};
+    final initialContextProvided = <String, bool>{};
+    final initialContextCache = <String, String?>{};
 
     for (final nodeId in uniqueNodeIds) {
       final node = tree.nodes[nodeId];
@@ -869,12 +871,25 @@ class ConversationService {
         }
       }
 
+      String? initialContext;
+      final shouldIncludeInitial =
+          node.level == 1 &&
+          !(initialContextProvided[node.conversationId] ?? false);
+      if (shouldIncludeInitial) {
+        initialContext = await _getConversationInitialContext(
+          node.conversationId,
+          initialContextCache,
+        );
+        initialContextProvided[node.conversationId] = true;
+      }
+
       snippets.add(
         ConversationInteractionSnippet(
           conversation: conversation,
           node: node,
           aiMessage: resolvedAiMessage,
           userMessage: userMessage,
+          initialContext: initialContext,
         ),
       );
     }
@@ -884,6 +899,33 @@ class ConversationService {
     );
 
     return snippets;
+  }
+
+  Future<String?> _getConversationInitialContext(
+    String conversationId,
+    Map<String, String?> cache,
+  ) async {
+    if (cache.containsKey(conversationId)) {
+      return cache[conversationId];
+    }
+
+    final messages = await _databaseService.getConversationMessages(
+      conversationId,
+    );
+
+    for (final message in messages) {
+      if (message.type == MessageType.user) {
+        final trimmed = message.content.trim();
+        if (trimmed.isNotEmpty) {
+          cache[conversationId] = trimmed;
+          return trimmed;
+        }
+        break;
+      }
+    }
+
+    cache[conversationId] = null;
+    return null;
   }
 
   String formatInteractionSnippets(
@@ -899,6 +941,10 @@ class ConversationService {
       buffer.writeln(
         '--- Interaction from "${snippet.conversation.title}" ---',
       );
+      final initialContext = snippet.initialContext?.trim();
+      if (initialContext != null && initialContext.isNotEmpty) {
+        buffer.writeln('Initial context: $initialContext');
+      }
       buffer.writeln('Node summary: ${snippet.node.summary}');
       final userMessage = snippet.userMessage?.content.trim();
       if (userMessage != null && userMessage.isNotEmpty) {
@@ -1047,11 +1093,13 @@ class ConversationInteractionSnippet {
   final ConversationTreeNode node;
   final ConversationMessage aiMessage;
   final ConversationMessage? userMessage;
+  final String? initialContext;
 
   ConversationInteractionSnippet({
     required this.conversation,
     required this.node,
     required this.aiMessage,
     required this.userMessage,
+    this.initialContext,
   });
 }
