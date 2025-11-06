@@ -78,6 +78,7 @@ dependencies:
   # Sharing
   share_plus: ^12.0.0
   pdf: ^3.11.3
+  printing: ^5.13.0
   
   # UUID generation
   uuid: ^4.2.1
