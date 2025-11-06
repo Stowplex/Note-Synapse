@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
@@ -233,9 +234,18 @@ class ShareService {
     required AppLocalizations l10n,
     required Size pageSize,
   }) async {
+    final fonts = await _PdfFontManager.instance.load();
+
     final pageFormat = PdfPageFormat(
       pageSize.width,
       pageSize.height,
+    );
+
+    final theme = pw.ThemeData.withFont(
+      base: fonts.base,
+      bold: fonts.bold,
+      italic: fonts.italic,
+      boldItalic: fonts.boldItalic,
     );
 
     final exporter = _PdfNoteRenderer(
@@ -243,11 +253,12 @@ class ShareService {
       includeSubNotes: includeSubNotes,
       l10n: l10n,
       pageFormat: pageFormat,
+      fonts: fonts,
     );
 
     final content = await exporter.buildContent();
 
-    final document = pw.Document();
+    final document = pw.Document(theme: theme);
     document.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
@@ -803,22 +814,95 @@ class _PdfShareResult {
   final File? cacheFile;
 }
 
+class _PdfFonts {
+  const _PdfFonts({
+    required this.base,
+    required this.bold,
+    required this.italic,
+    required this.boldItalic,
+    required this.monospace,
+    required this.fallback,
+  });
+
+  final pw.Font base;
+  final pw.Font bold;
+  final pw.Font italic;
+  final pw.Font boldItalic;
+  final pw.Font monospace;
+  final List<pw.Font> fallback;
+}
+
+class _PdfFontManager {
+  _PdfFontManager._();
+
+  static final _PdfFontManager instance = _PdfFontManager._();
+
+  _PdfFonts? _cache;
+
+  Future<_PdfFonts> load() async {
+    if (_cache != null) {
+      return _cache!;
+    }
+
+    try {
+      final base = await PdfGoogleFonts.notoSansSCRegular();
+      final bold = await PdfGoogleFonts.notoSansSCBold();
+      final monospace = await PdfGoogleFonts.robotoMonoRegular();
+
+      _cache = _PdfFonts(
+        base: base,
+        bold: bold,
+        italic: base,
+        boldItalic: bold,
+        monospace: monospace,
+        fallback: [base],
+      );
+    } catch (e, stackTrace) {
+      LoggerService.warning(
+        'Failed to load PDF fonts from Google Fonts, falling back to Helvetica: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
+      final base = pw.Font.helvetica();
+      final bold = pw.Font.helveticaBold();
+      final italic = pw.Font.helveticaOblique();
+      final boldItalic = pw.Font.helveticaBoldOblique();
+      final monospace = pw.Font.courier();
+
+      _cache = _PdfFonts(
+        base: base,
+        bold: bold,
+        italic: italic,
+        boldItalic: boldItalic,
+        monospace: monospace,
+        fallback: [base],
+      );
+    }
+
+    return _cache!;
+  }
+}
+
 class _PdfNoteRenderer {
   _PdfNoteRenderer({
     required this.notes,
     required this.includeSubNotes,
     required this.l10n,
     required this.pageFormat,
+    required this.fonts,
   })  : _contentWidth = math.max(pageFormat.width - 48, 0),
         _markdownRenderer = _MarkdownPdfRenderer(
           l10n: l10n,
           maxContentWidth: math.max(pageFormat.width - 48, 0),
+          fonts: fonts,
         );
 
   final List<Note> notes;
   final bool includeSubNotes;
   final AppLocalizations l10n;
   final PdfPageFormat pageFormat;
+  final _PdfFonts fonts;
 
   final double _contentWidth;
   final _MarkdownPdfRenderer _markdownRenderer;
@@ -828,11 +912,13 @@ class _PdfNoteRenderer {
     final titleStyle = pw.TextStyle(
       fontSize: 20,
       fontWeight: pw.FontWeight.bold,
+      fontFallback: fonts.fallback,
     );
     final sectionTitleStyle = pw.TextStyle(
       fontSize: 14,
       fontWeight: pw.FontWeight.bold,
       color: PdfColors.grey700,
+      fontFallback: fonts.fallback,
     );
 
     for (var index = 0; index < notes.length; index++) {
@@ -929,14 +1015,16 @@ class _PdfNoteRenderer {
   }
 
   pw.Widget _metadataLine(String label, String value) {
-    const labelStyle = pw.TextStyle(
+    final labelStyle = pw.TextStyle(
       fontSize: 10,
       fontWeight: pw.FontWeight.bold,
       color: PdfColors.grey700,
+      fontFallback: fonts.fallback,
     );
-    const valueStyle = pw.TextStyle(
+    final valueStyle = pw.TextStyle(
       fontSize: 10,
       color: PdfColors.grey800,
+      fontFallback: fonts.fallback,
     );
 
     return pw.Padding(
@@ -975,17 +1063,19 @@ class _PdfNoteRenderer {
       final subNoteHeader = <pw.Widget>[
         pw.Text(
           subNote.name,
-          style: const pw.TextStyle(
+          style: pw.TextStyle(
             fontSize: 12,
             fontWeight: pw.FontWeight.bold,
+            fontFallback: fonts.fallback,
           ),
         ),
         pw.SizedBox(height: 2),
         pw.Text(
           '${l10n.created}: ${ShareService._formatDateTime(subNote.createdAt)}',
-          style: const pw.TextStyle(
+          style: pw.TextStyle(
             fontSize: 10,
             color: PdfColors.grey700,
+            fontFallback: fonts.fallback,
           ),
         ),
       ];
@@ -994,9 +1084,10 @@ class _PdfNoteRenderer {
         subNoteHeader.add(
           pw.Text(
             l10n.completed,
-            style: const pw.TextStyle(
+            style: pw.TextStyle(
               fontSize: 10,
               color: PdfColors.green800,
+              fontFallback: fonts.fallback,
             ),
           ),
         );
@@ -1055,9 +1146,10 @@ class _PdfNoteRenderer {
               padding: const pw.EdgeInsets.only(top: 6),
               child: pw.Text(
                 '$fileName (${l10n.attachmentMissing})',
-                style: const pw.TextStyle(
+              style: pw.TextStyle(
                   fontSize: 10,
                   color: PdfColors.red700,
+                fontFallback: fonts.fallback,
                 ),
               ),
             ),
@@ -1074,9 +1166,10 @@ class _PdfNoteRenderer {
             padding: const pw.EdgeInsets.only(top: 6),
             child: pw.Text(
               '$fileName ($mimeType)',
-              style: const pw.TextStyle(
+              style: pw.TextStyle(
                 fontSize: 10,
                 color: PdfColors.grey700,
+                fontFallback: fonts.fallback,
               ),
             ),
           ),
@@ -1117,10 +1210,11 @@ class _PdfNoteRenderer {
               padding: const pw.EdgeInsets.only(bottom: 8, top: 2),
               child: pw.Text(
                 l10n.pdfPreviewUnavailable,
-                style: const pw.TextStyle(
+                style: pw.TextStyle(
                   fontSize: 9,
                   color: PdfColors.grey600,
                   fontStyle: pw.FontStyle.italic,
+                  fontFallback: fonts.fallback,
                 ),
               ),
             ),
@@ -1137,9 +1231,10 @@ class _PdfNoteRenderer {
             padding: const pw.EdgeInsets.only(top: 6),
             child: pw.Text(
               '$fileName (${l10n.attachmentUnavailable})',
-              style: const pw.TextStyle(
+              style: pw.TextStyle(
                 fontSize: 10,
                 color: PdfColors.red700,
+                fontFallback: fonts.fallback,
               ),
             ),
           ),
@@ -1155,23 +1250,32 @@ class _MarkdownPdfRenderer {
   _MarkdownPdfRenderer({
     required this.l10n,
     required this.maxContentWidth,
-  })  : _baseTextStyle = const pw.TextStyle(fontSize: 12, lineSpacing: 1.3),
-        _linkStyle = const pw.TextStyle(
+    required this.fonts,
+  })  : _baseTextStyle = pw.TextStyle(
+          fontSize: 12,
+          lineSpacing: 1.3,
+          fontFallback: fonts.fallback,
+        ),
+        _linkStyle = pw.TextStyle(
           color: PdfColors.blue,
           decoration: pw.TextDecoration.underline,
+          fontFallback: fonts.fallback,
         ),
         _codeStyle = pw.TextStyle(
           fontSize: 11,
-          font: pw.Font.courier(),
+          font: fonts.monospace,
+          fontFallback: fonts.fallback,
         ),
-        _imageFallbackStyle = const pw.TextStyle(
+        _imageFallbackStyle = pw.TextStyle(
           fontSize: 10,
           color: PdfColors.grey600,
           fontStyle: pw.FontStyle.italic,
+          fontFallback: fonts.fallback,
         );
 
   final AppLocalizations l10n;
   final double maxContentWidth;
+  final _PdfFonts fonts;
 
   final pw.TextStyle _baseTextStyle;
   final pw.TextStyle _linkStyle;
@@ -1456,13 +1560,17 @@ class _MarkdownPdfRenderer {
       case 'b':
         return _buildInlineSpans(
           node.children ?? [],
-          styleOverride: style.merge(const pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          styleOverride: style.merge(
+            pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          ),
         );
       case 'em':
       case 'i':
         return _buildInlineSpans(
           node.children ?? [],
-          styleOverride: style.merge(const pw.TextStyle(fontStyle: pw.FontStyle.italic)),
+          styleOverride: style.merge(
+            pw.TextStyle(fontStyle: pw.FontStyle.italic),
+          ),
         );
       case 'code':
         final text = _extractPlainText(node);
@@ -1479,7 +1587,7 @@ class _MarkdownPdfRenderer {
         return _buildInlineSpans(
           node.children ?? [],
           styleOverride: style.merge(
-            const pw.TextStyle(decoration: pw.TextDecoration.lineThrough),
+            pw.TextStyle(decoration: pw.TextDecoration.lineThrough),
           ),
         );
       case 'br':
