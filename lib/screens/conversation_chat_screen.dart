@@ -9,23 +9,22 @@ import '../models/conversation.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
-import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/ai_tool_service.dart';
-import '../services/model_selector.dart';
-import '../models/model_type.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../l10n/app_localizations.dart';
+import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
+import 'immersive_note_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
@@ -47,21 +46,12 @@ class ConversationChatScreen extends StatefulWidget {
   State<ConversationChatScreen> createState() => _ConversationChatScreenState();
 }
 
-class _AssistantResponse {
-  const _AssistantResponse({
-    required this.content,
-    this.metadata,
-  });
-
-  final String content;
-  final Map<String, dynamic>? metadata;
-}
-
 class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
+  final ConversationAiEngine _aiEngine = const ConversationAiEngine();
 
   Conversation? _conversation;
   List<ConversationMessage> _messages = [];
@@ -394,6 +384,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
+    String? requestId;
     _messageController.clear();
     setState(() {
       _attachedFiles.clear();
@@ -444,7 +435,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       _scrollToBottom();
 
       // Generate AI response
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      requestId = DateTime.now().millisecondsSinceEpoch.toString();
       _currentRequestId = requestId;
 
       final aiResponse = await _generateAIResponse(
@@ -452,11 +443,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         attachments,
         requestId,
       );
-
-      if (_cancelledRequestIds.contains(requestId)) {
-        _cancelledRequestIds.remove(requestId);
-        return; // Stop processing if the request was cancelled
-      }
 
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -469,6 +455,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         _messages.add(aiMessage);
       });
       _scrollToBottom();
+    } on ConversationCancelledException {
+      if (requestId != null) {
+        _cancelledRequestIds.remove(requestId);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -480,6 +478,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         setState(() {
           _isSending = false;
           _currentRequestId = null;
+          if (requestId != null) {
+            _cancelledRequestIds.remove(requestId);
+          }
         });
       }
     }
@@ -498,6 +499,20 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         ),
       );
     }
+  }
+
+  void _openInImmersiveMode() {
+    if (_notes.isEmpty) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImmersiveNoteScreen(
+          notes: List<Note>.from(_notes),
+        ),
+      ),
+    );
   }
 
   Future<void> _abortRequest() async {
@@ -530,47 +545,58 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     });
   }
 
-  Future<_AssistantResponse> _generateAIResponse(
+  Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
     String requestId,
   ) async {
     try {
-      // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
+        throw const ConversationCancelledException();
       }
 
       final request = await _buildConversationPrompt(attachedFiles);
 
-      // Check if this specific request was cancelled before AI generation
       if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
+        throw const ConversationCancelledException();
       }
 
-      // Check if any external tools are available
-      if (_hasAnyTools) {
-        return await _generateWithMcpTools(request, requestId);
-      } else {
-        final responseText = await AIService.executePrompt(
-          request,
-          requestId: requestId,
-        );
+      final activeTools = _buildActiveToolsMap();
+      final response = await _aiEngine.generate(
+        request: request,
+        activeTools: activeTools,
+        enableTools: activeTools.isNotEmpty,
+        executeTool: (serviceName, toolName, params) async {
+          if (_aiToolBundles.containsKey(serviceName)) {
+            final runtime = await _getAiToolRuntime(serviceName);
+            return runtime.invoke(toolName, params);
+          }
 
-        // Check if this specific request was cancelled after AI response
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
+          return McpToolIntegrationService.executeToolCall(
+            serviceName: serviceName,
+            toolName: toolName,
+            parameters: params,
+            enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+          );
+        },
+        isCancelled: () => _cancelledRequestIds.contains(requestId),
+        requestId: requestId,
+      );
 
-        return _AssistantResponse(content: responseText);
-      }
-    } catch (e) {
       if (_cancelledRequestIds.contains(requestId)) {
-        // Don't show error for cancelled requests
-        rethrow;
+        throw const ConversationCancelledException();
       }
-      LoggerService.error('Error generating AI response: $e', error: e);
-      return _AssistantResponse(
+
+      return response;
+    } on ConversationCancelledException {
+      rethrow;
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error generating AI response: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return const ConversationAiResponse(
         content:
             'I apologize, but I encountered an error while generating a response. Please try again.',
       );
@@ -749,231 +775,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
 
     return file;
-  }
-
-  Future<_AssistantResponse> _generateWithMcpTools(
-    PromptRequest request,
-    String requestId,
-  ) async {
-    try {
-      if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
-      }
-
-      var currentMessages = <PromptMessage>[
-        request.systemMessage,
-        ...request.contextMessages,
-        ...request.conversationMessages,
-      ];
-
-      final currentModelType = ModelSelector.instance.currentModelType;
-      final activeTools = _buildActiveToolsMap();
-      final callToolFunction = currentModelType == ModelType.openaiCompatible
-          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
-          : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
-
-      LoggerService.info(
-        'Starting tool-enabled conversation with ${activeTools.length} services',
-      );
-
-      const maxIterations = 10;
-      final conversationParts = <String>[];
-      Map<String, dynamic>? lastAssistantMetadata;
-
-      for (int iteration = 0; iteration < maxIterations; iteration++) {
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
-
-        LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
-
-        final response = await ModelSelector.instance
-            .generateWithToolsAndMessages(currentMessages, [callToolFunction]);
-
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
-
-        final textResponse = response['text'] as String?;
-        final functionCalls = response['function_calls'] as List?;
-
-        if (functionCalls != null && functionCalls.isNotEmpty) {
-          LoggerService.info(
-            'AI requested ${functionCalls.length} tool call(s)',
-          );
-
-          final toolResults = <String>[];
-          final toolCallsWithResults = <Map<String, dynamic>>[];
-
-          for (int i = 0; i < functionCalls.length; i++) {
-            if (_cancelledRequestIds.contains(requestId)) {
-              throw Exception('Request cancelled by user');
-            }
-
-            final functionCall = functionCalls[i] as Map<String, dynamic>;
-            final functionName = functionCall['name'] as String;
-            final rawArgs = functionCall['args'];
-
-            LoggerService.debug(
-              'Processing function call',
-              error: {'functionName': functionName, 'args': rawArgs},
-            );
-
-            if (functionName != 'call_tool') {
-              continue;
-            }
-
-            final parsedArgs = McpToolIntegrationService.parseCallToolArguments(
-              rawArgs,
-            );
-            if (parsedArgs == null) {
-              LoggerService.error(
-                'Failed to parse call_tool arguments',
-                error: {'args': rawArgs},
-              );
-              continue;
-            }
-
-            final serviceName = parsedArgs['service_name'] as String;
-            final toolName = parsedArgs['tool_name'] as String;
-            final params = parsedArgs['params'] as Map<String, dynamic>;
-
-            LoggerService.info('Executing: $serviceName.$toolName');
-            LoggerService.debug('Tool parameters', error: params);
-
-            try {
-              String result;
-              if (_aiToolBundles.containsKey(serviceName)) {
-                final runtime = await _getAiToolRuntime(serviceName);
-                result = await runtime.invoke(toolName, params);
-              } else {
-                result = await McpToolIntegrationService.executeToolCall(
-                  serviceName: serviceName,
-                  toolName: toolName,
-                  parameters: params,
-                  enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-                );
-              }
-
-              final toolSummary =
-                  'Tool: $serviceName.$toolName\nResult: $result';
-              toolResults.add(toolSummary);
-              conversationParts.add('[Tool executed: $serviceName.$toolName]');
-
-              if (currentModelType == ModelType.openaiCompatible) {
-                final timestamp = DateTime.now()
-                    .millisecondsSinceEpoch
-                    .toRadixString(36);
-                final shortName = toolName.length > 10
-                    ? toolName.substring(0, 10)
-                    : toolName;
-                final toolCallId =
-                    't_${timestamp}_${shortName}_$i';
-                toolCallsWithResults.add({
-                  'id': toolCallId,
-                  'function_call': functionCall,
-                  'result': toolSummary,
-                });
-              }
-            } catch (e) {
-              LoggerService.error('Tool execution failed: $e');
-              toolResults.add('Tool: $serviceName.$toolName\nError: $e');
-            }
-          }
-
-          if (toolResults.isNotEmpty) {
-            final assistantMetadata = <String, dynamic>{
-              'function_calls': functionCalls,
-            };
-
-            if (toolCallsWithResults.isNotEmpty) {
-              assistantMetadata['tool_calls_with_results'] =
-                  toolCallsWithResults;
-            }
-
-            final assistantMessage = PromptMessage(
-              role: PromptRole.assistant,
-              content: textResponse ?? '',
-              metadata: assistantMetadata,
-            );
-            lastAssistantMetadata = assistantMetadata;
-
-            if (currentModelType == ModelType.openaiCompatible) {
-              final toolMessages = toolCallsWithResults
-                  .map(
-                    (toolCall) => PromptMessage(
-                      role: PromptRole.tool,
-                      content: toolCall['result'] as String,
-                      metadata: {'tool_call_id': toolCall['id']},
-                    ),
-                  )
-                  .toList();
-
-              currentMessages = [
-                ...currentMessages,
-                assistantMessage,
-                ...toolMessages,
-              ];
-            } else {
-              // For Gemini, we need to store function call info in metadata
-              // so we can properly format the functionResponse
-              final toolMessages = <PromptMessage>[];
-              for (int i = 0; i < toolResults.length; i++) {
-                final functionCall = i < functionCalls.length ? functionCalls[i] : null;
-                toolMessages.add(
-                  PromptMessage(
-                    role: PromptRole.user,
-                    content: toolResults[i],
-                    metadata: functionCall != null ? {
-                      'function_name': functionCall['name'],
-                      'function_args': functionCall['args'],
-                    } : null,
-                  ),
-                );
-              }
-
-              currentMessages = [
-                ...currentMessages,
-                assistantMessage,
-                ...toolMessages,
-              ];
-            }
-
-            continue;
-          }
-        }
-
-        if (textResponse != null && textResponse.isNotEmpty) {
-          conversationParts.add(textResponse);
-          return _AssistantResponse(
-            content: conversationParts.join('\n\n'),
-            metadata: lastAssistantMetadata,
-          );
-        }
-
-        LoggerService.warning('AI returned empty response after tool calls');
-        return _AssistantResponse(
-          content: 'I was unable to generate a response. Please try again.',
-          metadata: lastAssistantMetadata,
-        );
-      }
-
-      LoggerService.warning('MCP tool loop exceeded $maxIterations iterations');
-      return _AssistantResponse(
-        content:
-            'I was unable to complete the request with the available tools. Please try again later.',
-        metadata: lastAssistantMetadata,
-      );
-    } catch (e) {
-      if (_cancelledRequestIds.contains(requestId)) {
-        rethrow;
-      }
-      LoggerService.error('Error during MCP tool execution: $e', error: e);
-      return _AssistantResponse(
-        content:
-            'I encountered an error while coordinating tools for this request. Please try again.',
-      );
-    }
   }
 
   Future<void> _attachFiles() async {
@@ -1712,9 +1513,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 _startNewConversation();
               } else if (value == 'add_tags') {
                 _showConversationTagsDialog();
+              } else if (value == 'open_immersive') {
+                _openInImmersiveMode();
               }
             },
             itemBuilder: (context) => [
+              if (_notes.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'open_immersive',
+                  child: Text(l10n.immersiveMode),
+                ),
               if (_conversation != null)
                 PopupMenuItem<String>(
                   value: 'add_tags',

@@ -15,16 +15,22 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
+import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
+import '../models/user_app.dart';
 import '../providers/app_provider.dart';
-import '../services/ai_service.dart';
+import '../services/ai_tool_service.dart';
 import '../services/conversation_service.dart';
+import '../services/conversation_ai_engine.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/mcp_service.dart';
+import '../services/mcp_tool_integration_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
+import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
@@ -65,12 +71,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, PDFViewController> _pdfControllers = {};
   final Map<String, TransformationController> _imageTransforms = {};
 
+  final ConversationAiEngine _aiEngine = const ConversationAiEngine();
   Conversation? _conversation;
   List<Note> _conversationNotes = [];
 
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
+  bool _isAborting = false;
+  String? _currentRequestId;
+  final Set<String> _cancelledRequestIds = {};
+  
+  // MCP support
+  List<McpEndpoint> _availableMcpEndpoints = [];
+  final Set<String> _selectedMcpEndpointIds = {};
+  Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
+  bool _isMcpPanelExpanded = false; // Collapsed by default
+
+  // AI tool support
+  Map<String, AiToolAppBundle> _aiToolBundles = {};
+  Map<String, List<McpTool>> _aiToolMcpMap = {};
+  final Set<String> _selectedAiToolServices = {};
+  final Map<String, AiToolRuntime> _aiToolRuntimes = {};
   final List<Offset> _penStrokePoints = [];
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
@@ -103,6 +125,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     // Don't create conversation immediately - wait for first message
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadConversationNotes();
+      _loadMcpEndpoints();
+      _loadAiTools();
     });
   }
 
@@ -112,6 +136,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _chatScrollController.dispose();
     _disposePdfResources();
     _disposeImageResources();
+    for (final runtime in _aiToolRuntimes.values) {
+      runtime.dispose();
+    }
+    _aiToolRuntimes.clear();
     super.dispose();
   }
 
@@ -177,6 +205,150 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
       rethrow;
     }
+  }
+
+  Future<void> _loadMcpEndpoints() async {
+    try {
+      final endpoints = await McpService.getEndpoints();
+      // Only show endpoints that have cached tools
+      final endpointsWithTools = <McpEndpoint>[];
+      for (final endpoint in endpoints) {
+        final cache = await McpService.getCachedTools(endpoint.id);
+        if (cache != null && cache.tools.isNotEmpty) {
+          endpointsWithTools.add(endpoint);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _availableMcpEndpoints = endpointsWithTools;
+        });
+      }
+    } catch (e) {
+      LoggerService.error('Error loading MCP endpoints: $e');
+    }
+  }
+
+  Future<void> _updateMcpTools() async {
+    if (_selectedMcpEndpointIds.isEmpty) {
+      setState(() {
+        _mcpToolsByEndpoint = {};
+      });
+      return;
+    }
+
+    try {
+      final toolsByEndpoint = await McpToolIntegrationService.getAvailableTools(
+        _selectedMcpEndpointIds.toList(),
+      );
+      setState(() {
+        _mcpToolsByEndpoint = toolsByEndpoint;
+      });
+      LoggerService.info(
+        'Updated MCP tools: ${toolsByEndpoint.length} services, ${toolsByEndpoint.values.fold(0, (sum, tools) => sum + tools.length)} tools',
+      );
+    } catch (e) {
+      LoggerService.error('Error updating MCP tools: $e');
+    }
+  }
+
+  Future<void> _loadAiTools() async {
+    final appProvider = context.read<AppProvider>();
+    final aiApps = appProvider.userApps
+        .where((app) => app.type == UserAppType.aiTool)
+        .toList();
+
+    final bundles = <String, AiToolAppBundle>{};
+    final mcpMap = <String, List<McpTool>>{};
+
+    for (final app in aiApps) {
+      if (app.selectedRevisionId == null) {
+        LoggerService.warning('AI tool "${app.name}" has no selected revision.');
+        continue;
+      }
+
+      try {
+        final revision = await UserAppService.getAppRevision(app.selectedRevisionId!);
+        if (revision == null) {
+          LoggerService.warning('AI tool "${app.name}" selected revision not found.');
+          continue;
+        }
+
+        final bundle = await AiToolService.loadAppBundle(app: app, revision: revision);
+        if (bundle == null || bundle.toolDefinitions.isEmpty) {
+          continue;
+        }
+
+        bundles[bundle.serviceName] = bundle;
+        mcpMap[bundle.serviceName] = bundle.toMcpTools();
+      } catch (e) {
+        LoggerService.error('Failed to load AI tool "${app.name}": $e');
+      }
+    }
+
+    final removedServices = _aiToolRuntimes.keys
+        .where((service) => !bundles.containsKey(service))
+        .toList(growable: false);
+    for (final service in removedServices) {
+      _aiToolRuntimes.remove(service)?.dispose();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _aiToolBundles = bundles;
+      _aiToolMcpMap = mcpMap;
+      _selectedAiToolServices
+          .removeWhere((service) => !mcpMap.containsKey(service));
+    });
+  }
+
+  Map<String, List<McpTool>> _buildActiveToolsMap() {
+    final combined = <String, List<McpTool>>{};
+    combined.addAll(_mcpToolsByEndpoint);
+
+    for (final service in _selectedAiToolServices) {
+      final tools = _aiToolMcpMap[service];
+      if (tools != null && tools.isNotEmpty) {
+        combined[service] = tools;
+      }
+    }
+
+    return combined;
+  }
+
+  bool get _hasAnyTools => _buildActiveToolsMap().isNotEmpty;
+
+  void _toggleAiToolService(String serviceName, bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _selectedAiToolServices.add(serviceName);
+      } else {
+        _selectedAiToolServices.remove(serviceName);
+      }
+    });
+
+    if (!isSelected) {
+      _aiToolRuntimes.remove(serviceName)?.dispose();
+    }
+  }
+
+  Future<AiToolRuntime> _getAiToolRuntime(String serviceName) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) {
+      return existing;
+    }
+
+    final bundle = _aiToolBundles[serviceName];
+    if (bundle == null) {
+      throw Exception('AI tool not available: $serviceName');
+    }
+
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
   }
 
   @override
@@ -478,26 +650,76 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     decoration: InputDecoration.collapsed(
                       hintText: l10n.askAiHint,
                     ),
-                    onSubmitted: (_) => _sendMessage(),
+                    onSubmitted: (_) {
+                      if (!_isSending && !_isAborting) {
+                        _sendMessage();
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: _isSending
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                  tooltip: l10n.send,
-                  onPressed: _isSending ? null : _sendMessage,
-                ),
+                _buildSendControl(l10n),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSendControl(AppLocalizations l10n) {
+    if (_isAborting) {
+      return const SizedBox(
+        width: 40,
+        height: 40,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (_isSending) {
+      return _buildAbortButtonWithSpinner(l10n);
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.send),
+      tooltip: l10n.send,
+      onPressed: _sendMessage,
+    );
+  }
+
+  Widget _buildAbortButtonWithSpinner(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                theme.colorScheme.error.withOpacity(0.3),
+              ),
+            ),
+          ),
+          Material(
+            color: theme.colorScheme.error,
+            shape: const CircleBorder(),
+            elevation: 2,
+            child: IconButton(
+              onPressed: _abortRequest,
+              icon: const Icon(Icons.stop, color: Colors.white, size: 18),
+              tooltip: l10n.cancelAiRequest,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -515,12 +737,193 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: LinearProgressIndicator(minHeight: 2),
             ),
+          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
+            _buildMcpSelectionSection(l10n),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _buildConversationList(l10n),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMcpSelectionSection(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final combinedTools = _buildActiveToolsMap();
+    final headerTitle = _isMcpPanelExpanded
+        ? l10n.mcpTools
+        : l10n.mcpAndLocalTools;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header - clickable to toggle expansion
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isMcpPanelExpanded = !_isMcpPanelExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cloud_sync,
+                  size: 16,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  headerTitle,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface.withOpacity(0.8),
+                  ),
+                ),
+                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                // Chevron icon that rotates based on expansion state
+                AnimatedRotation(
+                  turns: _isMcpPanelExpanded ? 0 : 0.5,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Expandable content
+          if (_isMcpPanelExpanded) ...[
+            const SizedBox(height: 8),
+            if (_availableMcpEndpoints.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _availableMcpEndpoints.map((endpoint) {
+                  final isSelected = _selectedMcpEndpointIds.contains(
+                    endpoint.id,
+                  );
+                  return FilterChip(
+                    label: Text(endpoint.name),
+                    selected: isSelected,
+                    onSelected: (selected) async {
+                      setState(() {
+                        if (selected) {
+                          _selectedMcpEndpointIds.add(endpoint.id);
+                        } else {
+                          _selectedMcpEndpointIds.remove(endpoint.id);
+                        }
+                      });
+                      await _updateMcpTools();
+                    },
+                    avatar: Icon(
+                      Icons.cloud,
+                      size: 16,
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            if (_aiToolBundles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.smart_toy,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    l10n.aiTools,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _aiToolBundles.entries.map((entry) {
+                  final serviceName = entry.key;
+                  final bundle = entry.value;
+                  final selected = _selectedAiToolServices.contains(serviceName);
+                  return FilterChip(
+                    label: Text(bundle.displayName),
+                    selected: selected,
+                    onSelected: (value) {
+                      _toggleAiToolService(serviceName, value);
+                    },
+                    avatar: Icon(
+                      Icons.smart_toy,
+                      size: 16,
+                      color: selected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            if (combinedTools.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                l10n.toolsAvailable(
+                  combinedTools.values.fold<int>(
+                    0,
+                    (sum, tools) => sum + tools.length,
+                  ),
+                ),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -1169,10 +1572,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     setState(() {
       _isSending = true;
+      _isAborting = false;
     });
 
     final content = trimmed;
     final attachments = List<PlatformFile>.from(_pendingAttachments);
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    _currentRequestId = requestId;
 
     _messageController.clear();
     setState(() {
@@ -1205,11 +1611,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       });
       _scrollToBottom();
 
-      final response = await _generateAiResponse(content, attachments);
+      final response = await _generateAiResponse(
+        content,
+        attachments,
+        requestId,
+      );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
         content: response.content,
-        metadata: null,
+        metadata: response.metadata,
       );
 
       if (!mounted) return;
@@ -1217,6 +1627,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _messages.add(aiMessage);
       });
       _scrollToBottom();
+    } on ConversationCancelledException {
+      _cancelledRequestIds.remove(requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e, stackTrace) {
       LoggerService.error(
         'Error sending immersive message: $e',
@@ -1232,14 +1652,47 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (mounted) {
         setState(() {
           _isSending = false;
+          _isAborting = false;
+          _currentRequestId = null;
         });
       }
+      _cancelledRequestIds.remove(requestId);
     }
   }
 
-  Future<_AssistantResponse> _generateAiResponse(
+  Future<void> _abortRequest() async {
+    if (!_isSending || _currentRequestId == null) return;
+
+    setState(() {
+      _isAborting = true;
+    });
+
+    _cancelledRequestIds.add(_currentRequestId!);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cancelling AI request...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (mounted) {
+      setState(() {
+        _isSending = false;
+        _isAborting = false;
+        _currentRequestId = null;
+      });
+    }
+  }
+
+  Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
+    String requestId,
   ) async {
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
@@ -1266,6 +1719,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           metadata: message.metadata,
         ),
       );
+
+      // Add tool results from previous assistant message
+      if (role == PromptRole.assistant) {
+        final toolCallsWithResults =
+            message.metadata?['tool_calls_with_results'] as List?;
+        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
+          for (final entry in toolCallsWithResults) {
+            final toolCallId = entry['id'];
+            final toolResult = entry['result'] as String? ?? '';
+            messages.add(
+              PromptMessage(
+                role: PromptRole.tool,
+                content: toolResult,
+                metadata: {
+                  if (toolCallId != null) 'tool_call_id': toolCallId,
+                  ...((entry is Map<String, dynamic>) ? entry : {}),
+                },
+              ),
+            );
+          }
+        }
+      }
     }
 
     messages.add(
@@ -1286,8 +1761,38 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       conversationMessages: messages,
     );
 
-    final responseText = await AIService.executePrompt(request);
-    return _AssistantResponse(responseText);
+    if (_cancelledRequestIds.contains(requestId)) {
+      throw const ConversationCancelledException();
+    }
+
+    final activeTools = _buildActiveToolsMap();
+
+    final response = await _aiEngine.generate(
+      request: request,
+      activeTools: activeTools,
+      enableTools: activeTools.isNotEmpty,
+      executeTool: (serviceName, toolName, params) async {
+        if (_aiToolBundles.containsKey(serviceName)) {
+          final runtime = await _getAiToolRuntime(serviceName);
+          return runtime.invoke(toolName, params);
+        }
+
+        return McpToolIntegrationService.executeToolCall(
+          serviceName: serviceName,
+          toolName: toolName,
+          parameters: params,
+          enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+        );
+      },
+      isCancelled: () => _cancelledRequestIds.contains(requestId),
+      requestId: requestId,
+    );
+
+    if (_cancelledRequestIds.contains(requestId)) {
+      throw const ConversationCancelledException();
+    }
+
+    return response;
   }
 
   PromptMessage _buildSystemPrompt() {
@@ -1297,6 +1802,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       'Format your responses using markdown.',
     ];
 
+    if (_hasAnyTools) {
+      lines.add(
+        'The user has enabled external tools (MCP services or user-defined AI tools). Prefer calling them when they can improve accuracy before responding.',
+      );
+    }
+
     if (_conversationNotes.isEmpty) {
       lines.add(
         'No note context is currently attached. Rely on the conversation history.',
@@ -1305,8 +1816,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final taskContext = lines.join('\n');
 
+    final combinedTools = _buildActiveToolsMap();
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(combinedTools);
+
     return SystemPromptBuilder.build(
-      taskContext: taskContext,
+      taskContext: '$taskContext\n\n$mcpToolsPrompt',
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
         AIPrompts.mathFormulaGuidelines,
@@ -1954,12 +2468,6 @@ class _FreeformStrokePainter extends CustomPainter {
   bool shouldRepaint(covariant _FreeformStrokePainter oldDelegate) {
     return !listEquals(oldDelegate._points, _points);
   }
-}
-
-class _AssistantResponse {
-  const _AssistantResponse(this.content);
-
-  final String content;
 }
 
 enum _AiPanelSide { top, bottom }
