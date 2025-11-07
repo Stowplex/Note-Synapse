@@ -264,7 +264,16 @@ class ShareService {
     // Create the main document
     final document = pw.Document(theme: theme);
 
-    // If there are PDF attachments, add them as image pages first
+    // Add the generated note content pages FIRST
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) => content,
+      ),
+    );
+
+    // If there are PDF attachments, add them as image pages AFTER the note content
     if (pdfAttachments.isNotEmpty) {
       for (var i = 0; i < pdfAttachments.length; i++) {
         try {
@@ -316,15 +325,6 @@ class ShareService {
         }
       }
     }
-
-    // Add the generated note content pages
-    document.addPage(
-      pw.MultiPage(
-        pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.all(24),
-        build: (context) => content,
-      ),
-    );
 
     final result = await document.save();
     LoggerService.debug('Generated final PDF: ${result.length} bytes');
