@@ -2,9 +2,9 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -258,7 +258,66 @@ class ShareService {
 
     final content = await exporter.buildContent();
 
+    // Collect all PDF attachments from notes
+    final pdfAttachments = await _collectPdfAttachments(notes);
+
+    // Create the main document
     final document = pw.Document(theme: theme);
+
+    // If there are PDF attachments, add them as image pages first
+    if (pdfAttachments.isNotEmpty) {
+      for (var i = 0; i < pdfAttachments.length; i++) {
+        try {
+          final pdfBytes = pdfAttachments[i];
+          LoggerService.debug('Converting PDF attachment ${i + 1} to images (${pdfBytes.length} bytes)');
+          
+          // Convert each PDF page to an image and add it to the document
+          await for (final page in Printing.raster(pdfBytes, dpi: 150)) {
+            final imageBytes = await page.toPng();
+            final image = pw.MemoryImage(imageBytes);
+            
+            document.addPage(
+              pw.Page(
+                pageFormat: pageFormat,
+                build: (context) => pw.Center(
+                  child: pw.Image(
+                    image,
+                    fit: pw.BoxFit.contain,
+                  ),
+                ),
+              ),
+            );
+          }
+          
+          LoggerService.debug('Successfully added PDF attachment ${i + 1} as images');
+        } catch (e, stackTrace) {
+          LoggerService.warning(
+            'Failed to convert PDF attachment ${i + 1} to images: $e',
+            error: e,
+            stackTrace: stackTrace,
+          );
+          
+          // Add a placeholder page for the failed PDF
+          document.addPage(
+            pw.Page(
+              pageFormat: pageFormat,
+              build: (context) => pw.Center(
+                child: pw.Text(
+                  'PDF Attachment ${i + 1}\n(Preview unavailable)',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    color: PdfColors.grey600,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    // Add the generated note content pages
     document.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
@@ -267,7 +326,43 @@ class ShareService {
       ),
     );
 
-    return document.save();
+    final result = await document.save();
+    LoggerService.debug('Generated final PDF: ${result.length} bytes');
+    return result;
+  }
+
+  /// Collect all PDF attachments from the notes
+  static Future<List<Uint8List>> _collectPdfAttachments(List<Note> notes) async {
+    final pdfAttachments = <Uint8List>[];
+    
+    for (final note in notes) {
+      for (final attachmentPath in note.attachmentPaths) {
+        try {
+          final extension = FileTypeUtils.getFileExtension(attachmentPath).toLowerCase();
+          if (extension != 'pdf') {
+            continue;
+          }
+
+          final file = File(attachmentPath);
+          if (!await file.exists()) {
+            LoggerService.warning('PDF attachment not found: $attachmentPath');
+            continue;
+          }
+
+          final bytes = await file.readAsBytes();
+          pdfAttachments.add(bytes);
+          LoggerService.debug('Collected PDF attachment: $attachmentPath (${bytes.length} bytes)');
+        } catch (e, stackTrace) {
+          LoggerService.warning(
+            'Failed to load PDF attachment $attachmentPath: $e',
+            error: e,
+            stackTrace: stackTrace,
+          );
+        }
+      }
+    }
+
+    return pdfAttachments;
   }
 
   static Future<Uint8List?> _loadImageBytesFromSource(String source) async {
@@ -350,8 +445,8 @@ class ShareService {
     if (lower.startsWith('data:')) {
       try {
         final data = UriData.parse(source);
-        final mime = data.mimeType?.toLowerCase();
-        return mime != null && mime.contains('image/svg');
+        final mime = data.mimeType.toLowerCase();
+        return mime.contains('image/svg');
       } catch (_) {
         return false;
       }
@@ -1205,11 +1300,13 @@ class _PdfNoteRenderer {
             ),
           );
         } else if (mimeType == 'application/pdf') {
+          // PDF attachments are merged as separate pages at the document level
+          // Show a note in the attachments section that it's included
           widgets.add(
             pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 8, top: 2),
               child: pw.Text(
-                l10n.pdfPreviewUnavailable,
+                '$fileName (PDF included as separate pages)',
                 style: pw.TextStyle(
                   fontSize: 9,
                   color: PdfColors.grey600,
