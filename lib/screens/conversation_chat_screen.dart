@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -26,11 +25,13 @@ import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'note_action_app_selection_screen.dart';
-import '../widgets/add_note_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
 import '../services/user_app_service.dart';
 import '../models/user_app.dart';
+import '../mixins/note_action_mixin.dart';
+import '../widgets/chat_message_action_row.dart';
+import '../widgets/active_tool_count_badge.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -46,7 +47,8 @@ class ConversationChatScreen extends StatefulWidget {
   State<ConversationChatScreen> createState() => _ConversationChatScreenState();
 }
 
-class _ConversationChatScreenState extends State<ConversationChatScreen> {
+class _ConversationChatScreenState extends State<ConversationChatScreen>
+    with NoteActionMixin<ConversationChatScreen> {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -972,6 +974,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   Widget _buildMcpSelectionSection() {
     final l10n = AppLocalizations.of(context)!;
     final combinedTools = _buildActiveToolsMap();
+    final activeMcpCount = _selectedMcpEndpointIds.length;
+    final activeLocalCount = _selectedAiToolServices.length;
+    final totalActiveCount = activeMcpCount + activeLocalCount;
     final headerTitle = _isMcpPanelExpanded
         ? l10n.mcpTools
         : l10n.mcpAndLocalTools;
@@ -1016,27 +1021,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                     ).colorScheme.onSurface.withOpacity(0.8),
                   ),
                 ),
-                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                if (totalActiveCount > 0) ...[
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
+                  ActiveToolCountBadge(
+                    count: totalActiveCount,
+                    label: l10n.active,
                   ),
                 ],
                 const Spacer(),
@@ -1057,6 +1046,34 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           ),
           // Expandable content
           if (_isMcpPanelExpanded) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.cloud,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  l10n.mcpTools,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.8),
+                      ),
+                ),
+                const Spacer(),
+                if (activeMcpCount > 0)
+                  ActiveToolCountBadge(
+                    count: activeMcpCount,
+                    label: l10n.active,
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1093,7 +1110,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
             if (_aiToolBundles.isNotEmpty) ...[
               const SizedBox(height: 16),
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.smart_toy,
@@ -1114,6 +1130,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                               .withOpacity(0.8),
                         ),
                   ),
+                  const Spacer(),
+                  if (activeLocalCount > 0)
+                    ActiveToolCountBadge(
+                      count: activeLocalCount,
+                      label: l10n.active,
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1166,77 +1188,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _addResponseToNote(String responseContent) async {
-    try {
-      final l10n = AppLocalizations.of(context)!;
-      final result = await AddNoteDialog.show(
-        context: context,
-        content: responseContent,
-        contextNotes: _notes,
-      );
-
-      if (!mounted || result == null) return;
-
-      if (result.isAppend) {
-        final appendedNote = result.appendedNote!;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
-            ),
-            backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => NoteDetailScreen(note: appendedNote),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-        return;
-      }
-
-      if (result.hasCreatedNotes) {
-        final createdNotes = result.createdNotes;
-        final firstNote = createdNotes.first;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              createdNotes.length == 1
-                  ? 'Note "${firstNote.title}" created successfully'
-                  : '${createdNotes.length} notes created successfully',
-            ),
-            backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => NoteDetailScreen(note: firstNote),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      LoggerService.error('Error creating note from AI response: $e', error: e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating note: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   void _scrollToBottom() {
@@ -1861,63 +1812,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  // Bottom-left subtle note action app icon button
-                  IconButton(
-                    icon: Icon(
-                      Icons.apps_outlined,
-                      size: 18,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    tooltip: 'Run Note Action App',
-                    onPressed: () => _openNoteActionAppsForContent(message),
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    padding: EdgeInsets.zero,
+              ChatMessageActionRow(
+                leading: IconButton(
+                  icon: Icon(
+                    Icons.apps_outlined,
+                    size: 18,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
                   ),
-                  const Spacer(),
-                  // Existing right-side actions
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: message.content));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.messageCopiedToClipboard),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: Text(l10n.copy),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                  tooltip: 'Run Note Action App',
+                  onPressed: () => _openNoteActionAppsForContent(message),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
                   ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _addResponseToNote(message.content),
-                    icon: const Icon(Icons.note_add, size: 16),
-                    label: Text(l10n.addToNote),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
+                  padding: EdgeInsets.zero,
+                ),
+                onCopy: () => copyContentToClipboard(message.content),
+                onAddNote: () => handleAddContentToNote(
+                  content: message.content,
+                  contextNotes: _notes,
+                ),
               ),
             ],
           ],

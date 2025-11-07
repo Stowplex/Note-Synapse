@@ -35,6 +35,9 @@ import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../mixins/note_action_mixin.dart';
+import '../widgets/chat_message_action_row.dart';
+import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
@@ -52,7 +55,7 @@ class ImmersiveNoteScreen extends StatefulWidget {
 }
 
 class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, NoteActionMixin<ImmersiveNoteScreen> {
   final ConversationService _conversationService = ConversationService();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
@@ -904,6 +907,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Widget _buildMcpSelectionSection(AppLocalizations l10n) {
     final theme = Theme.of(context);
     final combinedTools = _buildActiveToolsMap();
+    final activeMcpCount = _selectedMcpEndpointIds.length;
+    final activeLocalCount = _selectedAiToolServices.length;
+    final totalActiveCount = activeMcpCount + activeLocalCount;
     final headerTitle = _isMcpPanelExpanded
         ? l10n.mcpTools
         : l10n.mcpAndLocalTools;
@@ -944,31 +950,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     color: theme.colorScheme.onSurface.withOpacity(0.8),
                   ),
                 ),
-                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                if (totalActiveCount > 0) ...[
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
+                  ActiveToolCountBadge(
+                    count: totalActiveCount,
+                    label: l10n.active,
                   ),
                 ],
                 const Spacer(),
                 // Chevron icon that rotates based on expansion state
                 AnimatedRotation(
-                  turns: _isMcpPanelExpanded ? 0 : 0.5,
+                  turns: _isMcpPanelExpanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.keyboard_arrow_down,
@@ -983,6 +975,30 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           if (_isMcpPanelExpanded) ...[
             const SizedBox(height: 8),
             if (_availableMcpEndpoints.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(
+                    Icons.cloud,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    l10n.mcpTools,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (activeMcpCount > 0)
+                    ActiveToolCountBadge(
+                      count: activeMcpCount,
+                      label: l10n.active,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -1017,7 +1033,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             if (_aiToolBundles.isNotEmpty) ...[
               const SizedBox(height: 16),
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.smart_toy,
@@ -1032,6 +1047,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       color: theme.colorScheme.onSurface.withOpacity(0.8),
                     ),
                   ),
+                  const Spacer(),
+                  if (activeLocalCount > 0)
+                    ActiveToolCountBadge(
+                      count: activeLocalCount,
+                      label: l10n.active,
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1207,6 +1228,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     padding: const EdgeInsets.only(top: 8),
                     child: _buildMessageAttachmentChips(message, l10n),
                   ),
+                if (!isUser) ...[
+                  const SizedBox(height: 12),
+                  ChatMessageActionRow(
+                    onCopy: () => copyContentToClipboard(message.content),
+                    onAddNote: () => handleAddContentToNote(
+                      content: message.content,
+                      contextNotes: _conversationNotes,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
