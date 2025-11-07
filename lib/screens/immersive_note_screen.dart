@@ -68,7 +68,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Conversation? _conversation;
   List<Note> _conversationNotes = [];
 
-  bool _isAiExpanded = false;
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
@@ -76,6 +75,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
+  static const double _aiHandleHeight = 76.0;
+  static const double _aiHandleWidth = 360.0;
+  static const double _aiPanelHeightFraction = 0.45;
+  static const double _aiHandleMargin = 12.0;
+  double _aiHandleFraction = 0.5;
+  bool _isAiPanelExpanded = false;
+  _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
 
   @override
   void initState() {
@@ -113,12 +119,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       final noteIds = List<String>.from(_noteOrder);
-      final primaryNote = await _databaseService.getNote(noteIds.first);
-      final title = primaryNote?.title ?? 'Immersive Session';
+        final primaryNote = await _databaseService.getNote(noteIds.first);
+        final title = primaryNote?.title ?? 'Immersive Session';
       final conversation = await _conversationService.createConversation(
-        title: 'Immersive: $title',
-        noteIds: noteIds,
-      );
+          title: 'Immersive: $title',
+          noteIds: noteIds,
+        );
 
       final conversationNotes = await _conversationService.getConversationNotes(
         conversation.id,
@@ -182,38 +188,52 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final activeNote = notes[_activeNoteIndex.clamp(0, notes.length - 1)];
 
         return Scaffold(
-          appBar: AppBar(title: Text(l10n.immersiveMode)),
+          appBar: AppBar(
+            title: Text(l10n.immersiveMode),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.format_list_bulleted),
+                tooltip: l10n.outline,
+                onPressed: () => _showOutline(notes, l10n),
+              ),
+              IconButton(
+                icon: const Icon(Icons.account_tree),
+                tooltip: l10n.viewTree,
+                onPressed:
+                    _conversation == null ? null : () => _openConversationTree(),
+              ),
+            ],
+          ),
           body: SafeArea(
-            child: Column(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = constraints.biggest;
+                final overlays = _buildAiOverlays(size, l10n);
+                return Stack(
               children: [
-                _buildAiBar(l10n, notes),
-                const Divider(height: 1),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      _buildNoteArea(activeNote, l10n),
+                    Positioned.fill(child: _buildNoteArea(activeNote, l10n)),
                       if (_isPenMode)
                         Positioned.fill(
                           child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
+                          behavior: HitTestBehavior.opaque,
                             onPanStart: _handlePenPanStart,
                             onPanUpdate: _handlePenPanUpdate,
                             onPanEnd: (_) => _handlePenPanEnd(),
-                            onPanCancel: _resetPenStroke,
-                            child: CustomPaint(
-                              painter: _FreeformStrokePainter(
-                                _penStrokePoints.isEmpty
-                                    ? null
-                                    : List<Offset>.from(_penStrokePoints),
+                          onPanCancel: _resetPenStroke,
+                              child: CustomPaint(
+                            painter: _FreeformStrokePainter(
+                              _penStrokePoints.isEmpty
+                                  ? null
+                                  : List<Offset>.from(_penStrokePoints),
+                            ),
+                                size: Size.infinite,
                               ),
-                              size: Size.infinite,
                             ),
                           ),
-                        ),
+                    ...overlays,
                     ],
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         );
@@ -243,113 +263,192 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return resolved;
   }
 
-  Widget _buildAiBar(AppLocalizations l10n, List<Note> notes) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: _isAiExpanded
-              ? MediaQuery.of(context).size.height * 0.6
-              : 72,
-        ),
-        child: Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          elevation: 1,
-          child: _isAiExpanded
-              ? _buildExpandedAiBar(l10n, notes)
-              : _buildCollapsedAiBar(l10n, notes),
-        ),
+  List<Widget> _buildAiOverlays(
+    Size size,
+    AppLocalizations l10n,
+  ) {
+    final overlays = <Widget>[];
+    final totalHeight = size.height;
+    final handleHeight = _currentHandleHeight();
+    final panelHeight = _computePanelHeight(totalHeight);
+
+    double handleTop;
+
+    if (_isAiPanelExpanded) {
+      final clampedPanelHeight = panelHeight.clamp(
+        handleHeight * 1.2,
+        totalHeight - handleHeight - (_aiHandleMargin * 2),
+      );
+
+      if (_aiPanelSide == _AiPanelSide.top) {
+        overlays.add(
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: clampedPanelHeight,
+            child: _buildAiPanelContent(l10n),
+          ),
+        );
+        handleTop = clampedPanelHeight - handleHeight;
+      } else {
+        overlays.add(
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: clampedPanelHeight,
+            child: _buildAiPanelContent(l10n),
+          ),
+        );
+        handleTop = totalHeight - clampedPanelHeight - handleHeight;
+      }
+    } else {
+      final trackHeight = totalHeight - handleHeight;
+      handleTop = (_aiHandleFraction * trackHeight)
+          .clamp(_aiHandleMargin, totalHeight - handleHeight - _aiHandleMargin);
+    }
+
+    final double clampedHandleTop = handleTop.clamp(
+      _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin,
+    );
+
+    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+    overlays.add(
+      Positioned(
+        left: _aiHandleMargin,
+        top: clampedHandleTop,
+        width: handleWidth,
+        child: _buildAiHandle(l10n, size, handleWidth),
       ),
     );
+
+    return overlays;
   }
 
-  Widget _buildCollapsedAiBar(AppLocalizations l10n, List<Note> notes) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
+  double _computePanelHeight(double totalHeight) {
+    final desired = totalHeight * _aiPanelHeightFraction;
+    final minHeight = totalHeight * 0.25;
+    final maxHeight = totalHeight * 0.75;
+    return desired.clamp(minHeight, maxHeight);
+  }
+
+  double _currentHandleHeight() {
+    if (_pendingAttachments.isEmpty) {
+      return _aiHandleHeight;
+    }
+    final attachmentRows = (_pendingAttachments.length / 2).ceil();
+    return _aiHandleHeight + attachmentRows * 32.0;
+  }
+
+  Widget _buildAiHandle(
+    AppLocalizations l10n,
+    Size canvasSize,
+    double handleWidth,
+  ) {
+    final theme = Theme.of(context);
+    final bool expanded = _isAiPanelExpanded;
+    final double dynamicHeight = _currentHandleHeight();
+
+    final Widget controlWidget;
+    if (expanded) {
+      controlWidget = Center(
+        child: IconButton(
+          icon: const Icon(Icons.chevron_left),
+          tooltip: l10n.collapse,
+          onPressed: _collapseAiPanel,
+        ),
+      );
+    } else {
+      controlWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(Icons.expand_more),
+            icon: const Icon(Icons.keyboard_arrow_up),
             tooltip: l10n.expand,
-            onPressed: () => setState(() => _isAiExpanded = true),
-          ),
-          Expanded(
-            child: Text(
-              l10n.aiChat,
-              style: Theme.of(context).textTheme.titleMedium,
+            onPressed: () => _expandAiPanel(
+              _AiPanelSide.top,
+              canvasSize.height,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.format_list_bulleted),
-            tooltip: l10n.outline,
-            onPressed: () => _showOutline(notes, l10n),
-          ),
-          IconButton(
-            icon: const Icon(Icons.account_tree),
-            tooltip: l10n.viewTree,
-            onPressed: _conversation == null
-                ? null
-                : () => _openConversationTree(),
+            icon: const Icon(Icons.keyboard_arrow_down),
+            tooltip: l10n.expand,
+            onPressed: () => _expandAiPanel(
+              _AiPanelSide.bottom,
+              canvasSize.height,
+            ),
           ),
         ],
+      );
+    }
+
+    return GestureDetector(
+      onPanUpdate: (details) => _updateHandleDrag(details.delta.dy, canvasSize.height),
+      child: Material(
+        color: theme.colorScheme.surface.withOpacity(0.85),
+        elevation: 6,
+        borderRadius: BorderRadius.circular(16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: dynamicHeight, maxWidth: handleWidth),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+      child: Column(
+              mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                    SizedBox(
+                      width: 44,
+                        child: controlWidget,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildAiComposer(l10n)),
+                  ],
+              ),
+            ],
+          ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildExpandedAiBar(AppLocalizations l10n, List<Note> notes) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.expand_less),
-                tooltip: l10n.collapse,
-                onPressed: () => setState(() => _isAiExpanded = false),
-              ),
-              Text(l10n.aiChat, style: Theme.of(context).textTheme.titleMedium),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.format_list_bulleted),
-                tooltip: l10n.outline,
-                onPressed: () => _showOutline(notes, l10n),
-              ),
-              IconButton(
-                icon: const Icon(Icons.account_tree),
-                tooltip: l10n.viewTree,
-                onPressed: _conversation == null
-                    ? null
-                    : () => _openConversationTree(),
-              ),
-            ],
-          ),
-          if (_isLoadingConversation)
-            const LinearProgressIndicator(minHeight: 2),
-          const SizedBox(height: 8),
-          Expanded(child: _buildConversationList(l10n)),
+  Widget _buildAiComposer(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           if (_pendingAttachments.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: _buildPendingAttachmentsPreview(l10n),
             ),
-          Row(
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
             children: [
               IconButton(
                 icon: Icon(
                   Icons.brush,
-                  color: _isPenMode
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
+                    color: _isPenMode ? theme.colorScheme.primary : null,
                 ),
                 tooltip: l10n.annotate,
                 onPressed: () {
                   setState(() {
                     _isPenMode = !_isPenMode;
-                    _penStrokePoints.clear();
+                      _penStrokePoints.clear();
                   });
                 },
               ),
@@ -358,10 +457,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   controller: _messageController,
                   maxLines: 4,
                   minLines: 1,
-                  decoration: InputDecoration(
+                    decoration: InputDecoration.collapsed(
                     hintText: l10n.askAiHint,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
                   ),
                   onSubmitted: (_) => _sendMessage(),
                 ),
@@ -379,10 +476,102 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 onPressed: _isSending ? null : _sendMessage,
               ),
             ],
+            ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAiPanelContent(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.95),
+      elevation: 10,
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Text(
+                  l10n.aiChat,
+                  style: theme.textTheme.titleMedium,
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: l10n.collapse,
+                  onPressed: _collapseAiPanel,
+                ),
+              ],
+            ),
+          ),
+          if (_isLoadingConversation)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildConversationList(l10n),
+            ),
+          ),
+          const SizedBox(height: 12),
         ],
       ),
     );
+  }
+
+  void _expandAiPanel(_AiPanelSide side, double totalHeight) {
+    setState(() {
+      _isAiPanelExpanded = true;
+      _aiPanelSide = side;
+      final handleHeight = _currentHandleHeight();
+      final handleTravel = totalHeight - handleHeight;
+      final panelHeight = _computePanelHeight(totalHeight).clamp(
+        handleHeight * 1.2,
+        totalHeight - handleHeight - (_aiHandleMargin * 2),
+      );
+      final targetTop = side == _AiPanelSide.top
+          ? panelHeight - handleHeight
+          : totalHeight - panelHeight - handleHeight;
+      final clampedTop = targetTop.clamp(
+        _aiHandleMargin,
+        totalHeight - handleHeight - _aiHandleMargin,
+      );
+      _aiHandleFraction = handleTravel <= 0
+          ? 0.5
+          : (clampedTop / handleTravel).clamp(0.0, 1.0);
+    });
+  }
+
+  void _collapseAiPanel() {
+    setState(() {
+      _isAiPanelExpanded = false;
+    });
+  }
+
+  void _updateHandleDrag(double deltaDy, double totalHeight) {
+    final handleHeight = _currentHandleHeight();
+    final handleTravel = totalHeight - handleHeight;
+    if (handleTravel <= 0) {
+      return;
+    }
+
+    final currentTop = _aiHandleFraction * handleTravel;
+    final newTop = (currentTop + deltaDy).clamp(
+      _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin,
+    );
+
+    setState(() {
+      _aiHandleFraction = (newTop / handleTravel).clamp(0.0, 1.0);
+      _isAiPanelExpanded = false;
+    });
   }
 
   Widget _buildConversationList(AppLocalizations l10n) {
@@ -392,8 +581,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Text(
           l10n.startConversationHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
         ),
       );
     }
@@ -428,11 +617,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                  SelectableText(
-                    message.content,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                SelectableText(
+                  message.content,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                   )
                 else
                   SelectionArea(
@@ -442,8 +631,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                       onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
-                    ),
-                  ),
+                      ),
+                ),
                 if (message.attachmentPaths.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -526,9 +715,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
-                    note.id,
-                    newContent,
-                  );
+                        note.id,
+                        newContent,
+                      );
                 },
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -569,8 +758,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           return ClipRect(
             child: InteractiveViewer(
               transformationController: transformController,
-              minScale: 0.5,
-              maxScale: 4,
+            minScale: 0.5,
+            maxScale: 4,
               constrained: false,
               clipBehavior: Clip.hardEdge,
               child: Align(alignment: Alignment.topLeft, child: imageWidget),
@@ -583,7 +772,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
 
         if (extension == 'pdf') {
-          return _buildPdfViewer(source, l10n);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final availableHeight = constraints.hasBoundedHeight &&
+                      constraints.maxHeight.isFinite &&
+                      constraints.maxHeight > 0
+                  ? constraints.maxHeight
+                  : MediaQuery.of(context).size.height;
+              return _PdfDocumentView(
+                source: source,
+                availableHeight: availableHeight,
+                currentPageMap: _pdfCurrentPages,
+                totalPageMap: _pdfTotalPages,
+                controllerMap: _pdfControllers,
+                onError: (message) => LoggerService.error(message),
+              );
+            },
+          );
         }
 
         return Center(
@@ -634,12 +839,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Widget _buildPdfViewer(_AttachmentSource source, AppLocalizations l10n) {
-    return _PdfDocumentView(
-      source: source,
-      currentPageMap: _pdfCurrentPages,
-      totalPageMap: _pdfTotalPages,
-      controllerMap: _pdfControllers,
-      onError: (message) => LoggerService.error(message),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.hasBoundedHeight &&
+                constraints.maxHeight.isFinite &&
+                constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : MediaQuery.of(context).size.height;
+        return _PdfDocumentView(
+          source: source,
+          availableHeight: availableHeight,
+          currentPageMap: _pdfCurrentPages,
+          totalPageMap: _pdfTotalPages,
+          controllerMap: _pdfControllers,
+          onError: (message) => LoggerService.error(message),
+        );
+      },
     );
   }
 
@@ -722,9 +937,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ConversationTreeScreen(
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
             filterByActiveConversations: true,
             onOpenConversation: _handleConversationOpenedFromTree,
@@ -1263,7 +1478,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final Paint glowPaint = Paint()
         ..color = Colors.redAccent.withOpacity(0.18)
-        ..style = PaintingStyle.stroke
+      ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..strokeWidth = strokeWidth * 2;
@@ -1385,6 +1600,7 @@ class _AttachmentSource {
 class _PdfDocumentView extends StatefulWidget {
   const _PdfDocumentView({
     required this.source,
+    required this.availableHeight,
     required this.currentPageMap,
     required this.totalPageMap,
     required this.controllerMap,
@@ -1392,6 +1608,7 @@ class _PdfDocumentView extends StatefulWidget {
   });
 
   final _AttachmentSource source;
+  final double availableHeight;
   final Map<String, int> currentPageMap;
   final Map<String, int> totalPageMap;
   final Map<String, PDFViewController> controllerMap;
@@ -1404,6 +1621,8 @@ class _PdfDocumentView extends StatefulWidget {
 class _PdfDocumentViewState extends State<_PdfDocumentView>
     with AutomaticKeepAliveClientMixin {
   late Future<String> _pdfPathFuture;
+  String? _resolvedPath;
+  Widget? _cachedView;
 
   String get _cacheKey => widget.source.cacheKey;
 
@@ -1418,6 +1637,8 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.source.cacheKey != widget.source.cacheKey) {
       _pdfPathFuture = _resolvePdfPath();
+      _resolvedPath = null;
+      _cachedView = null;
     }
   }
 
@@ -1449,62 +1670,76 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
         }
 
         final filePath = snapshot.data!;
-        final initialPage =
-            widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
+        if (_cachedView == null || _resolvedPath != filePath) {
+          _resolvedPath = filePath;
+          _cachedView = _buildPdfView(filePath);
+        }
 
-        return PDFView(
-          key: ValueKey('${_cacheKey}_pdf_view'),
-          filePath: filePath,
-          autoSpacing: false,
-          pageFling: false,
-          pageSnap: false,
-          enableSwipe: true,
-          swipeHorizontal: false,
-          fitPolicy: FitPolicy.BOTH,
-          preventLinkNavigation: false,
-          defaultPage: initialPage,
-          onViewCreated: (controller) async {
-            widget.controllerMap[_cacheKey] = controller;
-            final storedPage = widget.currentPageMap[_cacheKey] ?? 0;
-            try {
-              final currentPage = await controller.getCurrentPage();
-              if (currentPage != storedPage) {
-                await controller.setPage(storedPage);
-              }
-            } catch (e) {
-              widget.onError('Unable to set initial PDF page: $e');
-            }
-          },
-          onRender: (pages) {
-            if (pages != null) {
-              widget.totalPageMap[_cacheKey] = pages;
-              final stored = widget.currentPageMap[_cacheKey];
-              if (stored != null && stored >= pages) {
-                widget.currentPageMap[_cacheKey] = pages - 1;
-              }
-            }
-          },
-          onPageChanged: (page, total) {
-            if (page != null) {
-              widget.currentPageMap[_cacheKey] = page;
-            }
-            if (total != null) {
-              widget.totalPageMap[_cacheKey] = total;
-            }
-          },
-          onError: (error) {
-            widget.onError('PDFView error: $error');
-          },
-          onPageError: (page, error) {
-            widget.onError('PDFView page error ($page): $error');
-          },
-        );
+        return _cachedView!;
       },
+    );
+  }
+
+  Widget _buildPdfView(String filePath) {
+    widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
+
+    return PDFView(
+      key: ValueKey('${_cacheKey}_pdf_view'),
+      filePath: filePath,
+      autoSpacing: false,
+      pageFling: false,
+      pageSnap: false,
+      enableSwipe: true,
+      swipeHorizontal: false,
+      fitPolicy: FitPolicy.BOTH,
+      preventLinkNavigation: false,
+      onViewCreated: (controller) async {
+        widget.controllerMap[_cacheKey] = controller;
+        final storedPage = widget.currentPageMap[_cacheKey] ?? 0;
+        try {
+          final currentPage = await controller.getCurrentPage();
+          if (currentPage != storedPage) {
+            await controller.setPage(storedPage);
+          }
+        } catch (e) {
+          widget.onError('Unable to set initial PDF page: $e');
+        }
+      },
+      onRender: (pages) {
+        if (pages != null) {
+          widget.totalPageMap[_cacheKey] = pages;
+          final stored = widget.currentPageMap[_cacheKey];
+          if (stored != null && stored >= pages) {
+            widget.currentPageMap[_cacheKey] = pages - 1;
+          }
+        }
+      },
+      onPageChanged: (page, total) {
+        if (page != null) {
+          widget.currentPageMap[_cacheKey] = page;
+        }
+        if (total != null) {
+          widget.totalPageMap[_cacheKey] = total;
+        }
+      },
+      onError: (error) {
+        widget.onError('PDFView error: $error');
+      },
+      onPageError: (page, error) {
+        widget.onError('PDFView page error ($page): $error');
+      },
+      backgroundColor: Colors.transparent,
     );
   }
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    widget.controllerMap.remove(_cacheKey);
+    super.dispose();
+  }
 }
 
 class _FreeformStrokePainter extends CustomPainter {
@@ -1565,3 +1800,5 @@ class _AssistantResponse {
 
   final String content;
 }
+
+enum _AiPanelSide { top, bottom }
