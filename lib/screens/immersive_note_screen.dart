@@ -73,7 +73,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isLoadingConversation = true;
   bool _isSending = false;
   final List<Offset> _penStrokePoints = [];
-  bool _isPdfMultiTouchActive = false;
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
@@ -86,7 +85,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (widget.initialAttachmentPath != null) {
       _activeAttachmentPath = widget.initialAttachmentPath;
-      _isPdfMultiTouchActive = false;
       final index = _findNoteIndexForAttachment(
         widget.initialAttachmentPath!,
         widget.notes,
@@ -115,12 +113,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       final noteIds = List<String>.from(_noteOrder);
-      final primaryNote = await _databaseService.getNote(noteIds.first);
-      final title = primaryNote?.title ?? 'Immersive Session';
+        final primaryNote = await _databaseService.getNote(noteIds.first);
+        final title = primaryNote?.title ?? 'Immersive Session';
       final conversation = await _conversationService.createConversation(
-        title: 'Immersive: $title',
-        noteIds: noteIds,
-      );
+          title: 'Immersive: $title',
+          noteIds: noteIds,
+        );
 
       final conversationNotes = await _conversationService.getConversationNotes(
         conversation.id,
@@ -147,7 +145,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           );
         }
         _activeAttachmentPath = null;
-        _isPdfMultiTouchActive = false;
       });
 
       _scrollToBottom();
@@ -203,13 +200,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             onPanUpdate: _handlePenPanUpdate,
                             onPanEnd: (_) => _handlePenPanEnd(),
                             onPanCancel: _resetPenStroke,
-                            child: CustomPaint(
+                              child: CustomPaint(
                               painter: _FreeformStrokePainter(
                                 _penStrokePoints.isEmpty
                                     ? null
                                     : List<Offset>.from(_penStrokePoints),
                               ),
-                              size: Size.infinite,
+                                size: Size.infinite,
                             ),
                           ),
                         ),
@@ -395,8 +392,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Text(
           l10n.startConversationHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
         ),
       );
     }
@@ -431,11 +428,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                  SelectableText(
-                    message.content,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                SelectableText(
+                  message.content,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                   )
                 else
                   SelectionArea(
@@ -445,8 +442,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                       onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
-                    ),
-                  ),
+                      ),
+                ),
                 if (message.attachmentPaths.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -529,9 +526,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
-                    note.id,
-                    newContent,
-                  );
+                        note.id,
+                        newContent,
+                      );
                 },
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -567,8 +564,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           return ClipRect(
             child: InteractiveViewer(
               transformationController: transformController,
-              minScale: 0.5,
-              maxScale: 4,
+            minScale: 0.5,
+            maxScale: 4,
               constrained: false,
               clipBehavior: Clip.hardEdge,
               child: Align(alignment: Alignment.topLeft, child: imageWidget),
@@ -648,33 +645,37 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
 
         final cacheKey = source.cacheKey;
-        final controller = _ensurePdfPageController(cacheKey, pages.length);
-        _ensurePdfControllerInRange(cacheKey, pages.length);
-
-        final pageViewPhysics = _isPdfMultiTouchActive
-            ? const NeverScrollableScrollPhysics()
-            : const PageScrollPhysics();
+        final pageCount = pages.length;
+        final controller = _ensurePdfPageController(cacheKey, pageCount);
+        _ensurePdfControllerInRange(cacheKey, pageCount);
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            return PageView.builder(
+        return PageView.builder(
               controller: controller,
-              physics: pageViewPhysics,
+              physics: const NeverScrollableScrollPhysics(),
               onPageChanged: (index) {
                 _pdfCurrentPages[cacheKey] = index;
               },
-              itemCount: pages.length,
-              itemBuilder: (context, index) {
-                final bytes = pages[index];
-                final transformController = _ensurePdfTransformController(
-                  cacheKey,
-                  index,
-                );
+              itemCount: pageCount,
+          itemBuilder: (context, index) {
+            final bytes = pages[index];
+                final transformController =
+                    _ensurePdfTransformController(cacheKey, index);
                 return _PdfPageViewer(
                   key: ValueKey('${source.cacheKey}_page_$index'),
                   bytes: bytes,
                   controller: transformController,
-                  onTwoFingerInteractionChanged: _handlePdfMultiTouchChange,
+                  onSwipeNext: () => _goToPdfPage(
+                    cacheKey,
+                    pageCount,
+                    index + 1,
+                  ),
+                  onSwipePrevious: () => _goToPdfPage(
+                    cacheKey,
+                    pageCount,
+                    index - 1,
+                  ),
                 );
               },
             );
@@ -735,7 +736,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     setState(() {
                       _activeNoteIndex = i;
                       _activeAttachmentPath = null;
-                      _isPdfMultiTouchActive = false;
                     });
                     Navigator.pop(context);
                   },
@@ -752,7 +752,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       setState(() {
                         _activeNoteIndex = i;
                         _activeAttachmentPath = attachment;
-                        _isPdfMultiTouchActive = false;
                       });
                       Navigator.pop(context);
                     },
@@ -790,9 +789,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ConversationTreeScreen(
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
             filterByActiveConversations: true,
             onOpenConversation: _handleConversationOpenedFromTree,
@@ -1166,7 +1165,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   void _resetPdfState() {
     _disposePdfResources();
-    _isPdfMultiTouchActive = false;
   }
 
   PageController _ensurePdfPageController(String cacheKey, int pageCount) {
@@ -1204,13 +1202,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return _imageTransforms.putIfAbsent(path, () => TransformationController());
   }
 
-  void _handlePdfMultiTouchChange(bool isActive) {
-    if (_isPdfMultiTouchActive == isActive || !mounted) {
+  void _goToPdfPage(String cacheKey, int pageCount, int targetPage) {
+    if (pageCount <= 0) {
       return;
     }
-    setState(() {
-      _isPdfMultiTouchActive = isActive;
-    });
+
+    final int clamped = targetPage.clamp(0, pageCount - 1);
+    final controller = _ensurePdfPageController(cacheKey, pageCount);
+    if (_pdfCurrentPages[cacheKey] == clamped) {
+      return;
+    }
+
+    _pdfCurrentPages[cacheKey] = clamped;
+    if (controller.hasClients) {
+      controller.animateToPage(
+        clamped,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      controller.jumpToPage(clamped);
+    }
   }
 
   Future<bool> _switchConversation(String conversationId) async {
@@ -1264,7 +1276,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _activeNoteIndex = 0;
         }
         _activeAttachmentPath = null;
-        _isPdfMultiTouchActive = false;
       });
 
       _scrollToBottom();
@@ -1381,7 +1392,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final Paint glowPaint = Paint()
         ..color = Colors.redAccent.withOpacity(0.18)
-        ..style = PaintingStyle.stroke
+      ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..strokeWidth = strokeWidth * 2;
@@ -1505,66 +1516,104 @@ class _PdfPageViewer extends StatefulWidget {
     super.key,
     required this.bytes,
     required this.controller,
-    required this.onTwoFingerInteractionChanged,
+    required this.onSwipeNext,
+    required this.onSwipePrevious,
   });
 
   final Uint8List bytes;
   final TransformationController controller;
-  final ValueChanged<bool> onTwoFingerInteractionChanged;
+  final VoidCallback onSwipeNext;
+  final VoidCallback onSwipePrevious;
 
   @override
   State<_PdfPageViewer> createState() => _PdfPageViewerState();
 }
 
 class _PdfPageViewerState extends State<_PdfPageViewer> {
-  int _pointerCount = 0;
-  bool _gesturesEnabled = false;
-
-  void _updatePointerCount(int nextCount) {
-    final clamped = max(0, nextCount);
-    if (clamped == _pointerCount) {
-      return;
-    }
-    _pointerCount = clamped;
-    final shouldEnable = _pointerCount >= 2;
-    if (shouldEnable != _gesturesEnabled) {
-      setState(() {
-        _gesturesEnabled = shouldEnable;
-      });
-      widget.onTwoFingerInteractionChanged(shouldEnable);
-    }
-  }
+  Matrix4? _gestureStartMatrix;
+  double _singleFingerDrag = 0;
+  bool _hasTriggeredSwipe = false;
+  bool _isDisposed = false;
+  bool _didMultiTouch = false;
 
   @override
   void dispose() {
-    widget.onTwoFingerInteractionChanged(false);
+    _isDisposed = true;
     super.dispose();
+  }
+
+  void _handleInteractionStart(ScaleStartDetails details) {
+    _gestureStartMatrix = widget.controller.value.clone();
+    _singleFingerDrag = 0;
+    _hasTriggeredSwipe = false;
+    _didMultiTouch = details.pointerCount >= 2;
+  }
+
+  void _handleInteractionUpdate(ScaleUpdateDetails details) {
+    if (_isDisposed) {
+      return;
+    }
+
+    if (details.pointerCount >= 2) {
+      _didMultiTouch = true;
+      return;
+    }
+
+    if (_gestureStartMatrix != null) {
+      widget.controller.value = _gestureStartMatrix!;
+    }
+
+    _singleFingerDrag += details.focalPointDelta.dx;
+    if (_hasTriggeredSwipe) {
+      return;
+    }
+
+    const double threshold = 80;
+    if (_singleFingerDrag.abs() >= threshold) {
+      if (_singleFingerDrag < 0) {
+        widget.onSwipeNext();
+      } else {
+        widget.onSwipePrevious();
+      }
+      _hasTriggeredSwipe = true;
+    }
+  }
+
+  void _handleInteractionEnd(ScaleEndDetails details) {
+    if (_isDisposed) {
+      return;
+    }
+    _singleFingerDrag = 0;
+    _hasTriggeredSwipe = false;
+    if (!_didMultiTouch && _gestureStartMatrix != null) {
+      widget.controller.value = _gestureStartMatrix!;
+    }
+    _gestureStartMatrix = null;
+    _didMultiTouch = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => _updatePointerCount(_pointerCount + 1),
-      onPointerUp: (_) => _updatePointerCount(_pointerCount - 1),
-      onPointerCancel: (_) => _updatePointerCount(_pointerCount - 1),
-      child: Container(
-        color: Colors.white,
-        child: InteractiveViewer(
-          transformationController: widget.controller,
-          panEnabled: _gesturesEnabled,
-          scaleEnabled: _gesturesEnabled,
-          minScale: 0.5,
-          maxScale: 4,
-          constrained: false,
-          clipBehavior: Clip.hardEdge,
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: Image.memory(
-              widget.bytes,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.high,
-            ),
+    return Container(
+      color: Colors.white,
+      child: InteractiveViewer(
+        transformationController: widget.controller,
+        panEnabled: true,
+        scaleEnabled: true,
+        minScale: 0.5,
+        maxScale: 4,
+        boundaryMargin: const EdgeInsets.all(double.infinity),
+        constrained: false,
+        clipBehavior: Clip.none,
+        onInteractionStart: _handleInteractionStart,
+        onInteractionUpdate: _handleInteractionUpdate,
+        onInteractionEnd: _handleInteractionEnd,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Image.memory(
+            widget.bytes,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.high,
           ),
         ),
       ),
