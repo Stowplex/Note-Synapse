@@ -512,6 +512,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       MaterialPageRoute(
         builder: (context) => ImmersiveNoteScreen(
           notes: List<Note>.from(_notes),
+          initialConversation: _conversation,
+          initialMessages: List<ConversationMessage>.from(_messages),
         ),
       ),
     );

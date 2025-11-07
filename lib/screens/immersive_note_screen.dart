@@ -45,10 +45,14 @@ class ImmersiveNoteScreen extends StatefulWidget {
     super.key,
     required this.notes,
     this.initialAttachmentPath,
+    this.initialConversation,
+    this.initialMessages = const [],
   }) : assert(notes.length > 0, 'Immersive mode requires at least one note.');
 
   final List<Note> notes;
   final String? initialAttachmentPath;
+  final Conversation? initialConversation;
+  final List<ConversationMessage> initialMessages;
 
   @override
   State<ImmersiveNoteScreen> createState() => _ImmersiveNoteScreenState();
@@ -114,6 +118,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     super.initState();
     _initialNotesById = {for (final note in widget.notes) note.id: note};
     _noteOrder = widget.notes.map((note) => note.id).toList();
+    _conversationNotes = List<Note>.from(widget.notes);
+
+    if (widget.initialConversation != null) {
+      _conversation = widget.initialConversation;
+    }
+
+    if (widget.initialMessages.isNotEmpty) {
+      _messages.addAll(widget.initialMessages);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    }
 
     if (widget.initialAttachmentPath != null) {
       _activeAttachmentPath = widget.initialAttachmentPath;
@@ -128,7 +144,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     // Don't create conversation immediately - wait for first message
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadConversationNotes();
+      if (widget.initialConversation != null) {
+        _switchConversation(widget.initialConversation!.id);
+      } else {
+        _loadConversationNotes();
+      }
       _loadMcpEndpoints();
       _loadAiTools();
     });
