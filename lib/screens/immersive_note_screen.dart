@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -8,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:printing/printing.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -58,11 +59,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   late List<String> _noteOrder;
   final List<ConversationMessage> _messages = [];
   final List<PlatformFile> _pendingAttachments = [];
-  final Map<String, List<Uint8List>> _pdfRasterCache = {};
-  final Map<String, Future<List<Uint8List>>> _pdfRasterPending = {};
-  final Map<String, PageController> _pdfPageControllers = {};
+  final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
-  final Map<String, Map<int, TransformationController>> _pdfPageTransforms = {};
+  final Map<String, int> _pdfTotalPages = {};
+  final Map<String, PDFViewController> _pdfControllers = {};
   final Map<String, TransformationController> _imageTransforms = {};
 
   Conversation? _conversation;
@@ -113,12 +113,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       final noteIds = List<String>.from(_noteOrder);
-        final primaryNote = await _databaseService.getNote(noteIds.first);
-        final title = primaryNote?.title ?? 'Immersive Session';
+      final primaryNote = await _databaseService.getNote(noteIds.first);
+      final title = primaryNote?.title ?? 'Immersive Session';
       final conversation = await _conversationService.createConversation(
-          title: 'Immersive: $title',
-          noteIds: noteIds,
-        );
+        title: 'Immersive: $title',
+        noteIds: noteIds,
+      );
 
       final conversationNotes = await _conversationService.getConversationNotes(
         conversation.id,
@@ -200,13 +200,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             onPanUpdate: _handlePenPanUpdate,
                             onPanEnd: (_) => _handlePenPanEnd(),
                             onPanCancel: _resetPenStroke,
-                              child: CustomPaint(
+                            child: CustomPaint(
                               painter: _FreeformStrokePainter(
                                 _penStrokePoints.isEmpty
                                     ? null
                                     : List<Offset>.from(_penStrokePoints),
                               ),
-                                size: Size.infinite,
+                              size: Size.infinite,
                             ),
                           ),
                         ),
@@ -392,8 +392,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Text(
           l10n.startConversationHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -428,11 +428,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                SelectableText(
-                  message.content,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  SelectableText(
+                    message.content,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   )
                 else
                   SelectionArea(
@@ -442,8 +442,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                       onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
-                      ),
-                ),
+                    ),
+                  ),
                 if (message.attachmentPaths.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -526,9 +526,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
-                        note.id,
-                        newContent,
-                      );
+                    note.id,
+                    newContent,
+                  );
                 },
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -540,8 +540,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Widget _buildAttachmentViewer(String attachmentPath, AppLocalizations l10n) {
+    final future = _attachmentSourceFutures.putIfAbsent(
+      attachmentPath,
+      () => _loadAttachmentSource(attachmentPath),
+    );
+
     return FutureBuilder<_AttachmentSource?>(
-      future: _loadAttachmentSource(attachmentPath),
+      future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -564,8 +569,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           return ClipRect(
             child: InteractiveViewer(
               transformationController: transformController,
-            minScale: 0.5,
-            maxScale: 4,
+              minScale: 0.5,
+              maxScale: 4,
               constrained: false,
               clipBehavior: Clip.hardEdge,
               child: Align(alignment: Alignment.topLeft, child: imageWidget),
@@ -629,85 +634,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Widget _buildPdfViewer(_AttachmentSource source, AppLocalizations l10n) {
-    return FutureBuilder<List<Uint8List>>(
-      future: _rasterizePdf(source),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.hasError) {
-          return Center(child: Text(l10n.failedToLoadAttachment));
-        }
-
-        final pages = snapshot.data!;
-        if (pages.isEmpty) {
-          return Center(child: Text(l10n.failedToLoadAttachment));
-        }
-
-        final cacheKey = source.cacheKey;
-        final pageCount = pages.length;
-        final controller = _ensurePdfPageController(cacheKey, pageCount);
-        _ensurePdfControllerInRange(cacheKey, pageCount);
-
-        return LayoutBuilder(
-          builder: (context, constraints) {
-        return PageView.builder(
-              controller: controller,
-              physics: const NeverScrollableScrollPhysics(),
-              onPageChanged: (index) {
-                _pdfCurrentPages[cacheKey] = index;
-              },
-              itemCount: pageCount,
-          itemBuilder: (context, index) {
-            final bytes = pages[index];
-                final transformController =
-                    _ensurePdfTransformController(cacheKey, index);
-                return _PdfPageViewer(
-                  key: ValueKey('${source.cacheKey}_page_$index'),
-                  bytes: bytes,
-                  controller: transformController,
-                  onSwipeNext: () => _goToPdfPage(
-                    cacheKey,
-                    pageCount,
-                    index + 1,
-                  ),
-                  onSwipePrevious: () => _goToPdfPage(
-                    cacheKey,
-                    pageCount,
-                    index - 1,
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
+    return _PdfDocumentView(
+      source: source,
+      currentPageMap: _pdfCurrentPages,
+      totalPageMap: _pdfTotalPages,
+      controllerMap: _pdfControllers,
+      onError: (message) => LoggerService.error(message),
     );
-  }
-
-  Future<List<Uint8List>> _rasterizePdf(_AttachmentSource source) {
-    final cacheKey = source.cacheKey;
-    if (_pdfRasterCache.containsKey(cacheKey)) {
-      return SynchronousFuture(_pdfRasterCache[cacheKey]!);
-    }
-    if (_pdfRasterPending.containsKey(cacheKey)) {
-      return _pdfRasterPending[cacheKey]!;
-    }
-
-    final future = () async {
-      final bytes = source.bytes ?? await source.file.readAsBytes();
-      final pages = <Uint8List>[];
-      await for (final page in Printing.raster(bytes, dpi: 150)) {
-        final png = await page.toPng();
-        pages.add(png);
-      }
-      _pdfRasterCache[cacheKey] = pages;
-      _pdfRasterPending.remove(cacheKey);
-      return pages;
-    }();
-
-    _pdfRasterPending[cacheKey] = future;
-    return future;
   }
 
   void _showOutline(List<Note> notes, AppLocalizations l10n) {
@@ -789,9 +722,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ConversationTreeScreen(
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
             filterByActiveConversations: true,
             onOpenConversation: _handleConversationOpenedFromTree,
@@ -1142,18 +1075,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _disposePdfResources() {
-    for (final controller in _pdfPageControllers.values) {
-      controller.dispose();
-    }
-    _pdfPageControllers.clear();
+    _pdfControllers.clear();
     _pdfCurrentPages.clear();
-
-    for (final entry in _pdfPageTransforms.values) {
-      for (final controller in entry.values) {
-        controller.dispose();
-      }
-    }
-    _pdfPageTransforms.clear();
+    _pdfTotalPages.clear();
+    _attachmentSourceFutures.clear();
   }
 
   void _disposeImageResources() {
@@ -1167,62 +1092,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _disposePdfResources();
   }
 
-  PageController _ensurePdfPageController(String cacheKey, int pageCount) {
-    final maxPage = pageCount <= 0 ? 0 : pageCount - 1;
-    final initialPage = (_pdfCurrentPages[cacheKey] ?? 0).clamp(0, maxPage);
-    return _pdfPageControllers.putIfAbsent(cacheKey, () {
-      _pdfCurrentPages[cacheKey] = initialPage;
-      return PageController(initialPage: initialPage);
-    });
-  }
-
-  void _ensurePdfControllerInRange(String cacheKey, int pageCount) {
-    final controller = _pdfPageControllers[cacheKey];
-    if (controller == null) return;
-    final maxPage = pageCount <= 0 ? 0 : pageCount - 1;
-    final storedIndex = (_pdfCurrentPages[cacheKey] ?? controller.initialPage)
-        .clamp(0, maxPage);
-    if (_pdfCurrentPages[cacheKey] != storedIndex) {
-      _pdfCurrentPages[cacheKey] = storedIndex;
-    }
-    if (controller.hasClients && controller.page != storedIndex.toDouble()) {
-      controller.jumpToPage(storedIndex);
-    }
-  }
-
-  TransformationController _ensurePdfTransformController(
-    String cacheKey,
-    int pageIndex,
-  ) {
-    final controllers = _pdfPageTransforms.putIfAbsent(cacheKey, () => {});
-    return controllers.putIfAbsent(pageIndex, () => TransformationController());
-  }
-
   TransformationController _ensureImageTransformationController(String path) {
     return _imageTransforms.putIfAbsent(path, () => TransformationController());
-  }
-
-  void _goToPdfPage(String cacheKey, int pageCount, int targetPage) {
-    if (pageCount <= 0) {
-      return;
-    }
-
-    final int clamped = targetPage.clamp(0, pageCount - 1);
-    final controller = _ensurePdfPageController(cacheKey, pageCount);
-    if (_pdfCurrentPages[cacheKey] == clamped) {
-      return;
-    }
-
-    _pdfCurrentPages[cacheKey] = clamped;
-    if (controller.hasClients) {
-      controller.animateToPage(
-        clamped,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    } else {
-      controller.jumpToPage(clamped);
-    }
   }
 
   Future<bool> _switchConversation(String conversationId) async {
@@ -1392,7 +1263,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final Paint glowPaint = Paint()
         ..color = Colors.redAccent.withOpacity(0.18)
-      ..style = PaintingStyle.stroke
+        ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..strokeWidth = strokeWidth * 2;
@@ -1511,114 +1382,129 @@ class _AttachmentSource {
   String get cacheKey => originalPath;
 }
 
-class _PdfPageViewer extends StatefulWidget {
-  const _PdfPageViewer({
-    super.key,
-    required this.bytes,
-    required this.controller,
-    required this.onSwipeNext,
-    required this.onSwipePrevious,
+class _PdfDocumentView extends StatefulWidget {
+  const _PdfDocumentView({
+    required this.source,
+    required this.currentPageMap,
+    required this.totalPageMap,
+    required this.controllerMap,
+    required this.onError,
   });
 
-  final Uint8List bytes;
-  final TransformationController controller;
-  final VoidCallback onSwipeNext;
-  final VoidCallback onSwipePrevious;
+  final _AttachmentSource source;
+  final Map<String, int> currentPageMap;
+  final Map<String, int> totalPageMap;
+  final Map<String, PDFViewController> controllerMap;
+  final void Function(String message) onError;
 
   @override
-  State<_PdfPageViewer> createState() => _PdfPageViewerState();
+  State<_PdfDocumentView> createState() => _PdfDocumentViewState();
 }
 
-class _PdfPageViewerState extends State<_PdfPageViewer> {
-  Matrix4? _gestureStartMatrix;
-  double _singleFingerDrag = 0;
-  bool _hasTriggeredSwipe = false;
-  bool _isDisposed = false;
-  bool _didMultiTouch = false;
+class _PdfDocumentViewState extends State<_PdfDocumentView>
+    with AutomaticKeepAliveClientMixin {
+  late Future<String> _pdfPathFuture;
+
+  String get _cacheKey => widget.source.cacheKey;
 
   @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
+  void initState() {
+    super.initState();
+    _pdfPathFuture = _resolvePdfPath();
   }
 
-  void _handleInteractionStart(ScaleStartDetails details) {
-    _gestureStartMatrix = widget.controller.value.clone();
-    _singleFingerDrag = 0;
-    _hasTriggeredSwipe = false;
-    _didMultiTouch = details.pointerCount >= 2;
-  }
-
-  void _handleInteractionUpdate(ScaleUpdateDetails details) {
-    if (_isDisposed) {
-      return;
-    }
-
-    if (details.pointerCount >= 2) {
-      _didMultiTouch = true;
-      return;
-    }
-
-    if (_gestureStartMatrix != null) {
-      widget.controller.value = _gestureStartMatrix!;
-    }
-
-    _singleFingerDrag += details.focalPointDelta.dx;
-    if (_hasTriggeredSwipe) {
-      return;
-    }
-
-    const double threshold = 80;
-    if (_singleFingerDrag.abs() >= threshold) {
-      if (_singleFingerDrag < 0) {
-        widget.onSwipeNext();
-      } else {
-        widget.onSwipePrevious();
-      }
-      _hasTriggeredSwipe = true;
+  @override
+  void didUpdateWidget(covariant _PdfDocumentView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.source.cacheKey != widget.source.cacheKey) {
+      _pdfPathFuture = _resolvePdfPath();
     }
   }
 
-  void _handleInteractionEnd(ScaleEndDetails details) {
-    if (_isDisposed) {
-      return;
+  Future<String> _resolvePdfPath() async {
+    final file = widget.source.file;
+    if (await file.exists()) {
+      return file.path;
     }
-    _singleFingerDrag = 0;
-    _hasTriggeredSwipe = false;
-    if (!_didMultiTouch && _gestureStartMatrix != null) {
-      widget.controller.value = _gestureStartMatrix!;
-    }
-    _gestureStartMatrix = null;
-    _didMultiTouch = false;
+
+    final bytes = widget.source.bytes ?? await file.readAsBytes();
+    final result = await SynapseTempUtils.saveTempData(
+      mimeType: 'application/pdf',
+      bytes: bytes,
+    );
+    return result.file.path;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      child: InteractiveViewer(
-        transformationController: widget.controller,
-        panEnabled: true,
-        scaleEnabled: true,
-        minScale: 0.5,
-        maxScale: 4,
-        boundaryMargin: const EdgeInsets.all(double.infinity),
-        constrained: false,
-        clipBehavior: Clip.none,
-        onInteractionStart: _handleInteractionStart,
-        onInteractionUpdate: _handleInteractionUpdate,
-        onInteractionEnd: _handleInteractionEnd,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Image.memory(
-            widget.bytes,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.high,
-          ),
-        ),
-      ),
+    super.build(context);
+    return FutureBuilder<String>(
+      future: _pdfPathFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.hasError) {
+          return const Center(child: Text('Failed to load PDF'));
+        }
+
+        final filePath = snapshot.data!;
+        final initialPage =
+            widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
+
+        return PDFView(
+          key: ValueKey('${_cacheKey}_pdf_view'),
+          filePath: filePath,
+          autoSpacing: false,
+          pageFling: false,
+          pageSnap: false,
+          enableSwipe: true,
+          swipeHorizontal: false,
+          fitPolicy: FitPolicy.BOTH,
+          preventLinkNavigation: false,
+          defaultPage: initialPage,
+          onViewCreated: (controller) async {
+            widget.controllerMap[_cacheKey] = controller;
+            final storedPage = widget.currentPageMap[_cacheKey] ?? 0;
+            try {
+              final currentPage = await controller.getCurrentPage();
+              if (currentPage != storedPage) {
+                await controller.setPage(storedPage);
+              }
+            } catch (e) {
+              widget.onError('Unable to set initial PDF page: $e');
+            }
+          },
+          onRender: (pages) {
+            if (pages != null) {
+              widget.totalPageMap[_cacheKey] = pages;
+              final stored = widget.currentPageMap[_cacheKey];
+              if (stored != null && stored >= pages) {
+                widget.currentPageMap[_cacheKey] = pages - 1;
+              }
+            }
+          },
+          onPageChanged: (page, total) {
+            if (page != null) {
+              widget.currentPageMap[_cacheKey] = page;
+            }
+            if (total != null) {
+              widget.totalPageMap[_cacheKey] = total;
+            }
+          },
+          onError: (error) {
+            widget.onError('PDFView error: $error');
+          },
+          onPageError: (page, error) {
+            widget.onError('PDFView page error ($page): $error');
+          },
+        );
+      },
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class _FreeformStrokePainter extends CustomPainter {
