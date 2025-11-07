@@ -20,11 +20,14 @@ class ConversationTreeScreen extends StatefulWidget {
   /// When true, activeConversationIds are used to filter the tree (from note detail view)
   /// When false, activeConversationIds are only used for highlighting (from conversation view)
   final bool filterByActiveConversations;
+  final Future<bool> Function(BuildContext context, String conversationId)?
+  onOpenConversation;
 
   const ConversationTreeScreen({
     super.key,
     this.activeConversationIds,
     this.filterByActiveConversations = false,
+    this.onOpenConversation,
   });
 
   @override
@@ -193,6 +196,28 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _openConversation(
+    BuildContext navigationContext,
+    String conversationId,
+  ) async {
+    final handler = widget.onOpenConversation;
+    if (handler != null) {
+      final handled = await handler(navigationContext, conversationId);
+      if (handled) {
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    await Navigator.of(navigationContext).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) =>
+            ConversationChatScreen(conversationId: conversationId),
+      ),
+    );
   }
 
   Future<void> _refreshTree({bool clearHighlight = true}) async {
@@ -1176,15 +1201,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => ConversationChatScreen(
-                            conversationId: conversation.id,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () =>
+                        _openConversation(context, conversation.id),
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(
                       l10n.open,
@@ -1381,15 +1399,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(futureContext).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => ConversationChatScreen(
-                            conversationId: message.conversationId,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () => _openConversation(
+                      futureContext,
+                      message.conversationId,
+                    ),
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(
                       futureL10n.open,

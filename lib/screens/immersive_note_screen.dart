@@ -60,6 +60,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final List<PlatformFile> _pendingAttachments = [];
   final Map<String, List<Uint8List>> _pdfRasterCache = {};
   final Map<String, Future<List<Uint8List>>> _pdfRasterPending = {};
+  final Map<String, PageController> _pdfPageControllers = {};
+  final Map<String, int> _pdfCurrentPages = {};
+  final Map<String, Map<int, TransformationController>> _pdfPageTransforms = {};
+  final Map<String, TransformationController> _imageTransforms = {};
 
   Conversation? _conversation;
   List<Note> _conversationNotes = [];
@@ -69,6 +73,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isLoadingConversation = true;
   bool _isSending = false;
   final List<Offset> _penStrokePoints = [];
+  bool _isPdfMultiTouchActive = false;
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
@@ -81,6 +86,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (widget.initialAttachmentPath != null) {
       _activeAttachmentPath = widget.initialAttachmentPath;
+      _isPdfMultiTouchActive = false;
       final index = _findNoteIndexForAttachment(
         widget.initialAttachmentPath!,
         widget.notes,
@@ -99,6 +105,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   void dispose() {
     _messageController.dispose();
     _chatScrollController.dispose();
+    _disposePdfResources();
+    _disposeImageResources();
     super.dispose();
   }
 
@@ -106,45 +114,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     setState(() => _isLoadingConversation = true);
 
     try {
-      final appProvider = context.read<AppProvider>();
       final noteIds = List<String>.from(_noteOrder);
-
-      String? conversationId = await _findExistingConversationId(
-        noteIds,
-        appProvider,
+      final primaryNote = await _databaseService.getNote(noteIds.first);
+      final title = primaryNote?.title ?? 'Immersive Session';
+      final conversation = await _conversationService.createConversation(
+        title: 'Immersive: $title',
+        noteIds: noteIds,
       );
-
-      Conversation? conversation;
-      List<ConversationMessage> messages = [];
-
-      if (conversationId != null) {
-        final result = await _conversationService
-            .getConversationWithFullHistory(conversationId);
-        if (result != null) {
-          conversation = result.conversation;
-          messages = result.messages;
-        }
-      }
-
-      if (conversation == null) {
-        final primaryNote = await _databaseService.getNote(noteIds.first);
-        final title = primaryNote?.title ?? 'Immersive Session';
-        conversation = await _conversationService.createConversation(
-          title: 'Immersive: $title',
-          noteIds: noteIds,
-        );
-      } else {
-        final existingNoteIds = await _databaseService.getConversationNoteIds(
-          conversation.id,
-        );
-        final missing = noteIds.where((id) => !existingNoteIds.contains(id));
-        if (missing.isNotEmpty) {
-          await _conversationService.addNotesToConversation(
-            conversation.id,
-            missing.toList(),
-          );
-        }
-      }
 
       final conversationNotes = await _conversationService.getConversationNotes(
         conversation.id,
@@ -153,11 +129,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (!mounted) return;
 
       setState(() {
+        _resetPdfState();
+        _disposeImageResources();
         _conversation = conversation;
-        _messages
-          ..clear()
-          ..addAll(messages);
+        _messages.clear();
         _conversationNotes = conversationNotes;
+        for (final note in conversationNotes) {
+          _initialNotesById[note.id] = note;
+        }
+        if (conversationNotes.isNotEmpty) {
+          _noteOrder = conversationNotes
+              .map((note) => note.id)
+              .toList(growable: false);
+          _activeNoteIndex = _activeNoteIndex.clamp(
+            0,
+            conversationNotes.length - 1,
+          );
+        }
+        _activeAttachmentPath = null;
+        _isPdfMultiTouchActive = false;
       });
 
       _scrollToBottom();
@@ -176,46 +166,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         setState(() => _isLoadingConversation = false);
       }
     }
-  }
-
-  Future<String?> _findExistingConversationId(
-    List<String> noteIds,
-    AppProvider appProvider,
-  ) async {
-    if (noteIds.isEmpty) return null;
-
-    final candidateIds = <String>{};
-    for (final noteId in noteIds) {
-      final ids = await appProvider.getNoteConversationIds(noteId);
-      candidateIds.addAll(ids);
-    }
-
-    String? bestMatchId;
-    int? bestMatchSize;
-
-    for (final candidateId in candidateIds) {
-      final noteSet = await _databaseService.getConversationNoteIds(
-        candidateId,
-      );
-      final conversation = await _databaseService.getConversation(candidateId);
-      if (conversation == null || conversation.isArchived) {
-        continue;
-      }
-
-      final set = noteSet.toSet();
-      if (set.isEmpty) continue;
-
-      final containsAll = noteIds.every(set.contains);
-      if (!containsAll) continue;
-
-      if (bestMatchId == null ||
-          (bestMatchSize != null && set.length < bestMatchSize)) {
-        bestMatchId = candidateId;
-        bestMatchSize = set.length;
-      }
-    }
-
-    return bestMatchId;
   }
 
   @override
@@ -607,13 +557,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
         final extension = source.extension;
         if (_isImageExtension(extension)) {
-          return InteractiveViewer(
-            panEnabled: true,
-            minScale: 0.5,
-            maxScale: 4,
-            child: source.bytes != null
-                ? Image.memory(source.bytes!, fit: BoxFit.contain)
-                : Image.file(source.file, fit: BoxFit.contain),
+          final transformController = _ensureImageTransformationController(
+            source.cacheKey,
+          );
+          final imageWidget = source.bytes != null
+              ? Image.memory(source.bytes!)
+              : Image.file(source.file);
+
+          return ClipRect(
+            child: InteractiveViewer(
+              transformationController: transformController,
+              minScale: 0.5,
+              maxScale: 4,
+              constrained: false,
+              clipBehavior: Clip.hardEdge,
+              child: Align(alignment: Alignment.topLeft, child: imageWidget),
+            ),
           );
         }
 
@@ -688,13 +647,36 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           return Center(child: Text(l10n.failedToLoadAttachment));
         }
 
-        return PageView.builder(
-          itemCount: pages.length,
-          itemBuilder: (context, index) {
-            final bytes = pages[index];
-            return _PdfPageViewer(
-              key: ValueKey('${source.cacheKey}_page_$index'),
-              bytes: bytes,
+        final cacheKey = source.cacheKey;
+        final controller = _ensurePdfPageController(cacheKey, pages.length);
+        _ensurePdfControllerInRange(cacheKey, pages.length);
+
+        final pageViewPhysics = _isPdfMultiTouchActive
+            ? const NeverScrollableScrollPhysics()
+            : const PageScrollPhysics();
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return PageView.builder(
+              controller: controller,
+              physics: pageViewPhysics,
+              onPageChanged: (index) {
+                _pdfCurrentPages[cacheKey] = index;
+              },
+              itemCount: pages.length,
+              itemBuilder: (context, index) {
+                final bytes = pages[index];
+                final transformController = _ensurePdfTransformController(
+                  cacheKey,
+                  index,
+                );
+                return _PdfPageViewer(
+                  key: ValueKey('${source.cacheKey}_page_$index'),
+                  bytes: bytes,
+                  controller: transformController,
+                  onTwoFingerInteractionChanged: _handlePdfMultiTouchChange,
+                );
+              },
             );
           },
         );
@@ -753,6 +735,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     setState(() {
                       _activeNoteIndex = i;
                       _activeAttachmentPath = null;
+                      _isPdfMultiTouchActive = false;
                     });
                     Navigator.pop(context);
                   },
@@ -769,6 +752,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       setState(() {
                         _activeNoteIndex = i;
                         _activeAttachmentPath = attachment;
+                        _isPdfMultiTouchActive = false;
                       });
                       Navigator.pop(context);
                     },
@@ -811,6 +795,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
             filterByActiveConversations: true,
+            onOpenConversation: _handleConversationOpenedFromTree,
           ),
         ),
       );
@@ -1157,6 +1142,166 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  void _disposePdfResources() {
+    for (final controller in _pdfPageControllers.values) {
+      controller.dispose();
+    }
+    _pdfPageControllers.clear();
+    _pdfCurrentPages.clear();
+
+    for (final entry in _pdfPageTransforms.values) {
+      for (final controller in entry.values) {
+        controller.dispose();
+      }
+    }
+    _pdfPageTransforms.clear();
+  }
+
+  void _disposeImageResources() {
+    for (final controller in _imageTransforms.values) {
+      controller.dispose();
+    }
+    _imageTransforms.clear();
+  }
+
+  void _resetPdfState() {
+    _disposePdfResources();
+    _isPdfMultiTouchActive = false;
+  }
+
+  PageController _ensurePdfPageController(String cacheKey, int pageCount) {
+    final maxPage = pageCount <= 0 ? 0 : pageCount - 1;
+    final initialPage = (_pdfCurrentPages[cacheKey] ?? 0).clamp(0, maxPage);
+    return _pdfPageControllers.putIfAbsent(cacheKey, () {
+      _pdfCurrentPages[cacheKey] = initialPage;
+      return PageController(initialPage: initialPage);
+    });
+  }
+
+  void _ensurePdfControllerInRange(String cacheKey, int pageCount) {
+    final controller = _pdfPageControllers[cacheKey];
+    if (controller == null) return;
+    final maxPage = pageCount <= 0 ? 0 : pageCount - 1;
+    final storedIndex = (_pdfCurrentPages[cacheKey] ?? controller.initialPage)
+        .clamp(0, maxPage);
+    if (_pdfCurrentPages[cacheKey] != storedIndex) {
+      _pdfCurrentPages[cacheKey] = storedIndex;
+    }
+    if (controller.hasClients && controller.page != storedIndex.toDouble()) {
+      controller.jumpToPage(storedIndex);
+    }
+  }
+
+  TransformationController _ensurePdfTransformController(
+    String cacheKey,
+    int pageIndex,
+  ) {
+    final controllers = _pdfPageTransforms.putIfAbsent(cacheKey, () => {});
+    return controllers.putIfAbsent(pageIndex, () => TransformationController());
+  }
+
+  TransformationController _ensureImageTransformationController(String path) {
+    return _imageTransforms.putIfAbsent(path, () => TransformationController());
+  }
+
+  void _handlePdfMultiTouchChange(bool isActive) {
+    if (_isPdfMultiTouchActive == isActive || !mounted) {
+      return;
+    }
+    setState(() {
+      _isPdfMultiTouchActive = isActive;
+    });
+  }
+
+  Future<bool> _switchConversation(String conversationId) async {
+    setState(() => _isLoadingConversation = true);
+
+    try {
+      final result = await _conversationService.getConversationWithFullHistory(
+        conversationId,
+      );
+
+      if (result == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Conversation not found.')));
+        }
+        return false;
+      }
+
+      final conversationNotes = await _conversationService.getConversationNotes(
+        conversationId,
+      );
+
+      if (!mounted) return false;
+
+      setState(() {
+        _resetPdfState();
+        _disposeImageResources();
+        _conversation = result.conversation;
+        _messages
+          ..clear()
+          ..addAll(result.messages);
+        _conversationNotes = conversationNotes;
+        for (final note in conversationNotes) {
+          _initialNotesById[note.id] = note;
+        }
+        if (conversationNotes.isNotEmpty) {
+          _noteOrder = conversationNotes
+              .map((note) => note.id)
+              .toList(growable: false);
+          _activeNoteIndex = min(
+            _activeNoteIndex,
+            conversationNotes.length - 1,
+          );
+        } else if (_noteOrder.isNotEmpty) {
+          _activeNoteIndex = min(_activeNoteIndex, _noteOrder.length - 1);
+        } else if (_initialNotesById.isNotEmpty) {
+          _noteOrder = _initialNotesById.keys.toList(growable: false);
+          _activeNoteIndex = 0;
+        } else {
+          _activeNoteIndex = 0;
+        }
+        _activeAttachmentPath = null;
+        _isPdfMultiTouchActive = false;
+      });
+
+      _scrollToBottom();
+      return true;
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to load conversation $conversationId: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to open conversation: $e')),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingConversation = false);
+      }
+    }
+  }
+
+  Future<bool> _handleConversationOpenedFromTree(
+    BuildContext treeContext,
+    String conversationId,
+  ) async {
+    final success = await _switchConversation(conversationId);
+    if (success) {
+      final navigator = Navigator.of(treeContext);
+      if (navigator.canPop()) {
+        await navigator.maybePop();
+      }
+    }
+    return true;
+  }
+
   Rect _computeStrokeBounds(List<Offset> points) {
     double minX = points.first.dx;
     double maxX = points.first.dx;
@@ -1356,30 +1501,24 @@ class _AttachmentSource {
 }
 
 class _PdfPageViewer extends StatefulWidget {
-  const _PdfPageViewer({super.key, required this.bytes});
+  const _PdfPageViewer({
+    super.key,
+    required this.bytes,
+    required this.controller,
+    required this.onTwoFingerInteractionChanged,
+  });
 
   final Uint8List bytes;
+  final TransformationController controller;
+  final ValueChanged<bool> onTwoFingerInteractionChanged;
 
   @override
   State<_PdfPageViewer> createState() => _PdfPageViewerState();
 }
 
 class _PdfPageViewerState extends State<_PdfPageViewer> {
-  late final TransformationController _transformationController;
   int _pointerCount = 0;
   bool _gesturesEnabled = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _transformationController = TransformationController();
-  }
-
-  @override
-  void dispose() {
-    _transformationController.dispose();
-    super.dispose();
-  }
 
   void _updatePointerCount(int nextCount) {
     final clamped = max(0, nextCount);
@@ -1392,7 +1531,14 @@ class _PdfPageViewerState extends State<_PdfPageViewer> {
       setState(() {
         _gesturesEnabled = shouldEnable;
       });
+      widget.onTwoFingerInteractionChanged(shouldEnable);
     }
+  }
+
+  @override
+  void dispose() {
+    widget.onTwoFingerInteractionChanged(false);
+    super.dispose();
   }
 
   @override
@@ -1405,15 +1551,17 @@ class _PdfPageViewerState extends State<_PdfPageViewer> {
       child: Container(
         color: Colors.white,
         child: InteractiveViewer(
-          transformationController: _transformationController,
+          transformationController: widget.controller,
           panEnabled: _gesturesEnabled,
           scaleEnabled: _gesturesEnabled,
           minScale: 0.5,
           maxScale: 4,
-          child: Center(
+          constrained: false,
+          clipBehavior: Clip.hardEdge,
+          child: Align(
+            alignment: Alignment.topLeft,
             child: Image.memory(
               widget.bytes,
-              fit: BoxFit.contain,
               gaplessPlayback: true,
               filterQuality: FilterQuality.high,
             ),
