@@ -204,11 +204,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 tooltip: l10n.outline,
                 onPressed: () => _showOutline(notes, l10n),
               ),
-                IconButton(
-                  icon: const Icon(Icons.account_tree),
-                  tooltip: l10n.viewTree,
-                  onPressed: () => _openConversationTree(),
-                ),
+              IconButton(
+                icon: const Icon(Icons.account_tree),
+                tooltip: l10n.viewTree,
+                onPressed: () => _openConversationTree(),
+              ),
             ],
           ),
           body: SafeArea(
@@ -1013,10 +1013,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           left: 80,
                           right: 16,
                         ),
-                        leading: Icon(
-                          _iconForAttachment(attachment),
-                          size: 18,
-                        ),
+                        leading: Icon(_iconForAttachment(attachment), size: 18),
                         title: Text(
                           attachment.split(Platform.pathSeparator).last,
                           overflow: TextOverflow.ellipsis,
@@ -1080,7 +1077,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final appProvider = context.read<AppProvider>();
       final noteIds = List<String>.from(_noteOrder);
       final conversationIds = <String>{};
-      
+
       // Add current conversation if it exists
       if (_conversation != null) {
         conversationIds.add(_conversation!.id);
@@ -1093,7 +1090,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       if (!mounted) return;
-      
+
       // Navigate to tree view with the current conversation highlighted
       Navigator.of(context).push(
         MaterialPageRoute(
