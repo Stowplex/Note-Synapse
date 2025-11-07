@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
@@ -51,6 +52,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final ScrollController _chatScrollController = ScrollController();
   final GlobalKey _noteBoundaryKey = GlobalKey();
 
+  static const double _strokeCaptureMargin = 16;
+
   late final Map<String, Note> _initialNotesById;
   late List<String> _noteOrder;
   final List<ConversationMessage> _messages = [];
@@ -65,8 +68,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
-  Rect? _selectionRect;
-  Offset? _dragStart;
+  final List<Offset> _penStrokePoints = [];
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
@@ -74,9 +76,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   @override
   void initState() {
     super.initState();
-    _initialNotesById = {
-      for (final note in widget.notes) note.id: note,
-    };
+    _initialNotesById = {for (final note in widget.notes) note.id: note};
     _noteOrder = widget.notes.map((note) => note.id).toList(growable: false);
 
     if (widget.initialAttachmentPath != null) {
@@ -118,9 +118,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       List<ConversationMessage> messages = [];
 
       if (conversationId != null) {
-        final result = await _conversationService.getConversationWithFullHistory(
-          conversationId,
-        );
+        final result = await _conversationService
+            .getConversationWithFullHistory(conversationId);
         if (result != null) {
           conversation = result.conversation;
           messages = result.messages;
@@ -195,7 +194,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     int? bestMatchSize;
 
     for (final candidateId in candidateIds) {
-      final noteSet = await _databaseService.getConversationNoteIds(candidateId);
+      final noteSet = await _databaseService.getConversationNoteIds(
+        candidateId,
+      );
       final conversation = await _databaseService.getConversation(candidateId);
       if (conversation == null || conversation.isArchived) {
         continue;
@@ -207,7 +208,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final containsAll = noteIds.every(set.contains);
       if (!containsAll) continue;
 
-      if (bestMatchId == null || (bestMatchSize != null && set.length < bestMatchSize)) {
+      if (bestMatchId == null ||
+          (bestMatchSize != null && set.length < bestMatchSize)) {
         bestMatchId = candidateId;
         bestMatchSize = set.length;
       }
@@ -225,21 +227,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final notes = _resolveNotes(appProvider);
         if (notes.isEmpty) {
           return Scaffold(
-            appBar: AppBar(
-              title: Text(l10n.immersiveMode),
-            ),
-            body: Center(
-              child: Text(l10n.noNotesFound),
-            ),
+            appBar: AppBar(title: Text(l10n.immersiveMode)),
+            body: Center(child: Text(l10n.noNotesFound)),
           );
         }
 
         final activeNote = notes[_activeNoteIndex.clamp(0, notes.length - 1)];
 
         return Scaffold(
-          appBar: AppBar(
-            title: Text(l10n.immersiveMode),
-          ),
+          appBar: AppBar(title: Text(l10n.immersiveMode)),
           body: SafeArea(
             child: Column(
               children: [
@@ -252,15 +248,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       if (_isPenMode)
                         Positioned.fill(
                           child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onPanStart: _handlePenPanStart,
                             onPanUpdate: _handlePenPanUpdate,
                             onPanEnd: (_) => _handlePenPanEnd(),
-                            child: IgnorePointer(
-                              ignoring: false,
-                              child: CustomPaint(
-                                painter: _SelectionPainter(_selectionRect),
-                                size: Size.infinite,
+                            onPanCancel: _resetPenStroke,
+                            child: CustomPaint(
+                              painter: _FreeformStrokePainter(
+                                _penStrokePoints.isEmpty
+                                    ? null
+                                    : List<Offset>.from(_penStrokePoints),
                               ),
+                              size: Size.infinite,
                             ),
                           ),
                         ),
@@ -276,9 +275,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Note> _resolveNotes(AppProvider provider) {
-    final notesById = {
-      for (final note in provider.notes) note.id: note,
-    };
+    final notesById = {for (final note in provider.notes) note.id: note};
 
     final resolved = <Note>[];
     for (final id in _noteOrder) {
@@ -306,7 +303,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: _isAiExpanded ? MediaQuery.of(context).size.height * 0.6 : 72,
+          maxHeight: _isAiExpanded
+              ? MediaQuery.of(context).size.height * 0.6
+              : 72,
         ),
         child: Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -343,7 +342,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           IconButton(
             icon: const Icon(Icons.account_tree),
             tooltip: l10n.viewTree,
-            onPressed: _conversation == null ? null : _openConversationTree,
+            onPressed: _conversation == null
+                ? null
+                : () => _openConversationTree(),
           ),
         ],
       ),
@@ -363,10 +364,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 tooltip: l10n.collapse,
                 onPressed: () => setState(() => _isAiExpanded = false),
               ),
-              Text(
-                l10n.aiChat,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text(l10n.aiChat, style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.format_list_bulleted),
@@ -376,16 +374,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               IconButton(
                 icon: const Icon(Icons.account_tree),
                 tooltip: l10n.viewTree,
-                onPressed: _conversation == null ? null : _openConversationTree,
+                onPressed: _conversation == null
+                    ? null
+                    : () => _openConversationTree(),
               ),
             ],
           ),
           if (_isLoadingConversation)
             const LinearProgressIndicator(minHeight: 2),
           const SizedBox(height: 8),
-          Expanded(
-            child: _buildConversationList(l10n),
-          ),
+          Expanded(child: _buildConversationList(l10n)),
           if (_pendingAttachments.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -404,7 +402,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 onPressed: () {
                   setState(() {
                     _isPenMode = !_isPenMode;
-                    _selectionRect = null;
+                    _penStrokePoints.clear();
                   });
                 },
               ),
@@ -447,8 +445,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Text(
           l10n.startConversationHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -461,8 +459,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final message = _messages[index];
         final isUser = message.type == MessageType.user;
         return Align(
-          alignment:
-              isUser ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.7,
@@ -479,15 +476,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               ),
             ),
             child: Column(
-              crossAxisAlignment:
-                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  message.content,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                if (isUser)
+                  SelectableText(
+                    message.content,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  )
+                else
+                  SelectionArea(
+                    child: InteractiveCheckboxMarkdown(
+                      originalContent: message.content,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
-                ),
+                      onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
+                    ),
+                  ),
                 if (message.attachmentPaths.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -512,10 +521,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final label = path.split(Platform.pathSeparator).last;
         return ActionChip(
           avatar: Icon(_iconForAttachment(path), size: 18),
-          label: Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-          ),
+          label: Text(label, overflow: TextOverflow.ellipsis),
           onPressed: () => _openAttachment(path, l10n),
         );
       }).toList(),
@@ -530,10 +536,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final file = _pendingAttachments[index];
         return InputChip(
           avatar: const Icon(Icons.image, size: 18),
-          label: Text(
-            file.name,
-            overflow: TextOverflow.ellipsis,
-          ),
+          label: Text(file.name, overflow: TextOverflow.ellipsis),
           onDeleted: () => setState(() {
             _pendingAttachments.removeAt(index);
           }),
@@ -563,21 +566,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           children: [
             Text(
               note.title,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             SelectionArea(
               child: InteractiveCheckboxMarkdown(
-                key: ValueKey('immersive_note_${note.id}_${note.updatedAt.toIso8601String()}'),
+                key: ValueKey(
+                  'immersive_note_${note.id}_${note.updatedAt.toIso8601String()}',
+                ),
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
-                        note.id,
-                        newContent,
-                      );
+                    note.id,
+                    newContent,
+                  );
                 },
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -598,9 +602,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
         final source = snapshot.data;
         if (source == null) {
-          return Center(
-            child: Text(l10n.attachmentMissing),
-          );
+          return Center(child: Text(l10n.attachmentMissing));
         }
 
         final extension = source.extension;
@@ -690,11 +692,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           itemCount: pages.length,
           itemBuilder: (context, index) {
             final bytes = pages[index];
-            return InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4,
-              child: Image.memory(bytes, fit: BoxFit.contain),
+            return _PdfPageViewer(
+              key: ValueKey('${source.cacheKey}_page_$index'),
+              bytes: bytes,
             );
           },
         );
@@ -736,7 +736,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             padding: const EdgeInsets.symmetric(vertical: 12),
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Text(
                   l10n.outline,
                   style: Theme.of(context).textTheme.titleLarge,
@@ -778,15 +781,51 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
-  void _openConversationTree() {
+  Future<void> _openConversationTree() async {
     if (_conversation == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ConversationTreeScreen(
-          activeConversationIds: [_conversation!.id],
+
+    try {
+      final appProvider = context.read<AppProvider>();
+      final noteIds = List<String>.from(_noteOrder);
+      final conversationIds = <String>{_conversation!.id};
+
+      for (final noteId in noteIds) {
+        final ids = await appProvider.getNoteConversationIds(noteId);
+        conversationIds.addAll(ids);
+      }
+
+      if (conversationIds.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No conversations found for these notes.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationTreeScreen(
+            activeConversationIds: conversationIds.toList(growable: false),
+            filterByActiveConversations: true,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to open conversation tree: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading conversations: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
@@ -797,6 +836,41 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.failedToOpenAttachment(e.toString()))),
       );
+    }
+  }
+
+  Future<void> _handleMarkdownLinkTap(String url, AppLocalizations l10n) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invalid URL: $url')));
+      return;
+    }
+
+    try {
+      final canLaunchLink = await canLaunchUrl(uri);
+      if (!canLaunchLink) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Could not open link: $url')));
+        }
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e, stackTrace) {
+      LoggerService.warning(
+        'Failed to open link $url: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error opening link: $e')));
+      }
     }
   }
 
@@ -857,9 +931,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         stackTrace: stackTrace,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending message: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
       }
     } finally {
       if (mounted) {
@@ -911,7 +985,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final request = PromptRequest(
       systemMessage: systemMessage,
-      contextMessages: contextMessage.content.trim().isEmpty &&
+      contextMessages:
+          contextMessage.content.trim().isEmpty &&
               contextMessage.attachments.isEmpty
           ? const []
           : [contextMessage],
@@ -930,7 +1005,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     ];
 
     if (_conversationNotes.isEmpty) {
-      lines.add('No note context is currently attached. Rely on the conversation history.');
+      lines.add(
+        'No note context is currently attached. Rely on the conversation history.',
+      );
     }
 
     final taskContext = lines.join('\n');
@@ -1002,34 +1079,41 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
     setState(() {
-      _dragStart = localPosition;
-      _selectionRect = Rect.fromLTWH(localPosition.dx, localPosition.dy, 0, 0);
+      _penStrokePoints
+        ..clear()
+        ..add(localPosition);
     });
   }
 
   void _handlePenPanUpdate(DragUpdateDetails details) {
-    if (_dragStart == null) return;
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
     setState(() {
-      _selectionRect = Rect.fromPoints(_dragStart!, localPosition);
+      final lastPoint = _penStrokePoints.isEmpty ? null : _penStrokePoints.last;
+      if (lastPoint == null ||
+          (lastPoint - localPosition).distanceSquared > 1) {
+        _penStrokePoints.add(localPosition);
+      }
     });
   }
 
   Future<void> _handlePenPanEnd() async {
-    if (_selectionRect == null) return;
-    final rect = _selectionRect!;
-    setState(() {
-      _selectionRect = null;
-    });
+    if (_penStrokePoints.length < 2) {
+      _resetPenStroke();
+      return;
+    }
 
-    if (rect.width < 12 || rect.height < 12) {
+    final strokePoints = List<Offset>.from(_penStrokePoints);
+    final bounds = _computeStrokeBounds(strokePoints);
+    _resetPenStroke();
+
+    if (bounds.width < 12 || bounds.height < 12) {
       return;
     }
 
     try {
-      final croppedBytes = await _captureSelection(rect);
+      final croppedBytes = await _captureStroke(strokePoints, bounds);
       final result = await SynapseTempUtils.saveTempData(
         mimeType: 'image/png',
         bytes: croppedBytes,
@@ -1051,7 +1135,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
       }
     } catch (e, stackTrace) {
-      LoggerService.error('Failed to capture annotation: $e', error: e, stackTrace: stackTrace);
+      LoggerService.error(
+        'Failed to capture annotation: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to capture annotation: $e')),
@@ -1060,25 +1148,71 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  Future<Uint8List> _captureSelection(Rect logicalRect) async {
+  void _resetPenStroke() {
+    if (_penStrokePoints.isEmpty) {
+      return;
+    }
+    setState(() {
+      _penStrokePoints.clear();
+    });
+  }
+
+  Rect _computeStrokeBounds(List<Offset> points) {
+    double minX = points.first.dx;
+    double maxX = points.first.dx;
+    double minY = points.first.dy;
+    double maxY = points.first.dy;
+
+    for (final point in points.skip(1)) {
+      if (point.dx < minX) minX = point.dx;
+      if (point.dx > maxX) maxX = point.dx;
+      if (point.dy < minY) minY = point.dy;
+      if (point.dy > maxY) maxY = point.dy;
+    }
+
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  Rect _clampRectToSize(Rect rect, Size size) {
+    final double left = rect.left.clamp(0.0, size.width).toDouble();
+    final double top = rect.top.clamp(0.0, size.height).toDouble();
+    final double right = rect.right.clamp(0.0, size.width).toDouble();
+    final double bottom = rect.bottom.clamp(0.0, size.height).toDouble();
+    final double width = max(0.0, right - left);
+    final double height = max(0.0, bottom - top);
+    return Rect.fromLTWH(left, top, width, height);
+  }
+
+  Future<Uint8List> _captureStroke(List<Offset> points, Rect bounds) async {
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderRepaintBoundary) {
       throw Exception('Note view unavailable for capture.');
     }
 
-    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-    final image = await renderObject.toImage(pixelRatio: devicePixelRatio);
-
-    final scaledRect = Rect.fromLTWH(
-      logicalRect.left * devicePixelRatio,
-      logicalRect.top * devicePixelRatio,
-      logicalRect.width * devicePixelRatio,
-      logicalRect.height * devicePixelRatio,
+    final Rect cappedRect = _clampRectToSize(
+      bounds.inflate(_strokeCaptureMargin),
+      renderObject.size,
     );
 
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final paint = Paint();
+    if (cappedRect.width <= 0 || cappedRect.height <= 0) {
+      throw Exception('Failed to determine annotation bounds.');
+    }
+
+    final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final ui.Image image = await renderObject.toImage(
+      pixelRatio: devicePixelRatio,
+    );
+
+    final Rect scaledRect = Rect.fromLTWH(
+      cappedRect.left * devicePixelRatio,
+      cappedRect.top * devicePixelRatio,
+      cappedRect.width * devicePixelRatio,
+      cappedRect.height * devicePixelRatio,
+    );
+
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+    final Paint paint = Paint();
 
     canvas.drawImageRect(
       image,
@@ -1087,26 +1221,53 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       paint,
     );
 
-    final highlightPaint = Paint()
-      ..color = Colors.redAccent.withValues(alpha: 0.7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = max(3, 3 * devicePixelRatio / 2);
+    final List<Offset> scaledPoints = points
+        .map(
+          (point) => Offset(
+            (point.dx - cappedRect.left) * devicePixelRatio,
+            (point.dy - cappedRect.top) * devicePixelRatio,
+          ),
+        )
+        .toList();
 
-    canvas.drawOval(
-      Rect.fromLTWH(4, 4, scaledRect.width - 8, scaledRect.height - 8),
-      highlightPaint,
-    );
+    if (scaledPoints.length >= 2) {
+      final Path strokePath = _FreeformStrokePainter.buildPath(scaledPoints);
+      final double strokeWidth = max(4.0, 2.0 * devicePixelRatio);
 
-    final picture = recorder.endRecording();
-    final croppedImage = await picture.toImage(
+      final Paint glowPaint = Paint()
+        ..color = Colors.redAccent.withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = strokeWidth * 2;
+
+      final Paint strokePaint = Paint()
+        ..color = Colors.redAccent
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = strokeWidth;
+
+      canvas.drawPath(strokePath, glowPaint);
+      canvas.drawPath(strokePath, strokePaint);
+    }
+
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image croppedImage = await picture.toImage(
       max(1, scaledRect.width.round()),
       max(1, scaledRect.height.round()),
     );
+    image.dispose();
 
-    final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+    final ByteData? byteData = await croppedImage.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    croppedImage.dispose();
+
     if (byteData == null) {
       throw Exception('Failed to encode annotation.');
     }
+
     return byteData.buffer.asUint8List();
   }
 
@@ -1194,29 +1355,125 @@ class _AttachmentSource {
   String get cacheKey => originalPath;
 }
 
-class _SelectionPainter extends CustomPainter {
-  _SelectionPainter(this.rect);
+class _PdfPageViewer extends StatefulWidget {
+  const _PdfPageViewer({super.key, required this.bytes});
 
-  final Rect? rect;
+  final Uint8List bytes;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (rect == null) return;
-    final highlight = Paint()
-      ..color = Colors.redAccent.withValues(alpha: 0.25)
-      ..style = PaintingStyle.fill;
-    final border = Paint()
-      ..color = Colors.redAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+  State<_PdfPageViewer> createState() => _PdfPageViewerState();
+}
 
-    canvas.drawOval(rect!, highlight);
-    canvas.drawOval(rect!, border);
+class _PdfPageViewerState extends State<_PdfPageViewer> {
+  late final TransformationController _transformationController;
+  int _pointerCount = 0;
+  bool _gesturesEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController = TransformationController();
   }
 
   @override
-  bool shouldRepaint(covariant _SelectionPainter oldDelegate) {
-    return oldDelegate.rect != rect;
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _updatePointerCount(int nextCount) {
+    final clamped = max(0, nextCount);
+    if (clamped == _pointerCount) {
+      return;
+    }
+    _pointerCount = clamped;
+    final shouldEnable = _pointerCount >= 2;
+    if (shouldEnable != _gesturesEnabled) {
+      setState(() {
+        _gesturesEnabled = shouldEnable;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => _updatePointerCount(_pointerCount + 1),
+      onPointerUp: (_) => _updatePointerCount(_pointerCount - 1),
+      onPointerCancel: (_) => _updatePointerCount(_pointerCount - 1),
+      child: Container(
+        color: Colors.white,
+        child: InteractiveViewer(
+          transformationController: _transformationController,
+          panEnabled: _gesturesEnabled,
+          scaleEnabled: _gesturesEnabled,
+          minScale: 0.5,
+          maxScale: 4,
+          child: Center(
+            child: Image.memory(
+              widget.bytes,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FreeformStrokePainter extends CustomPainter {
+  _FreeformStrokePainter(List<Offset>? points)
+    : _points = points == null ? null : List<Offset>.unmodifiable(points);
+
+  final List<Offset>? _points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final points = _points;
+    if (points == null || points.length < 2) return;
+
+    final path = buildPath(points);
+
+    final glowPaint = Paint()
+      ..color = Colors.redAccent.withOpacity(0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 8;
+
+    final strokePaint = Paint()
+      ..color = Colors.redAccent
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 3;
+
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, strokePaint);
+  }
+
+  static Path buildPath(List<Offset> points) {
+    final path = Path();
+    path.moveTo(points.first.dx, points.first.dy);
+    for (int i = 1; i < points.length; i++) {
+      final prev = points[i - 1];
+      final current = points[i];
+      final midPoint = Offset(
+        (prev.dx + current.dx) / 2,
+        (prev.dy + current.dy) / 2,
+      );
+      path.quadraticBezierTo(prev.dx, prev.dy, midPoint.dx, midPoint.dy);
+    }
+    path.lineTo(points.last.dx, points.last.dy);
+    return path;
+  }
+
+  @override
+  bool shouldRepaint(covariant _FreeformStrokePainter oldDelegate) {
+    return !listEquals(oldDelegate._points, _points);
   }
 }
 
@@ -1225,4 +1482,3 @@ class _AssistantResponse {
 
   final String content;
 }
-
