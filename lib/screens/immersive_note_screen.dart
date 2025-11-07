@@ -100,6 +100,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   static const double _aiHandleHeight = 76.0;
   static const double _aiHandleWidth = 420.0;
   static const double _aiPanelHeightFraction = 0.45;
+  static const double _aiLandscapePanelFraction = 0.4;
   static const double _aiHandleMargin = 12.0;
   double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
@@ -443,60 +444,60 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Widget> _buildAiOverlays(Size size, AppLocalizations l10n) {
+    final isLandscape = size.width > size.height;
+    if (isLandscape) {
+      return _buildHorizontalAiOverlays(size, l10n);
+    }
+    return _buildVerticalAiOverlays(size, l10n);
+  }
+
+  List<Widget> _buildVerticalAiOverlays(Size size, AppLocalizations l10n) {
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
-    final panelHeight = _computePanelHeight(totalHeight);
+    final panelHeight = _computePanelExtent(totalHeight, handleHeight);
+    final effectiveSide = _effectivePanelSide(false);
+
+    final minHandleTop = _aiHandleMargin;
+    final maxHandleTop = max(
+      _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin,
+    );
 
     double handleTop;
 
-    if (_isAiPanelExpanded) {
-      final clampedPanelHeight = panelHeight.clamp(
-        handleHeight * 1.2,
-        totalHeight - handleHeight - (_aiHandleMargin * 2),
-      );
-
-      if (_aiPanelSide == _AiPanelSide.top) {
+    if (_isAiPanelExpanded && panelHeight > 0) {
+      if (effectiveSide == _AiPanelSide.top) {
         overlays.add(
           Positioned(
             top: 0,
             left: _aiHandleMargin,
             right: _aiHandleMargin,
-            height: clampedPanelHeight,
+            height: panelHeight,
             child: _buildAiPanelContent(l10n),
           ),
         );
-        // Position handle below the panel with margin
-        handleTop = clampedPanelHeight + _aiHandleMargin;
+        handleTop = panelHeight + _aiHandleMargin;
       } else {
         overlays.add(
           Positioned(
             bottom: 0,
             left: _aiHandleMargin,
             right: _aiHandleMargin,
-            height: clampedPanelHeight,
+            height: panelHeight,
             child: _buildAiPanelContent(l10n),
           ),
         );
-        // Position handle above the panel with margin
-        handleTop =
-            totalHeight -
-            clampedPanelHeight -
-            handleHeight -
-            (_aiHandleMargin * 2);
+        handleTop = totalHeight - panelHeight - handleHeight - _aiHandleMargin;
       }
     } else {
-      final trackHeight = totalHeight - handleHeight;
-      handleTop = (_aiHandleFraction * trackHeight).clamp(
-        _aiHandleMargin,
-        totalHeight - handleHeight - _aiHandleMargin,
-      );
+      final trackHeight = max(0.0, totalHeight - handleHeight);
+      handleTop = trackHeight <= 0
+          ? _aiHandleMargin
+          : _aiHandleFraction * trackHeight;
     }
 
-    final double clampedHandleTop = handleTop.clamp(
-      _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
-    );
+    final clampedHandleTop = _clampToRange(handleTop, minHandleTop, maxHandleTop);
 
     final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
     overlays.add(
@@ -507,7 +508,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Center(
           child: SizedBox(
             width: handleWidth,
-            child: _buildAiHandle(l10n, size, handleWidth),
+            child: _buildAiHandle(l10n, size, handleWidth, false),
           ),
         ),
       ),
@@ -516,11 +517,150 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return overlays;
   }
 
-  double _computePanelHeight(double totalHeight) {
-    final desired = totalHeight * _aiPanelHeightFraction;
-    final minHeight = totalHeight * 0.25;
-    final maxHeight = totalHeight * 0.75;
-    return desired.clamp(minHeight, maxHeight);
+  List<Widget> _buildHorizontalAiOverlays(Size size, AppLocalizations l10n) {
+    final overlays = <Widget>[];
+    final totalHeight = size.height;
+    final handleHeight = _currentHandleHeight();
+    final effectiveSide = _effectivePanelSide(true);
+
+    final minHandleTop = _aiHandleMargin;
+    final maxHandleTop = max(
+      _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin,
+    );
+
+    final trackHeight = max(0.0, totalHeight - handleHeight);
+    double handleTop = trackHeight <= 0
+        ? _aiHandleMargin
+        : _aiHandleFraction * trackHeight;
+    handleTop = _clampToRange(handleTop, minHandleTop, maxHandleTop);
+
+    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+
+    double panelWidth = 0.0;
+    if (_isAiPanelExpanded) {
+      panelWidth = _computeLandscapePanelWidth(size.width, handleWidth);
+      if (panelWidth > 0)
+        overlays.add(
+          Positioned(
+            top: _aiHandleMargin,
+            bottom: _aiHandleMargin,
+            left: effectiveSide == _AiPanelSide.left ? 0 : null,
+            right: effectiveSide == _AiPanelSide.right ? 0 : null,
+            width: panelWidth,
+            child: _buildAiPanelContent(l10n),
+          ),
+        );
+    }
+
+    double? handleLeft;
+    double? handleRight;
+    if (effectiveSide == _AiPanelSide.left) {
+      handleLeft = (_isAiPanelExpanded && panelWidth > 0)
+          ? panelWidth + _aiHandleMargin
+          : _aiHandleMargin;
+    } else {
+      handleRight = (_isAiPanelExpanded && panelWidth > 0)
+          ? panelWidth + _aiHandleMargin
+          : _aiHandleMargin;
+    }
+
+    if (handleLeft != null) {
+      handleLeft = min(handleLeft, max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin));
+    }
+    if (handleRight != null) {
+      handleRight = min(handleRight, max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin));
+    }
+
+    overlays.add(
+      Positioned(
+        top: handleTop,
+        left: handleLeft,
+        right: handleRight,
+        child: SizedBox(
+          width: handleWidth,
+          child: _buildAiHandle(l10n, size, handleWidth, true),
+        ),
+      ),
+    );
+
+    return overlays;
+  }
+
+  double _clampToRange(double value, double minValue, double maxValue) {
+    if (maxValue < minValue) {
+      maxValue = minValue;
+    }
+    return value.clamp(minValue, maxValue).toDouble();
+  }
+
+  double _computePanelExtent(double totalExtent, double handleExtent) {
+    final availableMax = max(
+      0.0,
+      totalExtent - handleExtent - (_aiHandleMargin * 2),
+    );
+
+    if (availableMax <= 0) {
+      return 0;
+    }
+
+    final minExtent = min(totalExtent * 0.25, availableMax);
+    final maxExtent = min(totalExtent * 0.75, availableMax);
+
+    return _clampToRange(
+      totalExtent * _aiPanelHeightFraction,
+      minExtent,
+      maxExtent,
+    );
+  }
+
+  double _computeLandscapePanelWidth(double totalWidth, double handleWidth) {
+    final available = max(
+      0.0,
+      totalWidth - handleWidth - (_aiHandleMargin * 3),
+    );
+
+    if (available <= 0) {
+      return 0;
+    }
+
+    final minWidth = min(totalWidth * 0.25, available);
+    final maxWidth = min(totalWidth * 0.6, available);
+
+    return _clampToRange(
+      totalWidth * _aiLandscapePanelFraction,
+      minWidth,
+      maxWidth,
+    );
+  }
+
+  _AiPanelSide _effectivePanelSide(bool isLandscape) {
+    if (isLandscape) {
+      if (_aiPanelSide == _AiPanelSide.left ||
+          _aiPanelSide == _AiPanelSide.right) {
+        return _aiPanelSide;
+      }
+      return _AiPanelSide.right;
+    } else {
+      if (_aiPanelSide == _AiPanelSide.top ||
+          _aiPanelSide == _AiPanelSide.bottom) {
+        return _aiPanelSide;
+      }
+      return _AiPanelSide.bottom;
+    }
+  }
+
+  _AiPanelSide _normalizePanelSide(_AiPanelSide side, bool isLandscape) {
+    if (isLandscape) {
+      if (side == _AiPanelSide.left || side == _AiPanelSide.right) {
+        return side;
+      }
+      return _AiPanelSide.right;
+    }
+    if (side == _AiPanelSide.top || side == _AiPanelSide.bottom) {
+      return side;
+    }
+    return _AiPanelSide.bottom;
   }
 
   double _currentHandleHeight() {
@@ -535,6 +675,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     AppLocalizations l10n,
     Size canvasSize,
     double handleWidth,
+    bool isLandscape,
   ) {
     final theme = Theme.of(context);
     final bool expanded = _isAiPanelExpanded;
@@ -558,25 +699,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             icon: Icon(icon, size: 20),
             padding: EdgeInsets.zero,
             tooltip: l10n.expand,
-            onPressed: () => _expandAiPanel(side, canvasSize.height),
+            onPressed: () => _expandAiPanel(side, canvasSize),
           ),
         );
       }
 
-      controlWidget = Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          buildArrowButton(Icons.keyboard_arrow_up, _AiPanelSide.top),
-          const SizedBox(height: 4),
-          buildArrowButton(Icons.keyboard_arrow_down, _AiPanelSide.bottom),
-        ],
-      );
+      if (isLandscape) {
+        controlWidget = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buildArrowButton(Icons.keyboard_arrow_left, _AiPanelSide.left),
+            const SizedBox(width: 4),
+            buildArrowButton(Icons.keyboard_arrow_right, _AiPanelSide.right),
+          ],
+        );
+      } else {
+        controlWidget = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buildArrowButton(Icons.keyboard_arrow_up, _AiPanelSide.top),
+            const SizedBox(height: 4),
+            buildArrowButton(Icons.keyboard_arrow_down, _AiPanelSide.bottom),
+          ],
+        );
+      }
     }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) =>
-          _updateHandleDrag(details.delta.dy, canvasSize.height),
+      onPanUpdate: (details) => _updateHandleDrag(details.delta, canvasSize),
       child: Material(
         color: theme.colorScheme.surface.withOpacity(0.85),
         elevation: 6,
@@ -929,26 +1080,38 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
-  void _expandAiPanel(_AiPanelSide side, double totalHeight) {
+  void _expandAiPanel(_AiPanelSide side, Size canvasSize) {
+    final isLandscape = canvasSize.width > canvasSize.height;
+    final normalizedSide = _normalizePanelSide(side, isLandscape);
+
     setState(() {
       _isAiPanelExpanded = true;
-      _aiPanelSide = side;
+      _aiPanelSide = normalizedSide;
+
+      if (isLandscape) {
+        return;
+      }
+
+      final totalHeight = canvasSize.height;
       final handleHeight = _currentHandleHeight();
-      final handleTravel = totalHeight - handleHeight;
-      final panelHeight = _computePanelHeight(totalHeight).clamp(
-        handleHeight * 1.2,
-        totalHeight - handleHeight - (_aiHandleMargin * 2),
-      );
-      final targetTop = side == _AiPanelSide.top
-          ? panelHeight - handleHeight
-          : totalHeight - panelHeight - handleHeight;
-      final clampedTop = targetTop.clamp(
+      final handleTravel = max(0.0, totalHeight - handleHeight);
+      if (handleTravel <= 0) {
+        return;
+      }
+
+      final panelHeight = _computePanelExtent(totalHeight, handleHeight);
+      final targetTop = normalizedSide == _AiPanelSide.top
+          ? panelHeight + _aiHandleMargin
+          : totalHeight - panelHeight - handleHeight - _aiHandleMargin;
+
+      final clampedTop = _clampToRange(
+        targetTop,
         _aiHandleMargin,
-        totalHeight - handleHeight - _aiHandleMargin,
+        max(_aiHandleMargin, totalHeight - handleHeight - _aiHandleMargin),
       );
-      _aiHandleFraction = handleTravel <= 0
-          ? 0.5
-          : (clampedTop / handleTravel).clamp(0.0, 1.0);
+
+      _aiHandleFraction =
+          (clampedTop / handleTravel).clamp(0.0, 1.0).toDouble();
     });
   }
 
@@ -958,21 +1121,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
-  void _updateHandleDrag(double deltaDy, double totalHeight) {
+  void _updateHandleDrag(Offset delta, Size canvasSize) {
+    final totalHeight = canvasSize.height;
     final handleHeight = _currentHandleHeight();
-    final handleTravel = totalHeight - handleHeight;
+    final handleTravel = max(0.0, totalHeight - handleHeight);
     if (handleTravel <= 0) {
       return;
     }
 
     final currentTop = _aiHandleFraction * handleTravel;
-    final newTop = (currentTop + deltaDy).clamp(
+    final proposedTop = currentTop + delta.dy;
+    final newTop = _clampToRange(
+      proposedTop,
       _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
+      max(_aiHandleMargin, totalHeight - handleHeight - _aiHandleMargin),
     );
 
     setState(() {
-      _aiHandleFraction = (newTop / handleTravel).clamp(0.0, 1.0);
+      _aiHandleFraction = (newTop / handleTravel).clamp(0.0, 1.0).toDouble();
       _isAiPanelExpanded = false;
     });
   }
@@ -2470,4 +2636,4 @@ class _FreeformStrokePainter extends CustomPainter {
   }
 }
 
-enum _AiPanelSide { top, bottom }
+enum _AiPanelSide { top, bottom, left, right }
