@@ -100,8 +100,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
+    // Don't create conversation immediately - wait for first message
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeConversation();
+      _loadConversationNotes();
     });
   }
 
@@ -114,60 +115,67 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     super.dispose();
   }
 
-  Future<void> _initializeConversation() async {
+  /// Load conversation notes without creating a conversation
+  Future<void> _loadConversationNotes() async {
     setState(() => _isLoadingConversation = true);
 
     try {
       final noteIds = List<String>.from(_noteOrder);
-        final primaryNote = await _databaseService.getNote(noteIds.first);
-        final title = primaryNote?.title ?? 'Immersive Session';
-      final conversation = await _conversationService.createConversation(
-          title: 'Immersive: $title',
-          noteIds: noteIds,
-        );
-
-      final conversationNotes = await _conversationService.getConversationNotes(
-        conversation.id,
-      );
+      final notes = <Note>[];
+      
+      for (final noteId in noteIds) {
+        final note = await _databaseService.getNote(noteId);
+        if (note != null) {
+          notes.add(note);
+        }
+      }
 
       if (!mounted) return;
 
       setState(() {
-        _resetPdfState();
-        _disposeImageResources();
-        _conversation = conversation;
-        _messages.clear();
-        _conversationNotes = conversationNotes;
-        for (final note in conversationNotes) {
+        _conversationNotes = notes;
+        for (final note in notes) {
           _initialNotesById[note.id] = note;
         }
-        if (conversationNotes.isNotEmpty) {
-          _noteOrder = conversationNotes
-              .map((note) => note.id)
-              .toList(growable: false);
-          _activeNoteIndex = _activeNoteIndex.clamp(
-            0,
-            conversationNotes.length - 1,
-          );
-        }
-        _activeAttachmentPath = null;
       });
-
-      _scrollToBottom();
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to initialize immersive conversation: $e',
+        'Failed to load notes for immersive view: $e',
         error: e,
         stackTrace: stackTrace,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading AI conversation: $e')),
       );
     } finally {
       if (mounted) {
         setState(() => _isLoadingConversation = false);
       }
+    }
+  }
+
+  /// Create conversation when first message is sent
+  Future<void> _initializeConversation() async {
+    if (_conversation != null) return;
+
+    try {
+      final noteIds = List<String>.from(_noteOrder);
+      final primaryNote = await _databaseService.getNote(noteIds.first);
+      final title = primaryNote?.title ?? 'Immersive Session';
+      final conversation = await _conversationService.createConversation(
+        title: 'Immersive: $title',
+        noteIds: noteIds,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _conversation = conversation;
+      });
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to create immersive conversation: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 
@@ -290,6 +298,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
+        // Position handle below the panel with margin
         handleTop = clampedPanelHeight + _aiHandleMargin;
       } else {
         overlays.add(
@@ -301,7 +310,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
-        handleTop = totalHeight - clampedPanelHeight - handleHeight - _aiHandleMargin;
+        // Position handle above the panel with margin
+        handleTop = totalHeight - clampedPanelHeight - handleHeight - (_aiHandleMargin * 2);
       }
     } else {
       final trackHeight = totalHeight - handleHeight;
@@ -709,6 +719,65 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ),
+            // Add subnotes if present
+            if (note.subNotes.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text(
+                l10n.subNotes,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              ...note.subNotes.map((subNote) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                if (subNote.isCompleted)
+                                  const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 20)
+                                else
+                                  const Icon(Icons.radio_button_unchecked,
+                                      size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    subNote.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (subNote.content.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              SelectionArea(
+                                child: InteractiveCheckboxMarkdown(
+                                  key: ValueKey(
+                                    'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
+                                  ),
+                                  originalContent: subNote.content,
+                                  onContentChanged: (_) {},
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  )),
+            ],
           ],
         ),
       ),
@@ -742,15 +811,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               ? Image.memory(source.bytes!)
               : Image.file(source.file);
 
-          return ClipRect(
-            child: InteractiveViewer(
-              transformationController: transformController,
-            minScale: 0.5,
+          return InteractiveViewer(
+            transformationController: transformController,
+            minScale: 0.1,
             maxScale: 4,
-              constrained: false,
-              clipBehavior: Clip.hardEdge,
-              child: Align(alignment: Alignment.topLeft, child: imageWidget),
-            ),
+            constrained: true,
+            clipBehavior: Clip.hardEdge,
+            child: imageWidget,
           );
         }
 
@@ -825,27 +892,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
-  Widget _buildPdfViewer(_AttachmentSource source, AppLocalizations l10n) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final availableHeight = constraints.hasBoundedHeight &&
-                constraints.maxHeight.isFinite &&
-                constraints.maxHeight > 0
-            ? constraints.maxHeight
-            : MediaQuery.of(context).size.height;
-        return _PdfDocumentView(
-          source: source,
-          availableHeight: availableHeight,
-          currentPageMap: _pdfCurrentPages,
-          totalPageMap: _pdfTotalPages,
-          controllerMap: _pdfControllers,
-          onError: (message) => LoggerService.error(message),
-        );
-      },
-    );
-  }
+  Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
+    // Collect linked notes with circular reference prevention
+    final linkedNotesMap = <String, List<Note>>{};
+    final appProvider = context.read<AppProvider>();
+    
+    for (final note in notes) {
+      try {
+        final linkedNotes = await _collectLinkedNotes(note.id, appProvider);
+        if (linkedNotes.isNotEmpty) {
+          linkedNotesMap[note.id] = linkedNotes;
+        }
+      } catch (e) {
+        LoggerService.warning('Failed to load linked notes for ${note.id}: $e');
+      }
+    }
 
-  void _showOutline(List<Note> notes, AppLocalizations l10n) {
+    if (!mounted) return;
+    
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
@@ -891,12 +955,68 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       Navigator.pop(context);
                     },
                   ),
+                // Add linked notes section if present
+                if (linkedNotesMap.containsKey(notes[i].id)) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 48, top: 8, bottom: 4),
+                    child: Text(
+                      'Linked Notes',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+                  for (final linkedNote in linkedNotesMap[notes[i].id]!)
+                    ListTile(
+                      contentPadding: const EdgeInsets.only(left: 64, right: 16),
+                      leading: const Icon(Icons.link, size: 20),
+                      title: Text(
+                        linkedNote.title,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      onTap: () {
+                        // Find if this linked note is already in the notes list
+                        final linkedIndex = notes.indexWhere((n) => n.id == linkedNote.id);
+                        if (linkedIndex >= 0) {
+                          setState(() {
+                            _activeNoteIndex = linkedIndex;
+                            _activeAttachmentPath = null;
+                          });
+                        }
+                        Navigator.pop(context);
+                      },
+                    ),
+                ],
               ],
             ],
           ),
         );
       },
     );
+  }
+
+  /// Collect linked notes with circular reference prevention
+  Future<List<Note>> _collectLinkedNotes(
+    String noteId,
+    AppProvider appProvider,
+  ) async {
+    final visited = <String>{noteId}; // Start with current note as visited
+    final result = <Note>[];
+    
+    try {
+      final linkedNotes = await appProvider.getLinkedNotes(noteId);
+      for (final linkedNote in linkedNotes) {
+        if (!visited.contains(linkedNote.id)) {
+          visited.add(linkedNote.id);
+          result.add(linkedNote);
+        }
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to collect linked notes: $e');
+    }
+    
+    return result;
   }
 
   Future<void> _openConversationTree() async {
@@ -998,9 +1118,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     if (trimmed.isEmpty && _pendingAttachments.isEmpty) {
       return;
     }
-    if (_conversation == null) {
-      return;
-    }
 
     setState(() {
       _isSending = true;
@@ -1015,6 +1132,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
 
     try {
+      // Create conversation on first message if it doesn't exist
+      if (_conversation == null) {
+        await _initializeConversation();
+      }
+
+      if (_conversation == null) {
+        throw Exception('Failed to create conversation');
+      }
+
       final attachmentPaths = attachments
           .where((file) => file.path != null)
           .map((file) => file.path!)
