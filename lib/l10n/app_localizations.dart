@@ -2021,7 +2021,7 @@ abstract class AppLocalizations {
   /// No description provided for @attachmentMissing.
   ///
   /// In en, this message translates to:
-  /// **'Attachment missing'**
+  /// **'Attachment not found.'**
   String get attachmentMissing;
 
   /// No description provided for @attachmentUnavailable.
@@ -4297,6 +4297,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Type your message...'**
   String get typeYourMessage;
+
+  /// No description provided for @immersiveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Immersive Mode'**
+  String get immersiveMode;
+
+  /// No description provided for @aiChat.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Chat'**
+  String get aiChat;
+
+  /// No description provided for @outline.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline'**
+  String get outline;
+
+  /// No description provided for @expand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
+
+  /// No description provided for @collapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get collapse;
+
+  /// No description provided for @annotate.
+  ///
+  /// In en, this message translates to:
+  /// **'Annotate'**
+  String get annotate;
+
+  /// No description provided for @askAiHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask the AI about this note...'**
+  String get askAiHint;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get send;
+
+  /// No description provided for @startConversationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start by asking the AI about your note.'**
+  String get startConversationHint;
+
+  /// No description provided for @unsupportedAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported attachment type ({type}).'**
+  String unsupportedAttachment(String type);
+
+  /// No description provided for @openAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Open attachment'**
+  String get openAttachment;
+
+  /// No description provided for @failedToLoadAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load attachment.'**
+  String get failedToLoadAttachment;
+
+  /// No description provided for @failedToOpenAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to open attachment: {error}'**
+  String failedToOpenAttachment(String error);
 
   /// No description provided for @cancellingRequest.
   ///

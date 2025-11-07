@@ -797,6 +797,34 @@
   "noConversations": "No conversations",
   "conversationsWithThisNote": "Conversations with this note",
   "typeYourMessage": "Type your message...",
+  "immersiveMode": "Immersive Mode",
+  "aiChat": "AI Chat",
+  "outline": "Outline",
+  "expand": "Expand",
+  "collapse": "Collapse",
+  "annotate": "Annotate",
+  "askAiHint": "Ask the AI about this note...",
+  "send": "Send",
+  "startConversationHint": "Start by asking the AI about your note.",
+  "attachmentMissing": "Attachment not found.",
+  "unsupportedAttachment": "Unsupported attachment type ({type}).",
+  "@unsupportedAttachment": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "openAttachment": "Open attachment",
+  "failedToLoadAttachment": "Failed to load attachment.",
+  "failedToOpenAttachment": "Failed to open attachment: {error}",
+  "@failedToOpenAttachment": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "cancellingRequest": "Cancelling request...",
   "attachFiles": "Attach files",
   "takePhotoAttachment": "Take photo",

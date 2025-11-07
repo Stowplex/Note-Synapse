@@ -797,6 +797,34 @@
   "noConversations": "无对话",
   "conversationsWithThisNote": "此笔记的对话",
   "typeYourMessage": "输入您的消息...",
+  "immersiveMode": "沉浸模式",
+  "aiChat": "AI 对话",
+  "outline": "大纲",
+  "expand": "展开",
+  "collapse": "收起",
+  "annotate": "标注",
+  "askAiHint": "向 AI 询问这条笔记...",
+  "send": "发送",
+  "startConversationHint": "先向 AI 询问关于你的笔记。",
+  "attachmentMissing": "找不到附件。",
+  "unsupportedAttachment": "不支持的附件类型（{type}）。",
+  "@unsupportedAttachment": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "openAttachment": "打开附件",
+  "failedToLoadAttachment": "加载附件失败。",
+  "failedToOpenAttachment": "无法打开附件：{error}",
+  "@failedToOpenAttachment": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "cancellingRequest": "正在取消请求...",
   "attachFiles": "附加文件",
   "takePhotoAttachment": "拍照",

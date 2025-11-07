@@ -1067,7 +1067,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => 'Attachment missing';
+  String get attachmentMissing => 'Attachment not found.';
 
   @override
   String get attachmentUnavailable => 'Attachment unavailable';
@@ -2405,6 +2405,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get typeYourMessage => 'Type your message...';
+
+  @override
+  String get immersiveMode => 'Immersive Mode';
+
+  @override
+  String get aiChat => 'AI Chat';
+
+  @override
+  String get outline => 'Outline';
+
+  @override
+  String get expand => 'Expand';
+
+  @override
+  String get collapse => 'Collapse';
+
+  @override
+  String get annotate => 'Annotate';
+
+  @override
+  String get askAiHint => 'Ask the AI about this note...';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get startConversationHint => 'Start by asking the AI about your note.';
+
+  @override
+  String unsupportedAttachment(String type) {
+    return 'Unsupported attachment type ($type).';
+  }
+
+  @override
+  String get openAttachment => 'Open attachment';
+
+  @override
+  String get failedToLoadAttachment => 'Failed to load attachment.';
+
+  @override
+  String failedToOpenAttachment(String error) {
+    return 'Failed to open attachment: $error';
+  }
 
   @override
   String get cancellingRequest => 'Cancelling request...';

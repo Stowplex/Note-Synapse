@@ -1049,7 +1049,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => '附件缺失';
+  String get attachmentMissing => '找不到附件。';
 
   @override
   String get attachmentUnavailable => '附件不可用';
@@ -2323,6 +2323,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get typeYourMessage => '输入您的消息...';
+
+  @override
+  String get immersiveMode => '沉浸模式';
+
+  @override
+  String get aiChat => 'AI 对话';
+
+  @override
+  String get outline => '大纲';
+
+  @override
+  String get expand => '展开';
+
+  @override
+  String get collapse => '收起';
+
+  @override
+  String get annotate => '标注';
+
+  @override
+  String get askAiHint => '向 AI 询问这条笔记...';
+
+  @override
+  String get send => '发送';
+
+  @override
+  String get startConversationHint => '先向 AI 询问关于你的笔记。';
+
+  @override
+  String unsupportedAttachment(String type) {
+    return '不支持的附件类型（$type）。';
+  }
+
+  @override
+  String get openAttachment => '打开附件';
+
+  @override
+  String get failedToLoadAttachment => '加载附件失败。';
+
+  @override
+  String failedToOpenAttachment(String error) {
+    return '无法打开附件：$error';
+  }
 
   @override
   String get cancellingRequest => '正在取消请求...';

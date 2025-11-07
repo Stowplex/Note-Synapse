@@ -14,6 +14,7 @@ import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'immersive_note_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -70,9 +71,10 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: l10n.linkSelectedNotes,
             ),
             IconButton(
-              icon: const Icon(Icons.share),
-              onPressed: _selectedNotes.isNotEmpty ? _shareSelectedNotes : null,
-              tooltip: l10n.shareSelectedNotes,
+              icon: const Icon(Icons.chrome_reader_mode),
+              onPressed:
+                  _selectedNotes.isNotEmpty ? _openImmersiveMode : null,
+              tooltip: l10n.immersiveMode,
             ),
             IconButton(
               icon: const Icon(Icons.psychology),
@@ -84,10 +86,52 @@ class _NotesScreenState extends State<NotesScreen> {
               onPressed: _selectedNotes.isNotEmpty ? _openNoteActionApps : null,
               tooltip: 'Run Note Action App',
             ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _selectedNotes.isNotEmpty ? _deleteSelectedNotes : null,
-              tooltip: l10n.deleteSelectedNotes,
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+              onSelected: (value) {
+                switch (value) {
+                  case 'share':
+                    if (_selectedNotes.isNotEmpty) {
+                      _shareSelectedNotes();
+                    }
+                    break;
+                  case 'delete':
+                    if (_selectedNotes.isNotEmpty) {
+                      _deleteSelectedNotes();
+                    }
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'share',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.share, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.shareSelectedNotes),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        l10n.deleteSelectedNotes,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             IconButton(
               icon: const Icon(Icons.close),
@@ -404,6 +448,18 @@ class _NotesScreenState extends State<NotesScreen> {
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openImmersiveMode() {
+    if (_selectedNotes.isEmpty) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImmersiveNoteScreen(
+          notes: List<Note>.from(_selectedNotes),
+        ),
       ),
     );
   }
