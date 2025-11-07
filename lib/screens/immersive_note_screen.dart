@@ -76,10 +76,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
   static const double _aiHandleHeight = 76.0;
-  static const double _aiHandleWidth = 360.0;
+  static const double _aiHandleWidth = 420.0;
   static const double _aiPanelHeightFraction = 0.45;
   static const double _aiHandleMargin = 12.0;
-  double _aiHandleFraction = 0.5;
+  double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
   _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
 
@@ -284,8 +284,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         overlays.add(
           Positioned(
             top: 0,
-            left: 0,
-            right: 0,
+            left: _aiHandleMargin,
+            right: _aiHandleMargin,
             height: clampedPanelHeight,
             child: _buildAiPanelContent(l10n),
           ),
@@ -295,8 +295,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         overlays.add(
           Positioned(
             bottom: 0,
-            left: 0,
-            right: 0,
+            left: _aiHandleMargin,
+            right: _aiHandleMargin,
             height: clampedPanelHeight,
             child: _buildAiPanelContent(l10n),
           ),
@@ -318,9 +318,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     overlays.add(
       Positioned(
         left: _aiHandleMargin,
+        right: _aiHandleMargin,
         top: clampedHandleTop,
-        width: handleWidth,
-        child: _buildAiHandle(l10n, size, handleWidth),
+        child: Center(
+          child: SizedBox(
+            width: handleWidth,
+            child: _buildAiHandle(l10n, size, handleWidth),
+          ),
+        ),
       ),
     );
 
@@ -386,6 +391,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onPanUpdate: (details) => _updateHandleDrag(details.delta.dy, canvasSize.height),
       child: Material(
         color: theme.colorScheme.surface.withOpacity(0.85),
