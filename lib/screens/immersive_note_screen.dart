@@ -290,7 +290,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
-        handleTop = clampedPanelHeight - handleHeight;
+        handleTop = clampedPanelHeight + _aiHandleMargin;
       } else {
         overlays.add(
           Positioned(
@@ -301,7 +301,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
-        handleTop = totalHeight - clampedPanelHeight - handleHeight;
+        handleTop = totalHeight - clampedPanelHeight - handleHeight - _aiHandleMargin;
       }
     } else {
       final trackHeight = totalHeight - handleHeight;
@@ -366,26 +366,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         ),
       );
     } else {
+      Widget buildArrowButton(IconData icon, _AiPanelSide side) {
+        return SizedBox(
+          width: 36,
+          height: 36,
+          child: IconButton(
+            icon: Icon(icon, size: 20),
+            padding: EdgeInsets.zero,
+            tooltip: l10n.expand,
+            onPressed: () => _expandAiPanel(side, canvasSize.height),
+          ),
+        );
+      }
+
       controlWidget = Column(
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up),
-            tooltip: l10n.expand,
-            onPressed: () => _expandAiPanel(
-              _AiPanelSide.top,
-              canvasSize.height,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down),
-            tooltip: l10n.expand,
-            onPressed: () => _expandAiPanel(
-              _AiPanelSide.bottom,
-              canvasSize.height,
-            ),
-          ),
+          buildArrowButton(Icons.keyboard_arrow_up, _AiPanelSide.top),
+          const SizedBox(height: 4),
+          buildArrowButton(Icons.keyboard_arrow_down, _AiPanelSide.bottom),
         ],
       );
     }
@@ -461,9 +460,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               Expanded(
                 child: TextField(
                   controller: _messageController,
-                  maxLines: 4,
-                  minLines: 1,
-                    decoration: InputDecoration.collapsed(
+                  maxLines: 6,
+                  minLines: 3,
+                  decoration: InputDecoration.collapsed(
                     hintText: l10n.askAiHint,
                   ),
                   onSubmitted: (_) => _sendMessage(),
@@ -498,35 +497,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Text(
-                  l10n.aiChat,
-                  style: theme.textTheme.titleMedium,
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  tooltip: l10n.collapse,
-                  onPressed: _collapseAiPanel,
-                ),
-              ],
-            ),
-          ),
           if (_isLoadingConversation)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: LinearProgressIndicator(minHeight: 2),
             ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _buildConversationList(l10n),
             ),
           ),
-          const SizedBox(height: 12),
         ],
       ),
     );
