@@ -87,7 +87,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   void initState() {
     super.initState();
     _initialNotesById = {for (final note in widget.notes) note.id: note};
-    _noteOrder = widget.notes.map((note) => note.id).toList(growable: false);
+    _noteOrder = widget.notes.map((note) => note.id).toList();
 
     if (widget.initialAttachmentPath != null) {
       _activeAttachmentPath = widget.initialAttachmentPath;
@@ -204,13 +204,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 tooltip: l10n.outline,
                 onPressed: () => _showOutline(notes, l10n),
               ),
-              IconButton(
-                icon: const Icon(Icons.account_tree),
-                tooltip: l10n.viewTree,
-                onPressed: _conversation == null
-                    ? null
-                    : () => _openConversationTree(),
-              ),
+                IconButton(
+                  icon: const Icon(Icons.account_tree),
+                  tooltip: l10n.viewTree,
+                  onPressed: () => _openConversationTree(),
+                ),
             ],
           ),
           body: SafeArea(
@@ -976,7 +974,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       ),
                     ),
                   ),
-                  for (final linkedNote in linkedNotesMap[notes[i].id]!)
+                  for (final linkedNote in linkedNotesMap[notes[i].id]!) ...[
                     ListTile(
                       contentPadding: const EdgeInsets.only(
                         left: 64,
@@ -988,19 +986,63 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       onTap: () {
-                        // Find if this linked note is already in the notes list
-                        final linkedIndex = notes.indexWhere(
-                          (n) => n.id == linkedNote.id,
-                        );
-                        if (linkedIndex >= 0) {
-                          setState(() {
+                        setState(() {
+                          // Find if this linked note is already in the notes list
+                          final linkedIndex = notes.indexWhere(
+                            (n) => n.id == linkedNote.id,
+                          );
+                          if (linkedIndex >= 0) {
+                            // Note already in list, just navigate to it
                             _activeNoteIndex = linkedIndex;
                             _activeAttachmentPath = null;
-                          });
-                        }
+                          } else {
+                            // Add linked note to the notes list
+                            _initialNotesById[linkedNote.id] = linkedNote;
+                            _noteOrder.add(linkedNote.id);
+                            _activeNoteIndex = _noteOrder.length - 1;
+                            _activeAttachmentPath = null;
+                          }
+                        });
                         Navigator.pop(context);
                       },
                     ),
+                    // Add attachments for the linked note
+                    for (final attachment in linkedNote.attachmentPaths)
+                      ListTile(
+                        contentPadding: const EdgeInsets.only(
+                          left: 80,
+                          right: 16,
+                        ),
+                        leading: Icon(
+                          _iconForAttachment(attachment),
+                          size: 18,
+                        ),
+                        title: Text(
+                          attachment.split(Platform.pathSeparator).last,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        onTap: () {
+                          setState(() {
+                            // Find if this linked note is already in the notes list
+                            final linkedIndex = notes.indexWhere(
+                              (n) => n.id == linkedNote.id,
+                            );
+                            if (linkedIndex >= 0) {
+                              // Note already in list
+                              _activeNoteIndex = linkedIndex;
+                            } else {
+                              // Add linked note to the notes list
+                              _initialNotesById[linkedNote.id] = linkedNote;
+                              _noteOrder.add(linkedNote.id);
+                              _activeNoteIndex = _noteOrder.length - 1;
+                            }
+                            _activeAttachmentPath = attachment;
+                          });
+                          Navigator.pop(context);
+                        },
+                      ),
+                  ],
                 ],
               ],
             ],
@@ -1034,35 +1076,30 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Future<void> _openConversationTree() async {
-    if (_conversation == null) return;
-
     try {
       final appProvider = context.read<AppProvider>();
       final noteIds = List<String>.from(_noteOrder);
-      final conversationIds = <String>{_conversation!.id};
+      final conversationIds = <String>{};
+      
+      // Add current conversation if it exists
+      if (_conversation != null) {
+        conversationIds.add(_conversation!.id);
+      }
 
+      // Collect all conversations associated with the notes
       for (final noteId in noteIds) {
         final ids = await appProvider.getNoteConversationIds(noteId);
         conversationIds.addAll(ids);
       }
 
-      if (conversationIds.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No conversations found for these notes.'),
-            ),
-          );
-        }
-        return;
-      }
-
       if (!mounted) return;
+      
+      // Navigate to tree view with the current conversation highlighted
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
-            filterByActiveConversations: true,
+            filterByActiveConversations: conversationIds.isNotEmpty,
             onOpenConversation: _handleConversationOpenedFromTree,
           ),
         ),
@@ -1483,7 +1520,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         } else if (_noteOrder.isNotEmpty) {
           _activeNoteIndex = min(_activeNoteIndex, _noteOrder.length - 1);
         } else if (_initialNotesById.isNotEmpty) {
-          _noteOrder = _initialNotesById.keys.toList(growable: false);
+          _noteOrder = _initialNotesById.keys.toList();
           _activeNoteIndex = 0;
         } else {
           _activeNoteIndex = 0;
