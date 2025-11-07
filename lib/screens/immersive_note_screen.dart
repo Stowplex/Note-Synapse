@@ -122,7 +122,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     try {
       final noteIds = List<String>.from(_noteOrder);
       final notes = <Note>[];
-      
+
       for (final noteId in noteIds) {
         final note = await _databaseService.getNote(noteId);
         if (note != null) {
@@ -207,8 +207,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               IconButton(
                 icon: const Icon(Icons.account_tree),
                 tooltip: l10n.viewTree,
-                onPressed:
-                    _conversation == null ? null : () => _openConversationTree(),
+                onPressed: _conversation == null
+                    ? null
+                    : () => _openConversationTree(),
               ),
             ],
           ),
@@ -218,28 +219,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 final size = constraints.biggest;
                 final overlays = _buildAiOverlays(size, l10n);
                 return Stack(
-              children: [
+                  children: [
                     Positioned.fill(child: _buildNoteArea(activeNote, l10n)),
-                      if (_isPenMode)
-                        Positioned.fill(
-                          child: GestureDetector(
+                    if (_isPenMode)
+                      Positioned.fill(
+                        child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                            onPanStart: _handlePenPanStart,
-                            onPanUpdate: _handlePenPanUpdate,
-                            onPanEnd: (_) => _handlePenPanEnd(),
+                          onPanStart: _handlePenPanStart,
+                          onPanUpdate: _handlePenPanUpdate,
+                          onPanEnd: (_) => _handlePenPanEnd(),
                           onPanCancel: _resetPenStroke,
-                              child: CustomPaint(
+                          child: CustomPaint(
                             painter: _FreeformStrokePainter(
                               _penStrokePoints.isEmpty
                                   ? null
                                   : List<Offset>.from(_penStrokePoints),
                             ),
-                                size: Size.infinite,
-                              ),
-                            ),
+                            size: Size.infinite,
                           ),
+                        ),
+                      ),
                     ...overlays,
-                    ],
+                  ],
                 );
               },
             ),
@@ -271,10 +272,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return resolved;
   }
 
-  List<Widget> _buildAiOverlays(
-    Size size,
-    AppLocalizations l10n,
-  ) {
+  List<Widget> _buildAiOverlays(Size size, AppLocalizations l10n) {
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
@@ -311,12 +309,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         );
         // Position handle above the panel with margin
-        handleTop = totalHeight - clampedPanelHeight - handleHeight - (_aiHandleMargin * 2);
+        handleTop =
+            totalHeight -
+            clampedPanelHeight -
+            handleHeight -
+            (_aiHandleMargin * 2);
       }
     } else {
       final trackHeight = totalHeight - handleHeight;
-      handleTop = (_aiHandleFraction * trackHeight)
-          .clamp(_aiHandleMargin, totalHeight - handleHeight - _aiHandleMargin);
+      handleTop = (_aiHandleFraction * trackHeight).clamp(
+        _aiHandleMargin,
+        totalHeight - handleHeight - _aiHandleMargin,
+      );
     }
 
     final double clampedHandleTop = handleTop.clamp(
@@ -401,32 +405,33 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => _updateHandleDrag(details.delta.dy, canvasSize.height),
+      onPanUpdate: (details) =>
+          _updateHandleDrag(details.delta.dy, canvasSize.height),
       child: Material(
         color: theme.colorScheme.surface.withOpacity(0.85),
         elevation: 6,
         borderRadius: BorderRadius.circular(16),
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: dynamicHeight, maxWidth: handleWidth),
+          constraints: BoxConstraints(
+            minHeight: dynamicHeight,
+            maxWidth: handleWidth,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12),
-      child: Column(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                    SizedBox(
-                      width: 44,
-                        child: controlWidget,
-                    ),
+                  children: [
+                    SizedBox(width: 44, child: controlWidget),
                     const SizedBox(width: 8),
                     Expanded(child: _buildAiComposer(l10n)),
                   ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -439,11 +444,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          if (_pendingAttachments.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _buildPendingAttachmentsPreview(l10n),
-            ),
+        if (_pendingAttachments.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildPendingAttachmentsPreview(l10n),
+          ),
         DecoratedBox(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
@@ -453,44 +458,44 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.brush,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.brush,
                     color: _isPenMode ? theme.colorScheme.primary : null,
-                ),
-                tooltip: l10n.annotate,
-                onPressed: () {
-                  setState(() {
-                    _isPenMode = !_isPenMode;
-                      _penStrokePoints.clear();
-                  });
-                },
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  maxLines: 6,
-                  minLines: 3,
-                  decoration: InputDecoration.collapsed(
-                    hintText: l10n.askAiHint,
                   ),
-                  onSubmitted: (_) => _sendMessage(),
+                  tooltip: l10n.annotate,
+                  onPressed: () {
+                    setState(() {
+                      _isPenMode = !_isPenMode;
+                      _penStrokePoints.clear();
+                    });
+                  },
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: _isSending
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-                tooltip: l10n.send,
-                onPressed: _isSending ? null : _sendMessage,
-              ),
-            ],
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    maxLines: 6,
+                    minLines: 3,
+                    decoration: InputDecoration.collapsed(
+                      hintText: l10n.askAiHint,
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: _isSending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                  tooltip: l10n.send,
+                  onPressed: _isSending ? null : _sendMessage,
+                ),
+              ],
             ),
           ),
         ),
@@ -578,8 +583,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         child: Text(
           l10n.startConversationHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -614,11 +619,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                SelectableText(
-                  message.content,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  SelectableText(
+                    message.content,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   )
                 else
                   SelectionArea(
@@ -628,8 +633,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                       onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
-                      ),
-                ),
+                    ),
+                  ),
                 if (message.attachmentPaths.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -712,9 +717,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
-                        note.id,
-                        newContent,
-                      );
+                    note.id,
+                    newContent,
+                  );
                 },
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -724,59 +729,62 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               const SizedBox(height: 24),
               Text(
                 l10n.subNotes,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              ...note.subNotes.map((subNote) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (subNote.isCompleted)
-                                  const Icon(Icons.check_circle,
-                                      color: Colors.green, size: 20)
-                                else
-                                  const Icon(Icons.radio_button_unchecked,
-                                      size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    subNote.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                  ),
+              ...note.subNotes.map(
+                (subNote) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (subNote.isCompleted)
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 20,
+                                )
+                              else
+                                const Icon(
+                                  Icons.radio_button_unchecked,
+                                  size: 20,
                                 ),
-                              ],
-                            ),
-                            if (subNote.content.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              SelectionArea(
-                                child: InteractiveCheckboxMarkdown(
-                                  key: ValueKey(
-                                    'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
-                                  ),
-                                  originalContent: subNote.content,
-                                  onContentChanged: (_) {},
-                                  style: Theme.of(context).textTheme.bodyMedium,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  subNote.name,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ],
+                          ),
+                          if (subNote.content.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            SelectionArea(
+                              child: InteractiveCheckboxMarkdown(
+                                key: ValueKey(
+                                  'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
+                                ),
+                                originalContent: subNote.content,
+                                onContentChanged: (_) {},
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
-                  )),
+                  ),
+                ),
+              ),
             ],
           ],
         ),
@@ -828,7 +836,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (extension == 'pdf') {
           return LayoutBuilder(
             builder: (context, constraints) {
-              final availableHeight = constraints.hasBoundedHeight &&
+              final availableHeight =
+                  constraints.hasBoundedHeight &&
                       constraints.maxHeight.isFinite &&
                       constraints.maxHeight > 0
                   ? constraints.maxHeight
@@ -896,7 +905,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     // Collect linked notes with circular reference prevention
     final linkedNotesMap = <String, List<Note>>{};
     final appProvider = context.read<AppProvider>();
-    
+
     for (final note in notes) {
       try {
         final linkedNotes = await _collectLinkedNotes(note.id, appProvider);
@@ -909,7 +918,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (!mounted) return;
-    
+
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
@@ -962,14 +971,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     child: Text(
                       'Linked Notes',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.bold,
-                          ),
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   for (final linkedNote in linkedNotesMap[notes[i].id]!)
                     ListTile(
-                      contentPadding: const EdgeInsets.only(left: 64, right: 16),
+                      contentPadding: const EdgeInsets.only(
+                        left: 64,
+                        right: 16,
+                      ),
                       leading: const Icon(Icons.link, size: 20),
                       title: Text(
                         linkedNote.title,
@@ -977,7 +989,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       ),
                       onTap: () {
                         // Find if this linked note is already in the notes list
-                        final linkedIndex = notes.indexWhere((n) => n.id == linkedNote.id);
+                        final linkedIndex = notes.indexWhere(
+                          (n) => n.id == linkedNote.id,
+                        );
                         if (linkedIndex >= 0) {
                           setState(() {
                             _activeNoteIndex = linkedIndex;
@@ -1003,7 +1017,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   ) async {
     final visited = <String>{noteId}; // Start with current note as visited
     final result = <Note>[];
-    
+
     try {
       final linkedNotes = await appProvider.getLinkedNotes(noteId);
       for (final linkedNote in linkedNotes) {
@@ -1015,7 +1029,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     } catch (e) {
       LoggerService.warning('Failed to collect linked notes: $e');
     }
-    
+
     return result;
   }
 
@@ -1044,9 +1058,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ConversationTreeScreen(
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationTreeScreen(
             activeConversationIds: conversationIds.toList(growable: false),
             filterByActiveConversations: true,
             onOpenConversation: _handleConversationOpenedFromTree,
@@ -1591,7 +1605,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final Paint glowPaint = Paint()
         ..color = Colors.redAccent.withOpacity(0.18)
-      ..style = PaintingStyle.stroke
+        ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..strokeWidth = strokeWidth * 2;
