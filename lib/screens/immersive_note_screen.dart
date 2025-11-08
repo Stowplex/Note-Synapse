@@ -39,6 +39,7 @@ import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
+import 'conversation_chat_screen.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -484,6 +485,21 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 tooltip: l10n.viewTree,
                 onPressed: () => _openConversationTree(),
               ),
+              if (_conversation != null)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (value) {
+                    if (value == 'open_chat') {
+                      _openConversationInChatMode();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem<String>(
+                      value: 'open_chat',
+                      child: Text(l10n.openInChatMode),
+                    ),
+                  ],
+                ),
             ],
           ),
           body: SafeArea(
@@ -1875,6 +1891,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  void _openConversationInChatMode() {
+    final conversation = _conversation;
+    if (conversation == null) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) =>
+            ConversationChatScreen(conversationId: conversation.id),
+      ),
+    );
+  }
+
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
     try {
       await FileUtils.openFile(path, context);
@@ -2432,7 +2464,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await navigator.maybePop();
       }
     }
-    return true;
+    return success;
   }
 
   Rect _computeStrokeBounds(List<Offset> points) {

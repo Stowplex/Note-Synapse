@@ -2415,6 +2415,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get immersiveMode => 'Immersive Mode';
 
   @override
+  String get openInChatMode => 'Open in Chat Mode';
+
+  @override
   String get aiChat => 'AI Chat';
 
   @override

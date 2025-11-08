@@ -451,13 +451,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             );
           }
 
-          // Navigate to the new conversation, replacing the tree view
-          await Navigator.of(currentContext).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) =>
-                  ConversationChatScreen(conversationId: newConversation.id),
-            ),
-          );
+          // Navigate to the new conversation using the configured handler
+          await _openConversation(currentContext, newConversation.id);
         }
       }
     } catch (e) {
@@ -522,12 +517,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
         // Navigate to the new conversation, replacing the tree view
         try {
-          Navigator.of(currentContext).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) =>
-                  ConversationChatScreen(conversationId: newConversation.id),
-            ),
-          );
+          await _openConversation(currentContext, newConversation.id);
         } catch (_) {
           // Navigation may have failed, but that's okay
         }

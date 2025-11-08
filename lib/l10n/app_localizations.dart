@@ -4310,6 +4310,12 @@ abstract class AppLocalizations {
   /// **'Immersive Mode'**
   String get immersiveMode;
 
+  /// No description provided for @openInChatMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Chat Mode'**
+  String get openInChatMode;
+
   /// No description provided for @aiChat.
   ///
   /// In en, this message translates to:

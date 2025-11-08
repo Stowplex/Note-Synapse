@@ -2333,6 +2333,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get immersiveMode => '沉浸模式';
 
   @override
+  String get openInChatMode => '在聊天模式中打开';
+
+  @override
   String get aiChat => 'AI 对话';
 
   @override
