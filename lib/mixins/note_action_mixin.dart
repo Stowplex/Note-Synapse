@@ -99,4 +99,3 @@ mixin NoteActionMixin<T extends StatefulWidget> on State<T> {
     );
   }
 }
-

@@ -30,4 +30,3 @@ class ActiveToolCountBadge extends StatelessWidget {
     );
   }
 }
-

@@ -88,7 +88,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
-  
+
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
@@ -287,18 +287,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     for (final app in aiApps) {
       if (app.selectedRevisionId == null) {
-        LoggerService.warning('AI tool "${app.name}" has no selected revision.');
+        LoggerService.warning(
+          'AI tool "${app.name}" has no selected revision.',
+        );
         continue;
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(app.selectedRevisionId!);
+        final revision = await UserAppService.getAppRevision(
+          app.selectedRevisionId!,
+        );
         if (revision == null) {
-          LoggerService.warning('AI tool "${app.name}" selected revision not found.');
+          LoggerService.warning(
+            'AI tool "${app.name}" selected revision not found.',
+          );
           continue;
         }
 
-        final bundle = await AiToolService.loadAppBundle(app: app, revision: revision);
+        final bundle = await AiToolService.loadAppBundle(
+          app: app,
+          revision: revision,
+        );
         if (bundle == null || bundle.toolDefinitions.isEmpty) {
           continue;
         }
@@ -322,8 +331,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     setState(() {
       _aiToolBundles = bundles;
       _aiToolMcpMap = mcpMap;
-      _selectedAiToolServices
-          .removeWhere((service) => !mcpMap.containsKey(service));
+      _selectedAiToolServices.removeWhere(
+        (service) => !mcpMap.containsKey(service),
+      );
     });
   }
 
@@ -589,7 +599,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           : _aiHandleFraction * trackHeight;
     }
 
-    final clampedHandleTop = _clampToRange(handleTop, minHandleTop, maxHandleTop);
+    final clampedHandleTop = _clampToRange(
+      handleTop,
+      minHandleTop,
+      maxHandleTop,
+    );
 
     final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
     overlays.add(
@@ -658,10 +672,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (handleLeft != null) {
-      handleLeft = min(handleLeft, max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin));
+      handleLeft = min(
+        handleLeft,
+        max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin),
+      );
     }
     if (handleRight != null) {
-      handleRight = min(handleRight, max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin));
+      handleRight = min(
+        handleRight,
+        max(_aiHandleMargin, size.width - handleWidth - _aiHandleMargin),
+      );
     }
 
     overlays.add(
@@ -885,8 +905,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     child: Text(
                       _toolExecutionStatus!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -926,8 +945,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     IconButton(
                       icon: Icon(
                         Icons.brush,
-                        color:
-                            _isPenMode ? theme.colorScheme.primary : null,
+                        color: _isPenMode ? theme.colorScheme.primary : null,
                       ),
                       tooltip: l10n.annotate,
                       onPressed: () {
@@ -1063,9 +1081,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.3),
-        ),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1205,7 +1221,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 children: _aiToolBundles.entries.map((entry) {
                   final serviceName = entry.key;
                   final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(serviceName);
+                  final selected = _selectedAiToolServices.contains(
+                    serviceName,
+                  );
                   return FilterChip(
                     label: Text(bundle.displayName),
                     selected: selected,
@@ -1274,8 +1292,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         max(_aiHandleMargin, totalHeight - handleHeight - _aiHandleMargin),
       );
 
-      _aiHandleFraction =
-          (clampedTop / handleTravel).clamp(0.0, 1.0).toDouble();
+      _aiHandleFraction = (clampedTop / handleTravel)
+          .clamp(0.0, 1.0)
+          .toDouble();
     });
   }
 
@@ -2112,23 +2131,19 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       activeTools: activeTools,
       enableTools: activeTools.isNotEmpty,
       executeTool: (serviceName, toolName, params) async {
-        return _runWithToolStatus(
-          serviceName,
-          toolName,
-          () async {
-            if (_aiToolBundles.containsKey(serviceName)) {
-              final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params);
-            }
+        return _runWithToolStatus(serviceName, toolName, () async {
+          if (_aiToolBundles.containsKey(serviceName)) {
+            final runtime = await _getAiToolRuntime(serviceName);
+            return runtime.invoke(toolName, params);
+          }
 
-            return McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-            );
-          },
-        );
+          return McpToolIntegrationService.executeToolCall(
+            serviceName: serviceName,
+            toolName: toolName,
+            parameters: params,
+            enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+          );
+        });
       },
       isCancelled: () => _cancelledRequestIds.contains(requestId),
       requestId: requestId,
@@ -2163,7 +2178,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final taskContext = lines.join('\n');
 
     final combinedTools = _buildActiveToolsMap();
-    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(combinedTools);
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+      combinedTools,
+    );
 
     return SystemPromptBuilder.build(
       taskContext: '$taskContext\n\n$mcpToolsPrompt',

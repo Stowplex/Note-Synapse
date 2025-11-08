@@ -246,15 +246,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       await _refreshConversationTags();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Tag "$tagName" removed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Tag "$tagName" removed')));
     } catch (e) {
       LoggerService.error('Error removing tag: $e', error: e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error removing tag: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error removing tag: $e')));
     }
   }
 
@@ -292,18 +292,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
     for (final app in aiApps) {
       if (app.selectedRevisionId == null) {
-        LoggerService.warning('AI tool "${app.name}" has no selected revision.');
+        LoggerService.warning(
+          'AI tool "${app.name}" has no selected revision.',
+        );
         continue;
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(app.selectedRevisionId!);
+        final revision = await UserAppService.getAppRevision(
+          app.selectedRevisionId!,
+        );
         if (revision == null) {
-          LoggerService.warning('AI tool "${app.name}" selected revision not found.');
+          LoggerService.warning(
+            'AI tool "${app.name}" selected revision not found.',
+          );
           continue;
         }
 
-        final bundle = await AiToolService.loadAppBundle(app: app, revision: revision);
+        final bundle = await AiToolService.loadAppBundle(
+          app: app,
+          revision: revision,
+        );
         if (bundle == null || bundle.toolDefinitions.isEmpty) {
           continue;
         }
@@ -327,8 +336,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     setState(() {
       _aiToolBundles = bundles;
       _aiToolMcpMap = mcpMap;
-      _selectedAiToolServices
-          .removeWhere((service) => !mcpMap.containsKey(service));
+      _selectedAiToolServices.removeWhere(
+        (service) => !mcpMap.containsKey(service),
+      );
     });
   }
 
@@ -414,8 +424,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return input.replaceAll(RegExp(r'[_\\-]+'), ' ');
   }
 
-  bool get _hasAnyTools =>
-      _buildActiveToolsMap().isNotEmpty;
+  bool get _hasAnyTools => _buildActiveToolsMap().isNotEmpty;
 
   void _toggleAiToolService(String serviceName, bool isSelected) {
     setState(() {
@@ -640,23 +649,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         activeTools: activeTools,
         enableTools: activeTools.isNotEmpty,
         executeTool: (serviceName, toolName, params) async {
-          return _runWithToolStatus(
-            serviceName,
-            toolName,
-            () async {
-              if (_aiToolBundles.containsKey(serviceName)) {
-                final runtime = await _getAiToolRuntime(serviceName);
-                return runtime.invoke(toolName, params);
-              }
+          return _runWithToolStatus(serviceName, toolName, () async {
+            if (_aiToolBundles.containsKey(serviceName)) {
+              final runtime = await _getAiToolRuntime(serviceName);
+              return runtime.invoke(toolName, params);
+            }
 
-              return McpToolIntegrationService.executeToolCall(
-                serviceName: serviceName,
-                toolName: toolName,
-                parameters: params,
-                enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-              );
-            },
-          );
+            return McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            );
+          });
         },
         isCancelled: () => _cancelledRequestIds.contains(requestId),
         requestId: requestId,
@@ -698,11 +703,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       // Prepend every user message with a timestamp context message.
       // The timestamp is based on the message's timestamp for KV-cache friendly reuse.
       if (role == PromptRole.user) {
-        final messageTimeContext = SystemPromptBuilder.formatTimestamp(message.timestamp);
-        conversationMessages.add(PromptMessage(
-          role: PromptRole.user,
-          content: 'Message created at: $messageTimeContext',
-        ));
+        final messageTimeContext = SystemPromptBuilder.formatTimestamp(
+          message.timestamp,
+        );
+        conversationMessages.add(
+          PromptMessage(
+            role: PromptRole.user,
+            content: 'Message created at: $messageTimeContext',
+          ),
+        );
       }
 
       final attachments = await _loadConversationAttachments(
@@ -741,7 +750,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
-    final contextMessages = (contextMessage.content.trim().isEmpty &&
+    final contextMessages =
+        (contextMessage.content.trim().isEmpty &&
             contextMessage.attachments.isEmpty)
         ? <PromptMessage>[]
         : [contextMessage];
@@ -769,13 +779,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
 
     if (_notes.isEmpty) {
-      lines.add('No note context is currently attached. Rely on the conversation history.');
+      lines.add(
+        'No note context is currently attached. Rely on the conversation history.',
+      );
     }
 
     final taskContext = lines.join('\n');
 
     final combinedTools = _buildActiveToolsMap();
-    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(combinedTools);
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+      combinedTools,
+    );
 
     return SystemPromptBuilder.build(
       taskContext: '$taskContext\n\n$mcpToolsPrompt',
@@ -785,7 +799,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         AIPrompts.relationshipGuidelines,
       ],
       now: _conversationStartTime,
-      needTimeInContext: false,  // Precise time comes with user message.
+      needTimeInContext: false, // Precise time comes with user message.
     );
   }
 
@@ -801,9 +815,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         _messages.isNotEmpty && identical(message, _messages.last);
 
     if (isLatestUserMessage && latestUserAttachments.isNotEmpty) {
-      return Future.wait(
-        latestUserAttachments.map(_normalizePlatformFile),
-      );
+      return Future.wait(latestUserAttachments.map(_normalizePlatformFile));
     }
 
     if (message.attachmentPaths.isEmpty) {
@@ -827,7 +839,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           ),
         );
       } catch (e) {
-        LoggerService.warning('Failed to load conversation attachment $path: $e');
+        LoggerService.warning(
+          'Failed to load conversation attachment $path: $e',
+        );
       }
     }
 
@@ -849,7 +863,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           bytes: bytes,
         );
       } catch (e) {
-        LoggerService.warning('Failed to normalize attachment ${file.name}: $e');
+        LoggerService.warning(
+          'Failed to normalize attachment ${file.name}: $e',
+        );
       }
     }
 
@@ -1137,11 +1153,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 Text(
                   l10n.mcpTools,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.8),
-                      ),
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.8),
+                  ),
                 ),
                 const Spacer(),
                 if (activeMcpCount > 0)
@@ -1191,21 +1207,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   Icon(
                     Icons.smart_toy,
                     size: 16,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.7),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     l10n.aiTools,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.8),
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.8),
+                    ),
                   ),
                   const Spacer(),
                   if (activeLocalCount > 0)
@@ -1222,7 +1236,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 children: _aiToolBundles.entries.map((entry) {
                   final serviceName = entry.key;
                   final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(serviceName);
+                  final selected = _selectedAiToolServices.contains(
+                    serviceName,
+                  );
                   return FilterChip(
                     label: Text(bundle.displayName),
                     selected: selected,
@@ -1234,10 +1250,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                       size: 16,
                       color: selected
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.6),
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
                     ),
                   );
                 }).toList(),
@@ -1253,12 +1268,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   ),
                 ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.6),
-                      fontStyle: FontStyle.italic,
-                    ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ],
@@ -1701,8 +1715,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                         ),
                         minLines: 1,
                         maxLines: 10,
-                        onSubmitted: (_) =>
-                            _isSending ? null : _sendMessage(),
+                        onSubmitted: (_) => _isSending ? null : _sendMessage(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1725,7 +1738,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.send),
                       ),
@@ -1773,8 +1788,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                     child: Text(
                       _toolExecutionStatus!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1875,9 +1889,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                     icon: Icon(
                       Icons.edit,
                       size: 16,
-                      color: Theme.of(context)
-                          .colorScheme.onSurface
-                          .withOpacity(0.5),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.5),
                     ),
                     onPressed: () {
                       _messageController.text = message.content;
