@@ -1071,9 +1071,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final totalActiveCount = activeMcpCount + activeLocalCount;
-    final headerTitle = _isMcpPanelExpanded
-        ? l10n.mcpTools
-        : l10n.mcpAndLocalTools;
+    final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

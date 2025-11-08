@@ -1070,9 +1070,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final totalActiveCount = activeMcpCount + activeLocalCount;
-    final headerTitle = _isMcpPanelExpanded
-        ? l10n.mcpTools
-        : l10n.mcpAndLocalTools;
+    final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1153,11 +1151,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 Text(
                   l10n.mcpTools,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.8),
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.8),
+                      ),
                 ),
                 const Spacer(),
                 if (activeMcpCount > 0)
