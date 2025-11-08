@@ -100,6 +100,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Map<String, List<McpTool>> _aiToolMcpMap = {};
   final Set<String> _selectedAiToolServices = {};
   final Map<String, AiToolRuntime> _aiToolRuntimes = {};
+  String? _toolExecutionStatus;
   final List<Offset> _penStrokePoints = [];
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
@@ -338,6 +339,74 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     return combined;
+  }
+
+  Future<String> _runWithToolStatus(
+    String serviceName,
+    String toolName,
+    Future<String> Function() action,
+  ) async {
+    final statusLabel = mounted
+        ? _buildToolStatusLabel(serviceName, toolName)
+        : '$serviceName -> $toolName';
+    if (mounted) {
+      setState(() {
+        _toolExecutionStatus = statusLabel;
+      });
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (_toolExecutionStatus == statusLabel) {
+            _toolExecutionStatus = null;
+          }
+        });
+      }
+    }
+  }
+
+  String _buildToolStatusLabel(String serviceName, String toolName) {
+    final l10n = AppLocalizations.of(context)!;
+    final serviceLabel = _resolveServiceLabel(serviceName);
+    final toolLabel = _resolveToolLabel(serviceName, toolName);
+    return l10n.executingToolStatus(serviceLabel, toolLabel);
+  }
+
+  String _resolveServiceLabel(String serviceName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      return aiBundle.displayName;
+    }
+    return serviceName;
+  }
+
+  String _resolveToolLabel(String serviceName, String toolName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      for (final definition in aiBundle.toolDefinitions) {
+        if (definition.toolName == toolName) {
+          return _prettifyLabel(definition.toolName);
+        }
+      }
+    }
+
+    final tools = _mcpToolsByEndpoint[serviceName];
+    if (tools != null) {
+      for (final tool in tools) {
+        if (tool.name == toolName) {
+          return _prettifyLabel(tool.name);
+        }
+      }
+    }
+
+    return _prettifyLabel(toolName);
+  }
+
+  String _prettifyLabel(String input) {
+    return input.replaceAll(RegExp(r'[_\\-]+'), ' ');
   }
 
   bool get _hasAnyTools => _buildActiveToolsMap().isNotEmpty;
@@ -782,6 +851,53 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Widget _buildToolExecutionIndicator() {
+    final theme = Theme.of(context);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1.0,
+          child: child,
+        ),
+      ),
+      child: _toolExecutionStatus == null
+          ? const SizedBox.shrink(key: ValueKey('tool-status-empty'))
+          : Padding(
+              key: ValueKey(_toolExecutionStatus),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _toolExecutionStatus!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color:
+                            theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   Widget _buildAiComposer(AppLocalizations l10n) {
     final theme = Theme.of(context);
     return Column(
@@ -801,38 +917,45 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.brush,
-                    color: _isPenMode ? theme.colorScheme.primary : null,
-                  ),
-                  tooltip: l10n.annotate,
-                  onPressed: () {
-                    setState(() {
-                      _isPenMode = !_isPenMode;
-                      _penStrokePoints.clear();
-                    });
-                  },
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    maxLines: 6,
-                    minLines: 3,
-                    decoration: InputDecoration.collapsed(
-                      hintText: l10n.askAiHint,
+                _buildToolExecutionIndicator(),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.brush,
+                        color:
+                            _isPenMode ? theme.colorScheme.primary : null,
+                      ),
+                      tooltip: l10n.annotate,
+                      onPressed: () {
+                        setState(() {
+                          _isPenMode = !_isPenMode;
+                          _penStrokePoints.clear();
+                        });
+                      },
                     ),
-                    onSubmitted: (_) {
-                      if (!_isSending && !_isAborting) {
-                        _sendMessage();
-                      }
-                    },
-                  ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        maxLines: 6,
+                        minLines: 3,
+                        decoration: InputDecoration.collapsed(
+                          hintText: l10n.askAiHint,
+                        ),
+                        onSubmitted: (_) {
+                          if (!_isSending && !_isAborting) {
+                            _sendMessage();
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSendControl(l10n),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                _buildSendControl(l10n),
               ],
             ),
           ),
@@ -1989,16 +2112,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       activeTools: activeTools,
       enableTools: activeTools.isNotEmpty,
       executeTool: (serviceName, toolName, params) async {
-        if (_aiToolBundles.containsKey(serviceName)) {
-          final runtime = await _getAiToolRuntime(serviceName);
-          return runtime.invoke(toolName, params);
-        }
+        return _runWithToolStatus(
+          serviceName,
+          toolName,
+          () async {
+            if (_aiToolBundles.containsKey(serviceName)) {
+              final runtime = await _getAiToolRuntime(serviceName);
+              return runtime.invoke(toolName, params);
+            }
 
-        return McpToolIntegrationService.executeToolCall(
-          serviceName: serviceName,
-          toolName: toolName,
-          parameters: params,
-          enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            return McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            );
+          },
         );
       },
       isCancelled: () => _cancelledRequestIds.contains(requestId),

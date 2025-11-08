@@ -1034,6 +1034,12 @@ abstract class AppLocalizations {
   /// **'Processing your request...'**
   String get processingRequest;
 
+  /// No description provided for @executingToolStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Executing tool: {service} → {tool}'**
+  String executingToolStatus(Object service, Object tool);
+
   /// No description provided for @errorProcessingRequest.
   ///
   /// In en, this message translates to:

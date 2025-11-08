@@ -78,6 +78,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Map<String, List<McpTool>> _aiToolMcpMap = {};
   final Set<String> _selectedAiToolServices = {};
   final Map<String, AiToolRuntime> _aiToolRuntimes = {};
+  String? _toolExecutionStatus;
 
   bool _hasInitialized = false;
 
@@ -345,6 +346,74 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return combined;
   }
 
+  Future<String> _runWithToolStatus(
+    String serviceName,
+    String toolName,
+    Future<String> Function() action,
+  ) async {
+    final statusLabel = mounted
+        ? _buildToolStatusLabel(serviceName, toolName)
+        : '$serviceName -> $toolName';
+    if (mounted) {
+      setState(() {
+        _toolExecutionStatus = statusLabel;
+      });
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (_toolExecutionStatus == statusLabel) {
+            _toolExecutionStatus = null;
+          }
+        });
+      }
+    }
+  }
+
+  String _buildToolStatusLabel(String serviceName, String toolName) {
+    final l10n = AppLocalizations.of(context)!;
+    final serviceLabel = _resolveServiceLabel(serviceName);
+    final toolLabel = _resolveToolLabel(serviceName, toolName);
+    return l10n.executingToolStatus(serviceLabel, toolLabel);
+  }
+
+  String _resolveServiceLabel(String serviceName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      return aiBundle.displayName;
+    }
+    return serviceName;
+  }
+
+  String _resolveToolLabel(String serviceName, String toolName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      for (final definition in aiBundle.toolDefinitions) {
+        if (definition.toolName == toolName) {
+          return _prettifyLabel(definition.toolName);
+        }
+      }
+    }
+
+    final tools = _mcpToolsByEndpoint[serviceName];
+    if (tools != null) {
+      for (final tool in tools) {
+        if (tool.name == toolName) {
+          return _prettifyLabel(tool.name);
+        }
+      }
+    }
+
+    return _prettifyLabel(toolName);
+  }
+
+  String _prettifyLabel(String input) {
+    return input.replaceAll(RegExp(r'[_\\-]+'), ' ');
+  }
+
   bool get _hasAnyTools =>
       _buildActiveToolsMap().isNotEmpty;
 
@@ -571,16 +640,22 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         activeTools: activeTools,
         enableTools: activeTools.isNotEmpty,
         executeTool: (serviceName, toolName, params) async {
-          if (_aiToolBundles.containsKey(serviceName)) {
-            final runtime = await _getAiToolRuntime(serviceName);
-            return runtime.invoke(toolName, params);
-          }
+          return _runWithToolStatus(
+            serviceName,
+            toolName,
+            () async {
+              if (_aiToolBundles.containsKey(serviceName)) {
+                final runtime = await _getAiToolRuntime(serviceName);
+                return runtime.invoke(toolName, params);
+              }
 
-          return McpToolIntegrationService.executeToolCall(
-            serviceName: serviceName,
-            toolName: toolName,
-            parameters: params,
-            enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              return McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              );
+            },
           );
         },
         isCancelled: () => _cancelledRequestIds.contains(requestId),
@@ -1592,68 +1667,122 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 ),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    focusNode: _messageFocusNode,
-                    enabled: !_isSending || _isAborting,
-                    decoration: InputDecoration(
-                      hintText: _isAborting
-                          ? l10n.cancellingRequest
-                          : l10n.typeYourMessage,
-                      border: const OutlineInputBorder(),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            onPressed: _isSending ? null : _attachFiles,
-                            tooltip: l10n.attachFiles,
+                _buildToolExecutionIndicator(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        enabled: !_isSending || _isAborting,
+                        decoration: InputDecoration(
+                          hintText: _isAborting
+                              ? l10n.cancellingRequest
+                              : l10n.typeYourMessage,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.attach_file),
+                                onPressed: _isSending ? null : _attachFiles,
+                                tooltip: l10n.attachFiles,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.camera_alt),
+                                onPressed: _isSending ? null : _captureImage,
+                                tooltip: l10n.takePhotoAttachment,
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.camera_alt),
-                            onPressed: _isSending ? null : _captureImage,
-                            tooltip: l10n.takePhotoAttachment,
-                          ),
-                        ],
+                        ),
+                        minLines: 1,
+                        maxLines: 10,
+                        onSubmitted: (_) =>
+                            _isSending ? null : _sendMessage(),
                       ),
                     ),
-                    minLines: 1,
-                    maxLines: 10,
-                    onSubmitted: (_) => _isSending ? null : _sendMessage(),
-                  ),
+                    const SizedBox(width: 8),
+                    if (_isSending && !_isAborting)
+                      _buildAbortButtonWithSpinner()
+                    else if (_isAborting)
+                      IconButton(
+                        onPressed: null,
+                        icon: const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        tooltip: 'Cancelling...',
+                      )
+                    else
+                      IconButton(
+                        onPressed: _isSending ? null : _sendMessage,
+                        icon: _isSending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                if (_isSending && !_isAborting)
-                  _buildAbortButtonWithSpinner()
-                else if (_isAborting)
-                  IconButton(
-                    onPressed: null,
-                    icon: const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    tooltip: 'Cancelling...',
-                  )
-                else
-                  IconButton(
-                    onPressed: _isSending ? null : _sendMessage,
-                    icon: _isSending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildToolExecutionIndicator() {
+    final theme = Theme.of(context);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1.0,
+          child: child,
+        ),
+      ),
+      child: _toolExecutionStatus == null
+          ? const SizedBox.shrink(key: ValueKey('tool-status-empty'))
+          : Padding(
+              key: ValueKey(_toolExecutionStatus),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _toolExecutionStatus!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color:
+                            theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 

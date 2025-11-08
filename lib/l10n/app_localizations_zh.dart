@@ -501,6 +501,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingRequest => '正在处理您的请求...';
 
   @override
+  String executingToolStatus(Object service, Object tool) {
+    return '执行工具：$service -> $tool';
+  }
+
+  @override
   String errorProcessingRequest(Object error) {
     return '处理请求时出错：$error';
   }

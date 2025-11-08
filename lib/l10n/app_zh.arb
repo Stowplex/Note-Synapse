@@ -155,6 +155,7 @@
   "removeFile": "移除文件",
   "addFiles": "添加文件",
   "processingRequest": "正在处理您的请求...",
+  "executingToolStatus": "执行工具：{service} -> {tool}",
   "errorProcessingRequest": "处理请求时出错：{error}",
   "responseCopied": "响应已复制到剪贴板",
   "notesCreatedSuccessfully": "笔记创建成功！",

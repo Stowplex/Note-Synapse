@@ -155,6 +155,7 @@
   "removeFile": "Remove File",
   "addFiles": "Add Files",
   "processingRequest": "Processing your request...",
+  "executingToolStatus": "Executing tool: {service} -> {tool}",
   "errorProcessingRequest": "Error processing request: {error}",
   "responseCopied": "Response copied to clipboard",
   "notesCreatedSuccessfully": "Notes created successfully!",

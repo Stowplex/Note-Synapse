@@ -510,6 +510,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get processingRequest => 'Processing your request...';
 
   @override
+  String executingToolStatus(Object service, Object tool) {
+    return 'Executing tool: $service -> $tool';
+  }
+
+  @override
   String errorProcessingRequest(Object error) {
     return 'Error processing request: $error';
   }
