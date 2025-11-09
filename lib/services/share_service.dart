@@ -144,7 +144,7 @@ class ShareService {
           ext: 'pdf',
           mimeType: MimeType.pdf,
         );
-      } else if (Platform.isAndroid || Platform.isIOS) {
+      } else if (Platform.isAndroid) {
         final tempFile = cacheFile!;
         await Share.shareXFiles(
           [
@@ -156,6 +156,50 @@ class ShareService {
           ],
           subject: l10n.shareDialogTitle,
         );
+      } else if (Platform.isIOS) {
+        // On iOS, try to use save dialog first, then fall back to share sheet if needed
+        final tempFile = cacheFile!;
+        try {
+          // Try to use file picker save dialog (if supported on iOS)
+          final result = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: const ['pdf'],
+          );
+
+          if (result != null) {
+            // User selected a location, save the file
+            final destination = File(result);
+            await destination.writeAsBytes(pdfBytes, flush: true);
+          } else {
+            // User cancelled save dialog, show share sheet instead
+            // Share sheet allows saving to Files app and sharing to other apps
+            await Share.shareXFiles(
+              [
+                XFile(
+                  tempFile.path,
+                  mimeType: 'application/pdf',
+                  name: fileName,
+                ),
+              ],
+              subject: l10n.shareDialogTitle,
+            );
+          }
+        } catch (e) {
+          // If save dialog is not supported or fails, use share sheet
+          // Share sheet is the standard iOS way and allows saving to Files app
+          await Share.shareXFiles(
+            [
+              XFile(
+                tempFile.path,
+                mimeType: 'application/pdf',
+                name: fileName,
+              ),
+            ],
+            subject: l10n.shareDialogTitle,
+          );
+        }
       } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
         final result = await FilePicker.platform.saveFile(
           dialogTitle: l10n.selectFileLocation,

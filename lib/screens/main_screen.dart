@@ -28,6 +28,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  // Method channel for native iOS clipboard access
+  static const MethodChannel _iosMethodChannel = MethodChannel('note_synapse/share');
   int _currentIndex = 0;
   
   // Audio recording service
@@ -468,10 +470,26 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _createNoteFromClipboard(BuildContext context) async {
     try {
-      // Get clipboard data
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      String? clipboardText;
       
-      if (clipboardData?.text == null || clipboardData!.text!.trim().isEmpty) {
+      // On iOS, use native method channel to access clipboard
+      // This avoids the "Operation not authorized" error
+      if (Platform.isIOS) {
+        try {
+          clipboardText = await _iosMethodChannel.invokeMethod<String>('getClipboardText');
+        } catch (e) {
+          LoggerService.error('Error accessing clipboard via native method: $e', error: e);
+          // Fallback to Flutter Clipboard
+          final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+          clipboardText = clipboardData?.text;
+        }
+      } else {
+        // On other platforms, use Flutter Clipboard
+        final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+        clipboardText = clipboardData?.text;
+      }
+      
+      if (clipboardText == null || clipboardText.trim().isEmpty) {
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -484,7 +502,7 @@ class _MainScreenState extends State<MainScreen> {
         return;
       }
 
-      final clipboardText = clipboardData.text!.trim();
+      clipboardText = clipboardText.trim();
       
       // Check if the clipboard content is a URL
       final url = _extractUrl(clipboardText);

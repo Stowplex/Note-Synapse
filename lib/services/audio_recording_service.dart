@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -11,6 +12,9 @@ class AudioRecordingService {
   static final AudioRecordingService _instance = AudioRecordingService._internal();
   factory AudioRecordingService() => _instance;
   AudioRecordingService._internal();
+
+  // Method channel for native iOS microphone permission
+  static const MethodChannel _iosMethodChannel = MethodChannel('note_synapse/share');
 
   // Only initialize audio services on supported platforms
   AudioRecorder? _recorder;
@@ -76,6 +80,9 @@ class AudioRecordingService {
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
 
+  /// Check if running on iOS (non-web)
+  bool get _isIOS => !kIsWeb && Platform.isIOS;
+
   /// Request microphone permission
   Future<bool> requestPermission() async {
     if (!isSupported) return false;
@@ -86,8 +93,31 @@ class AudioRecordingService {
     }
     
     try {
-      final status = await Permission.microphone.request();
-      return status == PermissionStatus.granted;
+      final status = await Permission.microphone.status;
+      
+      // If already granted, return true
+      if (status == PermissionStatus.granted) {
+        return true;
+      }
+      
+      // On iOS, permission_handler might not show the dialog properly.
+      // The record package will handle permission requests automatically when
+      // we try to start recording. So on iOS, we'll return false here and
+      // let the record package handle it.
+      if (_isIOS) {
+        // If permanently denied, we can't request again
+        if (status == PermissionStatus.permanentlyDenied) {
+          LoggerService.warning('Microphone permission permanently denied on iOS');
+          return false;
+        }
+        // For notDetermined or denied, let the record package handle it
+        // by returning false and trying to start recording anyway
+        return false;
+      }
+      
+      // On Android and other platforms, request permission via permission_handler
+      final requestedStatus = await Permission.microphone.request();
+      return requestedStatus == PermissionStatus.granted;
     } catch (e) {
       LoggerService.error('Permission request failed: $e', error: e);
       return false;
@@ -123,14 +153,6 @@ class AudioRecordingService {
         return false;
       }
 
-      // Check permission
-      if (!await hasPermission()) {
-        final granted = await requestPermission();
-        if (!granted) {
-          return false;
-        }
-      }
-
       // Get the documents directory
       final directory = await getApplicationDocumentsDirectory();
       final audioDir = Directory('${directory.path}/audio_recordings');
@@ -139,8 +161,10 @@ class AudioRecordingService {
       }
 
       // Generate unique filename
+      // Use .m4a extension for AAC encoder on iOS, .wav for other platforms
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      _currentRecordingPath = '${audioDir.path}/recording_$timestamp.wav';
+      final extension = _isIOS ? 'm4a' : 'wav';
+      _currentRecordingPath = '${audioDir.path}/recording_$timestamp.$extension';
 
       // Platform-specific recording implementation
       if (_isLinux) {
@@ -151,28 +175,105 @@ class AudioRecordingService {
           return false;
         }
 
-        // Check if recorder is available
-        if (!await _recorder!.hasPermission()) {
-          return false;
+        // On iOS, we need to use native AVAudioSession to request permission
+        // because permission_handler doesn't properly trigger the iOS permission dialog.
+        // On Android, we'll use permission_handler first, then verify with record package.
+        if (_isIOS) {
+          // Check current permission status first
+          final permissionStatus = await Permission.microphone.status;
+          LoggerService.info('iOS microphone permission status: $permissionStatus');
+          
+          if (permissionStatus == PermissionStatus.permanentlyDenied) {
+            LoggerService.warning('Microphone permission permanently denied on iOS');
+            return false;
+          }
+          
+          // If not granted, request it using native iOS method channel
+          // This will properly show the iOS permission dialog
+          if (permissionStatus != PermissionStatus.granted) {
+            LoggerService.info('Requesting microphone permission on iOS via native method');
+            try {
+              final granted = await _iosMethodChannel.invokeMethod<bool>('requestMicrophonePermission');
+              LoggerService.info('iOS native microphone permission result: $granted');
+              
+              if (granted != true) {
+                LoggerService.warning('Microphone permission not granted on iOS');
+                return false;
+              }
+              
+              // Wait a moment for the permission to be fully registered
+              await Future.delayed(const Duration(milliseconds: 300));
+              
+              // Re-initialize the recorder after permission is granted
+              // This ensures the recorder is aware of the new permission state
+              try {
+                _recorder?.dispose();
+                _recorder = AudioRecorder();
+                LoggerService.info('Re-initialized recorder after permission grant');
+              } catch (e) {
+                LoggerService.warning('Error re-initializing recorder: $e');
+              }
+            } catch (e) {
+              LoggerService.error('Error requesting microphone permission via native method: $e', error: e);
+              return false;
+            }
+          }
+          
+          // After requesting, check with record package
+          bool recorderHasPermission = await _recorder!.hasPermission();
+          if (!recorderHasPermission) {
+            // Wait a moment for the permission state to propagate
+            await Future.delayed(const Duration(milliseconds: 500));
+            recorderHasPermission = await _recorder!.hasPermission();
+            
+            if (!recorderHasPermission) {
+              LoggerService.warning('Record package does not recognize permission on iOS, but proceeding anyway');
+              // Proceed anyway - the system permission is what matters
+            }
+          }
+        } else {
+          // On Android and other platforms, check and request permission first
+          bool permissionGranted = await hasPermission();
+          if (!permissionGranted) {
+            permissionGranted = await requestPermission();
+            if (!permissionGranted) {
+              LoggerService.warning('Microphone permission not granted');
+              return false;
+            }
+          }
+          
+          // Re-check with record package
+          bool recorderHasPermission = await _recorder!.hasPermission();
+          if (!recorderHasPermission) {
+            LoggerService.warning('Recorder does not have permission after requesting');
+            return false;
+          }
         }
 
         // Start recording
-        await _recorder!.start(
-          const RecordConfig(
-            encoder: AudioEncoder.aacLc,
-            bitRate: 128000,
-            sampleRate: 44100,
-          ),
-          path: _currentRecordingPath!,
-        );
+        try {
+          await _recorder!.start(
+            const RecordConfig(
+              encoder: AudioEncoder.aacLc,
+              bitRate: 128000,
+              sampleRate: 44100,
+            ),
+            path: _currentRecordingPath!,
+          );
 
-        _isRecording = true;
-        _recordingStateController.add(true);
+          _isRecording = true;
+          _recordingStateController.add(true);
 
-        // Start duration tracking
-        _startDurationTracking();
+          // Start duration tracking
+          _startDurationTracking();
 
-        return true;
+          return true;
+        } catch (e) {
+          // If starting failed, log the error
+          // This could be due to permission issues or other problems
+          LoggerService.error('Failed to start recording: $e', error: e);
+          return false;
+        }
       }
     } catch (e) {
       LoggerService.error('Error starting recording: $e', error: e);
