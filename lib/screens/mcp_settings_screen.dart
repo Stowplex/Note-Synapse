@@ -123,597 +123,584 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     final result = await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            isEditing ? l10n.editMcpEndpoint : l10n.addMcpEndpointTitle,
-          ),
-          content: LayoutBuilder(
-            builder: (context, constraints) {
-              final maxHeight = MediaQuery.of(context).size.height * 0.8;
-              return SizedBox(
-                width: 560,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: maxHeight),
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TextField(
-                            controller: nameController,
-                            decoration: InputDecoration(
-                              labelText: l10n.name,
-                              hintText: l10n.nameHint,
-                              border: const OutlineInputBorder(),
-                            ),
+        builder: (context, setState) {
+          final maxDialogHeight = MediaQuery.of(context).size.height * 0.8;
+          return AlertDialog(
+            title: Text(
+              isEditing ? l10n.editMcpEndpoint : l10n.addMcpEndpointTitle,
+            ),
+            content: SizedBox(
+              width: 560,
+              child: Container(
+                constraints: BoxConstraints(maxHeight: maxDialogHeight),
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: nameController,
+                          decoration: InputDecoration(
+                            labelText: l10n.name,
+                            hintText: l10n.nameHint,
+                            border: const OutlineInputBorder(),
                           ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: baseUrlController,
-                            decoration: InputDecoration(
-                              labelText: l10n.baseUrl,
-                              hintText: l10n.baseUrlHint,
-                              border: const OutlineInputBorder(),
-                              helperText: l10n.baseUrlHelperText,
-                              helperMaxLines: 2,
-                            ),
-                            keyboardType: TextInputType.url,
-                            maxLines: 2,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: baseUrlController,
+                          decoration: InputDecoration(
+                            labelText: l10n.baseUrl,
+                            hintText: l10n.baseUrlHint,
+                            border: const OutlineInputBorder(),
+                            helperText: l10n.baseUrlHelperText,
+                            helperMaxLines: 2,
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            l10n.transportType,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          keyboardType: TextInputType.url,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          l10n.transportType,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
-                          const SizedBox(height: 8),
-                          ...McpTransportType.values.map(
-                            (type) => RadioListTile<McpTransportType>(
-                              title: Text(type.displayName),
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              value: type,
-                              groupValue: selectedTransport,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    selectedTransport = value;
-                                  });
-                                }
-                              },
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        ...McpTransportType.values.map(
+                          (type) => RadioListTile<McpTransportType>(
+                            title: Text(type.displayName),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: type,
+                            groupValue: selectedTransport,
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  selectedTransport = value;
+                                });
+                              }
+                            },
                           ),
-                          const SizedBox(height: 16),
-                          DefaultTabController(
-                            length: 2,
-                            initialIndex: selectedCredTab,
-                            child: Builder(
-                              builder: (context) => Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TabBar(
-                                    onTap: (index) {
-                                      setState(() {
-                                        selectedCredTab = index;
-                                      });
-                                    },
-                                    tabs: [
-                                      Tab(text: l10n.tokenTab),
-                                      Tab(text: l10n.oauthTab),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  IndexedStack(
-                                    index: selectedCredTab,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          TextField(
-                                            controller: bearerTokenController,
-                                            decoration: InputDecoration(
-                                              labelText:
-                                                  l10n.bearerTokenOptional,
-                                              hintText: l10n.bearerTokenHint,
-                                              border:
-                                                  const OutlineInputBorder(),
-                                              helperText:
-                                                  l10n.bearerTokenHelperText,
-                                              suffixIcon: IconButton(
-                                                icon: Icon(
-                                                  obscureToken
-                                                      ? Icons.visibility
-                                                      : Icons.visibility_off,
-                                                ),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    obscureToken =
-                                                        !obscureToken;
-                                                  });
-                                                },
+                        ),
+                        const SizedBox(height: 16),
+                        DefaultTabController(
+                          length: 2,
+                          initialIndex: selectedCredTab,
+                          child: Builder(
+                            builder: (context) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TabBar(
+                                  onTap: (index) {
+                                    setState(() {
+                                      selectedCredTab = index;
+                                    });
+                                  },
+                                  tabs: [
+                                    Tab(text: l10n.tokenTab),
+                                    Tab(text: l10n.oauthTab),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                IndexedStack(
+                                  index: selectedCredTab,
+                                  children: [
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        TextField(
+                                          controller: bearerTokenController,
+                                          decoration: InputDecoration(
+                                            labelText: l10n.bearerTokenOptional,
+                                            hintText: l10n.bearerTokenHint,
+                                            border: const OutlineInputBorder(),
+                                            helperText:
+                                                l10n.bearerTokenHelperText,
+                                            suffixIcon: IconButton(
+                                              icon: Icon(
+                                                obscureToken
+                                                    ? Icons.visibility
+                                                    : Icons.visibility_off,
                                               ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  obscureToken = !obscureToken;
+                                                });
+                                              },
                                             ),
-                                            obscureText: obscureToken,
                                           ),
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              ElevatedButton.icon(
-                                                onPressed: () async {
-                                                  final base = baseUrlController
-                                                      .text
-                                                      .trim();
-                                                  final result =
-                                                      await Navigator.push<
-                                                        OAuthDiscoveryResultData
-                                                      >(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              OAuthDiscoveryScreen(
-                                                                baseUrl:
-                                                                    base.isEmpty
-                                                                    ? 'https://example.com'
-                                                                    : base,
-                                                                usePkce:
-                                                                    usePkce,
-                                                              ),
-                                                        ),
-                                                      );
-                                                  if (result != null) {
-                                                    setState(() {
-                                                      discoveryResult = result;
-                                                      authEndpointController
-                                                          .text = result
-                                                          .authorizationEndpoint;
-                                                      tokenEndpointController
-                                                              .text =
-                                                          result.tokenEndpoint;
-                                                      if (result.clientId !=
-                                                          null) {
-                                                        clientIdController
-                                                                .text =
-                                                            result.clientId!;
-                                                      }
-                                                      if (result.clientSecret !=
-                                                          null) {
-                                                        clientSecretController
-                                                            .text = result
-                                                            .clientSecret!;
-                                                      }
-                                                      if (result.defaultScope !=
-                                                              null &&
-                                                          result
-                                                              .defaultScope!
-                                                              .isNotEmpty) {
-                                                        scopeController.text =
-                                                            result
-                                                                .defaultScope!;
-                                                      }
-                                                    });
-                                                  }
-                                                },
-                                                icon: const Icon(
-                                                  Icons.auto_fix_high,
-                                                ),
-                                                label: Text(l10n.autoConfigure),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              OutlinedButton.icon(
-                                                onPressed: () async {
-                                                  try {
-                                                    final oauthConfig = OAuthConfig(
-                                                      authorizationEndpoint:
-                                                          authEndpointController
-                                                              .text
-                                                              .trim(),
-                                                      tokenEndpoint:
-                                                          tokenEndpointController
-                                                              .text
-                                                              .trim(),
-                                                      clientId:
-                                                          clientIdController
-                                                              .text
-                                                              .trim(),
-                                                      clientSecret:
-                                                          clientSecretController
-                                                              .text
-                                                              .trim()
-                                                              .isEmpty
-                                                          ? null
-                                                          : clientSecretController
-                                                                .text
-                                                                .trim(),
-                                                      scope: scopeController
-                                                          .text
-                                                          .trim(),
-                                                      usePkce: usePkce,
-                                                      discoveryUrl:
-                                                          discoveryResult
-                                                              ?.resourceMetadataUrl ??
-                                                          discoveryResult
-                                                              ?.authorizationServerMetadataUrl,
-                                                      redirectUri:
-                                                          'http://127.0.0.1:51791/callback',
-                                                      issuer: discoveryResult
-                                                          ?.issuer,
-                                                      resourceMetadataUrl:
-                                                          discoveryResult
-                                                              ?.resourceMetadataUrl,
-                                                      authorizationServerMetadataUrl:
-                                                          discoveryResult
-                                                              ?.authorizationServerMetadataUrl,
+                                          obscureText: obscureToken,
+                                        ),
+                                      ],
+                                    ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            ElevatedButton.icon(
+                                              onPressed: () async {
+                                                final base = baseUrlController
+                                                    .text
+                                                    .trim();
+                                                final result =
+                                                    await Navigator.push<
+                                                      OAuthDiscoveryResultData
+                                                    >(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            OAuthDiscoveryScreen(
+                                                              baseUrl:
+                                                                  base.isEmpty
+                                                                  ? 'https://example.com'
+                                                                  : base,
+                                                              usePkce: usePkce,
+                                                            ),
+                                                      ),
                                                     );
-                                                    final tokenJson =
-                                                        await OAuthService.authorizationCodeFlow(
-                                                          config: oauthConfig,
-                                                          state: DateTime.now()
-                                                              .millisecondsSinceEpoch
-                                                              .toString(),
-                                                        );
-                                                    setState(() {
-                                                      oauthTokenResponse =
-                                                          tokenJson;
-                                                    });
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                            'OAuth login successful',
-                                                          ),
-                                                        ),
-                                                      );
+                                                if (result != null) {
+                                                  setState(() {
+                                                    discoveryResult = result;
+                                                    authEndpointController
+                                                        .text = result
+                                                        .authorizationEndpoint;
+                                                    tokenEndpointController
+                                                            .text =
+                                                        result.tokenEndpoint;
+                                                    if (result.clientId !=
+                                                        null) {
+                                                      clientIdController.text =
+                                                          result.clientId!;
                                                     }
-                                                  } catch (e) {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'OAuth login failed: $e',
-                                                          ),
-                                                          backgroundColor:
-                                                              Colors.red,
-                                                        ),
-                                                      );
+                                                    if (result.clientSecret !=
+                                                        null) {
+                                                      clientSecretController
+                                                              .text =
+                                                          result.clientSecret!;
                                                     }
+                                                    if (result.defaultScope !=
+                                                            null &&
+                                                        result
+                                                            .defaultScope!
+                                                            .isNotEmpty) {
+                                                      scopeController.text =
+                                                          result.defaultScope!;
+                                                    }
+                                                  });
+                                                }
+                                              },
+                                              icon: const Icon(
+                                                Icons.auto_fix_high,
+                                              ),
+                                              label: Text(l10n.autoConfigure),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            OutlinedButton.icon(
+                                              onPressed: () async {
+                                                try {
+                                                  final oauthConfig = OAuthConfig(
+                                                    authorizationEndpoint:
+                                                        authEndpointController
+                                                            .text
+                                                            .trim(),
+                                                    tokenEndpoint:
+                                                        tokenEndpointController
+                                                            .text
+                                                            .trim(),
+                                                    clientId: clientIdController
+                                                        .text
+                                                        .trim(),
+                                                    clientSecret:
+                                                        clientSecretController
+                                                            .text
+                                                            .trim()
+                                                            .isEmpty
+                                                        ? null
+                                                        : clientSecretController
+                                                              .text
+                                                              .trim(),
+                                                    scope: scopeController.text
+                                                        .trim(),
+                                                    usePkce: usePkce,
+                                                    discoveryUrl:
+                                                        discoveryResult
+                                                            ?.resourceMetadataUrl ??
+                                                        discoveryResult
+                                                            ?.authorizationServerMetadataUrl,
+                                                    redirectUri:
+                                                        'http://127.0.0.1:51791/callback',
+                                                    issuer:
+                                                        discoveryResult?.issuer,
+                                                    resourceMetadataUrl:
+                                                        discoveryResult
+                                                            ?.resourceMetadataUrl,
+                                                    authorizationServerMetadataUrl:
+                                                        discoveryResult
+                                                            ?.authorizationServerMetadataUrl,
+                                                  );
+                                                  final tokenJson =
+                                                      await OAuthService.authorizationCodeFlow(
+                                                        config: oauthConfig,
+                                                        state: DateTime.now()
+                                                            .millisecondsSinceEpoch
+                                                            .toString(),
+                                                      );
+                                                  setState(() {
+                                                    oauthTokenResponse =
+                                                        tokenJson;
+                                                  });
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'OAuth login successful',
+                                                        ),
+                                                      ),
+                                                    );
                                                   }
-                                                },
-                                                icon: const Icon(Icons.login),
-                                                label: Text(l10n.login),
-                                              ),
-                                            ],
+                                                } catch (e) {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'OAuth login failed: $e',
+                                                        ),
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                              icon: const Icon(Icons.login),
+                                              label: Text(l10n.login),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextField(
+                                          controller: authEndpointController,
+                                          decoration: InputDecoration(
+                                            labelText:
+                                                l10n.authorizationEndpoint,
+                                            border: const OutlineInputBorder(),
                                           ),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: authEndpointController,
-                                            decoration: InputDecoration(
-                                              labelText:
-                                                  l10n.authorizationEndpoint,
-                                              border:
-                                                  const OutlineInputBorder(),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextField(
+                                          controller: tokenEndpointController,
+                                          decoration: InputDecoration(
+                                            labelText: l10n.tokenEndpoint,
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextField(
+                                          controller: clientIdController,
+                                          decoration: InputDecoration(
+                                            labelText: l10n.clientId,
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextField(
+                                          controller: clientSecretController,
+                                          decoration: InputDecoration(
+                                            labelText: l10n
+                                                .clientSecretOptionalForPkce,
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextField(
+                                          controller: scopeController,
+                                          decoration: InputDecoration(
+                                            labelText: l10n.scope,
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        CheckboxListTile(
+                                          value: usePkce,
+                                          onChanged: (v) {
+                                            setState(() {
+                                              usePkce = v ?? true;
+                                            });
+                                          },
+                                          title: Text(
+                                            l10n.usePkceNoClientSecret,
+                                          ),
+                                          controlAffinity:
+                                              ListTileControlAffinity.leading,
+                                          contentPadding: EdgeInsets.zero,
+                                        ),
+                                        if (oauthTokenResponse != null)
+                                          const Text(
+                                            'Logged in: token captured',
+                                            style: TextStyle(
+                                              color: Colors.green,
                                             ),
                                           ),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: tokenEndpointController,
-                                            decoration: InputDecoration(
-                                              labelText: l10n.tokenEndpoint,
-                                              border:
-                                                  const OutlineInputBorder(),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: clientIdController,
-                                            decoration: InputDecoration(
-                                              labelText: l10n.clientId,
-                                              border:
-                                                  const OutlineInputBorder(),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: clientSecretController,
-                                            decoration: InputDecoration(
-                                              labelText: l10n
-                                                  .clientSecretOptionalForPkce,
-                                              border:
-                                                  const OutlineInputBorder(),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: scopeController,
-                                            decoration: InputDecoration(
-                                              labelText: l10n.scope,
-                                              border:
-                                                  const OutlineInputBorder(),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          CheckboxListTile(
-                                            value: usePkce,
-                                            onChanged: (v) {
-                                              setState(() {
-                                                usePkce = v ?? true;
-                                              });
-                                            },
-                                            title: Text(
-                                              l10n.usePkceNoClientSecret,
-                                            ),
-                                            controlAffinity:
-                                                ListTileControlAffinity.leading,
-                                            contentPadding: EdgeInsets.zero,
-                                          ),
-                                          if (oauthTokenResponse != null)
-                                            const Text(
-                                              'Logged in: token captured',
-                                              style: TextStyle(
-                                                color: Colors.green,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: additionalHeadersController,
-                            minLines: 4,
-                            maxLines: 8,
-                            keyboardType: TextInputType.multiline,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: '${l10n.headers} (JSON)',
-                              hintText: '{"X-Trace-Id": "12345"}',
-                              helperText:
-                                  'JSON object merged into every MCP request',
-                              border: const OutlineInputBorder(),
-                              alignLabelWithHint: true,
-                            ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: additionalHeadersController,
+                          minLines: 4,
+                          maxLines: 8,
+                          keyboardType: TextInputType.multiline,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
                           ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+                          decoration: InputDecoration(
+                            labelText: '${l10n.headers} (JSON)',
+                            hintText: '{"X-Trace-Id": "12345"}',
+                            helperText:
+                                'JSON object merged into every MCP request',
+                            border: const OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                // Cancel any active OAuth flow before closing dialog
-                await OAuthService.cancelActiveFlow();
-                Navigator.pop(context, false); // false indicates cancellation
-              },
-              child: Text(l10n.cancel),
+              ),
             ),
-            TextButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                final baseUrl = baseUrlController.text.trim();
-                final bearerToken = bearerTokenController.text.trim();
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  // Cancel any active OAuth flow before closing dialog
+                  await OAuthService.cancelActiveFlow();
+                  Navigator.pop(context, false); // false indicates cancellation
+                },
+                child: Text(l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final baseUrl = baseUrlController.text.trim();
+                  final bearerToken = bearerTokenController.text.trim();
 
-                if (name.isEmpty || baseUrl.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(l10n.pleaseProvideNameAndUrl),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                Map<String, String> parsedAdditionalHeaders = {};
-                final headersRaw = additionalHeadersController.text.trim();
-                if (headersRaw.isNotEmpty) {
-                  try {
-                    final decoded = jsonDecode(headersRaw);
-                    if (decoded is! Map) {
-                      throw FormatException(
-                        'Additional headers JSON must be an object',
-                      );
-                    }
-                    decoded.forEach((key, value) {
-                      if (key is! String) {
-                        throw FormatException('Header names must be strings');
-                      }
-                      if (value != null) {
-                        parsedAdditionalHeaders[key] = value.toString();
-                      }
-                    });
-                  } catch (e) {
-                    final message = e is FormatException
-                        ? e.message
-                        : e.toString();
+                  if (name.isEmpty || baseUrl.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(
-                          'Invalid additional headers JSON: $message',
-                        ),
+                        content: Text(l10n.pleaseProvideNameAndUrl),
                         backgroundColor: Colors.red,
                       ),
                     );
                     return;
                   }
-                }
 
-                try {
-                  if (isEditing) {
-                    // Update existing endpoint
-                    if (selectedCredTab == 1) {
-                      final oauthConfig = OAuthConfig(
-                        authorizationEndpoint: authEndpointController.text
-                            .trim(),
-                        tokenEndpoint: tokenEndpointController.text.trim(),
-                        clientId: clientIdController.text.trim(),
-                        clientSecret: clientSecretController.text.trim().isEmpty
-                            ? null
-                            : clientSecretController.text.trim(),
-                        scope: scopeController.text.trim(),
-                        usePkce: usePkce,
-                        discoveryUrl:
-                            discoveryResult?.resourceMetadataUrl ??
-                            discoveryResult?.authorizationServerMetadataUrl,
-                        redirectUri: 'http://127.0.0.1:51791/callback',
-                        issuer: discoveryResult?.issuer,
-                        resourceMetadataUrl:
-                            discoveryResult?.resourceMetadataUrl,
-                        authorizationServerMetadataUrl:
-                            discoveryResult?.authorizationServerMetadataUrl,
-                      );
-                      await McpService.updateEndpoint(
-                        id: endpoint.id,
-                        name: name,
-                        baseUrl: baseUrl,
-                        transportType: selectedTransport,
-                        authType: McpAuthType.oauth,
-                        oauthConfig: oauthConfig,
-                        additionalHeaders: parsedAdditionalHeaders,
-                      );
-                      if (oauthTokenResponse != null) {
-                        final manager = OAuthTokenManager(
-                          endpointId: endpoint.id,
-                          config: oauthConfig,
+                  Map<String, String> parsedAdditionalHeaders = {};
+                  final headersRaw = additionalHeadersController.text.trim();
+                  if (headersRaw.isNotEmpty) {
+                    try {
+                      final decoded = jsonDecode(headersRaw);
+                      if (decoded is! Map) {
+                        throw FormatException(
+                          'Additional headers JSON must be an object',
                         );
-                        await manager.saveTokens(oauthTokenResponse!);
                       }
-                    } else {
-                      await McpService.updateEndpoint(
-                        id: endpoint.id,
-                        name: name,
-                        baseUrl: baseUrl,
-                        transportType: selectedTransport,
-                        authType: McpAuthType.token,
-                        bearerToken: bearerToken.isNotEmpty
-                            ? bearerToken
-                            : null,
-                        additionalHeaders: parsedAdditionalHeaders,
-                      );
-                    }
-
-                    if (context.mounted) {
-                      Navigator.pop(context, true); // true indicates success
+                      decoded.forEach((key, value) {
+                        if (key is! String) {
+                          throw FormatException('Header names must be strings');
+                        }
+                        if (value != null) {
+                          parsedAdditionalHeaders[key] = value.toString();
+                        }
+                      });
+                    } catch (e) {
+                      final message = e is FormatException
+                          ? e.message
+                          : e.toString();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Updated endpoint: $name'),
-                          backgroundColor: Colors.green,
+                          content: Text(
+                            'Invalid additional headers JSON: $message',
+                          ),
+                          backgroundColor: Colors.red,
                         ),
                       );
-                    }
-                  } else {
-                    // Add new endpoint
-                    McpEndpoint created;
-                    if (selectedCredTab == 1) {
-                      final oauthConfig = OAuthConfig(
-                        authorizationEndpoint: authEndpointController.text
-                            .trim(),
-                        tokenEndpoint: tokenEndpointController.text.trim(),
-                        clientId: clientIdController.text.trim(),
-                        clientSecret: clientSecretController.text.trim().isEmpty
-                            ? null
-                            : clientSecretController.text.trim(),
-                        scope: scopeController.text.trim(),
-                        usePkce: usePkce,
-                        discoveryUrl:
-                            discoveryResult?.resourceMetadataUrl ??
-                            discoveryResult?.authorizationServerMetadataUrl,
-                        redirectUri: 'http://127.0.0.1:51791/callback',
-                        issuer: discoveryResult?.issuer,
-                        resourceMetadataUrl:
-                            discoveryResult?.resourceMetadataUrl,
-                        authorizationServerMetadataUrl:
-                            discoveryResult?.authorizationServerMetadataUrl,
-                      );
-                      created = await McpService.addEndpoint(
-                        name: name,
-                        baseUrl: baseUrl,
-                        transportType: selectedTransport,
-                        authType: McpAuthType.oauth,
-                        oauthConfig: oauthConfig,
-                        additionalHeaders: parsedAdditionalHeaders,
-                      );
-                      if (oauthTokenResponse != null) {
-                        final manager = OAuthTokenManager(
-                          endpointId: created.id,
-                          config: oauthConfig,
-                        );
-                        await manager.saveTokens(oauthTokenResponse!);
-                      }
-                    } else {
-                      created = await McpService.addEndpoint(
-                        name: name,
-                        baseUrl: baseUrl,
-                        transportType: selectedTransport,
-                        authType: McpAuthType.token,
-                        bearerToken: bearerToken.isNotEmpty
-                            ? bearerToken
-                            : null,
-                        additionalHeaders: parsedAdditionalHeaders,
-                      );
-                    }
-
-                    if (context.mounted) {
-                      Navigator.pop(context, true); // true indicates success
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.addedEndpoint(name)),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      return;
                     }
                   }
 
-                  // Reload endpoints
-                  _loadEndpoints();
-                } catch (e) {
-                  LoggerService.error(
-                    'Error ${isEditing ? "updating" : "adding"} endpoint: $e',
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          isEditing
-                              ? 'Error updating endpoint: $e'
-                              : l10n.errorAddingEndpoint(e),
-                        ),
-                        backgroundColor: Colors.red,
-                      ),
+                  try {
+                    if (isEditing) {
+                      // Update existing endpoint
+                      if (selectedCredTab == 1) {
+                        final oauthConfig = OAuthConfig(
+                          authorizationEndpoint: authEndpointController.text
+                              .trim(),
+                          tokenEndpoint: tokenEndpointController.text.trim(),
+                          clientId: clientIdController.text.trim(),
+                          clientSecret:
+                              clientSecretController.text.trim().isEmpty
+                              ? null
+                              : clientSecretController.text.trim(),
+                          scope: scopeController.text.trim(),
+                          usePkce: usePkce,
+                          discoveryUrl:
+                              discoveryResult?.resourceMetadataUrl ??
+                              discoveryResult?.authorizationServerMetadataUrl,
+                          redirectUri: 'http://127.0.0.1:51791/callback',
+                          issuer: discoveryResult?.issuer,
+                          resourceMetadataUrl:
+                              discoveryResult?.resourceMetadataUrl,
+                          authorizationServerMetadataUrl:
+                              discoveryResult?.authorizationServerMetadataUrl,
+                        );
+                        await McpService.updateEndpoint(
+                          id: endpoint.id,
+                          name: name,
+                          baseUrl: baseUrl,
+                          transportType: selectedTransport,
+                          authType: McpAuthType.oauth,
+                          oauthConfig: oauthConfig,
+                          additionalHeaders: parsedAdditionalHeaders,
+                        );
+                        if (oauthTokenResponse != null) {
+                          final manager = OAuthTokenManager(
+                            endpointId: endpoint.id,
+                            config: oauthConfig,
+                          );
+                          await manager.saveTokens(oauthTokenResponse!);
+                        }
+                      } else {
+                        await McpService.updateEndpoint(
+                          id: endpoint.id,
+                          name: name,
+                          baseUrl: baseUrl,
+                          transportType: selectedTransport,
+                          authType: McpAuthType.token,
+                          bearerToken: bearerToken.isNotEmpty
+                              ? bearerToken
+                              : null,
+                          additionalHeaders: parsedAdditionalHeaders,
+                        );
+                      }
+
+                      if (context.mounted) {
+                        Navigator.pop(context, true); // true indicates success
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Updated endpoint: $name'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } else {
+                      // Add new endpoint
+                      McpEndpoint created;
+                      if (selectedCredTab == 1) {
+                        final oauthConfig = OAuthConfig(
+                          authorizationEndpoint: authEndpointController.text
+                              .trim(),
+                          tokenEndpoint: tokenEndpointController.text.trim(),
+                          clientId: clientIdController.text.trim(),
+                          clientSecret:
+                              clientSecretController.text.trim().isEmpty
+                              ? null
+                              : clientSecretController.text.trim(),
+                          scope: scopeController.text.trim(),
+                          usePkce: usePkce,
+                          discoveryUrl:
+                              discoveryResult?.resourceMetadataUrl ??
+                              discoveryResult?.authorizationServerMetadataUrl,
+                          redirectUri: 'http://127.0.0.1:51791/callback',
+                          issuer: discoveryResult?.issuer,
+                          resourceMetadataUrl:
+                              discoveryResult?.resourceMetadataUrl,
+                          authorizationServerMetadataUrl:
+                              discoveryResult?.authorizationServerMetadataUrl,
+                        );
+                        created = await McpService.addEndpoint(
+                          name: name,
+                          baseUrl: baseUrl,
+                          transportType: selectedTransport,
+                          authType: McpAuthType.oauth,
+                          oauthConfig: oauthConfig,
+                          additionalHeaders: parsedAdditionalHeaders,
+                        );
+                        if (oauthTokenResponse != null) {
+                          final manager = OAuthTokenManager(
+                            endpointId: created.id,
+                            config: oauthConfig,
+                          );
+                          await manager.saveTokens(oauthTokenResponse!);
+                        }
+                      } else {
+                        created = await McpService.addEndpoint(
+                          name: name,
+                          baseUrl: baseUrl,
+                          transportType: selectedTransport,
+                          authType: McpAuthType.token,
+                          bearerToken: bearerToken.isNotEmpty
+                              ? bearerToken
+                              : null,
+                          additionalHeaders: parsedAdditionalHeaders,
+                        );
+                      }
+
+                      if (context.mounted) {
+                        Navigator.pop(context, true); // true indicates success
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l10n.addedEndpoint(name)),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    }
+
+                    // Reload endpoints
+                    _loadEndpoints();
+                  } catch (e) {
+                    LoggerService.error(
+                      'Error ${isEditing ? "updating" : "adding"} endpoint: $e',
                     );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isEditing
+                                ? 'Error updating endpoint: $e'
+                                : l10n.errorAddingEndpoint(e),
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
-                }
-              },
-              child: Text(isEditing ? l10n.save : l10n.create),
-            ),
-          ],
-        ),
+                },
+                child: Text(isEditing ? l10n.save : l10n.create),
+              ),
+            ],
+          );
+        },
       ),
     );
 
