@@ -1667,7 +1667,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           // Attached files section
           _buildAttachedFilesSection(),
           // MCP selection section
-          if (_availableMcpEndpoints.isNotEmpty) _buildMcpSelectionSection(),
+          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty) _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),
