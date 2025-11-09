@@ -448,109 +448,154 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 8),
             ...currentNote.subNotes.map(
               (subNote) => Card(
-                child: ListTile(
-                  leading: Icon(
-                    subNote.isCompleted
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: subNote.isCompleted ? Colors.green : Colors.grey,
-                  ),
-                  title: SelectableText(subNote.name),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InteractiveCheckboxMarkdown(
-                        key: ValueKey('subnote_${subNote.id}'),
-                        originalContent: subNote.content,
-                        onContentChanged: (newContent) =>
-                            _updateSubNoteContent(subNote, newContent),
-                        style: Theme.of(context).textTheme.bodySmall,
-                        textDirection: TextDirection.ltr,
-                        onLinkTap: _handleLinkTap,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with completed toggle and three dot menu
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                  trailing: PopupMenuButton(
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 16),
-                            const SizedBox(width: 8),
-                            Text(l10n.editSubNote),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'toggle',
-                        child: Row(
-                          children: [
-                            Icon(
-                              subNote.isCompleted ? Icons.undo : Icons.check,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
+                      child: Row(
+                        children: [
+                          // Completed status toggle
+                          IconButton(
+                            icon: Icon(
                               subNote.isCompleted
-                                  ? l10n.markIncomplete
-                                  : l10n.markComplete,
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: subNote.isCompleted
+                                  ? Colors.green
+                                  : Colors.grey,
                             ),
-                          ],
-                        ),
+                            onPressed: () => _toggleSubNoteCompletion(subNote),
+                            tooltip: subNote.isCompleted
+                                ? l10n.markIncomplete
+                                : l10n.markComplete,
+                          ),
+                          const Spacer(),
+                          // Three dot menu
+                          PopupMenuButton(
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.editSubNote),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      subNote.isCompleted
+                                          ? Icons.undo
+                                          : Icons.check,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      subNote.isCompleted
+                                          ? l10n.markIncomplete
+                                          : l10n.markComplete,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'reparent',
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.move_to_inbox, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.reparentSubNote),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete, color: Colors.red, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      l10n.deleteSubNote,
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'edit':
+                                  _editSubNote(currentNote, subNote);
+                                  break;
+                                case 'toggle':
+                                  _toggleSubNoteCompletion(subNote);
+                                  break;
+                                case 'reparent':
+                                  _reparentSubNote(currentNote, subNote);
+                                  break;
+                                case 'delete':
+                                  _deleteSubNote(currentNote, subNote);
+                                  break;
+                              }
+                            },
+                          ),
+                        ],
                       ),
-                      PopupMenuItem(
-                        value: 'reparent',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.move_to_inbox, size: 16),
-                            const SizedBox(width: 8),
-                            Text(l10n.reparentSubNote),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, color: Colors.red, size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.deleteSubNote,
-                              style: TextStyle(color: Colors.red),
+                    ),
+                    // Full width content area
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Subnote name
+                          if (subNote.name.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: SelectableText(
+                                subNote.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ],
-                        ),
+                          // Subnote content
+                          SelectionArea(
+                            child: InteractiveCheckboxMarkdown(
+                              key: ValueKey('subnote_${subNote.id}'),
+                              originalContent: subNote.content,
+                              onContentChanged: (newContent) =>
+                                  _updateSubNoteContent(subNote, newContent),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              textDirection: TextDirection.ltr,
+                              onLinkTap: _handleLinkTap,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Created date
+                          Text(
+                            '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.5),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'edit':
-                          _editSubNote(currentNote, subNote);
-                          break;
-                        case 'toggle':
-                          _toggleSubNoteCompletion(subNote);
-                          break;
-                        case 'reparent':
-                          _reparentSubNote(currentNote, subNote);
-                          break;
-                        case 'delete':
-                          _deleteSubNote(currentNote, subNote);
-                          break;
-                      }
-                    },
-                  ),
-                  onTap: () => _toggleSubNoteCompletion(subNote),
+                    ),
+                  ],
                 ),
               ),
             ),
