@@ -9,6 +9,10 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 
 import '../utils/synapse_temp_utils.dart';
 import 'interactive_checkbox_component.dart';
@@ -504,6 +508,19 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  Widget _buildCodeBlock(
+    BuildContext context,
+    String name,
+    String code,
+    bool closed,
+  ) {
+    return _HighlightedCodeBlock(
+      code: code,
+      languageHint: name,
+      textStyle: widget.style,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Create custom components list with our safe HTag and optional interactive checkbox component
@@ -536,8 +553,237 @@ class _InteractiveCheckboxMarkdownState
       overflow: widget.overflow,
       latexBuilder: _customLatexBuilder,
       imageBuilder: _customImageBuilder,
+      codeBuilder: _buildCodeBlock,
       components: components,
     );
   }
+}
+
+class _HighlightedCodeBlock extends StatefulWidget {
+  const _HighlightedCodeBlock({
+    required this.code,
+    required this.languageHint,
+    this.textStyle,
+  });
+
+  final String code;
+  final String languageHint;
+  final TextStyle? textStyle;
+
+  @override
+  State<_HighlightedCodeBlock> createState() => _HighlightedCodeBlockState();
+}
+
+class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
+  bool _copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final Map<String, TextStyle> themeMap =
+        isDark ? atomOneDarkTheme : atomOneLightTheme;
+    final TextStyle baseStyle = _buildBaseStyle(context);
+
+    final _HighlightResult highlightResult =
+        _CodeHighlightEngine.instance.highlight(
+      code: widget.code,
+      languageHint: widget.languageHint,
+      baseStyle: baseStyle,
+      theme: themeMap,
+    );
+
+    final String? resolvedLanguage = highlightResult.language;
+    final String? fallbackLabel =
+        _CodeHighlightEngine.instance.displayLabel(widget.languageHint);
+    final String headerLabel = (resolvedLanguage ?? fallbackLabel ?? 'code')
+        .toUpperCase();
+
+    final Color backgroundColor = Color.alphaBlend(
+      colorScheme.primary.withOpacity(isDark ? 0.10 : 0.05),
+      colorScheme.surfaceVariant,
+    );
+
+    return Material(
+      color: backgroundColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Text(
+                  headerLabel,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.onSurface,
+                    textStyle: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  onPressed: widget.code.isEmpty ? null : _handleCopy,
+                  icon: Icon(
+                    _copied ? Icons.done : Icons.content_paste,
+                    size: 16,
+                  ),
+                  label: Text(_copied ? 'Copied!' : 'Copy code'),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: colorScheme.outline.withOpacity(0.1),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(16),
+            child: SelectableText.rich(
+              highlightResult.span,
+              style: baseStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle _buildBaseStyle(BuildContext context) {
+    final theme = Theme.of(context);
+    final TextStyle effectiveBase =
+        widget.textStyle ?? theme.textTheme.bodyMedium ?? const TextStyle();
+    return effectiveBase.copyWith(
+      fontFamily: 'JetBrainsMono',
+      fontFamilyFallback: const ['SourceCodePro', 'monospace'],
+      height: 1.45,
+      letterSpacing: 0.1,
+      color: effectiveBase.color ?? theme.colorScheme.onSurface,
+    );
+  }
+
+  Future<void> _handleCopy() async {
+    await Clipboard.setData(ClipboardData(text: widget.code));
+    if (!mounted) return;
+    setState(() {
+      _copied = true;
+    });
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    setState(() {
+      _copied = false;
+    });
+  }
+}
+
+class _CodeHighlightEngine {
+  _CodeHighlightEngine._internal() {
+    _highlight.registerLanguages(builtinAllLanguages);
+  }
+
+  static final _CodeHighlightEngine instance =
+      _CodeHighlightEngine._internal();
+
+  final Highlight _highlight = Highlight();
+
+  _HighlightResult highlight({
+    required String code,
+    required String languageHint,
+    required TextStyle baseStyle,
+    required Map<String, TextStyle> theme,
+  }) {
+    HighlightResult? result;
+    String? resolvedLanguage;
+
+    final String? normalized = _normalizeLanguage(languageHint);
+    if (normalized != null) {
+      final Mode? language = _highlight.getLanguage(normalized);
+      if (language != null) {
+        try {
+          result = _highlight.highlight(
+            code: code,
+            language: normalized,
+          );
+          resolvedLanguage = normalized;
+        } on Object catch (error, stackTrace) {
+          if (kDebugMode) {
+            debugPrint('Code highlight failed for $normalized: $error');
+            debugPrint('$stackTrace');
+          }
+        }
+      }
+    }
+
+    result ??= _highlight.highlightAuto(code);
+    resolvedLanguage ??= result.language;
+
+    final TextSpanRenderer renderer = TextSpanRenderer(baseStyle, theme);
+    try {
+      result.render(renderer);
+    } on Object catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('Code highlight render error: $error');
+        debugPrint('$stackTrace');
+      }
+      return _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: resolvedLanguage,
+      );
+    }
+
+    final TextSpan? highlightedSpan = renderer.span;
+    return _HighlightResult(
+      span: highlightedSpan ?? TextSpan(text: code, style: baseStyle),
+      language: resolvedLanguage,
+    );
+  }
+
+  String? displayLabel(String? raw) {
+    final String? normalized = _normalizeLanguage(raw);
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
+  }
+
+  static String? _normalizeLanguage(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final String trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final String candidate =
+        trimmed.split(RegExp(r'[\s:{(]')).first.trim().toLowerCase();
+    if (candidate.isEmpty) {
+      return null;
+    }
+    return candidate;
+  }
+}
+
+class _HighlightResult {
+  const _HighlightResult({
+    required this.span,
+    this.language,
+  });
+
+  final TextSpan span;
+  final String? language;
 }
 
