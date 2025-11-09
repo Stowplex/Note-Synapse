@@ -134,7 +134,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
               child: Container(
                 constraints: BoxConstraints(maxHeight: maxDialogHeight),
                 child: Scrollbar(
-                  thumbVisibility: true,
+                  thumbVisibility: false,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -184,6 +184,25 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                 });
                               }
                             },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: additionalHeadersController,
+                          minLines: 4,
+                          maxLines: 8,
+                          keyboardType: TextInputType.multiline,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: '${l10n.headers} (JSON)',
+                            hintText: '{"X-Trace-Id": "12345"}',
+                            helperText:
+                                'JSON object merged into every MCP request',
+                            border: const OutlineInputBorder(),
+                            alignLabelWithHint: true,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -463,26 +482,6 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: additionalHeadersController,
-                          minLines: 4,
-                          maxLines: 8,
-                          keyboardType: TextInputType.multiline,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: '${l10n.headers} (JSON)',
-                            hintText: '{"X-Trace-Id": "12345"}',
-                            helperText:
-                                'JSON object merged into every MCP request',
-                            border: const OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
