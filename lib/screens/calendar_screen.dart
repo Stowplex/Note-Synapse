@@ -244,75 +244,64 @@ class _CalendarScreenState extends State<CalendarScreen> {
             return _selectedTags.any((selectedTag) => note.tags.contains(selectedTag));
           }).toList();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Calculate available height for TabBarView
-        // Date header: ~60px, Tab bar: ~48px, padding: ~32px
-        const headerHeight = 60.0;
-        const tabBarHeight = 48.0;
-        final tabViewHeight = constraints.maxHeight - headerHeight - tabBarHeight;
-        
-        return DefaultTabController(
-          length: 2,
-          child: Column(
-            children: [
-              // Date header
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  AppDateUtils.formatDateNumeric(selectedDate, context),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // Date header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              AppDateUtils.formatDateNumeric(selectedDate, context),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          // Tab bar
+          Container(
+            color: Theme.of(context).colorScheme.surface,
+            child: TabBar(
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.task_alt, size: 18),
+                      const SizedBox(width: 8),
+                      Text('${l10n.tasks} (${tasks.length})'),
+                    ],
                   ),
                 ),
-              ),
-              // Tab bar
-              Container(
-                color: Theme.of(context).colorScheme.surface,
-                child: TabBar(
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.task_alt, size: 18),
-                          const SizedBox(width: 8),
-                          Text('${l10n.tasks} (${tasks.length})'),
-                        ],
-                      ),
-                    ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.note, size: 18),
-                          const SizedBox(width: 8),
-                          Text('${l10n.notes} (${notes.length})'),
-                        ],
-                      ),
-                    ),
-                  ],
-                  labelColor: Theme.of(context).colorScheme.onSurface,
-                  unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                  indicatorColor: Theme.of(context).colorScheme.primary,
-                  indicatorWeight: 2.0,
-                  dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.note, size: 18),
+                      const SizedBox(width: 8),
+                      Text('${l10n.notes} (${notes.length})'),
+                    ],
+                  ),
                 ),
-              ),
-              // Tab content
-              SizedBox(
-                height: tabViewHeight,
-                child: TabBarView(
-                  children: [
-                    _buildTasksTab(tasks, appProvider, l10n),
-                    _buildNotesTab(notes, l10n),
-                  ],
-                ),
-              ),
-            ],
+              ],
+              labelColor: Theme.of(context).colorScheme.onSurface,
+              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              indicatorColor: Theme.of(context).colorScheme.primary,
+              indicatorWeight: 2.0,
+              dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            ),
           ),
-        );
-      },
+          // Tab content - use Expanded to fill remaining space
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildTasksTab(tasks, appProvider, l10n),
+                _buildNotesTab(notes, l10n),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
