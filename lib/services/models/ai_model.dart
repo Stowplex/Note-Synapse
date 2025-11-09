@@ -1,4 +1,7 @@
 import 'package:file_picker/file_picker.dart';
+
+import '../prompts/prompt_models.dart';
+import '../prompts/system_prompt_builder.dart';
 import '../../models/model_config.dart';
 
 /// Base interface for AI models
@@ -18,7 +21,26 @@ abstract class AIModel {
   /// Initialize the model
   Future<void> initialize({ModelConfig? config});
 
-  /// Generate text with optional attachments
+  /// High-level prompt execution entry point.
+  Future<String> generateFromPrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) {
+    return generateWithMessages(
+      request.buildFullMessageList(),
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  /// Generate text with optional attachments.
   Future<String> generateWithAttachments(
     String prompt,
     List<PlatformFile> attachedFiles, {
@@ -27,28 +49,41 @@ abstract class AIModel {
     double? topP,
     int? maxOutputTokens,
     String? requestId,
-  });
+  }) {
+    final request = PromptRequest.singleTurn(
+      systemMessage: SystemPromptBuilder.build(
+        taskContext:
+            'You will receive user instructions as individual messages. Respond helpfully and note any limitations.',
+      ),
+      userMessage: PromptMessage(
+        role: PromptRole.user,
+        content: prompt,
+        attachments: attachedFiles,
+      ),
+    );
 
-  /// Generate text using messages array (for conversations)
-  /// messages is a list of maps with 'role' and 'content' keys
-  /// roles can be 'system', 'user', or 'assistant'
-  /// 
+    return generateFromPrompt(
+      request,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  /// Generate text using prompt messages list (system + context + history).
+  ///
   /// NOTE: This method MUST be overridden by model implementations.
-  /// The default implementation throws an exception to prevent incorrect behavior.
   Future<String> generateWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
     String? requestId,
   }) {
-    // This should never be called - model implementations must override this method
-    throw UnimplementedError(
-      'generateWithMessages must be implemented by model classes. '
-      'Messages arrays should not be converted to strings.'
-    );
+    throw UnimplementedError('generateWithMessages must be implemented.');
   }
 
   /// Generate with function calling support
@@ -63,21 +98,27 @@ abstract class AIModel {
     int? maxOutputTokens,
     String? requestId,
   }) async {
-    // Default implementation just calls generateWithAttachments
-    // Models that support function calling should override this
-    final text = await generateWithAttachments(
-      prompt,
-      attachedFiles,
+    final request = PromptRequest.singleTurn(
+      systemMessage: SystemPromptBuilder.build(
+        taskContext:
+            'You may call external tools to fulfill the task. Decide when a tool is necessary before responding.',
+      ),
+      userMessage: PromptMessage(
+        role: PromptRole.user,
+        content: prompt,
+        attachments: attachedFiles,
+      ),
+    );
+
+    return generateWithToolsAndMessages(
+      request.buildFullMessageList(),
+      tools,
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
       requestId: requestId,
     );
-    return {
-      'text': text,
-      'function_calls': null,
-    };
   }
 
   /// Generate with function calling support using messages array
@@ -86,20 +127,15 @@ abstract class AIModel {
   /// NOTE: This method MUST be overridden by model implementations.
   /// The default implementation throws an exception to prevent incorrect behavior.
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
     String? requestId,
-  }) async {
-    // This should never be called - model implementations must override this method
-    throw UnimplementedError(
-      'generateWithToolsAndMessages must be implemented by model classes. '
-      'Messages arrays should not be converted to strings.'
-    );
+  }) {
+    throw UnimplementedError('generateWithToolsAndMessages must be implemented.');
   }
 
   /// Common utility methods for all AI models

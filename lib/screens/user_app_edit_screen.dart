@@ -10,12 +10,14 @@ import 'package:re_highlight/languages/css.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/app_provider.dart';
-import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/note.dart';
+import '../models/user_app.dart';
 import '../models/user_app_library.dart';
+import '../providers/app_provider.dart';
 import '../services/user_app_library_service.dart';
 import '../utils/file_utils.dart';
+import 'note_selection_dialog.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -45,6 +47,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   bool _isSearchVisible = false; // Control search input visibility
   String _originalCode = '';
   List<String> _attachmentPaths = [];
+  final List<Note> _selectedNotes = [];
   
   // Tab management
   late TabController _tabController;
@@ -274,6 +277,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         originalApp: currentApp,
         editSuggestion: _editSuggestionController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        contextNotes: _selectedNotes.isNotEmpty ? List<Note>.from(_selectedNotes) : null,
         libraries: librariesForAI,
       );
       
@@ -477,6 +481,44 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void _removeAttachment(int index) {
     setState(() {
       _attachmentPaths.removeAt(index);
+    });
+  }
+
+  void _showNoteSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        return NoteSelectionDialog(
+          title: l10n.selectNotesToAddToContext,
+          onNotesSelected: (notes) {
+            Navigator.of(dialogContext).pop();
+            if (!mounted) return;
+            setState(() {
+              final noteMap = {for (final note in _selectedNotes) note.id: note};
+              for (final note in notes) {
+                noteMap[note.id] = note;
+              }
+              _selectedNotes
+                ..clear()
+                ..addAll(noteMap.values);
+            });
+          },
+        );
+      },
+    );
+  }
+
+  void _removeSelectedNote(String noteId) {
+    setState(() {
+      _selectedNotes.removeWhere((note) => note.id == noteId);
+    });
+  }
+
+  void _clearSelectedNotes() {
+    if (_selectedNotes.isEmpty) return;
+    setState(() {
+      _selectedNotes.clear();
     });
   }
 
@@ -1146,10 +1188,26 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                     l10n.editSuggestion,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  IconButton(
-                    onPressed: _showImageSourceDialog,
-                    icon: const Icon(Icons.add_photo_alternate),
-                    tooltip: 'Add Image',
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_selectedNotes.isNotEmpty)
+                        IconButton(
+                          onPressed: _clearSelectedNotes,
+                          icon: const Icon(Icons.clear_all),
+                          tooltip: l10n.clearFilters,
+                        ),
+                      IconButton(
+                        onPressed: _showNoteSelectionDialog,
+                        icon: const Icon(Icons.note_add),
+                        tooltip: l10n.addNotes,
+                      ),
+                      IconButton(
+                        onPressed: _showImageSourceDialog,
+                        icon: const Icon(Icons.add_photo_alternate),
+                        tooltip: l10n.addImage,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1168,6 +1226,28 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   return null;
                 },
               ),
+              if (_selectedNotes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  l10n.notesSelected(_selectedNotes.length),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _selectedNotes.map((note) {
+                    return InputChip(
+                      label: Text(note.title),
+                      avatar: Icon(
+                        note.isTask ? Icons.check_circle : Icons.notes,
+                        size: 18,
+                      ),
+                      onDeleted: () => _removeSelectedNote(note.id),
+                    );
+                  }).toList(),
+                ),
+              ],
               // Show attached images below the edit box
               if (_attachmentPaths.isNotEmpty) ...[
                 const SizedBox(height: 12),

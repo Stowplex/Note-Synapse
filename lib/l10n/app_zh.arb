@@ -155,6 +155,7 @@
   "removeFile": "移除文件",
   "addFiles": "添加文件",
   "processingRequest": "正在处理您的请求...",
+  "executingToolStatus": "执行工具：{service} -> {tool}",
   "errorProcessingRequest": "处理请求时出错：{error}",
   "responseCopied": "响应已复制到剪贴板",
   "notesCreatedSuccessfully": "笔记创建成功！",
@@ -318,14 +319,56 @@
   "share": "分享",
   "shareNote": "分享笔记",
   "shareNotes": "分享笔记",
+  "shareAsPdf": "分享为 PDF",
   "shareAsText": "分享为文本",
   "copyToClipboard": "复制到剪贴板",
   "shareSubNotesAndLinkedNotes": "分享子笔记和关联笔记",
   "shareDialogTitle": "分享笔记",
   "shareDialogDescription": "选择您想要分享选中笔记的方式",
+  "notesToShare": "待分享 {count} {count, plural, =1{个笔记} other{个笔记}}",
+  "@notesToShare": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "textCopiedToClipboard": "文本已复制到剪贴板",
   "errorCopyingToClipboard": "复制到剪贴板时出错：{error}",
+  "@errorCopyingToClipboard": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "errorSharingText": "分享文本时出错：{error}",
+  "@errorSharingText": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pdfSavedToCache": "PDF 已保存到缓存：{fileName}",
+  "@pdfSavedToCache": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGeneratingPdf": "生成 PDF 时出错：{error}",
+  "@errorGeneratingPdf": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentMissing": "附件缺失",
+  "attachmentUnavailable": "附件不可用",
+  "pdfPreviewUnavailable": "暂不支持预览 PDF，请通过已保存的附件查看。",
   "selectFileLocation": "选择文件位置",
   "saveAsMarkdown": "保存为Markdown",
   "fileSavedSuccessfully": "文件保存成功",
@@ -676,6 +719,26 @@
   "updated": "更新",
   "noteActionApp": "笔记操作应用",
   "noteActionAppSubtitle": "此类应用将专门对预选笔记进行操作",
+  "appType": "类型",
+  "appTypeHint": "选择此应用的行为方式",
+  "appTypeNormal": "普通",
+  "appTypeNoteAction": "笔记操作",
+  "appTypeAiTool": "AI 工具",
+  "aiToolAppSubtitle": "暴露自定义 JavaScript 函数供 AI 调用，并在操场中测试",
+  "aiTools": "AI 工具",
+  "aiToolStartError": "无法启动 AI 工具“{appName}”：{error}",
+  "@aiToolStartError": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiToolMissingRevision": "此 AI 工具尚未选择版本。",
+  "aiToolDefinitionParseError": "所选版本不包含有效的 AI 工具规范。",
   "imageAttachmentsOptional": "图片附件（可选）",
   "imageAttachmentsSubtitle": "附加图片以帮助解释您希望AI创建的内容",
   "addImage": "添加图片",
@@ -735,10 +798,40 @@
   "noConversations": "无对话",
   "conversationsWithThisNote": "此笔记的对话",
   "typeYourMessage": "输入您的消息...",
+  "immersiveMode": "沉浸模式",
+  "openInChatMode": "在聊天模式中打开",
+  "aiChat": "AI 对话",
+  "outline": "大纲",
+  "expand": "展开",
+  "collapse": "收起",
+  "annotate": "标注",
+  "askAiHint": "向 AI 询问这条笔记...",
+  "send": "发送",
+  "startConversationHint": "先向 AI 询问关于你的笔记。",
+  "attachmentMissing": "找不到附件。",
+  "unsupportedAttachment": "不支持的附件类型（{type}）。",
+  "@unsupportedAttachment": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "openAttachment": "打开附件",
+  "failedToLoadAttachment": "加载附件失败。",
+  "failedToOpenAttachment": "无法打开附件：{error}",
+  "@failedToOpenAttachment": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "cancellingRequest": "正在取消请求...",
   "attachFiles": "附加文件",
   "takePhotoAttachment": "拍照",
   "mcpTools": "MCP工具",
+  "mcpAndLocalTools": "MCP和本地工具",
   "active": "活动",
   "toolsAvailable": "{count}个工具可用",
   "manageNotes": "管理笔记",

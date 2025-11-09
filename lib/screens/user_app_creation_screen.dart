@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../l10n/app_localizations.dart';
-import '../providers/app_provider.dart';
+import '../models/note.dart';
 import '../models/user_app.dart';
+import '../providers/app_provider.dart';
+import 'note_selection_dialog.dart';
 import 'user_app_result_screen.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
@@ -20,8 +22,9 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
   final _descriptionController = TextEditingController();
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
-  bool _isNoteActionApp = false;
+  UserAppType _selectedAppType = UserAppType.normal;
   final List<String> _attachmentPaths = [];
+  final List<Note> _selectedNotes = [];
   
   // Tab management
   late TabController _tabController;
@@ -53,6 +56,17 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
     setState(() {
       _stepControllers.add(TextEditingController());
     });
+  }
+
+  String _getAppTypeSubtitle(AppLocalizations l10n, UserAppType type) {
+    switch (type) {
+      case UserAppType.noteAction:
+        return l10n.noteActionAppSubtitle;
+      case UserAppType.aiTool:
+        return l10n.aiToolAppSubtitle;
+      case UserAppType.normal:
+        return '';
+    }
   }
 
   void _removeStep(int index) {
@@ -205,6 +219,44 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
     });
   }
 
+  void _showNoteSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        return NoteSelectionDialog(
+          title: l10n.selectNotesToAddToContext,
+          onNotesSelected: (notes) {
+            Navigator.of(dialogContext).pop();
+            if (!mounted) return;
+            setState(() {
+              final noteMap = {for (final note in _selectedNotes) note.id: note};
+              for (final note in notes) {
+                noteMap[note.id] = note;
+              }
+              _selectedNotes
+                ..clear()
+                ..addAll(noteMap.values);
+            });
+          },
+        );
+      },
+    );
+  }
+
+  void _removeSelectedNote(String noteId) {
+    setState(() {
+      _selectedNotes.removeWhere((note) => note.id == noteId);
+    });
+  }
+
+  void _clearSelectedNotes() {
+    if (_selectedNotes.isEmpty) return;
+    setState(() {
+      _selectedNotes.clear();
+    });
+  }
+
   void _showImageSourceDialog() {
     showDialog(
       context: context,
@@ -262,8 +314,9 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         steps: steps,
-        type: _isNoteActionApp ? UserAppType.noteAction : UserAppType.normal,
+        type: _selectedAppType,
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
+        contextNotes: _selectedNotes.isNotEmpty ? List<Note>.from(_selectedNotes) : null,
         libraries: _libraries.isNotEmpty ? _libraries : null,
       );
       
@@ -368,33 +421,62 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
               ),
               const SizedBox(height: 16),
               
-              // Note Action App Checkbox
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CheckboxListTile(
-                        title: Text(
-                          l10n.noteActionApp,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          l10n.noteActionAppSubtitle,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        value: _isNoteActionApp,
-                        onChanged: (value) {
-                          setState(() {
-                            _isNoteActionApp = value ?? false;
-                          });
-                        },
-                        controlAffinity: ListTileControlAffinity.leading,
+              // App Type Selector
+              Builder(
+                builder: (context) {
+                  final subtitle = _getAppTypeSubtitle(l10n, _selectedAppType);
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.appType,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<UserAppType>(
+                            value: _selectedAppType,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              hintText: l10n.appTypeHint,
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: UserAppType.normal,
+                                child: Text(l10n.appTypeNormal),
+                              ),
+                              DropdownMenuItem(
+                                value: UserAppType.noteAction,
+                                child: Text(l10n.appTypeNoteAction),
+                              ),
+                              DropdownMenuItem(
+                                value: UserAppType.aiTool,
+                                child: Text(l10n.appTypeAiTool),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _selectedAppType = value;
+                              });
+                            },
+                          ),
+                          if (subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              subtitle,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               
@@ -465,6 +547,68 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Note Context Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            l10n.addNotes,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_selectedNotes.isNotEmpty)
+                                IconButton(
+                                  onPressed: _clearSelectedNotes,
+                                  icon: const Icon(Icons.clear_all),
+                                  tooltip: l10n.clearFilters,
+                                ),
+                              IconButton(
+                                onPressed: _showNoteSelectionDialog,
+                                icon: const Icon(Icons.note_add),
+                                tooltip: l10n.addNotes,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.selectNotesToAddToContext,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                      ),
+                      if (_selectedNotes.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _selectedNotes.map((note) {
+                            return InputChip(
+                              label: Text(note.title),
+                              avatar: Icon(
+                                note.isTask ? Icons.check_circle : Icons.notes,
+                                size: 18,
+                              ),
+                              onDeleted: () => _removeSelectedNote(note.id),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               
               // Steps Section
               Text(
@@ -486,6 +630,8 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                             hintText: '${l10n.stepHint} ${index + 1}',
                             border: const OutlineInputBorder(),
                           ),
+                          maxLines: 3,
+                          keyboardType: TextInputType.multiline,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Step cannot be empty';

@@ -1,8 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
+
+import '../utils/synapse_temp_utils.dart';
 import 'interactive_checkbox_component.dart';
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
@@ -182,6 +190,320 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  /// Custom image builder that handles data URLs and synapsetemp:/// URIs.
+  ///
+  /// - synapsetemp:/// URIs load files from the app's cache directory
+  /// - data: URIs are decoded and rendered from memory
+  /// - all other URIs fall back to network loading
+  Widget _customImageBuilder(
+    BuildContext context,
+    String url, {
+    double? width,
+    double? height,
+  }) {
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return FutureBuilder<SynapseTempFile>(
+        future: SynapseTempUtils.loadFile(url),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return _buildLoadingPlaceholder(width, height);
+          }
+
+          if (snapshot.hasError || !snapshot.hasData) {
+            if (snapshot.hasError && kDebugMode) {
+              debugPrint('SynapseTemp image load error: ${snapshot.error}');
+            }
+            return _buildPlaceholder(width, height, 'Unable to load temporary image');
+          }
+
+          final tempFile = snapshot.data!;
+          final mime = tempFile.mimeType.toLowerCase();
+
+          if (mime == 'image/svg+xml') {
+            // Render SVG using InAppWebView for better compatibility and edge case handling
+            try {
+              final svgContent = utf8.decode(tempFile.bytes);
+              return _buildSvgWebView(svgContent, width, height);
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('Error decoding SVG content: $e');
+              }
+              return _buildPlaceholder(width, height, 'Failed to decode SVG');
+            }
+          }
+
+          if (mime.startsWith('image/')) {
+            return SizedBox(
+              width: width,
+              height: height,
+              child: Image.memory(
+                tempFile.bytes,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholder(width, height, 'Failed to render image');
+                },
+              ),
+            );
+          }
+
+          return _buildPlaceholder(width, height, 'Unsupported image type: ${tempFile.mimeType}');
+        },
+      );
+    }
+
+    if (url.startsWith('data:')) {
+      try {
+        final uri = Uri.parse(url);
+        final dataString = uri.toString();
+
+        final commaIndex = dataString.indexOf(',');
+        if (commaIndex == -1) {
+          return _buildPlaceholder(width, height, 'Invalid data URL format');
+        }
+
+        final header = dataString.substring(5, commaIndex); // Skip 'data:'
+        final data = dataString.substring(commaIndex + 1);
+
+        String mimetype = 'text/plain';
+        bool isBase64 = false;
+
+        if (header.isNotEmpty) {
+          final parts = header.split(';');
+          if (parts.isNotEmpty && parts[0].isNotEmpty) {
+            mimetype = parts[0];
+          }
+          isBase64 = parts.any((p) => p.toLowerCase() == 'base64');
+        }
+
+        if (mimetype.toLowerCase() == 'image/svg+xml') {
+          // Render SVG using InAppWebView for better compatibility and edge case handling
+          try {
+            final svgContent = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+            return _buildSvgWebView(svgContent, width, height);
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('Error decoding SVG from data URL: $e');
+            }
+            return _buildPlaceholder(width, height, 'Failed to decode SVG');
+          }
+        }
+
+        if (mimetype.startsWith('image/')) {
+          if (!isBase64) {
+            return _buildPlaceholder(width, height, 'Only base64 encoded images are supported');
+          }
+
+          final bytes = base64.decode(data);
+          return SizedBox(
+            width: width,
+            height: height,
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildPlaceholder(width, height, 'Failed to render image');
+              },
+            ),
+          );
+        }
+
+        return _buildPlaceholder(width, height, 'Unsupported image type: $mimetype');
+      } catch (e) {
+        return _buildPlaceholder(width, height, 'Error loading image: $e');
+      }
+    }
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Image(
+        image: NetworkImage(url),
+        loadingBuilder: (
+          BuildContext context,
+          Widget child,
+          ImageChunkEvent? loadingProgress,
+        ) {
+          if (loadingProgress == null) {
+            return child;
+          }
+          return Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                      loadingProgress.expectedTotalBytes!
+                  : null,
+            ),
+          );
+        },
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.broken_image, size: 48);
+        },
+      ),
+    );
+  }
+
+  /// Builds a placeholder widget for unsupported or error cases.
+  Widget _buildPlaceholder(double? width, double? height, String message) {
+    return SizedBox(
+      width: width,
+      height: height ?? 100,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingPlaceholder(double? width, double? height) {
+    return SizedBox(
+      width: width,
+      height: height ?? 100,
+      child: const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+
+  /// Creates an HTML wrapper for SVG content to render in WebView.
+  /// This ensures proper scaling and responsive behavior with pan and zoom support.
+  String _createSvgHtmlWrapper(String svgContent) {
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #svg-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    svg {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+  </style>
+  <script src="synapse://svg.pan-zoom.min.js"></script>
+</head>
+<body>
+  <div id="svg-container">
+    $svgContent
+  </div>
+  <script>
+    // Initialize svg-pan-zoom after the DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      const svgElement = document.querySelector('svg');
+      if (svgElement && typeof svgPanZoom !== 'undefined') {
+        svgPanZoom(svgElement, {
+          zoomEnabled: true,
+          controlIconsEnabled: false,
+          fit: true,
+          center: true,
+          minZoom: 0.1,
+          maxZoom: 15,
+          zoomScaleSensitivity: 0.3,
+          dblClickZoomEnabled: true,
+          mouseWheelZoomEnabled: true,
+          preventMouseEventsDefault: true,
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+''';
+  }
+
+  /// Builds an InAppWebView widget to render SVG content with pan and zoom support.
+  Widget _buildSvgWebView(String svgContent, double? width, double? height) {
+    final htmlContent = _createSvgHtmlWrapper(svgContent);
+    
+    // Determine the height for the WebView
+    // If height is not provided, calculate based on width with a reasonable aspect ratio
+    final webViewHeight = height ?? (width != null ? width * 0.75 : 300.0);
+    
+    // Wrap in GestureDetector to capture touches and prevent parent scroll
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) {},
+      onHorizontalDragStart: (_) {},
+      child: SizedBox(
+        width: width,
+        height: webViewHeight,
+        child: InAppWebView(
+          initialData: InAppWebViewInitialData(
+            data: htmlContent,
+            mimeType: 'text/html',
+            encoding: 'utf8',
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            supportZoom: true,
+            transparentBackground: true,
+            disableContextMenu: false,
+            horizontalScrollBarEnabled: false,
+            verticalScrollBarEnabled: false,
+            resourceCustomSchemes: ['synapse'],
+            useHybridComposition: true,
+            disableVerticalScroll: false,
+            disableHorizontalScroll: false,
+          ),
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<EagerGestureRecognizer>(
+              () => EagerGestureRecognizer(),
+            ),
+          },
+          onLoadResourceWithCustomScheme: (controller, request) async {
+            if (request.url.scheme.toLowerCase() == 'synapse') {
+              final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+              return CustomSchemeResponse(
+                contentType: 'application/javascript',
+                data: Uint8List.fromList(utf8.encode(data)),
+              );
+            }
+            return null;
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Create custom components list with our safe HTag and optional interactive checkbox component
@@ -213,6 +535,7 @@ class _InteractiveCheckboxMarkdownState
       maxLines: widget.maxLines,
       overflow: widget.overflow,
       latexBuilder: _customLatexBuilder,
+      imageBuilder: _customImageBuilder,
       components: components,
     );
   }

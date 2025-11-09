@@ -23,16 +23,17 @@ class ConversationContext {
     required this.messageCount,
   });
 
-  factory ConversationContext.fromJson(Map<String, dynamic> json) => _$ConversationContextFromJson(json);
+  factory ConversationContext.fromJson(Map<String, dynamic> json) =>
+      _$ConversationContextFromJson(json);
   Map<String, dynamic> toJson() => _$ConversationContextToJson(this);
 
   // Generate a summary for display in selection dialog
   String get displaySummary {
     final noteNames = notes.map((n) => n.title).join(', ');
-    final lastMessagePreview = initialContext != null 
+    final lastMessagePreview = initialContext != null
         ? 'Last message: ${initialContext!.length > 100 ? '${initialContext!.substring(0, 100)}...' : initialContext!}'
         : 'No messages';
-    
+
     return 'Notes: $noteNames\n$lastMessagePreview\nMessages: $messageCount';
   }
 
@@ -40,17 +41,17 @@ class ConversationContext {
   bool hasConflictingNotes(ConversationContext other) {
     final thisNoteIds = noteIds.toSet();
     final otherNoteIds = other.noteIds.toSet();
-    
-    // Check if they have different note sets
-    if (!thisNoteIds.containsAll(otherNoteIds) || !otherNoteIds.containsAll(thisNoteIds)) {
+
+    if (thisNoteIds.length != otherNoteIds.length) {
       return true;
     }
-    
-    // Check if initial contexts are different
-    if (initialContext != other.initialContext) {
-      return true;
+
+    for (final id in thisNoteIds) {
+      if (!otherNoteIds.contains(id)) {
+        return true;
+      }
     }
-    
+
     return false;
   }
 }
@@ -69,15 +70,19 @@ class ForkContextSelection {
     this.customTitle,
   });
 
-  factory ForkContextSelection.fromJson(Map<String, dynamic> json) => _$ForkContextSelectionFromJson(json);
+  factory ForkContextSelection.fromJson(Map<String, dynamic> json) =>
+      _$ForkContextSelectionFromJson(json);
   Map<String, dynamic> toJson() => _$ForkContextSelectionToJson(this);
 
-  bool get hasConflictingContexts => availableContexts.length > 1 && 
-      availableContexts.any((context) => 
-          availableContexts.any((other) => 
-              context != other && context.hasConflictingNotes(other)));
+  bool get hasConflictingContexts =>
+      availableContexts.length > 1 &&
+      availableContexts.any(
+        (context) => availableContexts.any(
+          (other) => context != other && context.hasConflictingNotes(other),
+        ),
+      );
 
-  bool get requiresUserSelection => hasConflictingContexts || selectedContext == null;
+  bool get requiresUserSelection => hasConflictingContexts;
 
   ForkContextSelection copyWith({
     String? forkMessageId,

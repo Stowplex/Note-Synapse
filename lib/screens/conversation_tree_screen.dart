@@ -12,17 +12,22 @@ import '../widgets/add_note_dialog.dart';
 import '../widgets/add_conversation_dialog.dart';
 import '../widgets/linear_history_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import 'note_detail_screen.dart';
 
 class ConversationTreeScreen extends StatefulWidget {
   final List<String>? activeConversationIds;
+
   /// When true, activeConversationIds are used to filter the tree (from note detail view)
   /// When false, activeConversationIds are only used for highlighting (from conversation view)
   final bool filterByActiveConversations;
+  final Future<bool> Function(BuildContext context, String conversationId)?
+  onOpenConversation;
 
   const ConversationTreeScreen({
     super.key,
     this.activeConversationIds,
     this.filterByActiveConversations = false,
+    this.onOpenConversation,
   });
 
   @override
@@ -53,10 +58,49 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     super.initState();
     // Set highlighted conversation from widget parameter
     // Only highlight if NOT filtering (when filtering, we don't want highlights)
-    if (widget.activeConversationIds != null && !widget.filterByActiveConversations) {
+    if (widget.activeConversationIds != null &&
+        !widget.filterByActiveConversations) {
       _highlightedConversationIds = widget.activeConversationIds!;
     }
-    _loadTree();
+    _initializeTree();
+  }
+
+  Future<void> _initializeTree() async {
+    await _ensureActiveConversationVisibility();
+    await _loadTree();
+  }
+
+  Future<void> _ensureActiveConversationVisibility() async {
+    if (!mounted) return;
+    if (widget.filterByActiveConversations) return;
+    final activeIds = widget.activeConversationIds;
+    if (activeIds == null || activeIds.isEmpty) return;
+
+    Duration requiredRange = _selectedTimeRange;
+    final now = DateTime.now();
+
+    for (final conversationId in activeIds) {
+      final conversation = await _databaseService.getConversation(
+        conversationId,
+      );
+      if (conversation == null) continue;
+
+      final ageSinceUpdate = now.difference(conversation.updatedAt);
+      if (ageSinceUpdate.isNegative) {
+        continue;
+      }
+
+      final desiredRange = ageSinceUpdate + const Duration(hours: 3);
+      if (desiredRange > requiredRange) {
+        requiredRange = desiredRange;
+      }
+    }
+
+    if (requiredRange > _selectedTimeRange && mounted) {
+      setState(() {
+        _selectedTimeRange = requiredRange;
+      });
+    }
   }
 
   @override
@@ -99,10 +143,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     try {
       // If filterByActiveConversations is true, use activeConversationIds as a filter
       // This overrides the default time range and tag filters
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
-      
+
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
@@ -153,6 +198,28 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
   }
 
+  Future<void> _openConversation(
+    BuildContext navigationContext,
+    String conversationId,
+  ) async {
+    final handler = widget.onOpenConversation;
+    if (handler != null) {
+      final handled = await handler(navigationContext, conversationId);
+      if (handled) {
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    await Navigator.of(navigationContext).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) =>
+            ConversationChatScreen(conversationId: conversationId),
+      ),
+    );
+  }
+
   Future<void> _refreshTree({bool clearHighlight = true}) async {
     setState(() {
       _isLoading = true;
@@ -166,10 +233,11 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       // If filterByActiveConversations is true, use activeConversationIds as a filter
       // This overrides the default time range and tag filters
       // Don't clear the filter when clearHighlight is false (automatic refresh)
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
-      
+
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
@@ -383,13 +451,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
             );
           }
 
-          // Navigate to the new conversation, replacing the tree view
-          await Navigator.of(currentContext).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) =>
-                  ConversationChatScreen(conversationId: newConversation.id),
-            ),
-          );
+          // Navigate to the new conversation using the configured handler
+          await _openConversation(currentContext, newConversation.id);
         }
       }
     } catch (e) {
@@ -436,14 +499,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         try {
           ScaffoldMessenger.of(currentContext).showSnackBar(
             SnackBar(
-              content: Text(l10n.conversationCreatedSuccessfully(newConversation.title)),
+              content: Text(
+                l10n.conversationCreatedSuccessfully(newConversation.title),
+              ),
               backgroundColor: Colors.green,
             ),
           );
         } catch (_) {
           // Context may have been deactivated, skip snackbar
         }
-        
+
         // Clear selected nodes and exit multi-select mode
         setState(() {
           _selectedNodes.clear();
@@ -452,12 +517,7 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
         // Navigate to the new conversation, replacing the tree view
         try {
-          Navigator.of(currentContext).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) =>
-                  ConversationChatScreen(conversationId: newConversation.id),
-            ),
-          );
+          await _openConversation(currentContext, newConversation.id);
         } catch (_) {
           // Navigation may have failed, but that's okay
         }
@@ -516,14 +576,39 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       final contextNotes = await _collectContextNotesFromNodes();
 
       // Show the unified add note dialog
-      final createdNotes = await AddNoteDialog.show(
+      final result = await AddNoteDialog.show(
         context: currentContext,
         content: conversationContent,
         contextNotes: contextNotes,
       );
 
-      // If notes were created, show success message
-      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
+      if (!mounted || result == null) return;
+
+      if (result.isAppend) {
+        final appendedNote = result.appendedNote!;
+        ScaffoldMessenger.of(currentContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
+            ),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: l10n.view,
+              onPressed: () {
+                Navigator.of(currentContext).push(
+                  MaterialPageRoute(
+                    builder: (context) => NoteDetailScreen(note: appendedNote),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (result.hasCreatedNotes) {
+        final createdNotes = result.createdNotes;
         ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
             content: Text(
@@ -555,52 +640,12 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   /// Build conversation content from selected nodes
   Future<String> _buildConversationContentFromNodes() async {
     if (_tree == null || _selectedNodes.isEmpty) return '';
+    final snippets = await _conversationService.buildInteractionSnippets(
+      existingTree: _tree!,
+      nodeIds: _selectedNodes,
+    );
 
-    final conversationIds = <String>{};
-
-    for (final nodeId in _selectedNodes) {
-      final node = _tree!.nodes[nodeId];
-      if (node != null && node.conversationId.isNotEmpty) {
-        conversationIds.add(node.conversationId);
-      }
-    }
-
-    if (conversationIds.isEmpty) {
-      return '';
-    }
-
-    // Build context messages from conversations
-    final contextMessages = <String>[];
-
-    for (final sourceConvId in conversationIds) {
-      final messages = await _databaseService.getConversationMessages(
-        sourceConvId,
-      );
-      if (messages.isNotEmpty) {
-        // Add a header for this conversation's context
-        contextMessages.add(
-          '--- Context from conversation: ${sourceConvId.substring(0, 8)}... ---',
-        );
-
-        // Add key messages (first few and last few)
-        final keyMessages = <ConversationMessage>[];
-        if (messages.length <= 4) {
-          keyMessages.addAll(messages);
-        } else {
-          // First 2 and last 2 messages
-          keyMessages.addAll(messages.take(2));
-          keyMessages.addAll(messages.skip(messages.length - 2));
-        }
-
-        for (final message in keyMessages) {
-          final prefix = message.type == MessageType.user ? 'User: ' : 'AI: ';
-          contextMessages.add('$prefix${message.content}');
-        }
-        contextMessages.add(''); // Empty line between conversations
-      }
-    }
-
-    return contextMessages.join('\n');
+    return _conversationService.formatInteractionSnippets(snippets);
   }
 
   /// Collect context notes from selected nodes
@@ -641,7 +686,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     }
 
     if (_tree == null) {
-      final bool hasActiveConversationFilter = widget.filterByActiveConversations &&
+      final bool hasActiveConversationFilter =
+          widget.filterByActiveConversations &&
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
       return Scaffold(
@@ -1145,15 +1191,8 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => ConversationChatScreen(
-                            conversationId: conversation.id,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () =>
+                        _openConversation(context, conversation.id),
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(
                       l10n.open,
@@ -1274,7 +1313,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                                         ? null
                                         : TextOverflow.ellipsis,
                                   )
-                                : InteractiveCheckboxMarkdown(originalContent: message.content),
+                                : InteractiveCheckboxMarkdown(
+                                    originalContent: message.content,
+                                  ),
                           ],
                         ),
                       ),
@@ -1348,15 +1389,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(futureContext).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => ConversationChatScreen(
-                            conversationId: message.conversationId,
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () => _openConversation(
+                      futureContext,
+                      message.conversationId,
+                    ),
                     icon: const Icon(Icons.chat, size: 14),
                     label: Text(
                       futureL10n.open,
@@ -1501,7 +1537,9 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            InteractiveCheckboxMarkdown(originalContent: aiMessage.content),
+                            InteractiveCheckboxMarkdown(
+                              originalContent: aiMessage.content,
+                            ),
                           ],
                         ),
                       ),

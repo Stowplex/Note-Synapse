@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,22 +8,30 @@ import '../models/conversation.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
-import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
-import '../services/model_selector.dart';
-import '../models/model_type.dart';
+import '../services/ai_tool_service.dart';
+import '../services/prompts/prompt_models.dart';
+import '../services/prompts/system_prompt_builder.dart';
+import '../services/prompts/note_prompt_builder.dart';
+import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../l10n/app_localizations.dart';
+import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
 import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
+import 'immersive_note_screen.dart';
 import 'note_action_app_selection_screen.dart';
-import '../widgets/add_note_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
+import '../services/user_app_service.dart';
+import '../models/user_app.dart';
+import '../mixins/note_action_mixin.dart';
+import '../widgets/chat_message_action_row.dart';
+import '../widgets/active_tool_count_badge.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -40,10 +47,13 @@ class ConversationChatScreen extends StatefulWidget {
   State<ConversationChatScreen> createState() => _ConversationChatScreenState();
 }
 
-class _ConversationChatScreenState extends State<ConversationChatScreen> {
+class _ConversationChatScreenState extends State<ConversationChatScreen>
+    with NoteActionMixin<ConversationChatScreen> {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
+  final ConversationAiEngine _aiEngine = const ConversationAiEngine();
 
   Conversation? _conversation;
   List<ConversationMessage> _messages = [];
@@ -55,12 +65,20 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final Set<String> _cancelledRequestIds = {};
   final List<PlatformFile> _attachedFiles = [];
   List<String> _conversationTags = [];
+  final DateTime _conversationStartTime = DateTime.now();
 
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
+
+  // AI tool support
+  Map<String, AiToolAppBundle> _aiToolBundles = {};
+  Map<String, List<McpTool>> _aiToolMcpMap = {};
+  final Set<String> _selectedAiToolServices = {};
+  final Map<String, AiToolRuntime> _aiToolRuntimes = {};
+  String? _toolExecutionStatus;
 
   bool _hasInitialized = false;
 
@@ -119,6 +137,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         );
       }
     } finally {
+      await _loadAiTools();
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -227,15 +246,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       );
       await _refreshConversationTags();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Tag "$tagName" removed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Tag "$tagName" removed')));
     } catch (e) {
       LoggerService.error('Error removing tag: $e', error: e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error removing tag: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error removing tag: $e')));
     }
   }
 
@@ -262,11 +281,190 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     }
   }
 
+  Future<void> _loadAiTools() async {
+    final appProvider = context.read<AppProvider>();
+    final aiApps = appProvider.userApps
+        .where((app) => app.type == UserAppType.aiTool)
+        .toList();
+
+    final bundles = <String, AiToolAppBundle>{};
+    final mcpMap = <String, List<McpTool>>{};
+
+    for (final app in aiApps) {
+      if (app.selectedRevisionId == null) {
+        LoggerService.warning(
+          'AI tool "${app.name}" has no selected revision.',
+        );
+        continue;
+      }
+
+      try {
+        final revision = await UserAppService.getAppRevision(
+          app.selectedRevisionId!,
+        );
+        if (revision == null) {
+          LoggerService.warning(
+            'AI tool "${app.name}" selected revision not found.',
+          );
+          continue;
+        }
+
+        final bundle = await AiToolService.loadAppBundle(
+          app: app,
+          revision: revision,
+        );
+        if (bundle == null || bundle.toolDefinitions.isEmpty) {
+          continue;
+        }
+
+        bundles[bundle.serviceName] = bundle;
+        mcpMap[bundle.serviceName] = bundle.toMcpTools();
+      } catch (e) {
+        LoggerService.error('Failed to load AI tool "${app.name}": $e');
+      }
+    }
+
+    final removedServices = _aiToolRuntimes.keys
+        .where((service) => !bundles.containsKey(service))
+        .toList(growable: false);
+    for (final service in removedServices) {
+      _aiToolRuntimes.remove(service)?.dispose();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _aiToolBundles = bundles;
+      _aiToolMcpMap = mcpMap;
+      _selectedAiToolServices.removeWhere(
+        (service) => !mcpMap.containsKey(service),
+      );
+    });
+  }
+
+  Map<String, List<McpTool>> _buildActiveToolsMap() {
+    final combined = <String, List<McpTool>>{};
+    combined.addAll(_mcpToolsByEndpoint);
+
+    for (final service in _selectedAiToolServices) {
+      final tools = _aiToolMcpMap[service];
+      if (tools != null && tools.isNotEmpty) {
+        combined[service] = tools;
+      }
+    }
+
+    return combined;
+  }
+
+  Future<String> _runWithToolStatus(
+    String serviceName,
+    String toolName,
+    Future<String> Function() action,
+  ) async {
+    final statusLabel = mounted
+        ? _buildToolStatusLabel(serviceName, toolName)
+        : '$serviceName -> $toolName';
+    if (mounted) {
+      setState(() {
+        _toolExecutionStatus = statusLabel;
+      });
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (_toolExecutionStatus == statusLabel) {
+            _toolExecutionStatus = null;
+          }
+        });
+      }
+    }
+  }
+
+  String _buildToolStatusLabel(String serviceName, String toolName) {
+    final l10n = AppLocalizations.of(context)!;
+    final serviceLabel = _resolveServiceLabel(serviceName);
+    final toolLabel = _resolveToolLabel(serviceName, toolName);
+    return l10n.executingToolStatus(serviceLabel, toolLabel);
+  }
+
+  String _resolveServiceLabel(String serviceName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      return aiBundle.displayName;
+    }
+    return serviceName;
+  }
+
+  String _resolveToolLabel(String serviceName, String toolName) {
+    final aiBundle = _aiToolBundles[serviceName];
+    if (aiBundle != null) {
+      for (final definition in aiBundle.toolDefinitions) {
+        if (definition.toolName == toolName) {
+          return _prettifyLabel(definition.toolName);
+        }
+      }
+    }
+
+    final tools = _mcpToolsByEndpoint[serviceName];
+    if (tools != null) {
+      for (final tool in tools) {
+        if (tool.name == toolName) {
+          return _prettifyLabel(tool.name);
+        }
+      }
+    }
+
+    return _prettifyLabel(toolName);
+  }
+
+  String _prettifyLabel(String input) {
+    return input.replaceAll(RegExp(r'[_\\-]+'), ' ');
+  }
+
+  bool get _hasAnyTools => _buildActiveToolsMap().isNotEmpty;
+
+  void _toggleAiToolService(String serviceName, bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _selectedAiToolServices.add(serviceName);
+      } else {
+        _selectedAiToolServices.remove(serviceName);
+      }
+    });
+
+    if (!isSelected) {
+      _aiToolRuntimes.remove(serviceName)?.dispose();
+    }
+  }
+
+  Future<AiToolRuntime> _getAiToolRuntime(String serviceName) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) {
+      return existing;
+    }
+
+    final bundle = _aiToolBundles[serviceName];
+    if (bundle == null) {
+      throw Exception('AI tool not available: $serviceName');
+    }
+
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
+  }
+
   Future<void> _sendMessage() async {
     if (_messageController.text.isEmpty && _attachedFiles.isEmpty) return;
 
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
+    String? requestId;
     _messageController.clear();
     setState(() {
       _attachedFiles.clear();
@@ -317,23 +515,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       _scrollToBottom();
 
       // Generate AI response
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      requestId = DateTime.now().millisecondsSinceEpoch.toString();
       _currentRequestId = requestId;
 
-      final aiResponseContent = await _generateAIResponse(
+      final aiResponse = await _generateAIResponse(
         content,
         attachments,
         requestId,
       );
 
-      if (_cancelledRequestIds.contains(requestId)) {
-        _cancelledRequestIds.remove(requestId);
-        return; // Stop processing if the request was cancelled
-      }
-
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
-        content: aiResponseContent,
+        content: aiResponse.content,
+        metadata: aiResponse.metadata,
       );
       if (!mounted) return;
 
@@ -341,6 +535,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         _messages.add(aiMessage);
       });
       _scrollToBottom();
+    } on ConversationCancelledException {
+      if (requestId != null) {
+        _cancelledRequestIds.remove(requestId);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -352,6 +558,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         setState(() {
           _isSending = false;
           _currentRequestId = null;
+          if (requestId != null) {
+            _cancelledRequestIds.remove(requestId);
+          }
         });
       }
     }
@@ -370,6 +579,22 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         ),
       );
     }
+  }
+
+  void _openInImmersiveMode() {
+    if (_notes.isEmpty) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImmersiveNoteScreen(
+          notes: List<Note>.from(_notes),
+          initialConversation: _conversation,
+          initialMessages: List<ConversationMessage>.from(_messages),
+        ),
+      ),
+    );
   }
 
   Future<void> _abortRequest() async {
@@ -402,333 +627,249 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     });
   }
 
-  Future<String> _generateAIResponse(
+  Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
     String requestId,
   ) async {
     try {
-      // Check if this specific request was cancelled before starting
       if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
+        throw const ConversationCancelledException();
       }
 
-      // Build messages array with system, user, and assistant roles
-      final messages = <Map<String, dynamic>>[];
+      final request = await _buildConversationPrompt(attachedFiles);
 
-      // Build system message with note context
-      final systemContent = await _buildSystemMessage(_notes);
-      if (systemContent.isNotEmpty) {
-        messages.add({'role': 'system', 'content': systemContent});
-      }
-
-      // Add conversation history (_messages already includes the current user message)
-      // since it was added to _messages before calling _generateAIResponse
-      for (final msg in _messages) {
-        messages.add({
-          'role': msg.type == MessageType.user ? 'user' : 'assistant',
-          'content': msg.content,
-        });
-      }
-
-      // Check if this specific request was cancelled before AI generation
       if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
+        throw const ConversationCancelledException();
       }
 
-      // Check if MCP tools are available
-      if (_mcpToolsByEndpoint.isNotEmpty) {
-        return await _generateWithMcpTools(messages, attachedFiles, requestId);
-      } else {
-        // Use AI service's answerNoteQuestion method which handles note context and attachments
-        final response = await AIService.answerNoteQuestionWithMessages(
-          messages,
-          _notes,
-          attachedFiles: attachedFiles.isNotEmpty ? attachedFiles : null,
-          useOwnKnowledge: true,
-        );
+      final activeTools = _buildActiveToolsMap();
+      final response = await _aiEngine.generate(
+        request: request,
+        activeTools: activeTools,
+        enableTools: activeTools.isNotEmpty,
+        executeTool: (serviceName, toolName, params) async {
+          return _runWithToolStatus(serviceName, toolName, () async {
+            if (_aiToolBundles.containsKey(serviceName)) {
+              final runtime = await _getAiToolRuntime(serviceName);
+              return runtime.invoke(toolName, params);
+            }
 
-        // Check if this specific request was cancelled after AI response
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
-
-        return response;
-      }
-    } catch (e) {
-      if (_cancelledRequestIds.contains(requestId)) {
-        // Don't show error for cancelled requests
-        rethrow;
-      }
-      LoggerService.error('Error generating AI response: $e', error: e);
-      return 'I apologize, but I encountered an error while generating a response. Please try again.';
-    }
-  }
-
-  Future<String> _buildSystemMessage(List<Note> notes) async {
-    if (notes.isEmpty) {
-      return '''You are a helpful assistant that can answer questions and help with tasks.
-
-${AIPrompts.mathFormulaGuidelines}
-
-''';
-    }
-
-    // Build note context for system message
-    final contextText = await AIService.buildContextFromNotes(notes);
-
-    // Build system message from context (without a specific question)
-    return '''You are a helpful assistant that can answer questions and help with tasks.
-
-Based on the following notes and their linked relationships, please answer user questions.
-
-Context Notes (including linked notes and their relationships):
-$contextText
-
-Please provide comprehensive answers using both the information in the notes and your own knowledge.
-Consider the relationships between the NOTES in the context:
-- The hierarchical structure shown (indented linked notes)
-- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
-- How linked notes might provide additional context or clarification
-- The direction of relationships (→ for outgoing, ← for incoming)
-
-${AIPrompts.mathFormulaGuidelines}
-
-You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
-''';
-  }
-
-  Future<String> _generateWithMcpTools(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
-    String requestId,
-  ) async {
-    try {
-      // Check if this specific request was cancelled before starting
-      if (_cancelledRequestIds.contains(requestId)) {
-        throw Exception('Request cancelled by user');
-      }
-
-      // Add MCP tool information to system message if present, otherwise create one
-      final mcpPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
-        _mcpToolsByEndpoint,
-      );
-      final messagesWithMcp = <Map<String, dynamic>>[];
-
-      // Find or create system message
-      bool hasSystemMessage = false;
-      for (final msg in messages) {
-        if (msg['role'] == 'system') {
-          // Append MCP prompt to existing system message
-          messagesWithMcp.add({
-            'role': 'system',
-            'content': '${msg['content']}\n\n$mcpPrompt',
+            return McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            );
           });
-          hasSystemMessage = true;
-        } else {
-          messagesWithMcp.add(msg);
-        }
-      }
-
-      // If no system message exists, add one with MCP prompt
-      if (!hasSystemMessage) {
-        messagesWithMcp.insert(0, {'role': 'system', 'content': mcpPrompt});
-      }
-
-      // Get call_tool function definition based on current model type
-      final currentModelType = ModelSelector.instance.currentModelType;
-      final callToolFunction = currentModelType == ModelType.openaiCompatible
-          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
-              _mcpToolsByEndpoint,
-            )
-          : McpToolIntegrationService.getCallToolFunctionForGemini(
-              _mcpToolsByEndpoint,
-            );
-
-      LoggerService.info(
-        'Starting MCP-enabled conversation with ${_mcpToolsByEndpoint.length} services',
+        },
+        isCancelled: () => _cancelledRequestIds.contains(requestId),
+        requestId: requestId,
       );
 
-      // Tool calling loop - max 5 iterations to prevent infinite loops
-      const maxIterations = 10;
-      List<Map<String, dynamic>> currentMessages = List.from(messagesWithMcp);
-      final conversationParts = <String>[];
-
-      for (int iteration = 0; iteration < maxIterations; iteration++) {
-        // Check if this specific request was cancelled before each iteration
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
-
-        LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
-
-        // Call AI with tools
-        final response = await ModelSelector.instance
-            .generateWithToolsAndMessages(currentMessages, attachedFiles, [
-              callToolFunction,
-            ]);
-
-        // Check if this specific request was cancelled after AI response
-        if (_cancelledRequestIds.contains(requestId)) {
-          throw Exception('Request cancelled by user');
-        }
-
-        final textResponse = response['text'] as String?;
-        final functionCalls = response['function_calls'] as List?;
-
-        if (functionCalls != null && functionCalls.isNotEmpty) {
-          LoggerService.info(
-            'AI requested ${functionCalls.length} tool call(s)',
-          );
-
-          // Execute all function calls
-          final toolResults = <String>[];
-          for (final functionCall in functionCalls) {
-            // Check if this specific request was cancelled before each tool execution
-            if (_cancelledRequestIds.contains(requestId)) {
-              throw Exception('Request cancelled by user');
-            }
-
-            final functionName = functionCall['name'] as String;
-            final args = functionCall['args'] as Map<String, dynamic>;
-
-            LoggerService.debug(
-              'Processing function call',
-              error: {'functionName': functionName, 'args': args},
-            );
-
-            if (functionName == 'call_tool') {
-              final parsedArgs =
-                  McpToolIntegrationService.parseCallToolArguments(args);
-              if (parsedArgs != null) {
-                final serviceName = parsedArgs['service_name'] as String;
-                final toolName = parsedArgs['tool_name'] as String;
-                final params = parsedArgs['params'] as Map<String, dynamic>;
-
-                LoggerService.info('Executing: $serviceName.$toolName');
-                LoggerService.debug('Tool parameters', error: params);
-
-                try {
-                  final result =
-                      await McpToolIntegrationService.executeToolCall(
-                        serviceName: serviceName,
-                        toolName: toolName,
-                        parameters: params,
-                        enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-                      );
-
-                  toolResults.add(
-                    'Tool: $serviceName.$toolName\nResult: $result',
-                  );
-                  conversationParts.add(
-                    '[Tool executed: $serviceName.$toolName]',
-                  );
-                } catch (e) {
-                  LoggerService.error('Tool execution failed: $e');
-                  toolResults.add('Tool: $serviceName.$toolName\nError: $e');
-                }
-              } else {
-                LoggerService.error(
-                  'Failed to parse call_tool arguments',
-                  error: {'args': args},
-                );
-              }
-            }
-          }
-
-          // If we have tool results, continue the conversation with them
-          if (toolResults.isNotEmpty) {
-            // Add assistant response with function call
-            currentMessages = List.from(currentMessages);
-
-            // Add tool results - format depends on model type
-            final currentModelType = ModelSelector.instance.currentModelType;
-            if (currentModelType == ModelType.openaiCompatible) {
-              // OpenAI format: assistant message with tool_calls, then tool messages with results
-              // Store function calls with their results for proper ID mapping
-              final toolCallsWithResults = <Map<String, dynamic>>[];
-              for (
-                int i = 0;
-                i < functionCalls.length && i < toolResults.length;
-                i++
-              ) {
-                final functionCall = functionCalls[i];
-                final functionName = functionCall['name'] as String;
-                final toolCallId =
-                    'call_${DateTime.now().millisecondsSinceEpoch}_${functionName}_$i';
-
-                toolCallsWithResults.add({
-                  'id': toolCallId,
-                  'function_call': functionCall,
-                  'result': toolResults[i],
-                });
-              }
-
-              // Add assistant message with tool calls
-              currentMessages.add({
-                'role': 'assistant',
-                'content': textResponse ?? '',
-                'function_calls': functionCalls,
-                'tool_calls_with_results':
-                    toolCallsWithResults, // Store for ID mapping
-              });
-
-              // Add tool result messages
-              for (final toolCallWithResult in toolCallsWithResults) {
-                currentMessages.add({
-                  'role': 'tool',
-                  'tool_call_id': toolCallWithResult['id'],
-                  'name': toolCallWithResult['function_call']['name'],
-                  'content': toolCallWithResult['result'],
-                });
-              }
-            } else {
-              // Gemini format: tool results are included differently
-              // For Gemini, we add tool results as a continuation in the user role
-              currentMessages.add({
-                'role': 'assistant',
-                'content': textResponse ?? '',
-                'function_calls': functionCalls,
-              });
-              final toolResultsText = toolResults.join('\n\n');
-              currentMessages.add({
-                'role': 'user',
-                'content':
-                    'Tool execution results:\n\n$toolResultsText\n\nBased on these results, provide your response.',
-              });
-            }
-            continue; // Go to next iteration
-          }
-        }
-
-        // If we get here, either no function calls or we have a text response
-        if (textResponse != null && textResponse.isNotEmpty) {
-          if (conversationParts.isNotEmpty) {
-            return '${conversationParts.join('\n')}\n\n$textResponse';
-          }
-          return textResponse;
-        }
-
-        // If no text and no function calls, something went wrong
-        LoggerService.warning(
-          'No text response and no function calls in iteration ${iteration + 1}',
-        );
-        break;
-      }
-
-      // If we exhausted iterations, return what we have
-      LoggerService.warning('Reached maximum tool calling iterations');
-      return conversationParts.isEmpty
-          ? 'I apologize, but I was unable to complete the task after multiple attempts.'
-          : conversationParts.join('\n');
-    } catch (e) {
       if (_cancelledRequestIds.contains(requestId)) {
-        // Don't show error for cancelled requests
-        rethrow;
+        throw const ConversationCancelledException();
       }
-      LoggerService.error('Error in MCP tool calling: $e', error: e);
-      return 'I apologize, but I encountered an error while using external tools. Error: $e';
+
+      return response;
+    } on ConversationCancelledException {
+      rethrow;
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error generating AI response: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return const ConversationAiResponse(
+        content:
+            'I apologize, but I encountered an error while generating a response. Please try again.',
+      );
     }
+  }
+
+  Future<PromptRequest> _buildConversationPrompt(
+    List<PlatformFile> latestUserAttachments,
+  ) async {
+    final noteBuilder = NotePromptBuilder(DatabaseService());
+    final systemMessage = _buildConversationSystemMessage();
+    final contextMessage = await noteBuilder.buildContextMessage(_notes);
+
+    final conversationMessages = <PromptMessage>[];
+    for (final message in _messages) {
+      final role = message.type == MessageType.user
+          ? PromptRole.user
+          : PromptRole.assistant;
+
+      // Prepend every user message with a timestamp context message.
+      // The timestamp is based on the message's timestamp for KV-cache friendly reuse.
+      if (role == PromptRole.user) {
+        final messageTimeContext = SystemPromptBuilder.formatTimestamp(
+          message.timestamp,
+        );
+        conversationMessages.add(
+          PromptMessage(
+            role: PromptRole.user,
+            content: 'Message created at: $messageTimeContext',
+          ),
+        );
+      }
+
+      final attachments = await _loadConversationAttachments(
+        message,
+        latestUserAttachments,
+      );
+
+      final promptMessage = PromptMessage(
+        role: role,
+        content: message.content,
+        attachments: attachments,
+        metadata: message.metadata,
+      );
+
+      conversationMessages.add(promptMessage);
+
+      if (role == PromptRole.assistant) {
+        final toolCallsWithResults =
+            message.metadata?['tool_calls_with_results'] as List?;
+        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
+          for (final entry in toolCallsWithResults) {
+            final toolCallId = entry['id'];
+            final toolResult = entry['result'] as String? ?? '';
+            conversationMessages.add(
+              PromptMessage(
+                role: PromptRole.tool,
+                content: toolResult,
+                metadata: {
+                  if (toolCallId != null) 'tool_call_id': toolCallId,
+                  ...((entry is Map<String, dynamic>) ? entry : {}),
+                },
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    final contextMessages =
+        (contextMessage.content.trim().isEmpty &&
+            contextMessage.attachments.isEmpty)
+        ? <PromptMessage>[]
+        : [contextMessage];
+
+    return PromptRequest(
+      systemMessage: systemMessage,
+      contextMessages: contextMessages,
+      conversationMessages: conversationMessages,
+    );
+  }
+
+  PromptMessage _buildConversationSystemMessage() {
+    final lines = <String>[
+      'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
+      'Treat all prior messages as immutable history for KV-cache friendly reuse.',
+      'Incorporate note relationships and hierarchies when citing evidence.',
+      'Use your own knowledge to clarify or extend when the notes are insufficient.',
+      'You should format your response as markdown for best reading experience.',
+    ];
+
+    if (_hasAnyTools) {
+      lines.add(
+        'The user has enabled external tools (MCP services or user-defined AI tools). Prefer calling them when they can improve accuracy before responding.',
+      );
+    }
+
+    if (_notes.isEmpty) {
+      lines.add(
+        'No note context is currently attached. Rely on the conversation history.',
+      );
+    }
+
+    final taskContext = lines.join('\n');
+
+    final combinedTools = _buildActiveToolsMap();
+    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+      combinedTools,
+    );
+
+    return SystemPromptBuilder.build(
+      taskContext: '$taskContext\n\n$mcpToolsPrompt',
+      guidelines: [
+        'Reference evidence when drawing conclusions and mention uncertainties.',
+        AIPrompts.mathFormulaGuidelines,
+        AIPrompts.relationshipGuidelines,
+      ],
+      now: _conversationStartTime,
+      needTimeInContext: false, // Precise time comes with user message.
+    );
+  }
+
+  Future<List<PlatformFile>> _loadConversationAttachments(
+    ConversationMessage message,
+    List<PlatformFile> latestUserAttachments,
+  ) async {
+    if (message.type != MessageType.user) {
+      return const [];
+    }
+
+    final isLatestUserMessage =
+        _messages.isNotEmpty && identical(message, _messages.last);
+
+    if (isLatestUserMessage && latestUserAttachments.isNotEmpty) {
+      return Future.wait(latestUserAttachments.map(_normalizePlatformFile));
+    }
+
+    if (message.attachmentPaths.isEmpty) {
+      return const [];
+    }
+
+    final files = <PlatformFile>[];
+    for (final path in message.attachmentPaths) {
+      try {
+        final file = File(path);
+        if (!file.existsSync()) {
+          continue;
+        }
+        final bytes = await file.readAsBytes();
+        files.add(
+          PlatformFile(
+            name: path.split('/').last,
+            path: path,
+            size: bytes.length,
+            bytes: bytes,
+          ),
+        );
+      } catch (e) {
+        LoggerService.warning(
+          'Failed to load conversation attachment $path: $e',
+        );
+      }
+    }
+
+    return files;
+  }
+
+  Future<PlatformFile> _normalizePlatformFile(PlatformFile file) async {
+    if (file.bytes != null) {
+      return file;
+    }
+
+    if (file.path != null) {
+      try {
+        final bytes = await File(file.path!).readAsBytes();
+        return PlatformFile(
+          name: file.name,
+          path: file.path,
+          size: bytes.length,
+          bytes: bytes,
+        );
+      } catch (e) {
+        LoggerService.warning(
+          'Failed to normalize attachment ${file.name}: $e',
+        );
+      }
+    }
+
+    return file;
   }
 
   Future<void> _attachFiles() async {
@@ -883,7 +1024,7 @@ You may supplement the information from the notes with your own knowledge to pro
             final file = _attachedFiles[index];
             return Container(
               margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(4),
@@ -910,20 +1051,9 @@ You may supplement the information from the notes with your own knowledge to pro
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      size: 16,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                    onPressed: () => _removeAttachedFile(index),
-                    constraints: const BoxConstraints(
-                      minWidth: 24,
-                      minHeight: 24,
-                    ),
-                    padding: EdgeInsets.zero,
+                  GestureDetector(
+                    onTap: () => _removeAttachedFile(index),
+                    child: Icon(Icons.close, size: 16, color: Colors.red[600]),
                   ),
                 ],
               ),
@@ -936,6 +1066,11 @@ You may supplement the information from the notes with your own knowledge to pro
 
   Widget _buildMcpSelectionSection() {
     final l10n = AppLocalizations.of(context)!;
+    final combinedTools = _buildActiveToolsMap();
+    final activeMcpCount = _selectedMcpEndpointIds.length;
+    final activeLocalCount = _selectedAiToolServices.length;
+    final totalActiveCount = activeMcpCount + activeLocalCount;
+    final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -969,7 +1104,7 @@ You may supplement the information from the notes with your own knowledge to pro
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  l10n.mcpTools,
+                  headerTitle,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(
@@ -977,27 +1112,11 @@ You may supplement the information from the notes with your own knowledge to pro
                     ).colorScheme.onSurface.withOpacity(0.8),
                   ),
                 ),
-                if (_selectedMcpEndpointIds.isNotEmpty) ...[
+                if (totalActiveCount > 0) ...[
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_selectedMcpEndpointIds.length} ${l10n.active}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
+                  ActiveToolCountBadge(
+                    count: totalActiveCount,
+                    label: l10n.active,
                   ),
                 ],
                 const Spacer(),
@@ -1018,6 +1137,34 @@ You may supplement the information from the notes with your own knowledge to pro
           ),
           // Expandable content
           if (_isMcpPanelExpanded) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.cloud,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  l10n.mcpTools,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.8),
+                      ),
+                ),
+                const Spacer(),
+                if (activeMcpCount > 0)
+                  ActiveToolCountBadge(
+                    count: activeMcpCount,
+                    label: l10n.active,
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1051,11 +1198,69 @@ You may supplement the information from the notes with your own knowledge to pro
                 );
               }).toList(),
             ),
-            if (_mcpToolsByEndpoint.isNotEmpty) ...[
+            if (_aiToolBundles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    Icons.smart_toy,
+                    size: 16,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    l10n.aiTools,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (activeLocalCount > 0)
+                    ActiveToolCountBadge(
+                      count: activeLocalCount,
+                      label: l10n.active,
+                    ),
+                ],
+              ),
               const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _aiToolBundles.entries.map((entry) {
+                  final serviceName = entry.key;
+                  final bundle = entry.value;
+                  final selected = _selectedAiToolServices.contains(
+                    serviceName,
+                  );
+                  return FilterChip(
+                    label: Text(bundle.displayName),
+                    selected: selected,
+                    onSelected: (value) {
+                      _toggleAiToolService(serviceName, value);
+                    },
+                    avatar: Icon(
+                      Icons.smart_toy,
+                      size: 16,
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            if (combinedTools.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Text(
                 l10n.toolsAvailable(
-                  _mcpToolsByEndpoint.values.fold<int>(
+                  combinedTools.values.fold<int>(
                     0,
                     (sum, tools) => sum + tools.length,
                   ),
@@ -1072,53 +1277,6 @@ You may supplement the information from the notes with your own knowledge to pro
         ],
       ),
     );
-  }
-
-  Future<void> _addResponseToNote(String responseContent) async {
-    try {
-      // Show the unified add note dialog
-      final createdNotes = await AddNoteDialog.show(
-        context: context,
-        content: responseContent,
-        contextNotes: _notes,
-      );
-
-      // If notes were created through AI, show success message with view action
-      if (createdNotes != null && createdNotes.isNotEmpty && mounted) {
-        final firstNote = createdNotes.first;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              createdNotes.length == 1
-                  ? 'Note "${firstNote.title}" created successfully'
-                  : '${createdNotes.length} notes created successfully',
-            ),
-            backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () {
-                // Navigate to the first created note
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => NoteDetailScreen(note: firstNote),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      LoggerService.error('Error creating note from AI response: $e', error: e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating note: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   void _scrollToBottom() {
@@ -1338,21 +1496,6 @@ You may supplement the information from the notes with your own knowledge to pro
     );
   }
 
-  Future<void> _removeNote(Note note) async {
-    if (_conversation == null) {
-      setState(() {
-        _notes.removeWhere((n) => n.id == note.id);
-      });
-      return;
-    }
-    await _conversationService.removeNotesFromConversation(_conversation!.id, [
-      note.id,
-    ]);
-    setState(() {
-      _notes.removeWhere((n) => n.id == note.id);
-    });
-  }
-
   Future<void> _clearAllNotes() async {
     if (_notes.isEmpty) return;
 
@@ -1410,9 +1553,16 @@ You may supplement the information from the notes with your own knowledge to pro
                 _startNewConversation();
               } else if (value == 'add_tags') {
                 _showConversationTagsDialog();
+              } else if (value == 'open_immersive') {
+                _openInImmersiveMode();
               }
             },
             itemBuilder: (context) => [
+              if (_notes.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'open_immersive',
+                  child: Text(l10n.immersiveMode),
+                ),
               if (_conversation != null)
                 PopupMenuItem<String>(
                   value: 'add_tags',
@@ -1472,21 +1622,15 @@ You may supplement the information from the notes with your own knowledge to pro
                             child: Chip(
                               label: Text(
                                 tag,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontSize: 11,
-                                      height: 1.0,
-                                    ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontSize: 11, height: 1.0),
                               ),
                               deleteIcon: Icon(
                                 Icons.close,
                                 size: 12,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.7),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.7),
                               ),
                               onDeleted: () => _removeTag(tag),
                               visualDensity: VisualDensity.compact,
@@ -1535,66 +1679,122 @@ You may supplement the information from the notes with your own knowledge to pro
                 ),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    enabled: !_isSending || _isAborting,
-                    decoration: InputDecoration(
-                      hintText: _isAborting
-                          ? l10n.cancellingRequest
-                          : l10n.typeYourMessage,
-                      border: const OutlineInputBorder(),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            onPressed: _isSending ? null : _attachFiles,
-                            tooltip: l10n.attachFiles,
+                _buildToolExecutionIndicator(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        enabled: !_isSending || _isAborting,
+                        decoration: InputDecoration(
+                          hintText: _isAborting
+                              ? l10n.cancellingRequest
+                              : l10n.typeYourMessage,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.attach_file),
+                                onPressed: _isSending ? null : _attachFiles,
+                                tooltip: l10n.attachFiles,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.camera_alt),
+                                onPressed: _isSending ? null : _captureImage,
+                                tooltip: l10n.takePhotoAttachment,
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.camera_alt),
-                            onPressed: _isSending ? null : _captureImage,
-                            tooltip: l10n.takePhotoAttachment,
-                          ),
-                        ],
+                        ),
+                        minLines: 1,
+                        maxLines: 10,
+                        onSubmitted: (_) => _isSending ? null : _sendMessage(),
                       ),
                     ),
-                    maxLines: null,
-                    onSubmitted: (_) => _isSending ? null : _sendMessage(),
-                  ),
+                    const SizedBox(width: 8),
+                    if (_isSending && !_isAborting)
+                      _buildAbortButtonWithSpinner()
+                    else if (_isAborting)
+                      IconButton(
+                        onPressed: null,
+                        icon: const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        tooltip: 'Cancelling...',
+                      )
+                    else
+                      IconButton(
+                        onPressed: _isSending ? null : _sendMessage,
+                        icon: _isSending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                if (_isSending && !_isAborting)
-                  _buildAbortButtonWithSpinner()
-                else if (_isAborting)
-                  IconButton(
-                    onPressed: null,
-                    icon: const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    tooltip: 'Cancelling...',
-                  )
-                else
-                  IconButton(
-                    onPressed: _isSending ? null : _sendMessage,
-                    icon: _isSending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildToolExecutionIndicator() {
+    final theme = Theme.of(context);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1.0,
+          child: child,
+        ),
+      ),
+      child: _toolExecutionStatus == null
+          ? const SizedBox.shrink(key: ValueKey('tool-status-empty'))
+          : Padding(
+              key: ValueKey(_toolExecutionStatus),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _toolExecutionStatus!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -1681,6 +1881,33 @@ You may supplement the information from the notes with your own knowledge to pro
                   _formatTimestamp(message.timestamp),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (isUser) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit,
+                      size: 16,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                    onPressed: () {
+                      _messageController.text = message.content;
+                      // Scroll to bottom to show the input field
+                      _scrollToBottom();
+                      // Focus the text field after a short delay to ensure it's visible
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        _messageFocusNode.requestFocus();
+                      });
+                    },
+                    tooltip: 'Use this message',
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
                 if (!isUser) ...[
                   const SizedBox(width: 8),
                   IconButton(
@@ -1728,63 +1955,28 @@ You may supplement the information from the notes with your own knowledge to pro
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  // Bottom-left subtle note action app icon button
-                  IconButton(
-                    icon: Icon(
-                      Icons.apps_outlined,
-                      size: 18,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    tooltip: 'Run Note Action App',
-                    onPressed: () => _openNoteActionAppsForContent(message),
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    padding: EdgeInsets.zero,
+              ChatMessageActionRow(
+                leading: IconButton(
+                  icon: Icon(
+                    Icons.apps_outlined,
+                    size: 18,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
                   ),
-                  const Spacer(),
-                  // Existing right-side actions
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: message.content));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.messageCopiedToClipboard),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: Text(l10n.copy),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                  tooltip: 'Run Note Action App',
+                  onPressed: () => _openNoteActionAppsForContent(message),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
                   ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _addResponseToNote(message.content),
-                    icon: const Icon(Icons.note_add, size: 16),
-                    label: Text(l10n.addToNote),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
+                  padding: EdgeInsets.zero,
+                ),
+                onCopy: () => copyContentToClipboard(message.content),
+                onAddNote: () => handleAddContentToNote(
+                  content: message.content,
+                  contextNotes: _notes,
+                ),
               ),
             ],
           ],
@@ -1883,6 +2075,11 @@ You may supplement the information from the notes with your own knowledge to pro
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _messageFocusNode.dispose();
+    for (final runtime in _aiToolRuntimes.values) {
+      runtime.dispose();
+    }
+    _aiToolRuntimes.clear();
     super.dispose();
   }
 }

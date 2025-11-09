@@ -1034,6 +1034,12 @@ abstract class AppLocalizations {
   /// **'Processing your request...'**
   String get processingRequest;
 
+  /// No description provided for @executingToolStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Executing tool: {service} -> {tool}'**
+  String executingToolStatus(Object service, Object tool);
+
   /// No description provided for @errorProcessingRequest.
   ///
   /// In en, this message translates to:
@@ -1946,6 +1952,12 @@ abstract class AppLocalizations {
   /// **'Share Notes'**
   String get shareNotes;
 
+  /// No description provided for @shareAsPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Share as PDF'**
+  String get shareAsPdf;
+
   /// No description provided for @shareAsText.
   ///
   /// In en, this message translates to:
@@ -1976,6 +1988,12 @@ abstract class AppLocalizations {
   /// **'Choose how you want to share the selected notes'**
   String get shareDialogDescription;
 
+  /// No description provided for @notesToShare.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{Note} other{Notes}} to share'**
+  String notesToShare(int count);
+
   /// No description provided for @textCopiedToClipboard.
   ///
   /// In en, this message translates to:
@@ -1986,13 +2004,43 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Error copying to clipboard: {error}'**
-  String errorCopyingToClipboard(Object error);
+  String errorCopyingToClipboard(String error);
 
   /// No description provided for @errorSharingText.
   ///
   /// In en, this message translates to:
   /// **'Error sharing text: {error}'**
-  String errorSharingText(Object error);
+  String errorSharingText(String error);
+
+  /// No description provided for @pdfSavedToCache.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF saved to cache: {fileName}'**
+  String pdfSavedToCache(String fileName);
+
+  /// No description provided for @errorGeneratingPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Error generating PDF: {error}'**
+  String errorGeneratingPdf(String error);
+
+  /// No description provided for @attachmentMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment not found.'**
+  String get attachmentMissing;
+
+  /// No description provided for @attachmentUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment unavailable'**
+  String get attachmentUnavailable;
+
+  /// No description provided for @pdfPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF preview not available. Use the saved attachment to view.'**
+  String get pdfPreviewUnavailable;
 
   /// No description provided for @selectFileLocation.
   ///
@@ -4112,6 +4160,66 @@ abstract class AppLocalizations {
   /// **'This type of app will operate specifically on pre-selected notes'**
   String get noteActionAppSubtitle;
 
+  /// No description provided for @appType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get appType;
+
+  /// No description provided for @appTypeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select how this app should behave'**
+  String get appTypeHint;
+
+  /// No description provided for @appTypeNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get appTypeNormal;
+
+  /// No description provided for @appTypeNoteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Action'**
+  String get appTypeNoteAction;
+
+  /// No description provided for @appTypeAiTool.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Tool'**
+  String get appTypeAiTool;
+
+  /// No description provided for @aiToolAppSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Expose custom JavaScript functions that the AI can call or you can test in a playground'**
+  String get aiToolAppSubtitle;
+
+  /// No description provided for @aiTools.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Tools'**
+  String get aiTools;
+
+  /// No description provided for @aiToolStartError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start AI tool \"{appName}\": {error}'**
+  String aiToolStartError(String appName, String error);
+
+  /// No description provided for @aiToolMissingRevision.
+  ///
+  /// In en, this message translates to:
+  /// **'This AI tool does not have a selected revision yet.'**
+  String get aiToolMissingRevision;
+
+  /// No description provided for @aiToolDefinitionParseError.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected revision does not contain a valid AI tool specification.'**
+  String get aiToolDefinitionParseError;
+
   /// No description provided for @imageAttachmentsOptional.
   ///
   /// In en, this message translates to:
@@ -4196,6 +4304,90 @@ abstract class AppLocalizations {
   /// **'Type your message...'**
   String get typeYourMessage;
 
+  /// No description provided for @immersiveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Immersive Mode'**
+  String get immersiveMode;
+
+  /// No description provided for @openInChatMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Chat Mode'**
+  String get openInChatMode;
+
+  /// No description provided for @aiChat.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Chat'**
+  String get aiChat;
+
+  /// No description provided for @outline.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline'**
+  String get outline;
+
+  /// No description provided for @expand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
+
+  /// No description provided for @collapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get collapse;
+
+  /// No description provided for @annotate.
+  ///
+  /// In en, this message translates to:
+  /// **'Annotate'**
+  String get annotate;
+
+  /// No description provided for @askAiHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask the AI about this note...'**
+  String get askAiHint;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get send;
+
+  /// No description provided for @startConversationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start by asking the AI about your note.'**
+  String get startConversationHint;
+
+  /// No description provided for @unsupportedAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported attachment type ({type}).'**
+  String unsupportedAttachment(String type);
+
+  /// No description provided for @openAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Open attachment'**
+  String get openAttachment;
+
+  /// No description provided for @failedToLoadAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load attachment.'**
+  String get failedToLoadAttachment;
+
+  /// No description provided for @failedToOpenAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to open attachment: {error}'**
+  String failedToOpenAttachment(String error);
+
   /// No description provided for @cancellingRequest.
   ///
   /// In en, this message translates to:
@@ -4213,6 +4405,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'MCP Tools'**
   String get mcpTools;
+
+  /// No description provided for @mcpAndLocalTools.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP & Local Tools'**
+  String get mcpAndLocalTools;
 
   /// No description provided for @active.
   ///

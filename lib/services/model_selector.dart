@@ -5,6 +5,7 @@ import 'models/gemini_model.dart';
 import 'models/openai_model.dart';
 import 'model_storage_service.dart';
 import 'logger_service.dart';
+import 'prompts/prompt_models.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
 
@@ -117,8 +118,7 @@ class ModelSelector {
 
   /// Generate text using messages array (for conversations)
   Future<String> generateWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
@@ -131,7 +131,28 @@ class ModelSelector {
 
     return await _currentModel!.generateWithMessages(
       messages,
-      attachedFiles,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  Future<String> generateFromPrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) async {
+    if (_currentModel == null) {
+      throw Exception('No model is currently selected. Please select a model first.');
+    }
+
+    return await _currentModel!.generateFromPrompt(
+      request,
       temperature: temperature,
       topK: topK,
       topP: topP,
@@ -167,8 +188,7 @@ class ModelSelector {
   }
 
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
     double? temperature,
     int? topK,
@@ -182,7 +202,6 @@ class ModelSelector {
 
     return await _currentModel!.generateWithToolsAndMessages(
       messages,
-      attachedFiles,
       tools,
       temperature: temperature,
       topK: topK,

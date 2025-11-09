@@ -154,11 +154,14 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
     final codeBytes = utf8.encode(pinnedRevision.appCode);
     final base64Code = base64Encode(codeBytes);
 
+    // Convert app type enum to string
+    final appTypeString = _appTypeToString(app.type);
+
     // Build the YAML content
     final yamlLines = <String>[
       'name: ${app.name}',
       'uuid: ${app.uuid}',
-      'note_action: ${app.type == UserAppType.noteAction}',
+      'app_type: $appTypeString',
       'description: ${app.description}',
       'author: ${app.author}',
       'license: ${app.license}',
@@ -172,6 +175,18 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
     yamlLines.add('code: $base64Code');
 
     return yamlLines.join('\n');
+  }
+
+  /// Converts UserAppType enum to string representation for YAML export.
+  String _appTypeToString(UserAppType type) {
+    switch (type) {
+      case UserAppType.normal:
+        return 'normal';
+      case UserAppType.noteAction:
+        return 'note_action';
+      case UserAppType.aiTool:
+        return 'ai_tool';
+    }
   }
 
   Future<void> _saveYamlFile(String content, String appName) async {

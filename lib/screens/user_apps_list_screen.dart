@@ -248,7 +248,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
         leading: CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primary,
           child: Icon(
-            app.type == UserAppType.noteAction ? Icons.apps : Icons.web,
+            _getAppIcon(app.type),
             color: Theme.of(context).colorScheme.onPrimary,
           ),
         ),
@@ -275,6 +275,13 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(app.description),
+            const SizedBox(height: 4),
+            Text(
+              _getAppTypeLabel(l10n, app.type),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+            ),
             const SizedBox(height: 4),
             Text(
               '${l10n.created}: ${_formatDate(app.createdAt)}',
@@ -613,6 +620,28 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
         ],
       ),
     );
+  }
+
+  IconData _getAppIcon(UserAppType type) {
+    switch (type) {
+      case UserAppType.noteAction:
+        return Icons.apps;
+      case UserAppType.aiTool:
+        return Icons.smart_toy;
+      case UserAppType.normal:
+        return Icons.web;
+    }
+  }
+
+  String _getAppTypeLabel(AppLocalizations l10n, UserAppType type) {
+    switch (type) {
+      case UserAppType.noteAction:
+        return l10n.appTypeNoteAction;
+      case UserAppType.aiTool:
+        return l10n.appTypeAiTool;
+      case UserAppType.normal:
+        return l10n.appTypeNormal;
+    }
   }
 
   String _formatDate(DateTime date) {

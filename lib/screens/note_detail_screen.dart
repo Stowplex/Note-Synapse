@@ -28,6 +28,7 @@ import '../services/conversation_service.dart';
 import '../models/conversation.dart';
 import 'conversation_chat_screen.dart';
 import 'conversation_tree_screen.dart';
+import 'immersive_note_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -285,11 +286,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     tooltip: 'Run Note Action App',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.share),
-                    onPressed: _shareNote,
+                    icon: const Icon(Icons.chrome_reader_mode),
+                    tooltip: l10n.immersiveMode,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ImmersiveNoteScreen(
+                            notes: [currentNote],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   PopupMenuButton(
                     itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.share),
+                            const SizedBox(width: 8),
+                            Text(l10n.shareNote),
+                          ],
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'delete',
                         child: Row(
@@ -353,7 +373,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                     ],
                     onSelected: (value) {
-                      if (value == 'delete') {
+                      if (value == 'share') {
+                        _shareNote();
+                      } else if (value == 'delete') {
                         _deleteNote();
                       } else if (value == 'convert') {
                         _convertNoteType();

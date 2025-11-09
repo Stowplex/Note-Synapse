@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
+import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -99,9 +100,27 @@ class OpenAIModel implements AIModel {
   }
 
   @override
+  Future<String> generateFromPrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) {
+    return generateWithMessages(
+      request.buildFullMessageList(),
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  @override
   Future<String> generateWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
@@ -112,7 +131,7 @@ class OpenAIModel implements AIModel {
       await initialize(config: _config);
 
       // Convert messages array to OpenAI format
-      final openaiMessages = await _convertMessagesToOpenAIFormat(messages, attachedFiles);
+      final openaiMessages = await _convertMessagesToOpenAIFormat(messages);
 
       final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
@@ -154,8 +173,13 @@ class OpenAIModel implements AIModel {
 
       // Add tools/functions to request body
       if (tools.isNotEmpty) {
-        requestBody['functions'] = tools;
-        requestBody['function_call'] = 'auto';
+        requestBody['tools'] = tools
+            .map((tool) => {
+                  'type': 'function',
+                  'function': tool,
+                })
+            .toList();
+        requestBody['tool_choice'] = 'auto';
       }
 
       return await _makeOpenAiRequestWithTools(
@@ -167,8 +191,7 @@ class OpenAIModel implements AIModel {
 
   @override
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
     double? temperature,
     int? topK,
@@ -180,7 +203,7 @@ class OpenAIModel implements AIModel {
       await initialize(config: _config);
 
       // Convert messages array to OpenAI format
-      final openaiMessages = await _convertMessagesToOpenAIFormat(messages, attachedFiles);
+      final openaiMessages = await _convertMessagesToOpenAIFormat(messages);
 
       final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
@@ -191,8 +214,13 @@ class OpenAIModel implements AIModel {
 
       // Add tools/functions to request body
       if (tools.isNotEmpty) {
-        requestBody['functions'] = tools;
-        requestBody['function_call'] = 'auto';
+        requestBody['tools'] = tools
+            .map((tool) => {
+                  'type': 'function',
+                  'function': tool,
+                })
+            .toList();
+        requestBody['tool_choice'] = 'auto';
       }
 
       return await _makeOpenAiRequestWithTools(
@@ -207,66 +235,38 @@ class OpenAIModel implements AIModel {
   /// Attachments are added to the first user message (documents should only be attached once)
   /// Today's context is added to the last user message (like Gemini)
   Future<List<Map<String, dynamic>>> _convertMessagesToOpenAIFormat(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
   ) async {
     final openaiMessages = <Map<String, dynamic>>[];
-    final todayContext = AIModel.getTodayContext();
-    bool filesAttached = false;
-    
-    // Find the index of the last user message first
-    int lastUserMessageIndex = -1;
-    for (int i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]['role'] == 'user') {
-        lastUserMessageIndex = i;
-        break;
-      }
-    }
-    
-    for (int i = 0; i < messages.length; i++) {
-      final msg = messages[i];
-      final role = msg['role'] as String;
-      final content = msg['content'] as String;
-      
-      // Determine if this is the first user message (where we attach files)
-      final isFirstUserMessage = role == 'user' && !filesAttached;
-      // Determine if this is the last user message (where we add todayContext)
-      final isLastUserMessage = role == 'user' && i == lastUserMessageIndex;
-      
-      if (role == 'system') {
-        // System messages are supported by OpenAI
-        openaiMessages.add({
-          'role': 'system',
-          'content': content,
-        });
-      } else if (role == 'user') {
-        // Add attachments to the first user message only (documents should only appear once)
-        if (isFirstUserMessage && attachedFiles.isNotEmpty) {
-          final messageContent = _buildMessageContentWithFiles(
-            content + (isLastUserMessage ? todayContext : ''), 
-            attachedFiles
-          );
+
+    for (final message in messages) {
+      switch (message.role) {
+        case PromptRole.system:
+          openaiMessages.add({
+            'role': 'system',
+            'content': message.content,
+          });
+          break;
+        case PromptRole.user:
+          final content = message.attachments.isEmpty
+              ? message.content
+              : _buildMessageContentWithFiles(message.content, message.attachments);
+
           openaiMessages.add({
             'role': 'user',
-            'content': messageContent,
-          });
-          filesAttached = true; // Mark that files have been attached
-        } else {
-          openaiMessages.add({
-            'role': 'user',
-            'content': content + (isLastUserMessage ? todayContext : ''),
-          });
-        }
-      } else if (role == 'assistant') {
-        // Assistant messages are supported by OpenAI
-        // Check if this assistant message has tool calls with results (for ID mapping)
-        final toolCallsWithResults = msg['tool_calls_with_results'] as List?;
-        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
-          // Use the stored tool call IDs from the conversation
-          openaiMessages.add({
-            'role': 'assistant',
             'content': content,
-            'tool_calls': toolCallsWithResults.map((tcwr) {
+          });
+          break;
+        case PromptRole.assistant:
+          final entry = <String, dynamic>{
+            'role': 'assistant',
+            'content': message.content,
+          };
+
+          final toolCallsWithResults =
+              message.metadata?['tool_calls_with_results'] as List?;
+          if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
+            entry['tool_calls'] = toolCallsWithResults.map((tcwr) {
               final fc = tcwr['function_call'] as Map<String, dynamic>;
               return {
                 'id': tcwr['id'] as String,
@@ -276,32 +276,27 @@ class OpenAIModel implements AIModel {
                   'arguments': jsonEncode(fc['args'] ?? {}),
                 }
               };
-            }).toList(),
-          });
-        } else {
-          // Regular assistant message
-          openaiMessages.add({
-            'role': 'assistant',
-            'content': content,
-          });
-        }
-      } else if (role == 'tool') {
-        // Tool role is for function call results in OpenAI
-        // Must include tool_call_id to match the assistant's tool_call
-        final toolCallId = msg['tool_call_id'] as String?;
-        if (toolCallId != null) {
-          openaiMessages.add({
-            'role': 'tool',
-            'tool_call_id': toolCallId,
-            'content': content,
-          });
-        } else {
-          // Fallback if tool_call_id is missing
-          LoggerService.warning('Tool message missing tool_call_id, skipping');
-        }
+            }).toList();
+          }
+
+          openaiMessages.add(entry);
+          break;
+        case PromptRole.tool:
+          final toolCallId = message.metadata?['tool_call_id'] as String? ??
+              message.metadata?['id'] as String?;
+          if (toolCallId != null) {
+            openaiMessages.add({
+              'role': 'tool',
+              'tool_call_id': toolCallId,
+              'content': message.content,
+            });
+          } else {
+            LoggerService.warning('Tool message missing tool_call_id, skipping');
+          }
+          break;
       }
     }
-    
+
     return openaiMessages;
   }
 
@@ -534,15 +529,16 @@ class OpenAIModel implements AIModel {
       final data = jsonDecode(response.body);
       if (data['choices'] != null && data['choices'].isNotEmpty) {
         final choice = data['choices'][0];
-        final content = choice['message']['content'];
+        final rawContent = choice['message']['content'];
+        final textContent = _extractTextContent(rawContent);
 
-        if (content != null) {
+        if (textContent != null && textContent.isNotEmpty) {
           LoggerService.debug('OpenAI API request completed successfully', error: {
-            'responseLength': content.length,
+            'responseLength': textContent.length,
             'requestId': requestId,
             'duration': '${duration.inMilliseconds}ms',
           });
-          return content;
+          return textContent;
         }
       }
       LoggerService.error('No content in OpenAI API response', error: {
@@ -602,33 +598,70 @@ class OpenAIModel implements AIModel {
         final choice = data['choices'][0];
         final message = choice['message'];
 
-        // Check for function call
+        // Check for tool/function call (new OpenAI API)
+        final toolCalls = message['tool_calls'] as List?;
         final functionCall = message['function_call'];
-        String? textContent = message['content'];
+        final rawContent = message['content'];
+        String? textContent = _extractTextContent(rawContent);
+
+        if (toolCalls != null && toolCalls.isNotEmpty) {
+          LoggerService.debug('OpenAI API request completed with tool calls', error: {
+            'toolCalls': toolCalls.map((tc) => tc['function']?['name']).toList(),
+            'requestId': requestId,
+            'duration': '${duration.inMilliseconds}ms',
+          });
+
+          final parsedCalls = toolCalls.map((tc) {
+            final fn = tc['function'] as Map<String, dynamic>? ?? const {};
+            final argsText = fn['arguments'] as String? ?? '{}';
+            Map<String, dynamic> parsedArgs;
+            try {
+              parsedArgs = jsonDecode(argsText) as Map<String, dynamic>;
+            } catch (_) {
+              parsedArgs = {};
+            }
+            return {
+              'name': fn['name'],
+              'args': parsedArgs,
+            };
+          }).toList();
+
+          return {
+            'text': textContent,
+            'function_calls': parsedCalls,
+            'raw_data': data,
+          };
+        }
 
         if (functionCall != null) {
-          // OpenAI returns function call in a different format than Gemini
-          LoggerService.debug('OpenAI API request completed with function call', error: {
+          // Legacy function_call fallback
+          LoggerService.debug('OpenAI API request completed with legacy function call', error: {
             'functionName': functionCall['name'],
             'requestId': requestId,
             'duration': '${duration.inMilliseconds}ms',
           });
+
+          Map<String, dynamic> parsedArgs;
+          try {
+            parsedArgs = jsonDecode(functionCall['arguments']) as Map<String, dynamic>;
+          } catch (_) {
+            parsedArgs = {};
+          }
 
           return {
             'text': textContent,
             'function_calls': [
               {
                 'name': functionCall['name'],
-                'args': jsonDecode(functionCall['arguments']),
+                'args': parsedArgs,
               }
             ],
             'raw_data': data,
           };
         }
 
-        // No function call, just text response
-        if (textContent != null) {
-          LoggerService.debug('OpenAI API request completed successfully', error: {
+        if (textContent != null && textContent.isNotEmpty) {
+          LoggerService.debug('OpenAI API request completed with text response', error: {
             'responseLength': textContent.length,
             'requestId': requestId,
             'duration': '${duration.inMilliseconds}ms',
@@ -657,5 +690,50 @@ class OpenAIModel implements AIModel {
       throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
     }
   }
+}
+
+String? _extractTextContent(dynamic content) {
+  if (content == null) {
+    return null;
+  }
+
+  if (content is String) {
+    return content;
+  }
+
+  if (content is List) {
+    final buffer = StringBuffer();
+    for (final part in content) {
+      if (part is Map<String, dynamic>) {
+        final type = part['type']?.toString();
+        if (type == null) {
+          final text = part['text']?.toString();
+          if (text != null) {
+            buffer.write(text);
+          }
+          continue;
+        }
+
+        if (type == 'text' || type == 'output_text') {
+          final text = part['text']?.toString();
+          if (text != null) {
+            buffer.write(text);
+          }
+        } else if (type == 'message' && part['content'] != null) {
+          final nested = _extractTextContent(part['content']);
+          if (nested != null) {
+            buffer.write(nested);
+          }
+        }
+      } else if (part is String) {
+        buffer.write(part);
+      }
+    }
+
+    final result = buffer.toString();
+    return result.isEmpty ? null : result;
+  }
+
+  return content.toString();
 }
 

@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
-import '../models/user_app.dart';
 import '../models/app_revision.dart';
+import '../models/note.dart';
+import '../models/user_app.dart';
 import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'prompts/note_prompt_builder.dart';
 import 'user_app_library_service.dart';
 
 class UserAppService {
@@ -172,11 +174,20 @@ class UserAppService {
     UserAppType type = UserAppType.normal,
     String? userPrompt,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Generate the app using AI
-      final aiResponse = await _generateAppWithAI(name, description, steps, type, attachmentPaths: attachmentPaths, libraries: libraries);
+      final aiResponse = await _generateAppWithAI(
+        name,
+        description,
+        steps,
+        type,
+        attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
+        libraries: libraries,
+      );
       
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
@@ -312,6 +323,7 @@ class UserAppService {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
@@ -324,6 +336,7 @@ class UserAppService {
         editSuggestion,
         originalApp.type,
         attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
         libraries: libraries,
       );
       
@@ -396,29 +409,31 @@ class UserAppService {
   }
   
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(String name, String description, List<String> steps, UserAppType type, {List<String>? attachmentPaths, List<UserAppLibraryInfo>? libraries}) async {
+  static Future<String> _generateAppWithAI(
+    String name,
+    String description,
+    List<String> steps,
+    UserAppType type, {
+    List<String>? attachmentPaths,
+    List<Note>? contextNotes,
+    List<UserAppLibraryInfo>? libraries,
+  }) async {
     try {
-      final prompt = _buildAppGenerationPrompt(name, description, steps, type, libraries: libraries);
-      
-      // Convert attachment paths to PlatformFile objects for the AI service
-      List<PlatformFile>? attachedFiles;
-      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
-        attachedFiles = [];
-        for (final path in attachmentPaths) {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final fileName = path.split('/').last;
-            attachedFiles.add(PlatformFile(
-              name: fileName,
-              size: bytes.length,
-              bytes: bytes,
-              path: path,
-            ));
-          }
-        }
-      }
-      
+      final noteContextPayload = await _buildNoteContextPayload(contextNotes);
+      final prompt = _buildAppGenerationPrompt(
+        name,
+        description,
+        steps,
+        type,
+        libraries: libraries,
+        noteContext: noteContextPayload?.text,
+      );
+
+      final attachedFiles = await _prepareAttachments(
+        attachmentPaths: attachmentPaths,
+        noteAttachments: noteContextPayload?.attachments,
+      );
+
       final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -436,9 +451,11 @@ class UserAppService {
     String editSuggestion,
     UserAppType type, {
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
+      final noteContextPayload = await _buildNoteContextPayload(contextNotes);
       final librariesSection = libraries != null && libraries.isNotEmpty ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
@@ -446,6 +463,15 @@ ${libraries.map((lib) => '''
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
 ''' : '';
+
+      final noteContextSection = (noteContextPayload?.text?.trim().isNotEmpty ?? false)
+          ? '''
+Additional Note Context:
+${noteContextPayload!.text}
+
+Use these notes (including linked relationships) to ground the edits and incorporate relevant data or behaviours.
+'''
+          : '';
 
       final prompt = '''
 Edit the following HTML application based on the user's suggestion:
@@ -455,6 +481,7 @@ Description: $description
 Steps: ${steps.join(', ')}
 
 $librariesSection
+$noteContextSection
 
 Original HTML:
 $originalHtml
@@ -626,12 +653,35 @@ IMPORTANT - REQUIREMENTS:
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
          * attachments: array of mixed attachment types (strings or objects):
            - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+           - synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
            - Base64 data: object with:
              * type: 'base64' (required)
              * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.proxyFetch(url: string, options?: object) - Perform an HTTP request via the Synapse backend proxy to bypass browser CORS restrictions (supports GET and POST).
+     Options format (all fields optional):
+       * method: string - HTTP method (defaults to 'GET'; set to 'POST' when sending data)
+       * headers: object - Key/value pairs of request headers (values must be strings)
+       * body: string - Raw text payload (used when `json` is not provided)
+       * json: any - JavaScript object/array automatically JSON-encoded; takes precedence over `body`
+     Response format:
+       {
+         status: 'success' | 'error',
+         statusCode?: number,      // Present when the request reached the server
+         error?: string,           // Present when status === 'error'
+         content?: {
+           mime: string,           // MIME type returned by the server
+           data: string            // UTF-8 text when mime starts with 'text/', otherwise base64 encoded string
+         }
+       }
+     Usage notes:
+       * Passing a plain headers object as the second argument is still supported; it will be treated as `{headers: ...}`.
+       * When sending JSON, the Content-Type defaults to `application/json; charset=utf-8` unless you override it.
+       * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
+       * Always handle the possibility of `status === 'error'`.
+       * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format: 
@@ -641,6 +691,11 @@ IMPORTANT - REQUIREMENTS:
             mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
             error?: string      // Optional, present when failed. The error message.
         }
+  - Synapse.saveTemp(data: object, mimeType: string) - Store temporary content in the cache and receive a synapsetemp:/// URI
+    Param format:
+      * data: object with either `text` (UTF-8 string) or `binary` (base64 string, data URI supported)
+      * mimeType: string - MIME type describing the data (e.g., 'image/png')
+    Response format: {success: boolean, uri?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -652,6 +707,7 @@ IMPORTANT - REQUIREMENTS:
          * isCompleted: boolean (optional, default: false) - Completion status
        - attachments: array (optional) - Array of attachment objects:
          * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+        * synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
          * Base64: object with:
            - type: 'base64' (required)
            - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
@@ -702,6 +758,19 @@ IMPORTANT - REQUIREMENTS:
        attachments: ['/path/to/existing/file.pdf']
      }
    ]);
+
+  // Save a note using a temporary attachment created at runtime
+  const tempImage = await Synapse.saveTemp({ binary: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...' }, 'image/png');
+  if (tempImage.success) {
+    await Synapse.saveNotes([
+      {
+        title: 'Whiteboard Snapshot',
+        content: 'Automatically captured whiteboard image',
+        type: 'note',
+        attachments: [tempImage.uri]
+      }
+    ]);
+  }
    
    // Task with base64 attachment
    const result3 = await Synapse.saveNotes([
@@ -757,6 +826,14 @@ IMPORTANT - REQUIREMENTS:
        }
      ]
    });
+
+  // With a temporary file created via Synapse.saveTemp
+  const tempSnapshot = await Synapse.saveTemp({ binary: 'data:audio/mpeg;base64,//uQZAAAAAAAAAAA...' }, 'audio/mpeg');
+  if (tempSnapshot.success) {
+    const resultTemp = await Synapse.chatAI('Transcribe this snippet', {
+      attachments: [tempSnapshot.uri]
+    });
+  }
    
    // WRONG - will cause parameter validation errors:
    // const result3 = await Synapse.chatAI('Test', {
@@ -841,7 +918,7 @@ IMPORTANT - REQUIREMENTS:
 11. Use MathML to display mathematical formulas.
 12. Place adequate console logging to help tracking key steps in the code.
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
 
@@ -867,25 +944,11 @@ Here's the updated application with your requested changes:
 ```
 ''';
       
-      // Convert attachment paths to PlatformFile objects for the AI service
-      List<PlatformFile>? attachedFiles;
-      if (attachmentPaths != null && attachmentPaths.isNotEmpty) {
-        attachedFiles = [];
-        for (final path in attachmentPaths) {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final fileName = path.split('/').last;
-            attachedFiles.add(PlatformFile(
-              name: fileName,
-              size: bytes.length,
-              bytes: bytes,
-              path: path,
-            ));
-          }
-        }
-      }
-      
+      final attachedFiles = await _prepareAttachments(
+        attachmentPaths: attachmentPaths,
+        noteAttachments: noteContextPayload?.attachments,
+      );
+
       final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -895,7 +958,14 @@ Here's the updated application with your requested changes:
   }
   
   // Build the app generation prompt
-  static String _buildAppGenerationPrompt(String name, String description, List<String> steps, UserAppType type, {List<UserAppLibraryInfo>? libraries}) {
+  static String _buildAppGenerationPrompt(
+    String name,
+    String description,
+    List<String> steps,
+    UserAppType type, {
+    List<UserAppLibraryInfo>? libraries,
+    String? noteContext,
+  }) {
     final librariesSection = libraries != null && libraries.isNotEmpty ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
@@ -903,6 +973,15 @@ ${libraries.map((lib) => '''
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
 ''' : '';
+
+    final noteContextSection = (noteContext != null && noteContext.trim().isNotEmpty)
+        ? '''
+Additional Note Context:
+$noteContext
+
+Use these notes (including linked relationships) to shape the app's functionality, data access patterns, and UI examples.
+'''
+        : '';
     
     final basePrompt = '''
 Create a single-page self-contained HTML application based on the following requirements:
@@ -913,6 +992,7 @@ Steps:
 - ${steps.join('\n - ')}
 
 $librariesSection
+$noteContextSection
 
 IMPORTANT - REQUIREMENTS:
 1. The HTML must be completely self-contained with embedded CSS and JavaScript
@@ -935,12 +1015,35 @@ IMPORTANT - REQUIREMENTS:
          * topP: number (double) between 0.0 and 1.0, nucleus sampling parameter (e.g., 0.9)
          * attachments: array of mixed attachment types (strings or objects):
            - File path: string - Path to existing attachment (e.g., '/path/to/file1.pdf')
+          - synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
            - Base64 data: object with:
              * type: 'base64' (required)
              * mimeType: string (required) - MIME type (e.g., 'image/png', 'text/plain')
              * data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
        Example: {temperature: 0.7, topK: 40, topP: 0.9, attachments: ['/path/to/file1.pdf', {type: 'base64', mimeType: 'image/png', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'}]}
      Response format: {success: boolean, response?: string, error?: string}
+   - Synapse.proxyFetch(url: string, options?: object) - Perform an HTTP request via the Synapse backend proxy to bypass browser CORS restrictions (supports GET and POST).
+     Options format (all fields optional):
+       * method: string - HTTP method (defaults to 'GET'; set to 'POST' when sending data)
+       * headers: object - Key/value pairs of request headers (values must be strings)
+       * body: string - Raw text payload (used when `json` is not provided)
+       * json: any - JavaScript object/array automatically JSON-encoded; takes precedence over `body`
+     Response format:
+       {
+         status: 'success' | 'error',
+         statusCode?: number,      // Present when the request reached the server
+         error?: string,           // Present when status === 'error'
+         content?: {
+           mime: string,           // MIME type returned by the server
+           data: string            // UTF-8 text when mime starts with 'text/', otherwise base64 encoded string
+         }
+       }
+     Usage notes:
+       * Passing a plain headers object as the second argument is still supported; it will be treated as `{headers: ...}`.
+       * When sending JSON, the Content-Type defaults to `application/json; charset=utf-8` unless you override it.
+       * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
+       * Always handle the possibility of `status === 'error'`.
+       * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format:
@@ -950,6 +1053,11 @@ IMPORTANT - REQUIREMENTS:
             mimeType?: string,  // Optional, present when successful. The mimetype of the attachment.
             error?: string      // Optional, present when failed. The error message.
         }
+  - Synapse.saveTemp(data: object, mimeType: string) - Store temporary content in the cache and receive a synapsetemp:/// URI
+    Param format:
+      * data: object with either `text` (UTF-8 string) or `binary` (base64 string, data URI supported)
+      * mimeType: string - MIME type describing the data (e.g., 'image/png')
+    Response format: {success: boolean, uri?: string, error?: string}
    - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
      Param format: array of note objects with the following structure:
        - title: string (required) - Note title
@@ -961,6 +1069,7 @@ IMPORTANT - REQUIREMENTS:
          * isCompleted: boolean (optional, default: false) - Completion status
        - attachments: array (optional) - Array of attachment objects:
          * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
+        * synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
          * Base64: object with:
            - type: 'base64' (required)
            - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
@@ -1011,6 +1120,19 @@ IMPORTANT - REQUIREMENTS:
        attachments: ['/path/to/existing/file.pdf']
      }
    ]);
+
+  // Save a note using a temporary attachment created at runtime
+  const tempImage = await Synapse.saveTemp({ binary: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...' }, 'image/png');
+  if (tempImage.success) {
+    await Synapse.saveNotes([
+      {
+        title: 'Whiteboard Snapshot',
+        content: 'Automatically captured whiteboard image',
+        type: 'note',
+        attachments: [tempImage.uri]
+      }
+    ]);
+  }
    
    // Task with base64 attachment
    const result3 = await Synapse.saveNotes([
@@ -1066,6 +1188,14 @@ IMPORTANT - REQUIREMENTS:
        }
      ]
    });
+
+  // With a temporary file created via Synapse.saveTemp
+  const tempSnapshot = await Synapse.saveTemp({ binary: 'data:audio/mpeg;base64,//uQZAAAAAAAAAAA...' }, 'audio/mpeg');
+  if (tempSnapshot.success) {
+    const resultTemp = await Synapse.chatAI('Transcribe this snippet', {
+      attachments: [tempSnapshot.uri]
+    });
+  }
    
    // WRONG - will cause parameter validation errors:
    // const result3 = await Synapse.chatAI('Test', {
@@ -1301,7 +1431,7 @@ Example SQL queries you can use:
 - SELECT * FROM notes WHERE pinned = 1 ORDER BY createdAt DESC
 - SELECT * FROM subnotes WHERE noteId = 'some-note-id' AND isCompleted = 0
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : ''}
+${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
 
 Generate the complete HTML application now.
 
@@ -1327,66 +1457,204 @@ Here's the complete HTML application:
 ```
 ''';
     
-    return basePrompt + librariesSection;
+    return basePrompt;
+  }
+
+  static Future<_NoteContextPayload?> _buildNoteContextPayload(List<Note>? contextNotes) async {
+    if (contextNotes == null || contextNotes.isEmpty) {
+      return null;
+    }
+
+    try {
+      final builder = NotePromptBuilder(DatabaseService());
+      final context = await builder.buildNoteContext(contextNotes);
+      final attachments = await builder.loadNoteAttachments(contextNotes);
+      final formattedContext = context.trim().isEmpty
+          ? null
+          : 'Note context with linked relationships:\n$context';
+
+      return _NoteContextPayload(
+        text: formattedContext,
+        attachments: attachments,
+      );
+    } catch (e) {
+      LoggerService.warning('Failed to build note context for user app prompts: $e');
+      return null;
+    }
+  }
+
+  static Future<List<PlatformFile>?> _prepareAttachments({
+    List<String>? attachmentPaths,
+    List<PlatformFile>? noteAttachments,
+  }) async {
+    final attachments = <PlatformFile>[];
+    final seenKeys = <String>{};
+
+    void addFile(PlatformFile file) {
+      final key = file.path ?? '${file.name}_${file.size}';
+      if (seenKeys.add(key)) {
+        attachments.add(file);
+      }
+    }
+
+    if (noteAttachments != null) {
+      for (final file in noteAttachments) {
+        addFile(file);
+      }
+    }
+
+    if (attachmentPaths != null) {
+      for (final path in attachmentPaths) {
+        try {
+          final file = File(path);
+          if (!await file.exists()) {
+            continue;
+          }
+
+          final bytes = await file.readAsBytes();
+          addFile(
+            PlatformFile(
+              name: path.split('/').last,
+              size: bytes.length,
+              bytes: bytes,
+              path: path,
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning('Failed to read attachment $path: $e');
+        }
+      }
+    }
+
+    return attachments.isEmpty ? null : attachments;
   }
 
   // Get Note Action App specific instructions
   static String _getNoteActionAppInstructions() {
     return '''
-NOTE ACTION APP SPECIFIC INSTRUCTIONS:
-This is a Note Action App that operates on pre-selected notes. The app will receive a list of notes through window.Synapse.Notes.
+ NOTE ACTION APP SPECIFIC INSTRUCTIONS:
+ This is a Note Action App that operates on pre-selected notes. The app will receive a list of notes through window.Synapse.Notes.
 
-IMPORTANT: The window.Synapse.Notes array will be pre-populated with the user's selected notes when the app runs.
+ IMPORTANT: The window.Synapse.Notes array will be pre-populated with the user's selected notes when the app runs.
 
-Note Object Format:
-Each note in window.Synapse.Notes has the following structure:
-{
-  "id": "string",                    // Unique note identifier
-  "title": "string",                 // Note title
-  "content": "string",               // Note content (may contain markdown)
-  "tags": ["string"],                // Array of tag names
-  "createdAt": "ISO8601 string",     // Creation timestamp
-  "updatedAt": "ISO8601 string",     // Last update timestamp
-  "isTask": boolean,                 // Whether this is a task (true) or note (false)
-  "status": "string",                // Task status: "todo", "inProgress", "completed", "cancelled" (only for tasks)
-  "pinned": boolean,                 // Whether the note is pinned
-  "isArchived": boolean,             // Whether the note is archived
-  "attachmentPaths": ["string"]      // Array of file paths to attachments
-}
+ Note Object Format:
+ Each note in window.Synapse.Notes has the following structure:
+ {
+   "id": "string",                    // Unique note identifier
+   "title": "string",                 // Note title
+   "content": "string",               // Note content (may contain markdown)
+   "tags": ["string"],                // Array of tag names
+   "createdAt": "ISO8601 string",     // Creation timestamp
+   "updatedAt": "ISO8601 string",     // Last update timestamp
+   "isTask": boolean,                 // Whether this is a task (true) or note (false)
+   "status": "string",                // Task status: "todo", "inProgress", "completed", "cancelled" (only for tasks)
+   "pinned": boolean,                 // Whether the note is pinned
+   "isArchived": boolean,             // Whether the note is archived
+   "attachmentPaths": ["string"]      // Array of file paths to attachments
+ }
 
-USAGE GUIDELINES:
-1. The app should primarily work with the notes provided in window.Synapse.Notes
-2. You can access individual notes like: window.Synapse.Notes[0], window.Synapse.Notes[1], etc.
-3. You can iterate through all notes using: window.Synapse.Notes.forEach(note => { ... })
-4. The app should be designed to process, analyze, or manipulate these specific notes
-5. If you need to query the database for additional context, you can still use Synapse.runQuery()
-6. The app should clearly indicate that it's working with the selected notes
-7. Consider showing the number of notes being processed: window.Synapse.Notes.length
-8. You can display note titles, content, tags, and other properties as needed
-9. For tasks, check the isTask property and status to handle them appropriately
-10. For attachments, the attachmentPaths array contains file paths that can be used with Synapse.chatAI() if needed
+ USAGE GUIDELINES:
+ 1. The app should primarily work with the notes provided in window.Synapse.Notes
+ 2. You can access individual notes like: window.Synapse.Notes[0], window.Synapse.Notes[1], etc.
+ 3. You can iterate through all notes using: window.Synapse.Notes.forEach(note => { ... })
+ 4. The app should be designed to process, analyze, or manipulate these specific notes
+ 5. If you need to query the database for additional context, you can still use Synapse.runQuery()
+ 6. The app should clearly indicate that it's working with the selected notes
+ 7. Consider showing the number of notes being processed: window.Synapse.Notes.length
+ 8. You can display note titles, content, tags, and other properties as needed
+ 9. For tasks, check the isTask property and status to handle them appropriately
+ 10. For attachments, the attachmentPaths array contains file paths that can be used with Synapse.chatAI() if needed
 
-EXAMPLE USAGE:
-```javascript
-// Check if notes are available
-if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
-  console.log(`Processing \${window.Synapse.Notes.length} selected notes`);
-  
-  // Process each note
-  window.Synapse.Notes.forEach((note, index) => {
-    console.log(`Note \${index + 1}: \${note.title}`);
-    console.log(`Content: \${note.content}`);
-    console.log(`Tags: \${note.tags.join(', ')}`);
-    console.log(`Type: \${note.isTask ? 'Task' : 'Note'}`);
-    if (note.isTask) {
-      console.log(`Status: \${note.status}`);
-    }
-  });
-} else {
-  console.log('No notes selected');
-}
-```
-''';
+ EXAMPLE USAGE:
+ ```javascript
+ // Check if notes are available
+ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
+   console.log(`Processing \${window.Synapse.Notes.length} selected notes`);
+   
+   // Process each note
+   window.Synapse.Notes.forEach((note, index) => {
+     console.log(`Note \${index + 1}: \${note.title}`);
+     console.log(`Content: \${note.content}`);
+     console.log(`Tags: \${note.tags.join(', ')}`);
+     console.log(`Type: \${note.isTask ? 'Task' : 'Note'}`);
+     if (note.isTask) {
+       console.log(`Status: \${note.status}`);
+     }
+   });
+ } else {
+   console.log('No notes selected');
+ }
+ ```
+ ''';
+  }
+
+  // Get AI Tool App specific instructions
+  static String _getAiToolAppInstructions() {
+    return '''
+ AI TOOL APP SPECIFIC INSTRUCTIONS:
+ This application must expose reusable tools that the AI can call headlessly and that users can try in an interactive playground.
+
+ REQUIRED STRUCTURE:
+ 1. Prepend the HTML with a CDATA block that starts with `<![CDATA[tool_spec` and ends with `]]>`. Place the YAML array that describes every tool inside this block so that any characters (even `-->` or backticks) are preserved verbatim.
+
+    Example:
+    <![CDATA[tool_spec
+    - name: example_tool
+      description: |
+        Describe what the tool does succinctly
+      input_params:
+        - query:
+            type: string
+            description: |
+              The search text
+      output_params:
+        - results:
+            type: array
+            items: string
+    ]]>
+    <!DOCTYPE HTML>
+    <html>
+      <!-- The HTML, css and JavaScript goes there -->
+    </html>
+
+    IMPORTANT: the <![CDATA[tool_spec ]]> block MUST come before the <!DOCTYPE html> marker.
+
+ 2. For every tool include:
+    - name: Tool identifier (string, snake_case recommended)
+    - description: Concise explanation of what the tool does. IMPORTANT: Description should be placed with YAML quotation block. For example:
+      <example>
+      Good:
+      description: |
+        this is the descirption line so that I don't need to worry about special characters.
+
+      Bad:
+      description: the content is on the same line. Special character like {}, [] is a concern to the parser.
+      </example>
+    
+    - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
+    - output_params: Keys and schemas for returned fields the tool produces
+
+ 3. The YAML must be valid and free of extra commentary so it can be parsed automatically.
+
+ RUNTIME BEHAVIOUR:
+ 1. Register each tool implementation in JavaScript as `window.Synapse.tool.registered.<tool_name> = (params) => { ... }`.
+ 2. Every registered function must return a JSON-serialisable object matching the declared output parameters.
+ 3. Detect `window.Synapse.tool.env.isInteractive`:
+    - When `true`, render a UI playground that lets the user call the tools manually (forms, buttons, result display, etc.).
+    - When `false`, skip the UI and only expose the tool functions for headless execution.
+ 4. Use `console` logging judiciously for debugging key steps.
+ 5. If user's intention requires manual configurations, such as setting up an API KEY, the playground is the right place to allow the
+    uesr to set it up, and save to the application state, so that in AI headless calls, it can be loaded and used. AI tool call
+    should NOT require user to input API KEY, unless directed by user.
+
+ GENERAL REQUIREMENTS:
+ - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
+ - Validate user inputs, surface errors gracefully, and ensure return objects never throw.
+ - Document tool usage and parameter expectations in comments or the interactive UI.
+ - Use `Synapse.proxyFetch` when you must contact external HTTP APIs; remember to decode base64 results for non-text MIME types.
+ - Tools should prefer single parameter object function over multiple parameters. The single parameter MUST NOT be named `param` or `params`
+   to avoid confusion to the caller.
+ ''';
   }
   
   // Check if WebView is supported on current platform
@@ -1643,4 +1911,14 @@ if (window.Synapse.Notes && window.Synapse.Notes.length > 0) {
     }
   }
 
+}
+
+class _NoteContextPayload {
+  final String? text;
+  final List<PlatformFile> attachments;
+
+  const _NoteContextPayload({
+    this.text,
+    this.attachments = const [],
+  });
 }

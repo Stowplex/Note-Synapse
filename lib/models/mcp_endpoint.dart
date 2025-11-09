@@ -199,11 +199,13 @@ class McpTool {
   final String name;
   final String? description;
   final Map<String, dynamic>? inputSchema;
+  final Map<String, dynamic>? outputSchema;
 
   McpTool({
     required this.name,
     this.description,
     this.inputSchema,
+    this.outputSchema,
   });
 
   factory McpTool.fromJson(Map<String, dynamic> json) {
@@ -211,6 +213,7 @@ class McpTool {
       name: json['name'] as String,
       description: json['description'] as String?,
       inputSchema: json['inputSchema'] as Map<String, dynamic>?,
+      outputSchema: json['outputSchema'] as Map<String, dynamic>?,
     );
   }
 
@@ -219,6 +222,7 @@ class McpTool {
       'name': name,
       if (description != null) 'description': description,
       if (inputSchema != null) 'inputSchema': inputSchema,
+      if (outputSchema != null) 'outputSchema': outputSchema,
     };
   }
 
@@ -231,6 +235,10 @@ class McpTool {
     if (inputSchema != null) {
       buffer.writeln('Schema:');
       buffer.writeln(const JsonEncoder.withIndent('  ').convert(inputSchema));
+    }
+    if (outputSchema != null) {
+      buffer.writeln('Output Schema:');
+      buffer.writeln(const JsonEncoder.withIndent('  ').convert(outputSchema));
     }
     return buffer.toString();
   }

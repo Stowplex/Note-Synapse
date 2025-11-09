@@ -510,6 +510,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get processingRequest => 'Processing your request...';
 
   @override
+  String executingToolStatus(Object service, Object tool) {
+    return 'Executing tool: $service -> $tool';
+  }
+
+  @override
   String errorProcessingRequest(Object error) {
     return 'Error processing request: $error';
   }
@@ -1014,6 +1019,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareNotes => 'Share Notes';
 
   @override
+  String get shareAsPdf => 'Share as PDF';
+
+  @override
   String get shareAsText => 'Share as Text';
 
   @override
@@ -1030,17 +1038,48 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose how you want to share the selected notes';
 
   @override
+  String notesToShare(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return '$count $_temp0 to share';
+  }
+
+  @override
   String get textCopiedToClipboard => 'Text copied to clipboard';
 
   @override
-  String errorCopyingToClipboard(Object error) {
+  String errorCopyingToClipboard(String error) {
     return 'Error copying to clipboard: $error';
   }
 
   @override
-  String errorSharingText(Object error) {
+  String errorSharingText(String error) {
     return 'Error sharing text: $error';
   }
+
+  @override
+  String pdfSavedToCache(String fileName) {
+    return 'PDF saved to cache: $fileName';
+  }
+
+  @override
+  String errorGeneratingPdf(String error) {
+    return 'Error generating PDF: $error';
+  }
+
+  @override
+  String get attachmentMissing => 'Attachment not found.';
+
+  @override
+  String get attachmentUnavailable => 'Attachment unavailable';
+
+  @override
+  String get pdfPreviewUnavailable =>
+      'PDF preview not available. Use the saved attachment to view.';
 
   @override
   String get selectFileLocation => 'Select file location';
@@ -2285,6 +2324,41 @@ class AppLocalizationsEn extends AppLocalizations {
       'This type of app will operate specifically on pre-selected notes';
 
   @override
+  String get appType => 'Type';
+
+  @override
+  String get appTypeHint => 'Select how this app should behave';
+
+  @override
+  String get appTypeNormal => 'Normal';
+
+  @override
+  String get appTypeNoteAction => 'Note Action';
+
+  @override
+  String get appTypeAiTool => 'AI Tool';
+
+  @override
+  String get aiToolAppSubtitle =>
+      'Expose custom JavaScript functions that the AI can call or you can test in a playground';
+
+  @override
+  String get aiTools => 'AI Tools';
+
+  @override
+  String aiToolStartError(String appName, String error) {
+    return 'Failed to start AI tool \"$appName\": $error';
+  }
+
+  @override
+  String get aiToolMissingRevision =>
+      'This AI tool does not have a selected revision yet.';
+
+  @override
+  String get aiToolDefinitionParseError =>
+      'The selected revision does not contain a valid AI tool specification.';
+
+  @override
   String get imageAttachmentsOptional => 'Image Attachments (Optional)';
 
   @override
@@ -2338,6 +2412,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get typeYourMessage => 'Type your message...';
 
   @override
+  String get immersiveMode => 'Immersive Mode';
+
+  @override
+  String get openInChatMode => 'Open in Chat Mode';
+
+  @override
+  String get aiChat => 'AI Chat';
+
+  @override
+  String get outline => 'Outline';
+
+  @override
+  String get expand => 'Expand';
+
+  @override
+  String get collapse => 'Collapse';
+
+  @override
+  String get annotate => 'Annotate';
+
+  @override
+  String get askAiHint => 'Ask the AI about this note...';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get startConversationHint => 'Start by asking the AI about your note.';
+
+  @override
+  String unsupportedAttachment(String type) {
+    return 'Unsupported attachment type ($type).';
+  }
+
+  @override
+  String get openAttachment => 'Open attachment';
+
+  @override
+  String get failedToLoadAttachment => 'Failed to load attachment.';
+
+  @override
+  String failedToOpenAttachment(String error) {
+    return 'Failed to open attachment: $error';
+  }
+
+  @override
   String get cancellingRequest => 'Cancelling request...';
 
   @override
@@ -2345,6 +2465,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mcpTools => 'MCP Tools';
+
+  @override
+  String get mcpAndLocalTools => 'MCP & Local Tools';
 
   @override
   String get active => 'active';

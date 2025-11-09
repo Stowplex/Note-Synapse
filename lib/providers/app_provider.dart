@@ -329,6 +329,7 @@ class AppProvider extends ChangeNotifier {
     String prompt,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
+    bool persist = true,
   }) async {
     try {
       final newNotes = await AIService.createNewNotes(
@@ -336,6 +337,10 @@ class AppProvider extends ChangeNotifier {
         contextNotes,
         attachedFiles: attachedFiles,
       );
+
+      if (!persist) {
+        return newNotes;
+      }
 
       // Save all new notes and reload them from database
       final List<Note> addedNotes = [];
@@ -983,12 +988,20 @@ class AppProvider extends ChangeNotifier {
     required List<String> steps,
     UserAppType type = UserAppType.normal,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
       // Construct user prompt from the provided information
-      final userPrompt =
-          'Create a $name app. Description: $description. Steps: ${steps.join(', ')}';
+      final promptBuffer = StringBuffer()
+        ..write('Create a $name app. Description: $description. Steps: ${steps.join(', ')}.');
+      if (contextNotes != null && contextNotes.isNotEmpty) {
+        final titles = contextNotes.map((note) => note.title).join(', ');
+        promptBuffer
+          ..write(' Note context provided from: ')
+          ..write(titles);
+      }
+      final userPrompt = promptBuffer.toString();
 
       final app = await UserAppService.createUserApp(
         name: name,
@@ -997,6 +1010,7 @@ class AppProvider extends ChangeNotifier {
         type: type,
         userPrompt: userPrompt,
         attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
         libraries: libraries,
       );
       _userApps.add(app);
@@ -1014,6 +1028,7 @@ class AppProvider extends ChangeNotifier {
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
+    List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
   }) async {
     try {
@@ -1021,6 +1036,7 @@ class AppProvider extends ChangeNotifier {
         originalApp: originalApp,
         editSuggestion: editSuggestion,
         attachmentPaths: attachmentPaths,
+        contextNotes: contextNotes,
         libraries: libraries,
       );
 

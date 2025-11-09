@@ -73,6 +73,60 @@ class OAuthDiscoverySummary {
 }
 
 class OAuthService {
+  // Track active OAuth flow for cancellation
+  static HttpServer? _activeServer;
+  static StreamSubscription<HttpRequest>? _activeSubscription;
+  static Completer<Map<String, dynamic>>? _activeCompleter;
+  static Future<void>? _activeClosingFuture;
+
+  /// Cancel any active OAuth authorization flow and shut down the local server
+  static Future<void> cancelActiveFlow() async {
+    if (_activeServer != null || _activeSubscription != null || _activeCompleter != null) {
+      LoggerService.debug('OAuthService: Cancelling active OAuth flow');
+      
+      // Complete the completer with cancellation error if not already completed
+      if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+        _activeCompleter!.completeError(Exception('OAuth flow cancelled by user'));
+      }
+      
+      // Save references before any async operations
+      final server = _activeServer;
+      final subscription = _activeSubscription;
+      final closingFuture = _activeClosingFuture;
+      
+      // Clear references immediately to prevent race conditions
+      _activeServer = null;
+      _activeSubscription = null;
+      _activeCompleter = null;
+      _activeClosingFuture = null;
+      
+      // Wait for any in-progress closing operation
+      if (closingFuture != null) {
+        try {
+          await closingFuture;
+        } catch (_) {
+          // Ignore errors from closing future
+        }
+      }
+      
+      // Close server and subscription if they weren't already closed
+      if (server != null) {
+        try {
+          await server.close(force: true);
+        } catch (_) {
+          // Server may already be closed, ignore errors
+        }
+      }
+      if (subscription != null) {
+        try {
+          await subscription.cancel();
+        } catch (_) {
+          // Subscription may already be cancelled, ignore errors
+        }
+      }
+    }
+  }
+
   /// Perform full discovery workflow combining protected resource metadata and
   /// authorization server metadata resolution. Implements RFC 9728 + RFC 8414.
   static Future<OAuthDiscoverySummary> performDiscovery({
@@ -450,6 +504,9 @@ class OAuthService {
     final verifier = config.usePkce ? _codeVerifier() : null;
     final codeChallenge = config.usePkce && verifier != null ? _codeChallenge(verifier) : null;
 
+    // Cancel any existing active flow first
+    await cancelActiveFlow();
+
     const port = 51791;
     late HttpServer server;
     try {
@@ -457,6 +514,10 @@ class OAuthService {
     } catch (e) {
       throw Exception('Unable to bind local redirect server on 127.0.0.1:$port. Ensure the port is free.');
     }
+    
+    // Track this as the active server
+    _activeServer = server;
+    
     final redirectUri = 'http://127.0.0.1:$port/callback';
 
     final authParams = <String, String>{
@@ -477,6 +538,7 @@ class OAuthService {
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
     final completer = Completer<Map<String, dynamic>>();
+    _activeCompleter = completer;
     bool handled = false;
     late StreamSubscription<HttpRequest> subscription;
     Future<void>? closingFuture;
@@ -489,7 +551,19 @@ class OAuthService {
         try {
           await subscription.cancel();
         } catch (_) {}
+        // Clear active references
+        if (_activeServer == server) {
+          _activeServer = null;
+        }
+        if (_activeSubscription == subscription) {
+          _activeSubscription = null;
+        }
+        if (_activeCompleter == completer) {
+          _activeCompleter = null;
+        }
+        _activeClosingFuture = null;
       }();
+      _activeClosingFuture = closingFuture;
       return closingFuture!;
     }
 
@@ -632,6 +706,9 @@ class OAuthService {
         completer.completeError(Exception('OAuth callback server error: $error'));
       }
     });
+    
+    // Track this as the active subscription
+    _activeSubscription = subscription;
 
     try {
       final result = await completer.future.timeout(const Duration(minutes: 5));

@@ -103,7 +103,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
       }
     }
 
-    await showDialog(
+    final result = await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -355,7 +355,11 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () async {
+                // Cancel any active OAuth flow before closing dialog
+                await OAuthService.cancelActiveFlow();
+                Navigator.pop(context, false); // false indicates cancellation
+              },
               child: Text(l10n.cancel),
             ),
             TextButton(
@@ -415,7 +419,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     }
                     
                     if (context.mounted) {
-                      Navigator.pop(context);
+                      Navigator.pop(context, true); // true indicates success
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Updated endpoint: $name'),
@@ -462,7 +466,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                     }
 
                     if (context.mounted) {
-                      Navigator.pop(context);
+                      Navigator.pop(context, true); // true indicates success
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(l10n.addedEndpoint(name)),
@@ -492,6 +496,12 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
         ),
       ),
     );
+    
+    // If dialog was cancelled (result is false) or dismissed without a value,
+    // cancel any active OAuth flow so the server can be restarted
+    if (result != true) {
+      await OAuthService.cancelActiveFlow();
+    }
   }
 
   Future<void> _deleteEndpoint(McpEndpoint endpoint) async {

@@ -50,17 +50,22 @@ class NoteSynapseApp extends StatelessWidget {
             ),
             darkTheme: ThemeData(
               colorScheme: ColorScheme.fromSeed(
-                  seedColor: Colors.blue, brightness: Brightness.dark),
+                seedColor: Colors.blue,
+                brightness: Brightness.dark,
+              ),
               useMaterial3: true,
             ),
-            themeMode: appProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            themeMode: appProvider.isDarkMode
+                ? ThemeMode.dark
+                : ThemeMode.light,
             home: const AppWrapper(),
             routes: {
               '/setup': (context) => const SetupScreen(),
               '/main': (context) => const MainScreen(),
               '/share': (context) {
                 final sharedData =
-                    ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+                    ModalRoute.of(context)!.settings.arguments
+                        as Map<String, dynamic>?;
                 if (sharedData != null) {
                   return ShareScreen(sharedData: sharedData);
                 }
@@ -70,6 +75,7 @@ class NoteSynapseApp extends StatelessWidget {
             builder: (context, child) {
               return DebugOverlay(
                 visible: false, // Disable the default two finger tap trigger
+                detectorBuilder: (onDetect, overlayChild) => overlayChild,
                 child: child ?? const SizedBox.shrink(),
               );
             },
@@ -123,7 +129,9 @@ class _AppWrapperState extends State<AppWrapper> {
       final result = await platform.invokeMethod('getSharedContent');
       if (result != null) {
         sharedData = Map<String, dynamic>.from(result);
-        LoggerService.debug('AppWrapper: Shared content detected: ${sharedData.keys}');
+        LoggerService.debug(
+          'AppWrapper: Shared content detected: ${sharedData.keys}',
+        );
       }
     } catch (e) {
       LoggerService.debug('No shared content or error: $e');
@@ -138,11 +146,7 @@ class _AppWrapperState extends State<AppWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_sharedData != null) {

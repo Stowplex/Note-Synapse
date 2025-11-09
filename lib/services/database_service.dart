@@ -1689,9 +1689,10 @@ class DatabaseService {
     final db = await database;
     final fileName = filePath.split('/').last;
     final fileType = FileTypeUtils.getFileExtension(fileName);
+    final uuid = Uuid();
 
     await db.insert('attachments', {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'id': uuid.v4(),
       'noteId': noteId,
       'filePath': filePath,
       'fileName': fileName,
@@ -2526,7 +2527,7 @@ class DatabaseService {
     final filterArgs = <dynamic>[];
 
     if (maxAge != null) {
-      filters.add('c.createdAt >= ?');
+      filters.add('c.updatedAt >= ?');
       filterArgs.add(DateTime.now().subtract(maxAge).millisecondsSinceEpoch);
     }
 
@@ -2794,9 +2795,9 @@ class DatabaseService {
 
     // Find conversations with no message mappings
     final emptyConversations = await db.rawQuery('''
-      SELECT c.id 
-      FROM conversations c 
-      LEFT JOIN conversation_message_mapping cmm ON c.id = cmm.conversationId 
+      SELECT c.id
+      FROM conversations c
+      LEFT JOIN conversation_message_mapping cmm ON c.id = cmm.conversationId
       WHERE cmm.conversationId IS NULL
     ''');
 
@@ -2813,6 +2814,48 @@ class DatabaseService {
     if (emptyConversations.isNotEmpty) {
       LoggerService.info(
         'Cleaned up ${emptyConversations.length} empty conversations',
+      );
+    }
+
+    // Remove conversations that only reference messages owned by earlier conversations
+    final redundantConversations = await db.rawQuery('''
+      WITH message_mappings AS (
+        SELECT
+          cmm.conversationId,
+          cmm.messageId,
+          ROW_NUMBER() OVER (
+            PARTITION BY cmm.messageId
+            ORDER BY c.createdAt ASC, c.id ASC
+          ) AS messageRank
+        FROM conversation_message_mapping cmm
+        JOIN conversations c ON c.id = cmm.conversationId
+      ),
+      conversation_note_counts AS (
+        SELECT conversationId, COUNT(*) AS noteCount
+        FROM conversation_note_mapping
+        GROUP BY conversationId
+      )
+      SELECT mm.conversationId AS id
+      FROM message_mappings mm
+      LEFT JOIN conversation_note_counts cnc ON mm.conversationId = cnc.conversationId
+      GROUP BY mm.conversationId, COALESCE(cnc.noteCount, 0)
+      HAVING SUM(CASE WHEN mm.messageRank = 1 THEN 1 ELSE 0 END) = 0
+         AND COALESCE(cnc.noteCount, 0) = 0
+    ''');
+
+    for (final conversation in redundantConversations) {
+      final conversationId = conversation['id'] as String;
+      LoggerService.info('Deleting redundant conversation: $conversationId');
+      await db.delete(
+        'conversations',
+        where: 'id = ?',
+        whereArgs: [conversationId],
+      );
+    }
+
+    if (redundantConversations.isNotEmpty) {
+      LoggerService.info(
+        'Removed ${redundantConversations.length} redundant conversations',
       );
     }
   }

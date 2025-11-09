@@ -155,6 +155,7 @@
   "removeFile": "Remove File",
   "addFiles": "Add Files",
   "processingRequest": "Processing your request...",
+  "executingToolStatus": "Executing tool: {service} -> {tool}",
   "errorProcessingRequest": "Error processing request: {error}",
   "responseCopied": "Response copied to clipboard",
   "notesCreatedSuccessfully": "Notes created successfully!",
@@ -318,14 +319,56 @@
   "share": "Share",
   "shareNote": "Share Note",
   "shareNotes": "Share Notes",
+  "shareAsPdf": "Share as PDF",
   "shareAsText": "Share as Text",
   "copyToClipboard": "Copy to Clipboard",
   "shareSubNotesAndLinkedNotes": "Share sub-notes and linked notes",
   "shareDialogTitle": "Share Notes",
   "shareDialogDescription": "Choose how you want to share the selected notes",
+  "notesToShare": "{count} {count, plural, =1{Note} other{Notes}} to share",
+  "@notesToShare": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "textCopiedToClipboard": "Text copied to clipboard",
   "errorCopyingToClipboard": "Error copying to clipboard: {error}",
+  "@errorCopyingToClipboard": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "errorSharingText": "Error sharing text: {error}",
+  "@errorSharingText": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pdfSavedToCache": "PDF saved to cache: {fileName}",
+  "@pdfSavedToCache": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGeneratingPdf": "Error generating PDF: {error}",
+  "@errorGeneratingPdf": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentMissing": "Attachment missing",
+  "attachmentUnavailable": "Attachment unavailable",
+  "pdfPreviewUnavailable": "PDF preview not available. Use the saved attachment to view.",
   "selectFileLocation": "Select file location",
   "saveAsMarkdown": "Save as Markdown",
   "fileSavedSuccessfully": "File saved successfully",
@@ -714,6 +757,26 @@
   "updated": "Updated",
   "noteActionApp": "Note Action App",
   "noteActionAppSubtitle": "This type of app will operate specifically on pre-selected notes",
+  "appType": "Type",
+  "appTypeHint": "Select how this app should behave",
+  "appTypeNormal": "Normal",
+  "appTypeNoteAction": "Note Action",
+  "appTypeAiTool": "AI Tool",
+  "aiToolAppSubtitle": "Expose custom JavaScript functions that the AI can call or you can test in a playground",
+  "aiTools": "AI Tools",
+  "aiToolStartError": "Failed to start AI tool \"{appName}\": {error}",
+  "@aiToolStartError": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiToolMissingRevision": "This AI tool does not have a selected revision yet.",
+  "aiToolDefinitionParseError": "The selected revision does not contain a valid AI tool specification.",
   "imageAttachmentsOptional": "Image Attachments (Optional)",
   "imageAttachmentsSubtitle": "Attach images to help explain what you want the AI to create",
   "addImage": "Add Image",
@@ -735,10 +798,40 @@
   "noConversations": "No conversations",
   "conversationsWithThisNote": "Conversations with this note",
   "typeYourMessage": "Type your message...",
+  "immersiveMode": "Immersive Mode",
+  "openInChatMode": "Open in Chat Mode",
+  "aiChat": "AI Chat",
+  "outline": "Outline",
+  "expand": "Expand",
+  "collapse": "Collapse",
+  "annotate": "Annotate",
+  "askAiHint": "Ask the AI about this note...",
+  "send": "Send",
+  "startConversationHint": "Start by asking the AI about your note.",
+  "attachmentMissing": "Attachment not found.",
+  "unsupportedAttachment": "Unsupported attachment type ({type}).",
+  "@unsupportedAttachment": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "openAttachment": "Open attachment",
+  "failedToLoadAttachment": "Failed to load attachment.",
+  "failedToOpenAttachment": "Failed to open attachment: {error}",
+  "@failedToOpenAttachment": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "cancellingRequest": "Cancelling request...",
   "attachFiles": "Attach files",
   "takePhotoAttachment": "Take photo",
   "mcpTools": "MCP Tools",
+  "mcpAndLocalTools": "MCP & Local Tools",
   "active": "active",
   "toolsAvailable": "{count} tools available",
   "manageNotes": "Manage Notes",

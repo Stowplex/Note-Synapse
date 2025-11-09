@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
+import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -77,9 +79,27 @@ class GeminiModel implements AIModel {
   }
 
   @override
+  Future<String> generateFromPrompt(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    String? requestId,
+  }) {
+    return generateWithMessages(
+      request.buildFullMessageList(),
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      requestId: requestId,
+    );
+  }
+
+  @override
   Future<String> generateWithMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
@@ -101,7 +121,6 @@ class GeminiModel implements AIModel {
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
         messages,
-        attachedFiles,
         generationConfig: generationConfig,
       );
 
@@ -145,8 +164,7 @@ class GeminiModel implements AIModel {
 
   @override
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles,
+    List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
     double? temperature,
     int? topK,
@@ -169,7 +187,6 @@ class GeminiModel implements AIModel {
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
         messages,
-        attachedFiles,
         generationConfig: generationConfig,
       );
 
@@ -189,103 +206,154 @@ class GeminiModel implements AIModel {
     });
   }
 
-  /// Build request body from messages array
-  /// Gemini uses a different format: contents array where each content has parts
-  /// System messages are passed in a separate systemInstruction field
-  /// Gemini expects alternating user and model messages
+  /// Build request body from prompt messages.
   Map<String, dynamic> _buildRequestBodyFromMessages(
-    List<Map<String, dynamic>> messages,
-    List<PlatformFile> attachedFiles, {
+    List<PromptMessage> messages, {
     Map<String, dynamic>? generationConfig,
   }) {
-    final todayContext = AIModel.getTodayContext();
     final contents = <Map<String, dynamic>>[];
-    String? systemInstruction;
-    
-    // Extract system messages and combine them for systemInstruction
     final systemMessages = <String>[];
-    final conversationMessages = <Map<String, dynamic>>[];
-    
-    for (final msg in messages) {
-      final role = msg['role'] as String;
-      final content = msg['content'] as String;
-      
-      if (role == 'system') {
-        systemMessages.add(content);
-      } else {
-        conversationMessages.add(msg);
-      }
-    }
-    
-    if (systemMessages.isNotEmpty) {
-      systemInstruction = systemMessages.join('\n\n');
-    }
-    
-    // Find the index of the last user message first
-    int lastUserMessageIndex = -1;
-    for (int i = conversationMessages.length - 1; i >= 0; i--) {
-      if (conversationMessages[i]['role'] == 'user') {
-        lastUserMessageIndex = i;
-        break;
-      }
-    }
-    
-    // Convert messages to Gemini format
-    // Gemini expects alternating user and model (assistant) messages
-    for (int i = 0; i < conversationMessages.length; i++) {
-      final msg = conversationMessages[i];
-      final role = msg['role'] as String;
-      final content = msg['content'] as String;
-      
-      if (role == 'assistant') {
-        // Add assistant response as model's turn
-        contents.add({
-          'role': 'model',
-          'parts': [{'text': content}]
-        });
-      } else if (role == 'user') {
-        // Determine if this is the last user message (where we attach files and add todayContext)
-        final isLastUserMessage = i == lastUserMessageIndex;
-        
-        // Build parts for this user message
-        final parts = <Map<String, dynamic>>[];
-        
-        // Add today's context to last user message only
-        String messageText = content;
-        if (isLastUserMessage) {
-          messageText = messageText + todayContext;
-        }
-        
-        parts.add({'text': messageText});
-        
-        // Add file attachments to the last user message
-        if (isLastUserMessage && attachedFiles.isNotEmpty) {
-          for (final file in attachedFiles) {
-            if (file.bytes != null) {
-              final base64Data = base64Encode(file.bytes!);
-              final extension = FileTypeUtils.getFileExtension(file.name);
-              final mimeType = FileTypeUtils.getMimeTypeForBytes(
-                file.bytes!,
-                extension: extension.isEmpty ? null : extension,
-              );
-              
-              parts.add({
-                'inline_data': {
-                  'mime_type': mimeType,
-                  'data': base64Data,
+
+    for (final message in messages) {
+      switch (message.role) {
+        case PromptRole.system:
+          if (message.content.trim().isNotEmpty) {
+            systemMessages.add(message.content.trim());
+          }
+          break;
+        case PromptRole.user:
+          // Check if this is a function response (tool result)
+          if (message.metadata != null && message.metadata!['function_name'] != null) {
+            final functionName = message.metadata!['function_name'] as String;
+            
+            // Parse the tool result content to extract the actual result
+            // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
+            final content = message.content;
+            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
+            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
+            
+            final responseData = <String, dynamic>{};
+            if (resultMatch != null) {
+              responseData['result'] = resultMatch.group(1)?.trim() ?? '';
+            } else if (errorMatch != null) {
+              responseData['error'] = errorMatch.group(1)?.trim() ?? '';
+            } else {
+              responseData['result'] = content;
+            }
+            
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'functionResponse': {
+                    'name': functionName,
+                    'response': responseData,
+                  }
                 }
+              ],
+            });
+          } else {
+            // Regular user message with optional attachments
+            final parts = <Map<String, dynamic>>[
+              {'text': message.content},
+            ];
+
+            if (message.attachments.isNotEmpty) {
+              for (final file in message.attachments) {
+                final bytes = _readPlatformFileBytes(file);
+                if (bytes == null) continue;
+
+                final extension = FileTypeUtils.getFileExtension(file.name);
+                final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                  bytes,
+                  extension: extension.isEmpty ? null : extension,
+                );
+
+                parts.add({
+                  'inline_data': {
+                    'mime_type': mimeType,
+                    'data': base64Encode(bytes),
+                  }
+                });
+              }
+            }
+
+            contents.add({
+              'role': 'user',
+              'parts': parts,
+            });
+          }
+          break;
+        case PromptRole.assistant:
+          final parts = <Map<String, dynamic>>[];
+          
+          // Add text content if present
+          if (message.content.trim().isNotEmpty) {
+            parts.add({'text': message.content});
+          }
+          
+          // Add function calls if present in metadata
+          if (message.metadata != null && message.metadata!['function_calls'] != null) {
+            final functionCalls = message.metadata!['function_calls'] as List;
+            for (final functionCall in functionCalls) {
+              parts.add({
+                'functionCall': functionCall,
               });
             }
           }
-        }
-        
-        contents.add({
-          'role': 'user',
-          'parts': parts
-        });
+          
+          contents.add({
+            'role': 'model',
+            'parts': parts,
+          });
+          break;
+        case PromptRole.tool:
+          // For Gemini, tool results should use functionResponse format
+          // Check if we have function metadata to construct proper response
+          if (message.metadata != null && message.metadata!['function_name'] != null) {
+            final functionName = message.metadata!['function_name'] as String;
+            
+            // Parse the tool result content to extract the actual result
+            // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
+            final content = message.content;
+            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
+            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
+            
+            final responseData = <String, dynamic>{};
+            if (resultMatch != null) {
+              responseData['result'] = resultMatch.group(1)?.trim() ?? '';
+            } else if (errorMatch != null) {
+              responseData['error'] = errorMatch.group(1)?.trim() ?? '';
+            } else {
+              responseData['result'] = content;
+            }
+            
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'functionResponse': {
+                    'name': functionName,
+                    'response': responseData,
+                  }
+                }
+              ],
+            });
+          } else {
+            // Fallback to text format if no metadata
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {
+                  'text': 'Tool result:\n${message.content}',
+                }
+              ],
+            });
+          }
+          break;
       }
     }
-    
+
     final requestBody = <String, dynamic>{
       'contents': contents,
       'generationConfig': generationConfig ??
@@ -296,15 +364,33 @@ class GeminiModel implements AIModel {
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
           },
     };
-    
-    // Add systemInstruction if we have system messages
-    if (systemInstruction != null && systemInstruction.isNotEmpty) {
+
+    if (systemMessages.isNotEmpty) {
       requestBody['systemInstruction'] = {
-        'parts': [{'text': systemInstruction}]
+        'parts': [
+          {'text': systemMessages.join('\n\n')},
+        ],
       };
     }
-    
+
     return requestBody;
+  }
+
+  Uint8List? _readPlatformFileBytes(PlatformFile file) {
+    if (file.bytes != null) {
+      return Uint8List.fromList(file.bytes!);
+    }
+
+    if (file.path != null) {
+      try {
+        final bytes = File(file.path!).readAsBytesSync();
+        return Uint8List.fromList(bytes);
+      } catch (e) {
+        LoggerService.warning('GeminiModel: failed to read attachment ${file.path}: $e');
+      }
+    }
+
+    return null;
   }
 
 
@@ -345,10 +431,7 @@ class GeminiModel implements AIModel {
     Map<String, dynamic>? generationConfig,
     List<Map<String, String>>? safetySettings,
   }) {
-    final todayContext = AIModel.getTodayContext();
-    final enhancedPrompt = prompt + todayContext;
-
-    final parts = <Map<String, dynamic>>[{'text': enhancedPrompt}];
+    final parts = <Map<String, dynamic>>[{'text': prompt}];
 
     // Add file attachments if any
     if (attachedFiles.isNotEmpty) {
@@ -434,16 +517,32 @@ class GeminiModel implements AIModel {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
 
-        if (content != null &&
-            content['parts'] != null &&
-            content['parts'].isNotEmpty) {
-          final responseText = content['parts'][0]['text'];
-          LoggerService.debug('Gemini API request completed successfully', error: {
-            'responseLength': responseText.length,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-          return responseText;
+        if (content is Map<String, dynamic>) {
+          final parts = content['parts'];
+          if (parts is List && parts.isNotEmpty) {
+            final buffer = StringBuffer();
+
+            for (final part in parts) {
+              if (part is Map<String, dynamic>) {
+                final text = part['text'];
+                if (text is String && text.isNotEmpty) {
+                  buffer.write(text);
+                }
+              } else if (part is String && part.isNotEmpty) {
+                buffer.write(part);
+              }
+            }
+
+            final responseText = buffer.toString();
+            if (responseText.isNotEmpty) {
+              LoggerService.debug('Gemini API request completed successfully', error: {
+                'responseLength': responseText.length,
+                'requestId': actualRequestId,
+                'duration': '${duration.inMilliseconds}ms',
+              });
+              return responseText;
+            }
+          }
         }
       }
       LoggerService.error('No content in Gemini API response', error: {
@@ -555,33 +654,46 @@ class GeminiModel implements AIModel {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
 
-        if (content != null && content['parts'] != null && content['parts'].isNotEmpty) {
-          final parts = content['parts'] as List;
-          
-          // Check for function calls
-          final functionCalls = <Map<String, dynamic>>[];
-          String? textResponse;
+        if (content is Map<String, dynamic>) {
+          final parts = content['parts'];
+          if (parts is List && parts.isNotEmpty) {
+            final functionCalls = <Map<String, dynamic>>[];
+            final textBuffer = StringBuffer();
 
-          for (final part in parts) {
-            if (part.containsKey('functionCall')) {
-              functionCalls.add(part['functionCall'] as Map<String, dynamic>);
-            } else if (part.containsKey('text')) {
-              textResponse = part['text'];
+            for (final part in parts) {
+              if (part is Map<String, dynamic>) {
+                if (part.containsKey('functionCall')) {
+                  final fnCall = part['functionCall'];
+                  if (fnCall is Map<String, dynamic>) {
+                    functionCalls.add(fnCall);
+                  }
+                  continue;
+                }
+
+                final text = part['text'];
+                if (text is String && text.isNotEmpty) {
+                  textBuffer.write(text);
+                }
+              } else if (part is String && part.isNotEmpty) {
+                textBuffer.write(part);
+              }
             }
+
+            final textResponse = textBuffer.toString();
+
+            LoggerService.debug('Gemini API request completed', error: {
+              'hasFunctionCalls': functionCalls.isNotEmpty,
+              'hasText': textResponse.isNotEmpty,
+              'requestId': actualRequestId,
+              'duration': '${duration.inMilliseconds}ms',
+            });
+
+            return {
+              'text': textResponse.isEmpty ? null : textResponse,
+              'function_calls': functionCalls.isEmpty ? null : functionCalls,
+              'raw_data': data,
+            };
           }
-
-          LoggerService.debug('Gemini API request completed', error: {
-            'hasFunctionCalls': functionCalls.isNotEmpty,
-            'hasText': textResponse != null,
-            'requestId': actualRequestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
-
-          return {
-            'text': textResponse,
-            'function_calls': functionCalls.isEmpty ? null : functionCalls,
-            'raw_data': data,
-          };
         }
       }
       LoggerService.error('No content in Gemini API response', error: {

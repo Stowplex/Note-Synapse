@@ -501,6 +501,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingRequest => '正在处理您的请求...';
 
   @override
+  String executingToolStatus(Object service, Object tool) {
+    return '执行工具：$service -> $tool';
+  }
+
+  @override
   String errorProcessingRequest(Object error) {
     return '处理请求时出错：$error';
   }
@@ -997,6 +1002,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareNotes => '分享笔记';
 
   @override
+  String get shareAsPdf => '分享为 PDF';
+
+  @override
   String get shareAsText => '分享为文本';
 
   @override
@@ -1012,17 +1020,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareDialogDescription => '选择您想要分享选中笔记的方式';
 
   @override
+  String notesToShare(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '个笔记',
+      one: '个笔记',
+    );
+    return '待分享 $count $_temp0';
+  }
+
+  @override
   String get textCopiedToClipboard => '文本已复制到剪贴板';
 
   @override
-  String errorCopyingToClipboard(Object error) {
+  String errorCopyingToClipboard(String error) {
     return '复制到剪贴板时出错：$error';
   }
 
   @override
-  String errorSharingText(Object error) {
+  String errorSharingText(String error) {
     return '分享文本时出错：$error';
   }
+
+  @override
+  String pdfSavedToCache(String fileName) {
+    return 'PDF 已保存到缓存：$fileName';
+  }
+
+  @override
+  String errorGeneratingPdf(String error) {
+    return '生成 PDF 时出错：$error';
+  }
+
+  @override
+  String get attachmentMissing => '找不到附件。';
+
+  @override
+  String get attachmentUnavailable => '附件不可用';
+
+  @override
+  String get pdfPreviewUnavailable => '暂不支持预览 PDF，请通过已保存的附件查看。';
 
   @override
   String get selectFileLocation => '选择文件位置';
@@ -2216,6 +2254,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
 
   @override
+  String get appType => '类型';
+
+  @override
+  String get appTypeHint => '选择此应用的行为方式';
+
+  @override
+  String get appTypeNormal => '普通';
+
+  @override
+  String get appTypeNoteAction => '笔记操作';
+
+  @override
+  String get appTypeAiTool => 'AI 工具';
+
+  @override
+  String get aiToolAppSubtitle => '暴露自定义 JavaScript 函数供 AI 调用，并在操场中测试';
+
+  @override
+  String get aiTools => 'AI 工具';
+
+  @override
+  String aiToolStartError(String appName, String error) {
+    return '无法启动 AI 工具“$appName”：$error';
+  }
+
+  @override
+  String get aiToolMissingRevision => '此 AI 工具尚未选择版本。';
+
+  @override
+  String get aiToolDefinitionParseError => '所选版本不包含有效的 AI 工具规范。';
+
+  @override
   String get imageAttachmentsOptional => '图片附件（可选）';
 
   @override
@@ -2260,6 +2330,52 @@ class AppLocalizationsZh extends AppLocalizations {
   String get typeYourMessage => '输入您的消息...';
 
   @override
+  String get immersiveMode => '沉浸模式';
+
+  @override
+  String get openInChatMode => '在聊天模式中打开';
+
+  @override
+  String get aiChat => 'AI 对话';
+
+  @override
+  String get outline => '大纲';
+
+  @override
+  String get expand => '展开';
+
+  @override
+  String get collapse => '收起';
+
+  @override
+  String get annotate => '标注';
+
+  @override
+  String get askAiHint => '向 AI 询问这条笔记...';
+
+  @override
+  String get send => '发送';
+
+  @override
+  String get startConversationHint => '先向 AI 询问关于你的笔记。';
+
+  @override
+  String unsupportedAttachment(String type) {
+    return '不支持的附件类型（$type）。';
+  }
+
+  @override
+  String get openAttachment => '打开附件';
+
+  @override
+  String get failedToLoadAttachment => '加载附件失败。';
+
+  @override
+  String failedToOpenAttachment(String error) {
+    return '无法打开附件：$error';
+  }
+
+  @override
   String get cancellingRequest => '正在取消请求...';
 
   @override
@@ -2267,6 +2383,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mcpTools => 'MCP工具';
+
+  @override
+  String get mcpAndLocalTools => 'MCP和本地工具';
 
   @override
   String get active => '活动';
