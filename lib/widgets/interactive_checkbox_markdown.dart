@@ -735,7 +735,6 @@ class _CodeHighlightEngine {
   final Highlight _highlight = Highlight();
   final LinkedHashMap<_HighlightCacheKey, _HighlightResult> _cache =
       LinkedHashMap<_HighlightCacheKey, _HighlightResult>();
-  final Map<String, String> _aliasCache = {};
 
   static const int _maxCacheEntries = 64;
 
@@ -773,39 +772,6 @@ class _CodeHighlightEngine {
     'yaml',
   };
 
-  static const List<String> _autoDetectLanguages = [
-    'bash',
-    'c',
-    'cpp',
-    'csharp',
-    'css',
-    'dart',
-    'diff',
-    'dockerfile',
-    'go',
-    'graphql',
-    'html',
-    'ini',
-    'java',
-    'javascript',
-    'json',
-    'kotlin',
-    'markdown',
-    'objectivec',
-    'php',
-    'plaintext',
-    'powershell',
-    'python',
-    'ruby',
-    'rust',
-    'shell',
-    'sql',
-    'swift',
-    'typescript',
-    'xml',
-    'yaml',
-  ];
-
   _HighlightResult highlight({
     required String code,
     required String languageHint,
@@ -822,12 +788,16 @@ class _CodeHighlightEngine {
     }
 
     final String? normalizedHint = _normalizeLanguage(languageHint);
-    final String canonicalHint =
-        normalizedHint == null ? '' : (_canonicalLanguage(normalizedHint) ?? normalizedHint);
+    if (normalizedHint == null || normalizedHint.isEmpty) {
+      return _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: null,
+      );
+    }
 
     final _HighlightCacheKey cacheKey = _HighlightCacheKey(
       code: code,
-      languageHint: canonicalHint,
+      languageHint: normalizedHint,
       isDarkTheme: isDarkTheme,
       styleSignature: styleSignature,
     );
@@ -840,45 +810,28 @@ class _CodeHighlightEngine {
     HighlightResult? result;
     String? resolvedLanguage;
 
-    if (canonicalHint.isNotEmpty &&
-        _ensureLanguageRegistered(canonicalHint)) {
+    if (_ensureLanguageRegistered(normalizedHint)) {
       try {
         result = _highlight.highlight(
           code: code,
-          language: canonicalHint,
+          language: normalizedHint,
         );
-        resolvedLanguage = canonicalHint;
+        resolvedLanguage = normalizedHint;
       } on Object catch (error, stackTrace) {
         if (kDebugMode) {
-          debugPrint('Code highlight failed for $canonicalHint: $error');
+          debugPrint('Code highlight failed for $normalizedHint: $error');
           debugPrint('$stackTrace');
         }
       }
     }
 
     if (result == null) {
-      late final HighlightResult autoResult;
-      try {
-        autoResult = _highlight.highlightAuto(code, _autoDetectLanguages);
-      } on Object catch (error, stackTrace) {
-        if (kDebugMode) {
-          debugPrint('Code auto-highlight failed: $error');
-          debugPrint('$stackTrace');
-        }
-        final _HighlightResult fallback = _HighlightResult(
-          span: TextSpan(text: code, style: baseStyle),
-          language: resolvedLanguage,
-        );
-        _storeInCache(cacheKey, fallback);
-        return fallback;
-      }
-      result = autoResult;
-      resolvedLanguage ??= autoResult.language;
-    }
-
-    if (resolvedLanguage != null) {
-      resolvedLanguage =
-          _canonicalLanguage(resolvedLanguage) ?? resolvedLanguage;
+      final _HighlightResult fallback = _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: resolvedLanguage,
+      );
+      _storeInCache(cacheKey, fallback);
+      return fallback;
     }
 
     final TextSpanRenderer renderer = TextSpanRenderer(baseStyle, theme);
@@ -907,11 +860,7 @@ class _CodeHighlightEngine {
   }
 
   String? displayLabel(String? raw) {
-    final String? normalized = _normalizeLanguage(raw);
-    if (normalized == null || normalized.isEmpty) {
-      return null;
-    }
-    return _canonicalLanguage(normalized) ?? normalized;
+    return raw?.trim().isEmpty ?? true ? null : raw?.trim();
   }
 
   static String? _normalizeLanguage(String? raw) {
@@ -947,48 +896,15 @@ class _CodeHighlightEngine {
   }
 
   bool _ensureLanguageRegistered(String language) {
-    final String? canonical = _canonicalLanguage(language);
-    if (canonical == null) {
-      return false;
-    }
-    if (_highlight.getLanguage(canonical) != null) {
+    if (_highlight.getLanguage(language) != null) {
       return true;
     }
-    final Mode? mode = builtinAllLanguages[canonical];
+    final Mode? mode = builtinAllLanguages[language];
     if (mode == null) {
       return false;
     }
-    _highlight.registerLanguage(canonical, mode);
+    _highlight.registerLanguage(language, mode);
     return true;
-  }
-
-  String? _canonicalLanguage(String language) {
-    if (language.isEmpty) {
-      return null;
-    }
-    if (builtinAllLanguages.containsKey(language)) {
-      return language;
-    }
-
-    final String? cachedAlias = _aliasCache[language];
-    if (cachedAlias != null) {
-      return cachedAlias;
-    }
-
-    for (final MapEntry<String, Mode> entry in builtinAllLanguages.entries) {
-      final List<String>? aliases = entry.value.aliases;
-      if (aliases == null) {
-        continue;
-      }
-      for (final String alias in aliases) {
-        if (alias.toLowerCase() == language) {
-          _aliasCache[language] = entry.key;
-          return entry.key;
-        }
-      }
-    }
-
-    return null;
   }
 }
 
