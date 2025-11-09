@@ -137,79 +137,90 @@ class _CalendarScreenState extends State<CalendarScreen> {
           } else if (_selectedView == 'todo') {
             return _buildTodoView(appProvider, l10n);
           } else {
-            return Column(
-              children: [
-                TableCalendar<Note>(
-                key: ValueKey(_calendarKey),
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                calendarFormat: _calendarFormat,
-                availableCalendarFormats: {
-                  CalendarFormat.month: l10n.month,
-                  CalendarFormat.twoWeeks: l10n.twoWeeks,
-                  CalendarFormat.week: l10n.week,
-                },
-                selectedDayPredicate: (day) {
-                  return isSameDay(_selectedDay, day);
-                },
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                onFormatChanged: (format) {
-                  setState(() {
-                    _calendarFormat = format;
-                    // Force a complete rebuild by updating the key
-                    _calendarKey++;
-                    // Ensure focused day is properly set when format changes
-                    if (_selectedDay != null) {
-                      _focusedDay = _selectedDay!;
-                    } else {
-                      _focusedDay = DateTime.now();
-                    }
-                  });
-                },
-                onPageChanged: (focusedDay) {
-                  setState(() {
-                    _focusedDay = focusedDay;
-                  });
-                },
-                eventLoader: (day) {
-                  final tasks = appProvider.getTasksForDate(day);
-                  if (_selectedTags.isEmpty) {
-                    return tasks;
-                  }
-                  return tasks.where((task) {
-                    return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
-                  }).toList();
-                },
-                calendarStyle: CalendarStyle(
-                  outsideDaysVisible: true,
-                  markersMaxCount: 3,
-                  markerDecoration: BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  TableCalendar<Note>(
+                    key: ValueKey(_calendarKey),
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    availableCalendarFormats: {
+                      CalendarFormat.month: l10n.month,
+                      CalendarFormat.twoWeeks: l10n.twoWeeks,
+                      CalendarFormat.week: l10n.week,
+                    },
+                    selectedDayPredicate: (day) {
+                      return isSameDay(_selectedDay, day);
+                    },
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    onFormatChanged: (format) {
+                      setState(() {
+                        _calendarFormat = format;
+                        // Force a complete rebuild by updating the key
+                        _calendarKey++;
+                        // Ensure focused day is properly set when format changes
+                        if (_selectedDay != null) {
+                          _focusedDay = _selectedDay!;
+                        } else {
+                          _focusedDay = DateTime.now();
+                        }
+                      });
+                    },
+                    onPageChanged: (focusedDay) {
+                      setState(() {
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    eventLoader: (day) {
+                      final tasks = appProvider.getTasksForDate(day);
+                      if (_selectedTags.isEmpty) {
+                        return tasks;
+                      }
+                      return tasks.where((task) {
+                        return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+                      }).toList();
+                    },
+                    calendarStyle: CalendarStyle(
+                      outsideDaysVisible: true,
+                      markersMaxCount: 3,
+                      markerDecoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: true,
+                      titleCentered: true,
+                      formatButtonShowsNext: false,
+                    ),
                   ),
-                ),
-                headerStyle: HeaderStyle(
-                  formatButtonVisible: true,
-                  titleCentered: true,
-                  formatButtonShowsNext: false,
-                ),
+                  const Divider(),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Calculate a reasonable height for content area
+                      final screenHeight = MediaQuery.of(context).size.height;
+                      final contentHeight = (screenHeight * 0.4).clamp(300.0, 500.0);
+                      
+                      return SizedBox(
+                        height: contentHeight,
+                        child: _selectedDay == null
+                            ? const Center(
+                                child: Text('Select a day to view notes and tasks'),
+                              )
+                            : _buildTabbedDayContent(appProvider, l10n),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const Divider(),
-              Expanded(
-                child: _selectedDay == null
-                    ? const Center(
-                        child: Text('Select a day to view notes and tasks'),
-                      )
-                    : _buildTabbedDayContent(appProvider, l10n),
-              ),
-            ],
-          );
+            );
           }
         },
       ),
@@ -233,64 +244,75 @@ class _CalendarScreenState extends State<CalendarScreen> {
             return _selectedTags.any((selectedTag) => note.tags.contains(selectedTag));
           }).toList();
 
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          // Date header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              AppDateUtils.formatDateNumeric(selectedDate, context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate available height for TabBarView
+        // Date header: ~60px, Tab bar: ~48px, padding: ~32px
+        const headerHeight = 60.0;
+        const tabBarHeight = 48.0;
+        final tabViewHeight = constraints.maxHeight - headerHeight - tabBarHeight;
+        
+        return DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              // Date header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  AppDateUtils.formatDateNumeric(selectedDate, context),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
-          ),
-          // Tab bar
-          Container(
-            color: Theme.of(context).colorScheme.surface,
-            child: TabBar(
-              tabs: [
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.task_alt, size: 18),
-                      const SizedBox(width: 8),
-                      Text('${l10n.tasks} (${tasks.length})'),
-                    ],
-                  ),
+              // Tab bar
+              Container(
+                color: Theme.of(context).colorScheme.surface,
+                child: TabBar(
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.task_alt, size: 18),
+                          const SizedBox(width: 8),
+                          Text('${l10n.tasks} (${tasks.length})'),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.note, size: 18),
+                          const SizedBox(width: 8),
+                          Text('${l10n.notes} (${notes.length})'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  labelColor: Theme.of(context).colorScheme.onSurface,
+                  unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  indicatorColor: Theme.of(context).colorScheme.primary,
+                  indicatorWeight: 2.0,
+                  dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
                 ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.note, size: 18),
-                      const SizedBox(width: 8),
-                      Text('${l10n.notes} (${notes.length})'),
-                    ],
-                  ),
+              ),
+              // Tab content
+              SizedBox(
+                height: tabViewHeight,
+                child: TabBarView(
+                  children: [
+                    _buildTasksTab(tasks, appProvider, l10n),
+                    _buildNotesTab(notes, l10n),
+                  ],
                 ),
-              ],
-              labelColor: Theme.of(context).colorScheme.onSurface,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-              indicatorColor: Theme.of(context).colorScheme.primary,
-              indicatorWeight: 2.0,
-              dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-            ),
+              ),
+            ],
           ),
-          // Tab content
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildTasksTab(tasks, appProvider, l10n),
-                _buildNotesTab(notes, l10n),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

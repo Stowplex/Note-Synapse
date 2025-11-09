@@ -108,80 +108,94 @@ class _MainScreenState extends State<MainScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40), // Added bottom padding to prevent overflow
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.addNewContent,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.psychology),
-              title: Text(l10n.newAiAction),
-              subtitle: Text(l10n.newAiActionSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToAIAction(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.note_add),
-              title: Text(l10n.newNote),
-              subtitle: Text(l10n.newNoteSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNewNote(NoteType.note);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.task),
-              title: Text(l10n.newTask),
-              subtitle: Text(l10n.newTaskSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNewNote(NoteType.task);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.mic),
-              title: Text(l10n.newVoice),
-              subtitle: Text(l10n.newVoiceSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToVoiceNote(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.image),
-              title: Text(l10n.newPicture),
-              subtitle: Text(l10n.newPictureSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToImageNote(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_file),
-              title: Text(l10n.attachment),
-              subtitle: Text(l10n.attachmentSubtitle),
-              onTap: () {
-                _navigateToFileAttachment(context);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.content_paste),
-              title: Text(l10n.newNoteFromClipboard),
-              subtitle: Text(l10n.newNoteFromClipboardSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNoteFromClipboard(context);
-              },
-            ),
-          ],
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.addNewContent,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.psychology),
+                        title: Text(l10n.newAiAction),
+                        subtitle: Text(l10n.newAiActionSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToAIAction(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.note_add),
+                        title: Text(l10n.newNote),
+                        subtitle: Text(l10n.newNoteSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNewNote(NoteType.note);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.task),
+                        title: Text(l10n.newTask),
+                        subtitle: Text(l10n.newTaskSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNewNote(NoteType.task);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.mic),
+                        title: Text(l10n.newVoice),
+                        subtitle: Text(l10n.newVoiceSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToVoiceNote(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.image),
+                        title: Text(l10n.newPicture),
+                        subtitle: Text(l10n.newPictureSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToImageNote(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.attach_file),
+                        title: Text(l10n.attachment),
+                        subtitle: Text(l10n.attachmentSubtitle),
+                        onTap: () {
+                          _navigateToFileAttachment(context);
+                          Navigator.pop(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.content_paste),
+                        title: Text(l10n.newNoteFromClipboard),
+                        subtitle: Text(l10n.newNoteFromClipboardSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNoteFromClipboard(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1541,68 +1541,117 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          _getFileIcon(fileName),
-          color: fileExists ? null : Colors.grey,
-        ),
-        title: Text(
-          fileName,
-          style: TextStyle(color: fileExists ? null : Colors.grey),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              fileExists
-                  ? _formatFileSize(file.lengthSync())
-                  : 'File not found',
-              style: TextStyle(
-                color: fileExists ? Colors.grey[600] : Colors.red,
-              ),
-            ),
-            if (isAudioFile && fileExists && _audioService != null) ...[
-              const SizedBox(height: 4),
-              _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
-            ],
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isAudioFile && fileExists && _audioService != null) ...[
-              IconButton(
-                icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
-                onPressed: () => _toggleAudioPlayback(attachmentPath),
-                tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
-              ),
-              if (isCurrentlyPlaying)
-                IconButton(
-                  icon: const Icon(Icons.stop),
-                  onPressed: () => _stopAudioPlayback(),
-                  tooltip: 'Stop',
-                ),
-              IconButton(
-                icon: const Icon(Icons.text_fields),
-                onPressed: () => _transcribeAudio(attachmentPath),
-                tooltip: 'Transcribe with AI',
-              ),
-            ] else if (fileExists)
-              IconButton(
-                icon: const Icon(Icons.open_in_new),
-                onPressed: () => FileUtils.openFile(attachmentPath, context),
-                tooltip: 'Open with default application',
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _removeAttachment(attachmentPath, currentNote),
-              tooltip: l10n.removeAttachmentTooltip,
-            ),
-          ],
-        ),
+      child: InkWell(
         onTap: fileExists && !isAudioFile
             ? () => FileUtils.openFile(attachmentPath, context)
             : null,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _getFileIcon(fileName),
+                    color: fileExists ? null : Colors.grey,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fileName,
+                          style: TextStyle(
+                            color: fileExists ? null : Colors.grey,
+                            fontSize: 16,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          fileExists
+                              ? _formatFileSize(file.lengthSync())
+                              : 'File not found',
+                          style: TextStyle(
+                            color: fileExists ? Colors.grey[600] : Colors.red,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAudioFile && fileExists && _audioService != null) ...[
+                        IconButton(
+                          icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
+                          onPressed: () => _toggleAudioPlayback(attachmentPath),
+                          tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                        if (isCurrentlyPlaying)
+                          IconButton(
+                            icon: const Icon(Icons.stop),
+                            onPressed: () => _stopAudioPlayback(),
+                            tooltip: 'Stop',
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.text_fields),
+                          onPressed: () => _transcribeAudio(attachmentPath),
+                          tooltip: 'Transcribe with AI',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      ] else if (fileExists)
+                        IconButton(
+                          icon: const Icon(Icons.open_in_new),
+                          onPressed: () => FileUtils.openFile(attachmentPath, context),
+                          tooltip: 'Open with default application',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _removeAttachment(attachmentPath, currentNote),
+                        tooltip: l10n.removeAttachmentTooltip,
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (isAudioFile && fileExists && _audioService != null) ...[
+                const SizedBox(height: 8),
+                _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
