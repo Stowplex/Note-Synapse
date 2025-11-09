@@ -604,45 +604,54 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
     final String headerLabel = (resolvedLanguage ?? fallbackLabel ?? 'code')
         .toUpperCase();
 
-    final Color backgroundColor = Color.alphaBlend(
-      colorScheme.primary.withOpacity(isDark ? 0.10 : 0.05),
-      colorScheme.surfaceVariant,
-    );
+    final Color backgroundColor = isDark
+        ? Color.alphaBlend(
+            Colors.black.withOpacity(0.35),
+            colorScheme.surface,
+          )
+        : Color.alphaBlend(
+            colorScheme.primary.withOpacity(0.05),
+            colorScheme.surface,
+          );
 
     return Material(
       color: backgroundColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: colorScheme.outline.withOpacity(0.2),
+          color: colorScheme.outline.withOpacity(0.12),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
                 Text(
                   headerLabel,
-                  style: theme.textTheme.labelLarge?.copyWith(
+                  style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
+                    letterSpacing: 0.5,
                   ),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     foregroundColor: colorScheme.onSurface,
-                    textStyle: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    textStyle: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   onPressed: widget.code.isEmpty ? null : _handleCopy,
                   icon: Icon(
                     _copied ? Icons.done : Icons.content_paste,
-                    size: 16,
+                    size: 14,
                   ),
                   label: Text(_copied ? 'Copied!' : 'Copy code'),
                 ),
@@ -651,12 +660,12 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
           ),
           Divider(
             height: 1,
-            thickness: 1,
-            color: colorScheme.outline.withOpacity(0.1),
+            thickness: 0.8,
+            color: colorScheme.outline.withOpacity(0.08),
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: SelectableText.rich(
               highlightResult.span,
               style: baseStyle,
@@ -671,11 +680,14 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
     final theme = Theme.of(context);
     final TextStyle effectiveBase =
         widget.textStyle ?? theme.textTheme.bodyMedium ?? const TextStyle();
+    final double baseSize =
+        effectiveBase.fontSize ?? theme.textTheme.bodyMedium?.fontSize ?? 14;
     return effectiveBase.copyWith(
       fontFamily: 'JetBrainsMono',
       fontFamilyFallback: const ['SourceCodePro', 'monospace'],
-      height: 1.45,
-      letterSpacing: 0.1,
+      fontSize: (baseSize * 0.92),
+      height: 1.42,
+      letterSpacing: 0.05,
       color: effectiveBase.color ?? theme.colorScheme.onSurface,
     );
   }
