@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
+import 'package:html2md/html2md.dart' as html2md;
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
@@ -11,9 +12,9 @@ import 'database_service.dart';
 import 'logger_service.dart';
 import 'prompts/note_prompt_builder.dart';
 import 'user_app_library_service.dart';
+import 'web_content_extraction_service.dart';
 
 class UserAppService {
-  
   // Get all user apps
   static Future<List<UserApp>> getAllUserApps() async {
     try {
@@ -24,7 +25,7 @@ class UserAppService {
       return [];
     }
   }
-  
+
   // Save a user app
   static Future<void> saveUserApp(UserApp app) async {
     try {
@@ -35,7 +36,7 @@ class UserAppService {
       rethrow;
     }
   }
-  
+
   // Update a user app
   static Future<void> updateUserApp(UserApp app) async {
     try {
@@ -46,7 +47,7 @@ class UserAppService {
       rethrow;
     }
   }
-  
+
   // Delete a user app
   static Future<void> deleteUserApp(String appId) async {
     try {
@@ -57,7 +58,7 @@ class UserAppService {
       rethrow;
     }
   }
-  
+
   // Get app state
   static Future<Map<String, dynamic>?> getAppState(String appId) async {
     try {
@@ -68,9 +69,12 @@ class UserAppService {
       return null;
     }
   }
-  
+
   // Save app state
-  static Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
+  static Future<void> saveAppState(
+    String appId,
+    Map<String, dynamic> state,
+  ) async {
     try {
       final databaseService = DatabaseService();
       await databaseService.updateUserAppState(appId, state);
@@ -111,7 +115,10 @@ class UserAppService {
     }
   }
 
-  static Future<void> setSelectedRevision(String appId, String revisionId) async {
+  static Future<void> setSelectedRevision(
+    String appId,
+    String revisionId,
+  ) async {
     try {
       final databaseService = DatabaseService();
       final app = await databaseService.getUserApp(appId);
@@ -164,8 +171,7 @@ class UserAppService {
       rethrow;
     }
   }
-  
-  
+
   // Create a new user app using AI
   static Future<UserApp> createUserApp({
     required String name,
@@ -188,17 +194,29 @@ class UserAppService {
         contextNotes: contextNotes,
         libraries: libraries,
       );
-      
+
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
-      final htmlContent = parsedResponse['code']?.isNotEmpty == true ? parsedResponse['code']! : aiResponse;
-      final explanation = parsedResponse['explanation']?.isNotEmpty == true ? parsedResponse['explanation']! : '';
-      
-      LoggerService.debug('createUserApp: Parsed response - code length: ${parsedResponse['code']?.length ?? 0}, explanation length: ${parsedResponse['explanation']?.length ?? 0}');
-      LoggerService.debug('createUserApp: Using parsed code: ${parsedResponse['code']?.isNotEmpty == true}');
-      LoggerService.debug('createUserApp: Final htmlContent length: ${htmlContent.length}');
-      LoggerService.debug('createUserApp: Final explanation length: ${explanation.length}');
-      
+      final htmlContent = parsedResponse['code']?.isNotEmpty == true
+          ? parsedResponse['code']!
+          : aiResponse;
+      final explanation = parsedResponse['explanation']?.isNotEmpty == true
+          ? parsedResponse['explanation']!
+          : '';
+
+      LoggerService.debug(
+        'createUserApp: Parsed response - code length: ${parsedResponse['code']?.length ?? 0}, explanation length: ${parsedResponse['explanation']?.length ?? 0}',
+      );
+      LoggerService.debug(
+        'createUserApp: Using parsed code: ${parsedResponse['code']?.isNotEmpty == true}',
+      );
+      LoggerService.debug(
+        'createUserApp: Final htmlContent length: ${htmlContent.length}',
+      );
+      LoggerService.debug(
+        'createUserApp: Final explanation length: ${explanation.length}',
+      );
+
       final app = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         uuid: const Uuid().v4(),
@@ -211,9 +229,9 @@ class UserAppService {
         updatedAt: DateTime.now(),
         libraries: libraries,
       );
-      
+
       await saveUserApp(app);
-      
+
       // Always create initial revision for new apps
       final databaseService = DatabaseService();
       final revision = AppRevision(
@@ -226,33 +244,40 @@ class UserAppService {
         appCode: htmlContent,
         attachmentPaths: attachmentPaths ?? [],
       );
-      
+
       LoggerService.debug('Creating revision ${revision.id} for app ${app.id}');
       LoggerService.debug('Revision userPrompt: ${revision.userPrompt}');
-      LoggerService.debug('Revision aiResponse length: ${revision.aiResponse.length}');
-      LoggerService.debug('Revision appCode length: ${revision.appCode.length}');
-      LoggerService.debug('Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...');
-      
+      LoggerService.debug(
+        'Revision aiResponse length: ${revision.aiResponse.length}',
+      );
+      LoggerService.debug(
+        'Revision appCode length: ${revision.appCode.length}',
+      );
+      LoggerService.debug(
+        'Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...',
+      );
+
       await databaseService.insertAppRevision(revision);
-      
+
       // Update app with selected revision
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
       await databaseService.updateUserApp(updatedApp);
-      LoggerService.debug('Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}');
-      
+      LoggerService.debug(
+        'Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}',
+      );
+
       // Download and store libraries if provided
       if (libraries != null && libraries.isNotEmpty) {
         await _downloadAndStoreLibraries(updatedApp, revision, libraries);
       }
-      
+
       return updatedApp;
     } catch (e) {
       LoggerService.error('Error creating user app: $e', error: e);
       rethrow;
     }
   }
-  
-  
+
   // Save manual code edit by creating a new revision
   static Future<AppRevision> saveManualCodeEdit({
     required UserApp originalApp,
@@ -262,8 +287,10 @@ class UserAppService {
     try {
       // Get the next revision number
       final databaseService = DatabaseService();
-      final revisionNumber = await databaseService.getNextRevisionNumber(originalApp.id);
-      
+      final revisionNumber = await databaseService.getNextRevisionNumber(
+        originalApp.id,
+      );
+
       // Create the revision for manual edit
       final revision = AppRevision(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -275,42 +302,56 @@ class UserAppService {
         appCode: newCode,
         attachmentPaths: attachmentPaths ?? [],
       );
-      
+
       // Save the revision
       await databaseService.insertAppRevision(revision);
-      
+
       // Copy dependencies from the current revision to the new revision
       if (originalApp.selectedRevisionId != null) {
         try {
-          LoggerService.debug('Manual edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
-          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          LoggerService.debug(
+            'Manual edit: Copying dependencies from revision ${originalApp.selectedRevisionId}',
+          );
+          final currentRevision = await databaseService.getAppRevision(
+            originalApp.selectedRevisionId!,
+          );
           if (currentRevision != null) {
-            LoggerService.debug('Manual edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            LoggerService.debug(
+              'Manual edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}',
+            );
             final libraryService = UserAppLibraryService();
             await libraryService.copyLibrariesToRevision(
               appUuid: originalApp.uuid,
               fromRevisionId: currentRevision.revisionNumber,
               toRevisionId: revisionNumber,
             );
-            LoggerService.debug('Manual edit: Successfully copied dependencies to revision $revisionNumber');
+            LoggerService.debug(
+              'Manual edit: Successfully copied dependencies to revision $revisionNumber',
+            );
           } else {
-            LoggerService.warning('Manual edit: Current revision not found: ${originalApp.selectedRevisionId}');
+            LoggerService.warning(
+              'Manual edit: Current revision not found: ${originalApp.selectedRevisionId}',
+            );
           }
         } catch (e) {
-          LoggerService.warning('Failed to copy dependencies for manual edit: $e');
+          LoggerService.warning(
+            'Failed to copy dependencies for manual edit: $e',
+          );
           // Don't rethrow - the revision creation should still succeed
         }
       } else {
-        LoggerService.warning('Manual edit: No selectedRevisionId found in originalApp');
+        LoggerService.warning(
+          'Manual edit: No selectedRevisionId found in originalApp',
+        );
       }
-      
+
       // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(
         selectedRevisionId: revision.id,
         updatedAt: DateTime.now(),
       );
       await databaseService.updateUserApp(updatedApp);
-      
+
       return revision;
     } catch (e) {
       LoggerService.error('Error saving manual code edit: $e', error: e);
@@ -339,16 +380,18 @@ class UserAppService {
         contextNotes: contextNotes,
         libraries: libraries,
       );
-      
+
       // Parse the AI response to extract code and explanation
       final parsedResponse = parseAIResponse(aiResponse);
       final newHtmlContent = parsedResponse['code'] ?? originalApp.htmlContent;
       final explanation = parsedResponse['explanation'] ?? '';
-      
+
       // Get the next revision number
       final databaseService = DatabaseService();
-      final revisionNumber = await databaseService.getNextRevisionNumber(originalApp.id);
-      
+      final revisionNumber = await databaseService.getNextRevisionNumber(
+        originalApp.id,
+      );
+
       // Create the revision
       final revision = AppRevision(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -360,54 +403,66 @@ class UserAppService {
         appCode: newHtmlContent,
         attachmentPaths: attachmentPaths ?? [],
       );
-      
+
       // Save the revision
       await databaseService.insertAppRevision(revision);
-      
+
       // Download and store libraries if provided
       if (libraries != null && libraries.isNotEmpty) {
         await _downloadAndStoreLibraries(originalApp, revision, libraries);
       }
-      
+
       // Copy dependencies from the current revision to the new revision
       if (originalApp.selectedRevisionId != null) {
         try {
-          LoggerService.debug('AI edit: Copying dependencies from revision ${originalApp.selectedRevisionId}');
-          final currentRevision = await databaseService.getAppRevision(originalApp.selectedRevisionId!);
+          LoggerService.debug(
+            'AI edit: Copying dependencies from revision ${originalApp.selectedRevisionId}',
+          );
+          final currentRevision = await databaseService.getAppRevision(
+            originalApp.selectedRevisionId!,
+          );
           if (currentRevision != null) {
-            LoggerService.debug('AI edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}');
+            LoggerService.debug(
+              'AI edit: Found current revision ${currentRevision.id} with revision number ${currentRevision.revisionNumber}',
+            );
             final libraryService = UserAppLibraryService();
             await libraryService.copyLibrariesToRevision(
               appUuid: originalApp.uuid,
               fromRevisionId: currentRevision.revisionNumber,
               toRevisionId: revisionNumber,
             );
-            LoggerService.debug('AI edit: Successfully copied dependencies to revision $revisionNumber');
+            LoggerService.debug(
+              'AI edit: Successfully copied dependencies to revision $revisionNumber',
+            );
           } else {
-            LoggerService.warning('AI edit: Current revision not found: ${originalApp.selectedRevisionId}');
+            LoggerService.warning(
+              'AI edit: Current revision not found: ${originalApp.selectedRevisionId}',
+            );
           }
         } catch (e) {
           LoggerService.warning('Failed to copy dependencies for AI edit: $e');
           // Don't rethrow - the revision creation should still succeed
         }
       } else {
-        LoggerService.warning('AI edit: No selectedRevisionId found in originalApp');
+        LoggerService.warning(
+          'AI edit: No selectedRevisionId found in originalApp',
+        );
       }
-      
+
       // Update the app's selected revision (but NOT the htmlContent)
       final updatedApp = originalApp.copyWith(
         selectedRevisionId: revision.id,
         updatedAt: DateTime.now(),
       );
       await databaseService.updateUserApp(updatedApp);
-      
+
       return revision;
     } catch (e) {
       LoggerService.error('Error editing user app: $e', error: e);
       rethrow;
     }
   }
-  
+
   // Generate app HTML using AI
   static Future<String> _generateAppWithAI(
     String name,
@@ -434,14 +489,17 @@ class UserAppService {
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(
+        prompt,
+        attachedFiles,
+      );
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app with AI: $e', error: e);
       rethrow;
     }
   }
-  
+
   // Generate app edit using AI
   static Future<String> _generateAppEditWithAI(
     String name,
@@ -456,15 +514,18 @@ class UserAppService {
   }) async {
     try {
       final noteContextPayload = await _buildNoteContextPayload(contextNotes);
-      final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+      final librariesSection = libraries != null && libraries.isNotEmpty
+          ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
     - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
-''' : '';
+'''
+          : '';
 
-      final noteContextSection = (noteContextPayload?.text?.trim().isNotEmpty ?? false)
+      final noteContextSection =
+          (noteContextPayload?.text?.trim().isNotEmpty ?? false)
           ? '''
 Additional Note Context:
 ${noteContextPayload!.text}
@@ -473,7 +534,8 @@ Use these notes (including linked relationships) to ground the edits and incorpo
 '''
           : '';
 
-      final prompt = '''
+      final prompt =
+          '''
 Edit the following HTML application based on the user's suggestion:
 
 Original App Name: $name
@@ -918,7 +980,11 @@ IMPORTANT - REQUIREMENTS:
 11. Use MathML to display mathematical formulas.
 12. Place adequate console logging to help tracking key steps in the code.
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
+${type == UserAppType.noteAction
+              ? _getNoteActionAppInstructions()
+              : type == UserAppType.aiTool
+              ? _getAiToolAppInstructions()
+              : ''}
 
 Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
 
@@ -943,20 +1009,23 @@ Here's the updated application with your requested changes:
 </html>
 ```
 ''';
-      
+
       final attachedFiles = await _prepareAttachments(
         attachmentPaths: attachmentPaths,
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateAppWithAttachments(prompt, attachedFiles);
+      final response = await AIService.generateAppWithAttachments(
+        prompt,
+        attachedFiles,
+      );
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
       LoggerService.error('Error generating app edit with AI: $e', error: e);
       rethrow;
     }
   }
-  
+
   // Build the app generation prompt
   static String _buildAppGenerationPrompt(
     String name,
@@ -966,15 +1035,18 @@ Here's the updated application with your requested changes:
     List<UserAppLibraryInfo>? libraries,
     String? noteContext,
   }) {
-    final librariesSection = libraries != null && libraries.isNotEmpty ? '''
+    final librariesSection = libraries != null && libraries.isNotEmpty
+        ? '''
   - User-provided libraries:
 ${libraries.map((lib) => '''
     - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
       Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
 ''').join('')}
-''' : '';
+'''
+        : '';
 
-    final noteContextSection = (noteContext != null && noteContext.trim().isNotEmpty)
+    final noteContextSection =
+        (noteContext != null && noteContext.trim().isNotEmpty)
         ? '''
 Additional Note Context:
 $noteContext
@@ -982,8 +1054,9 @@ $noteContext
 Use these notes (including linked relationships) to shape the app's functionality, data access patterns, and UI examples.
 '''
         : '';
-    
-    final basePrompt = '''
+
+    final basePrompt =
+        '''
 Create a single-page self-contained HTML application based on the following requirements:
 
 App Name: $name
@@ -1431,7 +1504,11 @@ Example SQL queries you can use:
 - SELECT * FROM notes WHERE pinned = 1 ORDER BY createdAt DESC
 - SELECT * FROM subnotes WHERE noteId = 'some-note-id' AND isCompleted = 0
 
-${type == UserAppType.noteAction ? _getNoteActionAppInstructions() : type == UserAppType.aiTool ? _getAiToolAppInstructions() : ''}
+${type == UserAppType.noteAction
+            ? _getNoteActionAppInstructions()
+            : type == UserAppType.aiTool
+            ? _getAiToolAppInstructions()
+            : ''}
 
 Generate the complete HTML application now.
 
@@ -1456,11 +1533,13 @@ Here's the complete HTML application:
 </html>
 ```
 ''';
-    
+
     return basePrompt;
   }
 
-  static Future<_NoteContextPayload?> _buildNoteContextPayload(List<Note>? contextNotes) async {
+  static Future<_NoteContextPayload?> _buildNoteContextPayload(
+    List<Note>? contextNotes,
+  ) async {
     if (contextNotes == null || contextNotes.isEmpty) {
       return null;
     }
@@ -1478,7 +1557,9 @@ Here's the complete HTML application:
         attachments: attachments,
       );
     } catch (e) {
-      LoggerService.warning('Failed to build note context for user app prompts: $e');
+      LoggerService.warning(
+        'Failed to build note context for user app prompts: $e',
+      );
       return null;
     }
   }
@@ -1656,40 +1737,94 @@ Here's the complete HTML application:
    to avoid confusion to the caller.
  ''';
   }
-  
+
   // Check if WebView is supported on current platform
   static bool isWebViewSupported() {
     return kIsWeb || !Platform.isLinux;
   }
 
+  static Future<Map<String, dynamic>> fetchWebPage(String urlRaw) async {
+    final url = urlRaw.trim();
+    if (url.isEmpty) {
+      throw ArgumentError('URL is required');
+    }
+
+    if (!isWebViewSupported()) {
+      throw Exception('WebView is not supported on this platform.');
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      throw ArgumentError('Invalid URL: $urlRaw');
+    }
+
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      throw ArgumentError('Only HTTP(S) URLs are supported');
+    }
+
+    final startTime = DateTime.now();
+    LoggerService.debug('[Synapse.fetchWebPage] Loading $url');
+
+    try {
+      final article = await WebContentExtractionService.extractFromUrl(url);
+      final markdown = html2md.convert(article.htmlContent);
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.debug(
+        '[Synapse.fetchWebPage] Success (${markdown.length} chars) in ${duration.inMilliseconds}ms',
+      );
+
+      return {
+        'url': url,
+        'title': article.title,
+        'markdown': markdown,
+        'html': article.htmlContent,
+        'textContent': article.textContent,
+        'excerpt': article.excerpt,
+      };
+    } catch (e, stackTrace) {
+      final duration = DateTime.now().difference(startTime);
+      LoggerService.error(
+        '[Synapse.fetchWebPage] Error after ${duration.inMilliseconds}ms for $url: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   // Parse AI response and extract code
   static Map<String, String> parseAIResponse(String response) {
-    final Map<String, String> result = {
-      'code': '',
-      'explanation': '',
-    };
-    
+    final Map<String, String> result = {'code': '', 'explanation': ''};
+
     // Remove leading and trailing whitespace
     String trimmed = response.trim();
-    LoggerService.debug('parseAIResponse: Input length: ${trimmed.length},Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...');
-    
+    LoggerService.debug(
+      'parseAIResponse: Input length: ${trimmed.length},Input preview: ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}...',
+    );
+
     // Look for HTML code blocks
     final htmlCodeBlockRegex = RegExp(r'```html\s*\n(.*?)\n```', dotAll: true);
     final codeBlockRegex = RegExp(r'```\s*\n(.*?)\n```', dotAll: true);
-    
+
     String? code;
     if (htmlCodeBlockRegex.hasMatch(trimmed)) {
       final match = htmlCodeBlockRegex.firstMatch(trimmed);
       code = match?.group(1)?.trim();
-      LoggerService.debug('parseAIResponse: Found HTML code block, length: ${code?.length ?? 0}');
+      LoggerService.debug(
+        'parseAIResponse: Found HTML code block, length: ${code?.length ?? 0}',
+      );
     } else if (codeBlockRegex.hasMatch(trimmed)) {
       final match = codeBlockRegex.firstMatch(trimmed);
       code = match?.group(1)?.trim();
-      LoggerService.debug('parseAIResponse: Found generic code block, length: ${code?.length ?? 0}');
+      LoggerService.debug(
+        'parseAIResponse: Found generic code block, length: ${code?.length ?? 0}',
+      );
     } else {
       LoggerService.debug('parseAIResponse: No code blocks found');
     }
-    
+
     if (code != null && code.isNotEmpty) {
       result['code'] = code;
       // Remove the code block from the response to get the explanation
@@ -1701,58 +1836,74 @@ Here's the complete HTML application:
       // If no code blocks found, treat the entire response as explanation
       result['explanation'] = trimmed;
     }
-    
-    LoggerService.debug('parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}');
+
+    LoggerService.debug(
+      'parseAIResponse: Result - code length: ${result['code']?.length ?? 0}, explanation length: ${result['explanation']?.length ?? 0}',
+    );
     return result;
   }
 
   // Download and store libraries for a user app
-  static Future<void> _downloadAndStoreLibraries(UserApp app, AppRevision revision, List<UserAppLibraryInfo> libraries) async {
+  static Future<void> _downloadAndStoreLibraries(
+    UserApp app,
+    AppRevision revision,
+    List<UserAppLibraryInfo> libraries,
+  ) async {
     try {
-      LoggerService.info('Downloading ${libraries.length} libraries for app ${app.name}');
-      
+      LoggerService.info(
+        'Downloading ${libraries.length} libraries for app ${app.name}',
+      );
+
       final libraryService = UserAppLibraryService();
-      
+
       // Get revision number from revision ID
       final revisionNumber = revision.revisionNumber;
-      
+
       for (final libraryInfo in libraries) {
         if (libraryInfo.name.trim().isEmpty || libraryInfo.links.isEmpty) {
-          LoggerService.warning('Skipping library with empty name or no links: ${libraryInfo.name}');
+          LoggerService.warning(
+            'Skipping library with empty name or no links: ${libraryInfo.name}',
+          );
           continue;
         }
-        
+
         LoggerService.info('Processing library: ${libraryInfo.name}');
-        
+
         // Download each library link
         final dependencies = <LibraryDependency>[];
-        
+
         for (final link in libraryInfo.links) {
           if (link.trim().isEmpty) continue;
-          
+
           try {
             LoggerService.debug('Downloading library file: $link');
-            
+
             final response = await http.get(Uri.parse(link));
             if (response.statusCode == 200) {
               // Process the URL to get the local path
               final localPath = _processLibraryUrl(link);
-              
-              dependencies.add(LibraryDependency(
-                originalUrl: link,
-                localPath: localPath,
-                bytes: response.bodyBytes,
-              ));
-              
-              LoggerService.debug('Downloaded: $link -> $localPath (${response.bodyBytes.length} bytes)');
+
+              dependencies.add(
+                LibraryDependency(
+                  originalUrl: link,
+                  localPath: localPath,
+                  bytes: response.bodyBytes,
+                ),
+              );
+
+              LoggerService.debug(
+                'Downloaded: $link -> $localPath (${response.bodyBytes.length} bytes)',
+              );
             } else {
-              LoggerService.warning('Failed to download $link: HTTP ${response.statusCode}');
+              LoggerService.warning(
+                'Failed to download $link: HTTP ${response.statusCode}',
+              );
             }
           } catch (e) {
             LoggerService.error('Error downloading $link: $e');
           }
         }
-        
+
         if (dependencies.isNotEmpty) {
           // Add the library to the database
           await libraryService.addLibrary(
@@ -1762,13 +1913,17 @@ Here's the complete HTML application:
             usageInstructions: libraryInfo.usage,
             dependencies: dependencies,
           );
-          
-          LoggerService.info('Successfully added library: ${libraryInfo.name} with ${dependencies.length} dependencies');
+
+          LoggerService.info(
+            'Successfully added library: ${libraryInfo.name} with ${dependencies.length} dependencies',
+          );
         } else {
-          LoggerService.warning('No dependencies downloaded for library: ${libraryInfo.name}');
+          LoggerService.warning(
+            'No dependencies downloaded for library: ${libraryInfo.name}',
+          );
         }
       }
-      
+
       LoggerService.info('Completed downloading libraries for app ${app.name}');
     } catch (e) {
       LoggerService.error('Error downloading libraries: $e', error: e);
@@ -1780,16 +1935,16 @@ Here's the complete HTML application:
   static String _processLibraryUrl(String url) {
     try {
       final uri = Uri.parse(url);
-      
+
       // Remove the scheme and host, keep the path
       // Example: https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js -> /npm/mermaid@11/dist/mermaid.min.js
       var path = uri.path;
-      
+
       // Ensure path starts with /
       if (!path.startsWith('/')) {
         path = '/$path';
       }
-      
+
       return path;
     } catch (e) {
       LoggerService.error('Error processing library URL $url: $e');
@@ -1802,17 +1957,21 @@ Here's the complete HTML application:
   static Future<UserApp> cloneUserApp(UserApp originalApp) async {
     try {
       LoggerService.info('Cloning user app: ${originalApp.name}');
-      
+
       // Get the selected revision from the original app
       AppRevision? selectedRevision;
       if (originalApp.selectedRevisionId != null) {
-        selectedRevision = await getAppRevision(originalApp.selectedRevisionId!);
+        selectedRevision = await getAppRevision(
+          originalApp.selectedRevisionId!,
+        );
       }
-      
+
       if (selectedRevision == null) {
-        throw Exception('No selected revision found for app: ${originalApp.id}');
+        throw Exception(
+          'No selected revision found for app: ${originalApp.id}',
+        );
       }
-      
+
       // Create new app with new UUID and ID
       final newApp = UserApp(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1826,12 +1985,14 @@ Here's the complete HTML application:
         license: originalApp.license,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        libraries: originalApp.libraries != null ? List<UserAppLibraryInfo>.from(originalApp.libraries!) : null,
+        libraries: originalApp.libraries != null
+            ? List<UserAppLibraryInfo>.from(originalApp.libraries!)
+            : null,
       );
-      
+
       // Save the new app
       await saveUserApp(newApp);
-      
+
       // Create a new revision with the selected revision's content
       final newRevision = AppRevision(
         id: '${DateTime.now().millisecondsSinceEpoch}_rev',
@@ -1839,51 +2000,68 @@ Here's the complete HTML application:
         revisionNumber: 1,
         revisionTimestamp: DateTime.now(),
         userPrompt: 'Cloned from ${originalApp.name}',
-        aiResponse: 'This app was cloned from the selected revision of "${originalApp.name}".',
+        aiResponse:
+            'This app was cloned from the selected revision of "${originalApp.name}".',
         appCode: selectedRevision.appCode,
         attachmentPaths: List<String>.from(selectedRevision.attachmentPaths),
       );
-      
+
       // Save the new revision
       final databaseService = DatabaseService();
       await databaseService.insertAppRevision(newRevision);
-      
+
       // Update the app with the selected revision
       final updatedApp = newApp.copyWith(selectedRevisionId: newRevision.id);
       await databaseService.updateUserApp(updatedApp);
-      
+
       // Copy libraries if they exist
-      LoggerService.debug('Checking for libraries in original app: ${originalApp.name}');
-      LoggerService.debug('Original app libraries field: ${originalApp.libraries?.length ?? 0}');
-      
+      LoggerService.debug(
+        'Checking for libraries in original app: ${originalApp.name}',
+      );
+      LoggerService.debug(
+        'Original app libraries field: ${originalApp.libraries?.length ?? 0}',
+      );
+
       try {
         LoggerService.info('Copying libraries for cloned app: ${newApp.name}');
         final libraryService = UserAppLibraryService();
-        
+
         // Get libraries from the original app's selected revision
         final sourceLibraries = await libraryService.getLibraries(
-          originalApp.uuid, 
-          selectedRevision.revisionNumber
+          originalApp.uuid,
+          selectedRevision.revisionNumber,
         );
-        
-        LoggerService.debug('Found ${sourceLibraries.length} libraries in source revision ${selectedRevision.revisionNumber}');
-        
+
+        LoggerService.debug(
+          'Found ${sourceLibraries.length} libraries in source revision ${selectedRevision.revisionNumber}',
+        );
+
         if (sourceLibraries.isNotEmpty) {
           // Copy each library to the new app
           for (final library in sourceLibraries) {
-            LoggerService.debug('Copying library: ${library.name} (ID: ${library.id})');
-            
+            LoggerService.debug(
+              'Copying library: ${library.name} (ID: ${library.id})',
+            );
+
             // Get all dependencies for this library
-            final dependencies = await libraryService.getDependencies(library.id);
-            LoggerService.debug('Found ${dependencies.length} dependencies for library ${library.name}');
-            
+            final dependencies = await libraryService.getDependencies(
+              library.id,
+            );
+            LoggerService.debug(
+              'Found ${dependencies.length} dependencies for library ${library.name}',
+            );
+
             // Convert UserAppLibraryDependency to LibraryDependency
-            final libraryDependencies = dependencies.map((dep) => LibraryDependency(
-              originalUrl: dep.originalUrl,
-              localPath: dep.localPath,
-              bytes: dep.bytes,
-            )).toList();
-            
+            final libraryDependencies = dependencies
+                .map(
+                  (dep) => LibraryDependency(
+                    originalUrl: dep.originalUrl,
+                    localPath: dep.localPath,
+                    bytes: dep.bytes,
+                  ),
+                )
+                .toList();
+
             // Create the library in the new app
             await libraryService.addLibrary(
               appUuid: newApp.uuid,
@@ -1893,32 +2071,34 @@ Here's the complete HTML application:
               dependencies: libraryDependencies,
             );
           }
-          
-          LoggerService.info('Successfully copied ${sourceLibraries.length} libraries for cloned app');
+
+          LoggerService.info(
+            'Successfully copied ${sourceLibraries.length} libraries for cloned app',
+          );
         } else {
-          LoggerService.debug('No libraries found in source revision ${selectedRevision.revisionNumber} for app ${originalApp.uuid}');
+          LoggerService.debug(
+            'No libraries found in source revision ${selectedRevision.revisionNumber} for app ${originalApp.uuid}',
+          );
         }
       } catch (e) {
         LoggerService.warning('Failed to copy libraries for cloned app: $e');
         // Don't rethrow - the clone should still succeed
       }
-      
-      LoggerService.info('Successfully cloned user app: ${originalApp.name} -> ${newApp.name}');
+
+      LoggerService.info(
+        'Successfully cloned user app: ${originalApp.name} -> ${newApp.name}',
+      );
       return updatedApp;
     } catch (e) {
       LoggerService.error('Error cloning user app: $e', error: e);
       rethrow;
     }
   }
-
 }
 
 class _NoteContextPayload {
   final String? text;
   final List<PlatformFile> attachments;
 
-  const _NoteContextPayload({
-    this.text,
-    this.attachments = const [],
-  });
+  const _NoteContextPayload({this.text, this.attachments = const []});
 }
