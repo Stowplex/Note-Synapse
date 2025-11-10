@@ -26,6 +26,30 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
 class ShareService {
+  static const _channel = MethodChannel('com.github.kkspeed/share');
+
+  static Future<void> init(AppProvider appProvider) async {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'newSharedContent') {
+        await handleSharedContent(appProvider);
+      }
+    });
+  }
+
+  static Future<void> handleSharedContent(AppProvider appProvider) async {
+    try {
+      final sharedData = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
+      if (sharedData != null) {
+        final result = await processSharedContent(sharedData.cast<String, dynamic>());
+        if (result['success'] == true) {
+          final note = result['note'] as Note;
+          await appProvider.addNote(note, fromShare: true);
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Error handling shared content: $e', error: e);
+    }
+  }
   
   /// Generates markdown text from a list of notes with optional sub-notes and linked notes
   static Future<String> generateMarkdownText({

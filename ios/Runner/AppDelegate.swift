@@ -4,7 +4,7 @@ import AVFoundation
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-  private let CHANNEL = "note_synapse/share"
+  private let CHANNEL = "com.github.kkspeed/share"
   private let appGroupId = "group.com.github.kkspeed.note-synapse"
   private let sharedKey = "shared"
   
@@ -42,8 +42,11 @@ import AVFoundation
   ) -> Bool {
     // Handle notesynapse://share URL scheme
     if url.scheme == "notesynapse" && url.host == "share" {
-      // The shared content is already saved in UserDefaults by the extension
-      // The Flutter app will retrieve it via getSharedContent method channel
+      // Notify the Flutter app that new content is available
+      if let controller = window?.rootViewController as? FlutterViewController {
+        let methodChannel = FlutterMethodChannel(name: CHANNEL, binaryMessenger: controller.binaryMessenger)
+        methodChannel.invokeMethod("newSharedContent", arguments: nil)
+      }
       return true
     }
     return super.application(app, open: url, options: options)

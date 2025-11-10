@@ -3008,4 +3008,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorAddingTranscription(String error) {
     return '添加转录时出错：$error';
   }
+
+  @override
+  String get newNoteFromShareCreated => '分享的笔记创建成功！';
 }

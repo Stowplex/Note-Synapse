@@ -5539,6 +5539,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error adding transcription: {error}'**
   String errorAddingTranscription(String error);
+
+  /// No description provided for @newNoteFromShareCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'New note from share created successfully!'**
+  String get newNoteFromShareCreated;
 }
 
 class _AppLocalizationsDelegate

@@ -1163,5 +1163,6 @@
             "type": "String"
           }
         }
-      }
+      },
+      "newNoteFromShareCreated": "New note from share created successfully!"
 }

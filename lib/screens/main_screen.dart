@@ -49,13 +49,28 @@ class _MainScreenState extends State<MainScreen> {
     _setupAudioListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
+      context.read<AppProvider>().addListener(_showNewNoteNotification);
     });
   }
 
   @override
   void dispose() {
     _audioService?.resetState();
+    context.read<AppProvider>().removeListener(_showNewNoteNotification);
     super.dispose();
+  }
+
+  void _showNewNoteNotification() {
+    if (context.read<AppProvider>().newNoteFromShare) {
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.newNoteFromShareCreated),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.read<AppProvider>().newNoteFromShare = false;
+    }
   }
 
   void _setupAudioListeners() {

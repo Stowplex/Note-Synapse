@@ -3137,4 +3137,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorAddingTranscription(String error) {
     return 'Error adding transcription: $error';
   }
+
+  @override
+  String get newNoteFromShareCreated =>
+      'New note from share created successfully!';
 }

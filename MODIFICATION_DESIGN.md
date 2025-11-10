@@ -1,183 +1,103 @@
-# Modification Design: iOS Keyboard Fix for Immersive Chat
+# iOS Share Extension Modification Design
 
-## 1. Overview
+## Overview
 
-This document outlines the design for a fix to a critical bug on the iOS platform. In the app's immersive view, the chat text field becomes unusable because the on-screen keyboard is immediately dismissed after it appears.
+This document outlines the design for implementing an iOS Share Extension for the Note Synapse application. The goal is to allow users to share content (URLs, text, images, and files) from other apps to Note Synapse, similar to the existing functionality on Android.
 
-The root cause is the default Flutter `Scaffold` behavior, which resizes its body to accommodate the keyboard. This resizing event causes the complex, dynamically positioned chat panel widget to be rebuilt, leading to the `TextField` losing focus.
+## Problem Analysis
 
-The proposed solution is to disable the automatic resizing and instead manually adjust the position of the chat panel to keep it visible above the keyboard.
+Currently, the Note Synapse app does not appear in the iOS share sheet. This is because the iOS project has not been configured to support a share extension, and there is no mechanism to handle incoming data from such an extension.
 
-## 2. Analysis of the Problem
+The existing `ShareViewController.swift` and `share_service.dart` files provide a starting point, but they are not fully integrated. The `ShareViewController.swift` saves data to an App Group's `UserDefaults` and opens a custom URL, but the Flutter app does not handle this URL or read the data.
 
-- **Screen:** `lib/screens/immersive_note_screen.dart`
-- **Widgets Involved:** `Scaffold`, `LayoutBuilder`, `Stack`, `Positioned`, `GestureDetector`, `TextField`.
-- **Behavior:**
-    1. The user taps the `TextField` within the AI chat handle.
-    2. The iOS keyboard begins to animate upwards.
-    3. The `Scaffold`'s `resizeToAvoidBottomInset` property is `true` by default, so it resizes its `body` (the `SafeArea`).
-    4. The `LayoutBuilder` within the `body` gets new, smaller constraints.
-    5. The entire `Stack` and its `Positioned` children are rebuilt based on the new constraints.
-    6. This rapid rebuild causes the `TextField` to lose focus.
-    7. With focus lost, the keyboard is dismissed.
+## Alternatives Considered
 
-This creates a loop where the keyboard can never stay open, rendering the chat feature unusable on iOS.
+### 1. Using a Third-Party Package
 
-## 3. Alternatives Considered
+Packages like `receive_sharing_intent` or `share_handler` could simplify the implementation. However, given that there is already some native code in place, and to have more control over the user experience and data handling, this design will focus on a custom implementation using `MethodChannel` and App Groups. This approach also avoids introducing a new dependency.
 
-### Alternative 1: Wrap the UI in a `SingleChildScrollView`
+### 2. Embedding Flutter UI in the Share Extension
 
-- **Description:** The most common "Flutter-idiomatic" solution for keyboard overlap issues is to wrap the main content in a `SingleChildScrollView` and keep `resizeToAvoidBottomInset: true`.
-- **Pros:** The framework would automatically handle scrolling the focused `TextField` into view.
-- **Cons:** The UI in `immersive_note_screen.dart` is not a simple, static layout. It features a draggable handle whose position is calculated with a `GestureDetector` and a fractional value (`_aiHandleFraction`). Integrating a `SingleChildScrollView` would require a significant and risky refactoring of this complex layout and positioning logic. It's a high-risk change for a targeted bug fix.
+It is technically possible to embed a Flutter view directly into the share extension. This would allow for a more customized UI within the share sheet. However, this is an advanced and not fully supported feature of Flutter, and it can lead to a larger extension size and slower performance. A native UI for the extension is the recommended and more stable approach.
 
-### Alternative 2: Disable Resizing and Manually Adjust (Chosen)
+## Detailed Design
 
-- **Description:** Set `resizeToAvoidBottomInset: false` on the `Scaffold`. This prevents the resize event that causes the focus loss. Then, use `MediaQuery` to detect the keyboard's presence and height, and manually adjust the chat panel's position to keep it visible.
-- **Pros:**
-    - **Targeted Fix:** Directly addresses the root cause (the resize) without altering the existing layout structure.
-    - **Low Risk:** It's a much less invasive change, requiring modifications only to the `Scaffold` and the layout logic for the AI handle.
-    - **Preserves UI:** The existing draggable behavior and complex layout are preserved.
-- **Cons:** Requires manual calculation and state management to adjust the UI when the keyboard appears and disappears.
+The proposed design involves three main parts:
 
-The second alternative is strongly preferred as it is a safer, more localized, and less complex solution for the given problem.
+1.  **Configuring the iOS Project:** Setting up the necessary capabilities and URL schemes.
+2.  **Enhancing the Share Extension:** Modifying the Swift code to reliably save data and open the app.
+3.  **Implementing the Flutter-side Handling:** Creating the logic in the Flutter app to receive and process the shared data.
 
-## 4. Detailed Design
+### 1. iOS Project Configuration
 
-The implementation will be done in `lib/screens/immersive_note_screen.dart`.
+#### App Groups
 
-### Step 1: Disable Scaffold Resizing
+An App Group will be used to share data between the share extension and the main app.
 
-In the `build` method of `_ImmersiveNoteScreenState`, locate the `Scaffold` widget and set its `resizeToAvoidBottomInset` property to `false`.
+*   **App Group ID:** `group.com.github.kkspeed.note-synapse` (as defined in `ShareViewController.swift`)
+*   **Configuration:** This App Group needs to be enabled for both the `Runner` and `ShareExtension` targets in Xcode.
 
-```dart
-// In _ImmersiveNoteScreenState.build()
+#### URL Scheme
 
-return Scaffold(
-  resizeToAvoidBottomInset: false, // This is the key change
-  appBar: AppBar(...),
-  body: SafeArea(...),
-);
-```
+A custom URL scheme will be used to launch the main app from the share extension.
 
-### Step 2: Adjust Layout for Keyboard
+*   **URL Scheme:** `notesynapse` (as defined in `ShareViewController.swift`)
+*   **Configuration:** The `notesynapse` URL scheme will be added to the `Info.plist` file for the `Runner` target.
 
-With the resizing disabled, the keyboard will now overlay the content. We need to adjust the position of the AI chat handle when the keyboard is visible. The layout logic is primarily in the `_buildVerticalAiOverlays` method.
+### 2. Share Extension (`ShareViewController.swift`)
 
-We will use `MediaQuery.of(context).viewInsets.bottom` to get the height of the keyboard. This value is non-zero only when the keyboard is visible.
+The existing `ShareViewController.swift` will be modified to ensure it correctly handles all supported data types and properly launches the main app.
 
-The plan is to treat the area obscured by the keyboard as "off-limits" for the bottom of the screen. We will subtract the keyboard's height from the total available height when calculating the handle's position.
+The logic will be as follows:
 
-The modification will be in `_buildVerticalAiOverlays`:
+1.  When the share extension is invoked, it will determine the type of the shared content (URL, text, image, file).
+2.  The content will be saved to the `UserDefaults` of the shared App Group. For files (images, PDFs, etc.), the file will be saved to the shared container, and the file path will be saved to `UserDefaults`.
+3.  The main app will be launched using the `notesynapse://share` URL.
 
-```dart
-// In _ImmersiveNoteScreenState._buildVerticalAiOverlays()
+### 3. Flutter-side Handling
 
-List<Widget> _buildVerticalAiOverlays(Size size, AppLocalizations l10n) {
-  // Get the keyboard height
-  final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+#### `AppDelegate.swift`
 
-  final overlays = <Widget>[];
-  // The total height is now the canvas size. We will use keyboardHeight to offset.
-  final totalHeight = size.height;
-  final handleHeight = _currentHandleHeight();
-  final panelHeight = _computePanelExtent(totalHeight, handleHeight);
-  final effectiveSide = _effectivePanelSide(false);
+The `AppDelegate.swift` file will be modified to handle the custom URL scheme and to set up a `MethodChannel` for communication with the Flutter app.
 
-  // Adjust the maximum top position to account for the keyboard
-  final minHandleTop = _aiHandleMargin;
-  final maxHandleTop = max(
-    _aiHandleMargin,
-    // Subtract keyboardHeight from the total height for positioning
-    totalHeight - handleHeight - _aiHandleMargin - keyboardHeight,
-  );
+1.  **URL Handling:** The `application(_:open:options:)` method will be implemented to detect when the app is opened with the `notesynapse://share` URL. When this happens, it will send a notification to the Flutter app.
+2.  **MethodChannel:** A `FlutterMethodChannel` named `com.github.kkspeed/share` will be created. This channel will be used to send the shared data from the native side to the Flutter side.
 
-  double handleTop;
+#### `share_service.dart`
 
-  if (_isAiPanelExpanded && panelHeight > 0) {
-    // ... (logic for expanded panel)
-    // This part also needs to be checked to ensure it respects the keyboard.
-    // The current logic positions from top or bottom. When positioned from the bottom,
-    // it should be offset by the keyboard height.
-    if (effectiveSide == _AiPanelSide.top) {
-      // ...
-    } else { // Bottom
-      overlays.add(
-        Positioned(
-          // Add keyboardHeight to the bottom offset
-          bottom: keyboardHeight,
-          left: _aiHandleMargin,
-          right: _aiHandleMargin,
-          height: panelHeight,
-          child: _buildAiPanelContent(l10n),
-        ),
-      );
-      handleTop = totalHeight - panelHeight - handleHeight - _aiHandleMargin - keyboardHeight;
-    }
-  } else {
-    // Adjust the track height for the handle's draggable area
-    final trackHeight = max(0.0, totalHeight - handleHeight - keyboardHeight);
-    handleTop = trackHeight <= 0
-        ? _aiHandleMargin
-        : _aiHandleFraction * trackHeight;
-  }
+The `share_service.dart` file will be modified to listen for incoming data from the `MethodChannel`.
 
-  final clampedHandleTop = _clampToRange(
-    handleTop,
-    minHandleTop,
-    maxHandleTop,
-  );
+1.  **MethodChannel Listener:** A method handler will be set up on the `com.github.kkspeed/share` channel.
+2.  **Data Processing:** When data is received from the native side, the `processSharedContent` method will be called to process the data and create a new note.
 
-  // ... rest of the method remains the same
-}
-```
-
-The core idea is to subtract `keyboardHeight` from any calculation that assumes the bottom of the screen is at `size.height`. This will ensure the handle and the expanded panel are always rendered above the keyboard.
-
-A similar adjustment will be needed for `_buildHorizontalAiOverlays` to ensure the landscape view is also correct, although the primary issue is with the vertical (portrait) layout. In landscape, the keyboard takes up less vertical space, but the principle is the same.
-
-### Step 3: Mermaid Diagram
-
-This diagram illustrates the "before" and "after" layout behavior when the keyboard appears.
+### Mermaid Diagram
 
 ```mermaid
-graph TD
-    subgraph Before (resizeToAvoidBottomInset: true)
-        A[Screen] --> B{Scaffold};
-        B --> C[Body (Resized)];
-        C --> D[Stack];
-        D --> E[TextField];
-        E -- "Focus" --> F((Keyboard Appears));
-        F -- "Resizes Body" --> C;
-        C -- "Rebuilds Stack" --> D;
-        D -- "Causes Focus Loss" --> E;
-    end
+sequenceDiagram
+    participant User
+    participant Safari
+    participant ShareExtension
+    participant AppGroup
+    participant NoteSynapseApp
+    participant share_service.dart
 
-    subgraph After (resizeToAvoidBottomInset: false)
-        A2[Screen] --> B2{Scaffold};
-        B2 --> C2[Body (Not Resized)];
-        C2 --> D2[Stack];
-        D2 --> E2[TextField];
-        E2 -- "Focus" --> F2((Keyboard Appears));
-        F2 -- "Overlays Body" --> C2;
-        subgraph Manual Adjustment
-            G[MediaQuery] -- "Provides Keyboard Height" --> H{Layout Logic};
-            H -- "Adjusts Position" --> I[Chat Handle];
-        end
-        F2 --> G;
-    end
+    User->>Safari: Clicks "Share"
+    Safari->>ShareExtension: Presents Share Sheet
+    User->>ShareExtension: Selects Note Synapse
+    ShareExtension->>AppGroup: Saves shared data (URL, text, etc.)
+    ShareExtension->>NoteSynapseApp: Opens app with URL "notesynapse://share"
+    NoteSynapseApp->>share_service.dart: Notifies of new shared data
+    share_service.dart->>AppGroup: Reads shared data
+    share_service.dart->>NoteSynapseApp: Processes data and creates a new note
 ```
 
-## 5. Summary of Design
+## Summary of Design
 
-1.  **Prevent Resizing:** Set `resizeToAvoidBottomInset: false` on the `Scaffold` in `immersive_note_screen.dart`.
-2.  **Detect Keyboard:** Use `MediaQuery.of(context).viewInsets.bottom` to get the keyboard's height.
-3.  **Adjust Layout:** Modify the `_buildVerticalAiOverlays` and `_buildHorizontalAiOverlays` methods to subtract the keyboard's height from their vertical layout calculations, ensuring the chat handle and panel are always positioned above the keyboard.
+This design establishes a robust and reliable mechanism for sharing content to the Note Synapse app on iOS. By using a combination of App Groups, custom URL schemes, and `MethodChannel`, it ensures that shared data is correctly passed from the share extension to the Flutter app for processing.
 
-This design provides a targeted, low-risk fix that resolves the iOS keyboard bug while preserving the existing UI structure and behavior.
+## Research URLs
 
-## 6. Research
-
-- Flutter `Scaffold` `resizeToAvoidBottomInset` property: [https://api.flutter.dev/flutter/material/Scaffold/resizeToAvoidBottomInset.html](https://api.flutter.dev/flutter/material/Scaffold/resizeToAvoidBottomInset.html)
-- Flutter `MediaQuery` `viewInsets` property: [https://api.flutter.dev/flutter/widgets/MediaQueryData/viewInsets.html](https://api.flutter.dev/flutter/widgets/MediaQueryData/viewInsets.html)
-- General discussion on Flutter keyboard and `TextField` focus issues.
+*   [Implementing an iOS Share Extension in a Flutter application](https://flutter.dev/docs/development/platform-integration/ios-share-extension)
+*   [How to add iOS Share Extension to your Flutter app](https://medium.com/flutter-community/how-to-add-ios-share-extension-to-your-flutter-app-55de55941831)
+*   [share_handler package](https://pub.dev/packages/share_handler)
+*   [receive_sharing_intent package](https://pub.dev/packages/receive_sharing_intent)

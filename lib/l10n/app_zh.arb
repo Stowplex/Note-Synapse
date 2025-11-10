@@ -1163,5 +1163,6 @@
             "type": "String"
           }
         }
-      }
+      },
+      "newNoteFromShareCreated": "分享的笔记创建成功！"
 }
