@@ -26,13 +26,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
 class ShareService {
-  static const MethodChannel _iosChannel = MethodChannel('com.github.kkspeed/share');
-  static const MethodChannel _androidChannel = MethodChannel('note_synapse/share');
-
-  static MethodChannel get _platformChannel =>
-      Platform.isIOS ? _iosChannel : _androidChannel;
-
-  static MethodChannel get _channel => _platformChannel;
+  static const MethodChannel _channel = MethodChannel('com.github.kkspeed/share');
   static bool _initialized = false;
   static bool _waitingForNavigatorFrame = false;
   static bool _isPresentingShareScreen = false;
