@@ -112,9 +112,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   static const double _aiPanelHeightFraction = 0.45;
   static const double _aiLandscapePanelFraction = 0.4;
   static const double _aiHandleMargin = 12.0;
+  static const double _aiHandlePadding = 12.0;
+  static const double _aiHandleControlWidth = 44.0;
+  static const double _aiHandleControlGap = 8.0;
   double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
   _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
+  bool _isHandleDragFromComposerArea = false;
 
   @override
   void initState() {
@@ -229,7 +233,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       bool hasConversations = false;
 
       for (final noteId in noteIds) {
-        final conversationIds = await appProvider.getNoteConversationIds(noteId);
+        final conversationIds = await appProvider.getNoteConversationIds(
+          noteId,
+        );
         if (conversationIds.isNotEmpty) {
           hasConversations = true;
           break;
@@ -904,7 +910,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => _updateHandleDrag(details.delta, canvasSize),
+      onPanStart: (details) =>
+          _onAiHandlePanStart(details.localPosition, handleWidth),
+      onPanUpdate: (details) => _onAiHandlePanUpdate(details, canvasSize),
+      onPanEnd: (_) => _onAiHandlePanEnd(),
+      onPanCancel: _onAiHandlePanEnd,
       child: Material(
         color: theme.colorScheme.surface.withOpacity(0.85),
         elevation: 6,
@@ -923,7 +933,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 44, child: controlWidget),
+                    SizedBox(
+                      width: _aiHandleControlWidth,
+                      child: controlWidget,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(child: _buildAiComposer(l10n)),
                   ],
@@ -1365,6 +1378,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     setState(() {
       _isAiPanelExpanded = false;
     });
+  }
+
+  void _onAiHandlePanStart(Offset localPosition, double handleWidth) {
+    _isHandleDragFromComposerArea = _isPointInsideComposerArea(
+      localPosition,
+      handleWidth,
+    );
+  }
+
+  void _onAiHandlePanUpdate(DragUpdateDetails details, Size canvasSize) {
+    if (_isHandleDragFromComposerArea) {
+      return;
+    }
+    _updateHandleDrag(details.delta, canvasSize);
+  }
+
+  void _onAiHandlePanEnd() {
+    _isHandleDragFromComposerArea = false;
+  }
+
+  bool _isPointInsideComposerArea(Offset localPosition, double handleWidth) {
+    final double composerLeft =
+        _aiHandlePadding + _aiHandleControlWidth + _aiHandleControlGap;
+    final double composerRight = handleWidth - _aiHandlePadding;
+    if (composerRight <= composerLeft) {
+      return false;
+    }
+    return localPosition.dx >= composerLeft &&
+        localPosition.dx <= composerRight;
   }
 
   void _updateHandleDrag(Offset delta, Size canvasSize) {
