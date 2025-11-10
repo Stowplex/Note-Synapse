@@ -33,11 +33,13 @@ class UserAppEditScreen extends StatefulWidget {
   State<UserAppEditScreen> createState() => _UserAppEditScreenState();
 }
 
-class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProviderStateMixin {
+class _UserAppEditScreenState extends State<UserAppEditScreen>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _editSuggestionController = TextEditingController();
   late final CodeLineEditingController _codeController;
-  late final CodeLineEditingController _viewController; // Read-only controller for viewing
+  late final CodeLineEditingController
+  _viewController; // Read-only controller for viewing
   late final CodeFindController _findController;
   late final MobileSelectionToolbarController _mobileToolbarController;
   late final MobileSelectionToolbarController _viewMobileToolbarController;
@@ -48,17 +50,19 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   String _originalCode = '';
   List<String> _attachmentPaths = [];
   final List<Note> _selectedNotes = [];
-  
+
   // Tab management
   late TabController _tabController;
-  
+
   // Library management
   List<UserAppLibrary> _modifiedLibraries = [];
   Map<int, List<String>> _libraryLinks = {}; // libraryId -> list of links
   bool _isLoadingLibraries = false;
-  
+
   // Prevent rapid state changes during transitions
   bool _isTransitioning = false;
+  static const int _readOnlyCodeLineCount = 20;
+  static const double _readOnlyCodeLineHeight = 20.0;
 
   @override
   void initState() {
@@ -72,7 +76,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     _viewMobileToolbarController = MobileSelectionToolbarController(
       builder: _buildViewMobileToolbar,
     );
-    
+
     // Add listener to find input controller to prevent text selection issues
     // Use addPostFrameCallback to avoid potential issues during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,12 +84,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         _findController.findInputController.addListener(() {
           final text = _findController.findInputController.text;
           final selection = _findController.findInputController.selection;
-          
+
           // If all text is selected, move cursor to end
-          if (selection.isValid && selection.start == 0 && selection.end == text.length && text.isNotEmpty) {
-            _findController.findInputController.selection = TextSelection.fromPosition(
-              TextPosition(offset: text.length),
-            );
+          if (selection.isValid &&
+              selection.start == 0 &&
+              selection.end == text.length &&
+              text.isNotEmpty) {
+            _findController.findInputController.selection =
+                TextSelection.fromPosition(TextPosition(offset: text.length));
           }
         });
       }
@@ -94,7 +100,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     // Note: No need to add listener to code controller as the mobile toolbar
     // controller already handles selection-based UI updates automatically
 
-    
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
     _loadCurrentRevisionAttachments();
@@ -107,12 +112,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     try {
       final appProvider = context.read<AppProvider>();
       await appProvider.getAppRevisions(widget.app.id);
-      
+
       // Get revisions from provider
       final revisions = appProvider.appRevisions[widget.app.id] ?? [];
-      
+
       String codeToLoad = '';
-      
+
       // Use the passed selected revision if available, otherwise fall back to pinned revision
       if (widget.selectedRevision != null) {
         // Use the temporarily selected revision
@@ -124,7 +129,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           (app) => app.id == widget.app.id,
           orElse: () => widget.app,
         );
-        
+
         if (currentApp.selectedRevisionId != null) {
           try {
             _currentRevision = revisions.firstWhere(
@@ -144,7 +149,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           codeToLoad = _currentRevision!.appCode;
         }
       }
-      
+
       setState(() {
         _originalCode = codeToLoad;
         _codeController.text = codeToLoad;
@@ -154,7 +159,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           codeLines: CodeLines.fromText(codeToLoad),
         );
       });
-      
+
       // Load libraries for the current revision
       _loadCurrentLibraries();
     } catch (e) {
@@ -181,7 +186,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
   Future<void> _loadCurrentLibraries() async {
     if (_currentRevision == null) return;
-    
+
     setState(() {
       _isLoadingLibraries = true;
     });
@@ -192,7 +197,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         widget.app.uuid,
         _currentRevision!.revisionNumber,
       );
-      
+
       // Load dependencies (links) for each library
       final Map<int, List<String>> libraryLinks = {};
       for (final library in libraries) {
@@ -202,7 +207,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             .where((url) => url.isNotEmpty)
             .toList();
       }
-      
+
       setState(() {
         _modifiedLibraries = List.from(libraries);
         _libraryLinks = libraryLinks;
@@ -227,7 +232,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void dispose() {
     // Reset transition flag to prevent any pending operations
     _isTransitioning = false;
-    
+
     _editSuggestionController.dispose();
     _codeController.dispose();
     _viewController.dispose();
@@ -245,42 +250,50 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
     try {
       final appProvider = context.read<AppProvider>();
-      
+
       // Create a modified app that represents the current revision
       final currentApp = widget.app.copyWith(
         htmlContent: _currentRevision?.appCode ?? widget.app.htmlContent,
-        selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
+        selectedRevisionId:
+            _currentRevision?.id ?? widget.app.selectedRevisionId,
       );
-      
+
       // Convert libraries to UserAppLibraryInfo format for AI prompt
       List<UserAppLibraryInfo>? librariesForAI;
       if (_modifiedLibraries.isNotEmpty) {
-        librariesForAI = _modifiedLibraries.map((library) {
-          final links = _libraryLinks[library.id] ?? [];
-          final validLinks = links.where((link) => link.trim().isNotEmpty).toList();
-          
-          return UserAppLibraryInfo(
-            name: library.name,
-            usage: library.usageInstructions,
-            links: validLinks,
-          );
-        }).where((lib) => lib.name.trim().isNotEmpty).toList();
-        
+        librariesForAI = _modifiedLibraries
+            .map((library) {
+              final links = _libraryLinks[library.id] ?? [];
+              final validLinks = links
+                  .where((link) => link.trim().isNotEmpty)
+                  .toList();
+
+              return UserAppLibraryInfo(
+                name: library.name,
+                usage: library.usageInstructions,
+                links: validLinks,
+              );
+            })
+            .where((lib) => lib.name.trim().isNotEmpty)
+            .toList();
+
         // If no valid libraries, set to null
         if (librariesForAI.isEmpty) {
           librariesForAI = null;
         }
       }
-      
+
       // Create the new revision using the existing editUserApp method
       await appProvider.editUserApp(
         originalApp: currentApp,
         editSuggestion: _editSuggestionController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
-        contextNotes: _selectedNotes.isNotEmpty ? List<Note>.from(_selectedNotes) : null,
+        contextNotes: _selectedNotes.isNotEmpty
+            ? List<Note>.from(_selectedNotes)
+            : null,
         libraries: librariesForAI,
       );
-      
+
       if (mounted) {
         Navigator.pop(context, true); // Return true to indicate successful edit
         ScaffoldMessenger.of(context).showSnackBar(
@@ -295,7 +308,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
         setState(() {
           _isEditing = false;
         });
-        
+
         // Show error dialog instead of snackbar for better visibility
         showDialog(
           context: context,
@@ -305,13 +318,17 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(AppLocalizations.of(context)!.errorCreatingAppFromEdit(e.toString())),
+                Text(
+                  AppLocalizations.of(
+                    context,
+                  )!.errorCreatingAppFromEdit(e.toString()),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Please check your API key and try again.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -327,13 +344,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     }
   }
 
-
-
   Future<void> _saveCodeDirectly() async {
     if (_codeController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)!.errorSavingCode('Code cannot be empty')),
+          content: Text(
+            AppLocalizations.of(
+              context,
+            )!.errorSavingCode('Code cannot be empty'),
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -346,29 +365,30 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
 
     try {
       final appProvider = context.read<AppProvider>();
-      
+
       // Create a modified app that represents the current revision
       final currentApp = widget.app.copyWith(
         htmlContent: _currentRevision?.appCode ?? widget.app.htmlContent,
-        selectedRevisionId: _currentRevision?.id ?? widget.app.selectedRevisionId,
+        selectedRevisionId:
+            _currentRevision?.id ?? widget.app.selectedRevisionId,
       );
-      
+
       // Save manual code edit by creating a new revision
       await appProvider.saveManualCodeEdit(
         originalApp: currentApp,
         newCode: _codeController.text.trim(),
         attachmentPaths: _attachmentPaths.isNotEmpty ? _attachmentPaths : null,
       );
-      
+
       if (mounted) {
         setState(() {
           _originalCode = _codeController.text.trim();
           _isCodeEditable = false;
         });
-        
+
         // Return true to indicate successful save
         Navigator.pop(context, true);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.codeSavedSuccessfully),
@@ -380,7 +400,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.errorSavingCode(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.errorSavingCode(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -397,7 +419,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   void _toggleCodeEdit() {
     // Prevent rapid state changes during transitions
     if (_isTransitioning) return;
-    
+
     if (!_isCodeEditable) {
       // Switching to edit mode - can do immediately
       setState(() {
@@ -495,7 +517,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             Navigator.of(dialogContext).pop();
             if (!mounted) return;
             setState(() {
-              final noteMap = {for (final note in _selectedNotes) note.id: note};
+              final noteMap = {
+                for (final note in _selectedNotes) note.id: note,
+              };
               for (final note in notes) {
                 noteMap[note.id] = note;
               }
@@ -521,7 +545,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       _selectedNotes.clear();
     });
   }
-
 
   void _showImageSourceDialog() {
     showDialog(
@@ -649,7 +672,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       // Get the selected text using the proper CodeLineSelection methods
       final codeLines = _codeController.value.codeLines;
       final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
-      
+
       Clipboard.setData(ClipboardData(text: selectedText));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Copied: ${selectedText.length} characters')),
@@ -657,41 +680,42 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     }
   }
 
-  String _getSelectedTextFromCodeLines(CodeLines codeLines, CodeLineSelection selection) {
+  String _getSelectedTextFromCodeLines(
+    CodeLines codeLines,
+    CodeLineSelection selection,
+  ) {
     if (selection.isCollapsed) return '';
-    
+
     final startIndex = selection.startIndex;
     final endIndex = selection.endIndex;
     final startOffset = selection.startOffset;
     final endOffset = selection.endOffset;
-    
+
     if (startIndex == endIndex) {
       // Selection is within a single line
       return codeLines[startIndex].text.substring(startOffset, endOffset);
     } else {
       // Selection spans multiple lines
       final buffer = StringBuffer();
-      
+
       // First line (from startOffset to end)
       buffer.write(codeLines[startIndex].text.substring(startOffset));
-      
+
       // Middle lines (complete lines)
       for (int i = startIndex + 1; i < endIndex; i++) {
         buffer.write('\n');
         buffer.write(codeLines[i].text);
       }
-      
+
       // Last line (from start to endOffset)
       if (endIndex < codeLines.length) {
         buffer.write('\n');
         buffer.write(codeLines[endIndex].text.substring(0, endOffset));
       }
-      
+
       return buffer.toString();
     }
   }
-
-
 
   void _selectAll() {
     final codeLines = _codeController.value.codeLines;
@@ -709,31 +733,27 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   /// Cached to avoid repeated Theme.of(context) calls during build
   CodeHighlightTheme? _cachedCodeTheme;
   Brightness? _lastBrightness;
-  
+
   CodeHighlightTheme get _codeTheme {
     final currentBrightness = Theme.of(context).brightness;
-    
+
     // Only recreate theme if brightness has changed
     if (_cachedCodeTheme == null || _lastBrightness != currentBrightness) {
       _lastBrightness = currentBrightness;
       final isDarkMode = currentBrightness == Brightness.dark;
-      
+
       _cachedCodeTheme = CodeHighlightTheme(
         languages: {
           'html': CodeHighlightThemeMode(
             mode: langXml, // HTML uses XML highlighting mode
           ),
-          'javascript': CodeHighlightThemeMode(
-            mode: langJavascript,
-          ),
-          'css': CodeHighlightThemeMode(
-            mode: langCss,
-          ),
+          'javascript': CodeHighlightThemeMode(mode: langJavascript),
+          'css': CodeHighlightThemeMode(mode: langCss),
         },
         theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
       );
     }
-    
+
     return _cachedCodeTheme!;
   }
 
@@ -743,7 +763,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       // Get the selected text using the proper CodeLineSelection methods
       final codeLines = _viewController.value.codeLines;
       final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
-      
+
       Clipboard.setData(ClipboardData(text: selectedText));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Copied: ${selectedText.length} characters')),
@@ -782,7 +802,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     required VoidCallback onRefresh,
   }) {
     final hasSelection = !controller.selection.isCollapsed;
-    
+
     return Align(
       alignment: Alignment.center,
       child: Material(
@@ -838,7 +858,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     required VoidCallback onRefresh,
   }) {
     final hasSelection = !controller.selection.isCollapsed;
-    
+
     return Align(
       alignment: Alignment.center,
       child: Material(
@@ -902,15 +922,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           child: Icon(
             icon,
             size: 16,
-            color: onPressed != null 
-              ? Theme.of(context).textTheme.bodyMedium?.color
-              : Theme.of(context).disabledColor,
+            color: onPressed != null
+                ? Theme.of(context).textTheme.bodyMedium?.color
+                : Theme.of(context).disabledColor,
           ),
         ),
       ),
     );
   }
-
 
   Widget _buildPermanentToolbar() {
     return Container(
@@ -919,10 +938,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 1,
-          ),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
         ),
       ),
       child: Row(
@@ -946,7 +962,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
           const SizedBox(width: 8),
           // Search toggle button
           IconButton(
-            icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search, size: 18),
+            icon: Icon(
+              _isSearchVisible ? Icons.search_off : Icons.search,
+              size: 18,
+            ),
             onPressed: _toggleSearch,
             tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
             padding: const EdgeInsets.all(4),
@@ -964,10 +983,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).dividerColor,
-          width: 1,
-        ),
+        border: Border.all(color: Theme.of(context).dividerColor, width: 1),
       ),
       child: Row(
         children: [
@@ -978,7 +994,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               decoration: const InputDecoration(
                 hintText: 'Find...',
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
                 isDense: true,
               ),
               onChanged: (value) {
@@ -987,9 +1006,10 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               onTap: () {
                 // Move cursor to end of text instead of selecting all
                 final text = _findController.findInputController.text;
-                _findController.findInputController.selection = TextSelection.fromPosition(
-                  TextPosition(offset: text.length),
-                );
+                _findController.findInputController.selection =
+                    TextSelection.fromPosition(
+                      TextPosition(offset: text.length),
+                    );
               },
             ),
           ),
@@ -1003,7 +1023,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
                   child: Text(
                     '${value.result!.index + 1}/${value.result!.matches.length}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(fontSize: 12),
                   ),
                 );
               }
@@ -1039,7 +1061,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       resizeToAvoidBottomInset: true, // Always resize to avoid keyboard
       appBar: AppBar(
@@ -1054,7 +1076,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       ),
       body: Form(
         key: _formKey,
-        child: _isCodeEditable ? _buildEditModeLayout(l10n) : _buildViewModeLayout(l10n),
+        child: _isCodeEditable
+            ? _buildEditModeLayout(l10n)
+            : _buildViewModeLayout(l10n),
       ),
     );
   }
@@ -1063,273 +1087,283 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
     return TabBarView(
       controller: _tabController,
       physics: const NeverScrollableScrollPhysics(), // Disable tab swipe
-      children: [
-        _buildBasicTab(l10n),
-        _buildAdvancedTab(l10n),
-      ],
+      children: [_buildBasicTab(l10n), _buildAdvancedTab(l10n)],
     );
   }
 
   Widget _buildBasicTab(AppLocalizations l10n) {
-    return Column(
-      children: [
-        // App Info Card
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SizedBox(
-            width: double.infinity, // Make card expand to full width
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.appName,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.app.name,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.appDescription,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.app.description.length > 200 
-                          ? '${widget.app.description.substring(0, 200)}...'
-                          : widget.app.description,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        
-        // App Code Section - Takes up remaining space
-        Expanded(
-          child: Padding(
+    final mediaQuery = MediaQuery.of(context);
+    final double bottomPadding = mediaQuery.padding.bottom;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: bottomPadding + 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildAppInfoCard(l10n),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      l10n.appCode,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    // Edit button
-                    ElevatedButton.icon(
-                      onPressed: _toggleCodeEdit,
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: Text(l10n.editCodeDirectly),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+                _buildReadOnlyCodeHeader(l10n),
                 const SizedBox(height: 8),
-                Expanded(
+                SizedBox(
+                  height: _readOnlyCodeLineCount * _readOnlyCodeLineHeight,
                   child: Card(
                     child: Container(
                       padding: const EdgeInsets.all(12.0),
-                      child: CodeEditor(
-                        controller: _viewController,
-                        toolbarController: _viewMobileToolbarController,
-                        readOnly: true, // Make it read-only
-                        showCursorWhenReadOnly: true, // Enable cursor and selection in read-only mode
-                        wordWrap: false, // Disable word wrap for consistency
-                        style: CodeEditorStyle(
-                          codeTheme: _codeTheme,
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                        ),
-                        chunkAnalyzer: DefaultCodeChunkAnalyzer(),
-                      ),
+                      child: _buildReadOnlyCodeEditor(),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        
-        // Bottom section with suggestion input and submit button
-        Container(
-          padding: const EdgeInsets.all(16.0),
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).dividerColor,
-                width: 1,
-              ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: _buildSuggestionSection(l10n),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppInfoCard(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: SizedBox(
+        width: double.infinity,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.appName,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.app.name,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  l10n.appDescription,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.app.description.length > 200
+                      ? '${widget.app.description.substring(0, 200)}...'
+                      : widget.app.description,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    l10n.editSuggestion,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_selectedNotes.isNotEmpty)
-                        IconButton(
-                          onPressed: _clearSelectedNotes,
-                          icon: const Icon(Icons.clear_all),
-                          tooltip: l10n.clearFilters,
-                        ),
-                      IconButton(
-                        onPressed: _showNoteSelectionDialog,
-                        icon: const Icon(Icons.note_add),
-                        tooltip: l10n.addNotes,
-                      ),
-                      IconButton(
-                        onPressed: _showImageSourceDialog,
-                        icon: const Icon(Icons.add_photo_alternate),
-                        tooltip: l10n.addImage,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _editSuggestionController,
-                decoration: InputDecoration(
-                  hintText: l10n.editSuggestionHint,
-                  border: const OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your edit suggestion';
-                  }
-                  return null;
-                },
-              ),
-              if (_selectedNotes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  l10n.notesSelected(_selectedNotes.length),
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _selectedNotes.map((note) {
-                    return InputChip(
-                      label: Text(note.title),
-                      avatar: Icon(
-                        note.isTask ? Icons.check_circle : Icons.notes,
-                        size: 18,
-                      ),
-                      onDeleted: () => _removeSelectedNote(note.id),
-                    );
-                  }).toList(),
-                ),
-              ],
-              // Show attached images below the edit box
-              if (_attachmentPaths.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Attached Images:',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8.0,
-                  runSpacing: 8.0,
-                      children: _attachmentPaths.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final path = entry.value;
-                        return Stack(
-                          children: [
-                            GestureDetector(
-                              onTap: () => FileUtils.openFile(path, context),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  border: Border.all(
-                                    color: Colors.grey.withValues(alpha: 0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(7.0),
-                                  child: Image.file(
-                                    File(path),
-                                    width: 80,
-                                    height: 80,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: GestureDetector(
-                                onTap: () => _removeAttachment(index),
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                ),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isEditing ? null : _submitEdit,
-                child: _isEditing
-                    ? Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(l10n.editingApp),
-                        ],
-                      )
-                    : Text(l10n.submitEdit),
-              ),
-            ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyCodeHeader(AppLocalizations l10n) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(l10n.appCode, style: Theme.of(context).textTheme.titleMedium),
+        ElevatedButton.icon(
+          onPressed: _toggleCodeEdit,
+          icon: const Icon(Icons.edit, size: 16),
+          label: Text(l10n.editCodeDirectly),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReadOnlyCodeEditor() {
+    return CodeEditor(
+      controller: _viewController,
+      toolbarController: _viewMobileToolbarController,
+      readOnly: true,
+      showCursorWhenReadOnly: true,
+      wordWrap: false,
+      style: CodeEditorStyle(
+        codeTheme: _codeTheme,
+        fontFamily: 'monospace',
+        fontSize: 12,
+      ),
+      chunkAnalyzer: DefaultCodeChunkAnalyzer(),
+    );
+  }
+
+  Widget _buildSuggestionSection(AppLocalizations l10n) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                l10n.editSuggestion,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_selectedNotes.isNotEmpty)
+                    IconButton(
+                      onPressed: _clearSelectedNotes,
+                      icon: const Icon(Icons.clear_all),
+                      tooltip: l10n.clearFilters,
+                    ),
+                  IconButton(
+                    onPressed: _showNoteSelectionDialog,
+                    icon: const Icon(Icons.note_add),
+                    tooltip: l10n.addNotes,
+                  ),
+                  IconButton(
+                    onPressed: _showImageSourceDialog,
+                    icon: const Icon(Icons.add_photo_alternate),
+                    tooltip: l10n.addImage,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _editSuggestionController,
+            decoration: InputDecoration(
+              hintText: l10n.editSuggestionHint,
+              border: const OutlineInputBorder(),
+            ),
+            maxLines: 3,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter your edit suggestion';
+              }
+              return null;
+            },
+          ),
+          if (_selectedNotes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.notesSelected(_selectedNotes.length),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _selectedNotes.map((note) {
+                return InputChip(
+                  label: Text(note.title),
+                  avatar: Icon(
+                    note.isTask ? Icons.check_circle : Icons.notes,
+                    size: 18,
+                  ),
+                  onDeleted: () => _removeSelectedNote(note.id),
+                );
+              }).toList(),
+            ),
+          ],
+          if (_attachmentPaths.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Attached Images:',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              children: _attachmentPaths.asMap().entries.map((entry) {
+                final index = entry.key;
+                final path = entry.value;
+                return Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () => FileUtils.openFile(path, context),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8.0),
+                          border: Border.all(
+                            color: Colors.grey.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(7.0),
+                          child: Image.file(
+                            File(path),
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _removeAttachment(index),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _isEditing ? null : _submitEdit,
+            child: _isEditing
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(l10n.editingApp),
+                    ],
+                  )
+                : Text(l10n.submitEdit),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1346,7 +1380,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             label: Text(l10n.addLibrary),
           ),
           const SizedBox(height: 16),
-          
+
           // Libraries List
           if (_isLoadingLibraries)
             const Center(child: CircularProgressIndicator())
@@ -1354,15 +1388,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             ...List.generate(_modifiedLibraries.length, (index) {
               return _buildLibraryCard(index, l10n);
             }),
-          
+
           if (_modifiedLibraries.isEmpty && !_isLoadingLibraries) ...[
             const SizedBox(height: 32),
             Center(
               child: Text(
                 'No libraries added yet. Click "Add Library" to get started.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
               ),
             ),
           ],
@@ -1374,7 +1408,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
   Widget _buildLibraryCard(int index, AppLocalizations l10n) {
     final library = _modifiedLibraries[index];
     final links = _libraryLinks[library.id] ?? [];
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
       child: Padding(
@@ -1399,7 +1433,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               ],
             ),
             const SizedBox(height: 16),
-            
+
             // Library Name
             TextFormField(
               initialValue: library.name,
@@ -1411,7 +1445,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               onChanged: (value) => _updateLibraryName(index, value),
             ),
             const SizedBox(height: 16),
-            
+
             // Library Usage
             TextFormField(
               initialValue: library.usageInstructions ?? '',
@@ -1424,14 +1458,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
               onChanged: (value) => _updateLibraryUsage(index, value),
             ),
             const SizedBox(height: 16),
-            
+
             // Library Links
             Text(
               l10n.libraryLink,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
-            
+
             ...List.generate(links.length, (linkIndex) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
@@ -1444,7 +1478,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                           hintText: l10n.libraryLinkHint,
                           border: const OutlineInputBorder(),
                         ),
-                        onChanged: (value) => _updateLibraryLink(index, linkIndex, value),
+                        onChanged: (value) =>
+                            _updateLibraryLink(index, linkIndex, value),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1459,7 +1494,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                 ),
               );
             }),
-            
+
             // Add Link Button
             OutlinedButton.icon(
               onPressed: () => _addLibraryLink(index),
@@ -1493,9 +1528,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                         ),
                         Text(
                           widget.app.description,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
                         ),
                       ],
                     ),
@@ -1504,11 +1538,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
                     children: [
                       ElevatedButton.icon(
                         onPressed: _isSaving ? null : _saveCodeDirectly,
-                        icon: _isSaving 
+                        icon: _isSaving
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.save, size: 16),
                         label: Text(l10n.saveCode),
@@ -1530,18 +1566,21 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
             ),
           ),
         ),
-        
+
         // Permanent toolbar
         _buildPermanentToolbar(),
-        
+
         // Search bar (only visible when search is enabled)
         if (_isSearchVisible) ...[
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: _buildSearchBar(),
           ),
         ],
-        
+
         // Full-screen code editor
         Expanded(
           child: Padding(
@@ -1568,7 +1607,4 @@ class _UserAppEditScreenState extends State<UserAppEditScreen> with TickerProvid
       ],
     );
   }
-
-
 }
-
