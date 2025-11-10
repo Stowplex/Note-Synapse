@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -526,6 +525,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final activeNote = notes[_activeNoteIndex.clamp(0, notes.length - 1)];
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           appBar: AppBar(
             title: Text(l10n.immersiveMode),
             actions: [
@@ -625,6 +625,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Widget> _buildVerticalAiOverlays(Size size, AppLocalizations l10n) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
@@ -634,7 +635,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
       _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin - keyboardHeight,
     );
 
     double handleTop;
@@ -654,17 +655,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       } else {
         overlays.add(
           Positioned(
-            bottom: 0,
+            bottom: keyboardHeight, // Adjusted for keyboard
             left: _aiHandleMargin,
             right: _aiHandleMargin,
             height: panelHeight,
             child: _buildAiPanelContent(l10n),
           ),
         );
-        handleTop = totalHeight - panelHeight - handleHeight - _aiHandleMargin;
+        handleTop =
+            totalHeight -
+            panelHeight -
+            handleHeight -
+            _aiHandleMargin -
+            keyboardHeight; // Adjusted for keyboard
       }
     } else {
-      final trackHeight = max(0.0, totalHeight - handleHeight);
+      final trackHeight = max(
+        0.0,
+        totalHeight - handleHeight - keyboardHeight,
+      ); // Adjusted for keyboard
       handleTop = trackHeight <= 0
           ? _aiHandleMargin
           : _aiHandleFraction * trackHeight;
@@ -695,6 +704,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Widget> _buildHorizontalAiOverlays(Size size, AppLocalizations l10n) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
@@ -703,10 +713,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
       _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin - keyboardHeight,
     );
 
-    final trackHeight = max(0.0, totalHeight - handleHeight);
+    final trackHeight = max(0.0, totalHeight - handleHeight - keyboardHeight);
     double handleTop = trackHeight <= 0
         ? _aiHandleMargin
         : _aiHandleFraction * trackHeight;
@@ -717,7 +727,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     double panelWidth = 0.0;
     if (_isAiPanelExpanded) {
       panelWidth = _computeLandscapePanelWidth(size.width, handleWidth);
-      if (panelWidth > 0)
+      if (panelWidth > 0) {
         overlays.add(
           Positioned(
             top: _aiHandleMargin,
@@ -728,6 +738,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
+      }
     }
 
     double? handleLeft;
