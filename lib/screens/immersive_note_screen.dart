@@ -82,6 +82,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final ConversationAiEngine _aiEngine = const ConversationAiEngine();
   Conversation? _conversation;
   List<Note> _conversationNotes = [];
+  bool _hasAssociatedConversations = false;
 
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
@@ -124,6 +125,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
+      _hasAssociatedConversations = true;
     }
 
     if (widget.initialMessages.isNotEmpty) {
@@ -192,6 +194,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _initialNotesById[note.id] = note;
         }
       });
+
+      // Check for associated conversations
+      await _checkAssociatedConversations();
     } catch (e, stackTrace) {
       LoggerService.error(
         'Failed to load notes for immersive view: $e',
@@ -201,6 +206,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     } finally {
       if (mounted) {
         setState(() => _isLoadingConversation = false);
+      }
+    }
+  }
+
+  /// Check if there are any conversations associated with the notes
+  Future<void> _checkAssociatedConversations() async {
+    try {
+      // If there's already a conversation, we have associated conversations
+      if (_conversation != null) {
+        if (mounted) {
+          setState(() {
+            _hasAssociatedConversations = true;
+          });
+        }
+        return;
+      }
+
+      // Check if any notes have associated conversations
+      final appProvider = context.read<AppProvider>();
+      final noteIds = List<String>.from(_noteOrder);
+      bool hasConversations = false;
+
+      for (final noteId in noteIds) {
+        final conversationIds = await appProvider.getNoteConversationIds(noteId);
+        if (conversationIds.isNotEmpty) {
+          hasConversations = true;
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _hasAssociatedConversations = hasConversations;
+        });
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to check associated conversations: $e');
+      // On error, default to false to hide the tree icon
+      if (mounted) {
+        setState(() {
+          _hasAssociatedConversations = false;
+        });
       }
     }
   }
@@ -222,6 +269,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       setState(() {
         _conversation = conversation;
+        _hasAssociatedConversations = true;
       });
     } catch (e, stackTrace) {
       LoggerService.error(
@@ -480,11 +528,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 tooltip: l10n.outline,
                 onPressed: () => _showOutline(notes, l10n),
               ),
-              IconButton(
-                icon: const Icon(Icons.account_tree),
-                tooltip: l10n.viewTree,
-                onPressed: () => _openConversationTree(),
-              ),
+              if (_hasAssociatedConversations)
+                IconButton(
+                  icon: const Icon(Icons.account_tree),
+                  tooltip: l10n.viewTree,
+                  onPressed: () => _openConversationTree(),
+                ),
               if (_conversation != null)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
@@ -2406,6 +2455,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _resetPdfState();
         _disposeImageResources();
         _conversation = result.conversation;
+        _hasAssociatedConversations = true;
         _messages
           ..clear()
           ..addAll(result.messages);
