@@ -32,6 +32,19 @@ import AVFoundation
       }
     }
     
+    let captureChannel = FlutterMethodChannel(
+      name: "note_synapse/native_capture",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    captureChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      if call.method == "captureRegion" {
+        self?.handleCaptureRegion(call: call, result: result)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
@@ -183,6 +196,101 @@ import AVFoundation
       } else {
         result(nil)
       }
+    }
+  }
+  
+  private func handleCaptureRegion(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      result(FlutterError(code: "NO_CONTROLLER", message: "Unable to access FlutterViewController", details: nil))
+      return
+    }
+    
+    guard let arguments = call.arguments as? [String: Any],
+          let x = arguments["x"] as? Double,
+          let y = arguments["y"] as? Double,
+          let width = arguments["width"] as? Double,
+          let height = arguments["height"] as? Double else {
+      result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for captureRegion", details: nil))
+      return
+    }
+    
+    DispatchQueue.main.async {
+      guard let flutterView = controller.view else {
+        result(FlutterError(code: "NO_VIEW", message: "Flutter view unavailable for capture", details: nil))
+        return
+      }
+      
+      flutterView.layoutIfNeeded()
+      
+      let screenScale = UIScreen.main.scale
+      let origin = CGPoint(
+        x: CGFloat(x) / screenScale,
+        y: CGFloat(y) / screenScale
+      )
+      let size = CGSize(
+        width: CGFloat(width) / screenScale,
+        height: CGFloat(height) / screenScale
+      )
+      
+      guard size.width > 0, size.height > 0 else {
+        result(FlutterError(code: "INVALID_SIZE", message: "Capture region size must be positive", details: nil))
+        return
+      }
+      
+      let captureRectInFlutterView = CGRect(origin: origin, size: size)
+      let targetView: UIView
+      let captureRectInTarget: CGRect
+      
+      if let window = flutterView.window {
+        targetView = window
+        captureRectInTarget = flutterView.convert(captureRectInFlutterView, to: window)
+      } else {
+        targetView = flutterView
+        captureRectInTarget = captureRectInFlutterView
+      }
+      
+      let boundedCaptureRect = captureRectInTarget.intersection(targetView.bounds)
+      guard !boundedCaptureRect.isNull,
+            boundedCaptureRect.width > 0,
+            boundedCaptureRect.height > 0 else {
+        result(FlutterError(code: "INVALID_BOUNDS", message: "Capture region lies outside of view bounds", details: nil))
+        return
+      }
+      
+      targetView.layoutIfNeeded()
+      
+      let rendererFormat = UIGraphicsImageRendererFormat()
+      rendererFormat.scale = screenScale
+      rendererFormat.opaque = false
+      let renderer = UIGraphicsImageRenderer(size: boundedCaptureRect.size, format: rendererFormat)
+      
+      let image = renderer.image { context in
+        let drawRect = CGRect(
+          origin: CGPoint(
+            x: -boundedCaptureRect.origin.x,
+            y: -boundedCaptureRect.origin.y
+          ),
+          size: targetView.bounds.size
+        )
+        
+        if !targetView.drawHierarchy(in: drawRect, afterScreenUpdates: false) {
+          let cgContext = context.cgContext
+          cgContext.saveGState()
+          cgContext.translateBy(
+            x: -boundedCaptureRect.origin.x,
+            y: -boundedCaptureRect.origin.y
+          )
+          targetView.layer.render(in: cgContext)
+          cgContext.restoreGState()
+        }
+      }
+      
+      guard let data = image.pngData() else {
+        result(FlutterError(code: "ENCODE_ERROR", message: "Failed to encode captured image", details: nil))
+        return
+      }
+      
+      result(FlutterStandardTypedData(bytes: data))
     }
   }
   

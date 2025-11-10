@@ -1401,6 +1401,8 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   late String _status;
   String? _downloadedFilePath;
   bool _isDownloading = false;
+  bool _fileDownloaded = false; // Track if file was successfully downloaded
+  bool _downloadFailed = false; // Track if download failed
 
   @override
   void initState() {
@@ -1588,12 +1590,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 fileName,
               );
 
-              setState(() {
-                _downloadedFilePath = relativePath;
-                _isDownloading = false;
-                _status = 'File downloaded successfully';
-              });
-
               // Create a note with the downloaded file as attachment
               final note = Note(
                 id: const Uuid().v4(),
@@ -1606,6 +1602,15 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 tags: ['shared', 'download', 'file'],
               );
 
+              // Mark file as downloaded and close dialog immediately
+              setState(() {
+                _downloadedFilePath = relativePath;
+                _fileDownloaded = true;
+                _isDownloading = false;
+                _isLoading = false;
+                _status = 'File downloaded successfully';
+              });
+
               // Return the result after a short delay to show success message
               await Future.delayed(const Duration(milliseconds: 500));
 
@@ -1617,13 +1622,34 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               });
               return;
             }
+            // If detected as file but content is not binary, fall through to webview
+          } else {
+            // HTTP status code is not 200, treat as download failure
+            setState(() {
+              _downloadFailed = true;
+              _isDownloading = false;
+              _isLoading = false;
+              _status = 'Download failed: HTTP ${response.statusCode}';
+            });
+            widget.onComplete({
+              'success': false,
+              'error': l10n.errorDownloading('HTTP ${response.statusCode}', widget.url),
+            });
+            return;
           }
         } catch (e) {
-          // If download fails, fall through to webview
+          // If download fails, signal error and don't show webview
           setState(() {
+            _downloadFailed = true;
             _isDownloading = false;
-            _status = l10n.loadingWebPage;
+            _isLoading = false;
+            _status = 'Download failed: ${e.toString()}';
           });
+          widget.onComplete({
+            'success': false,
+            'error': l10n.errorDownloading(e.toString(), widget.url),
+          });
+          return;
         }
       }
 
@@ -1642,6 +1668,46 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+
+    // If file was successfully downloaded, don't show webview - dialog will close via onComplete
+    if (_fileDownloaded) {
+      return Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(_status),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // If download failed, don't show webview - dialog will close via onComplete with error
+    if (_downloadFailed) {
+      return Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _status,
+                style: TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Show downloading status if downloading
     if (_isDownloading) {

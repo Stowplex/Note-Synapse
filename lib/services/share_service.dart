@@ -27,28 +27,58 @@ import '../utils/synapse_temp_utils.dart';
 
 class ShareService {
   static const _channel = MethodChannel('com.github.kkspeed/share');
+  static bool _initialized = false;
+  static bool _waitingForNavigatorFrame = false;
+  static bool _isPresentingShareScreen = false;
+  static final List<Map<String, dynamic>> _pendingSharedQueue = <Map<String, dynamic>>[];
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final _ShareLifecycleObserver _lifecycleObserver = _ShareLifecycleObserver();
+  static bool _observerAttached = false;
 
-  static Future<void> init(AppProvider appProvider) async {
+  static Future<void> init([AppProvider? appProvider]) async {
+    if (_initialized) {
+      _scheduleNavigatorCheck();
+      await _fetchAndQueueSharedContent();
+      return;
+    }
+
+    _initialized = true;
+    _attachLifecycleObserver();
+    _scheduleNavigatorCheck();
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'newSharedContent') {
-        await handleSharedContent(appProvider);
+        await handleSharedContent();
       }
     });
+
+    await _fetchAndQueueSharedContent();
+    _scheduleNavigatorCheck(forceFrame: true);
   }
 
-  static Future<void> handleSharedContent(AppProvider appProvider) async {
-    try {
-      final sharedData = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
-      if (sharedData != null) {
-        final result = await processSharedContent(sharedData.cast<String, dynamic>());
-        if (result['success'] == true) {
-          final note = result['note'] as Note;
-          await appProvider.addNote(note, fromShare: true);
-        }
-      }
-    } catch (e) {
-      LoggerService.error('Error handling shared content: $e', error: e);
+  static Future<void> handleSharedContent([AppProvider? appProvider]) async {
+    await _fetchAndQueueSharedContent();
+    _scheduleNavigatorCheck(forceFrame: true);
+  }
+
+  static void _attachLifecycleObserver() {
+    if (_observerAttached) {
+      return;
     }
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _observerAttached = true;
+  }
+
+  static void _handleAppResumed() {
+    Future<void>(() async {
+      try {
+        await _fetchAndQueueSharedContent();
+      } catch (_) {
+        // Errors already logged inside _fetchAndQueueSharedContent
+      }
+      if (_pendingSharedQueue.isNotEmpty) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+    });
   }
   
   /// Generates markdown text from a list of notes with optional sub-notes and linked notes
@@ -962,6 +992,135 @@ class ShareService {
         'success': false,
         'error': 'Error processing PDF content: $e',
       };
+    }
+  }
+
+  static Future<void> _fetchAndQueueSharedContent() async {
+    try {
+      final rawShared = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
+      if (rawShared == null || rawShared.isEmpty) {
+        return;
+      }
+
+      final normalized = _normalizeSharedData(rawShared);
+      LoggerService.info('ShareService received shared content: ${normalized.keys}');
+      _pendingSharedQueue.add(normalized);
+      _scheduleNavigatorCheck(forceFrame: true);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error retrieving shared content: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  static Map<String, dynamic> _normalizeSharedData(Map<dynamic, dynamic> input) {
+    final result = <String, dynamic>{};
+    input.forEach((key, value) {
+      if (key == null) {
+        return;
+      }
+      final stringKey = key.toString();
+      if (value is Map) {
+        result[stringKey] = _normalizeSharedData(value.cast<dynamic, dynamic>());
+      } else if (value is List) {
+        result[stringKey] = value
+            .map((item) => item is Map
+                ? _normalizeSharedData(item.cast<dynamic, dynamic>())
+                : item)
+            .toList();
+      } else {
+        result[stringKey] = value;
+      }
+    });
+    return result;
+  }
+
+  static void _scheduleNavigatorCheck({bool forceFrame = false}) {
+    if (_waitingForNavigatorFrame) {
+      return;
+    }
+    if (_pendingSharedQueue.isEmpty) {
+      return;
+    }
+    _waitingForNavigatorFrame = true;
+    if (forceFrame) {
+      WidgetsBinding.instance.scheduleFrame();
+    }
+    final navigator = navigatorKey.currentState;
+    final bool needsDelay = navigator == null || !navigator.mounted;
+
+    final callback = (_) {
+      _waitingForNavigatorFrame = false;
+      _tryPresentPendingSharedContent();
+    };
+
+    if (needsDelay) {
+      Future.microtask(() => callback(null));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback(callback);
+    }
+  }
+
+  static void _tryPresentPendingSharedContent() {
+    if (_pendingSharedQueue.isEmpty) {
+      return;
+    }
+
+    final navigator = navigatorKey.currentState;
+    if (navigator == null || !navigator.mounted) {
+      _scheduleNavigatorCheck();
+      return;
+    }
+
+    if (_isPresentingShareScreen) {
+      return;
+    }
+
+    final sharedData = _pendingSharedQueue.removeAt(0);
+
+    late final Future<dynamic> navigationFuture;
+    try {
+      navigationFuture = navigator.pushNamed('/share', arguments: sharedData);
+    } catch (error, stackTrace) {
+      LoggerService.error(
+        'ShareService failed to present share screen: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _isPresentingShareScreen = false;
+      _pendingSharedQueue.insert(0, sharedData);
+      _scheduleNavigatorCheck(forceFrame: true);
+      return;
+    }
+
+    _isPresentingShareScreen = true;
+
+    navigationFuture.whenComplete(() {
+      _isPresentingShareScreen = false;
+      if (_pendingSharedQueue.isNotEmpty) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+    });
+    navigationFuture.catchError((error, stackTrace) {
+      LoggerService.error(
+        'ShareService encountered navigation error: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _isPresentingShareScreen = false;
+      _pendingSharedQueue.insert(0, sharedData);
+      _scheduleNavigatorCheck(forceFrame: true);
+    });
+  }
+}
+
+class _ShareLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ShareService._handleAppResumed();
     }
   }
 }

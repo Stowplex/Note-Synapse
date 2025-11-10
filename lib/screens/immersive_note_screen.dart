@@ -32,6 +32,7 @@ import '../services/prompts/system_prompt_builder.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
@@ -2612,25 +2613,67 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-    final ui.Image image = await renderObject.toImage(
-      pixelRatio: devicePixelRatio,
-    );
+    Uint8List? regionBytes;
+    if (Platform.isIOS) {
+      final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
+      final Offset captureOrigin = boundaryOrigin +
+          Offset(cappedRect.left, cappedRect.top);
+      regionBytes = await NativeCaptureUtils.captureRegion(
+        x: captureOrigin.dx * devicePixelRatio,
+        y: captureOrigin.dy * devicePixelRatio,
+        width: cappedRect.width * devicePixelRatio,
+        height: cappedRect.height * devicePixelRatio,
+        devicePixelRatio: devicePixelRatio,
+      );
+      if (regionBytes != null && regionBytes.isEmpty) {
+        regionBytes = null;
+      }
+    }
 
-    final Rect scaledRect = Rect.fromLTWH(
-      cappedRect.left * devicePixelRatio,
-      cappedRect.top * devicePixelRatio,
-      cappedRect.width * devicePixelRatio,
-      cappedRect.height * devicePixelRatio,
-    );
+    ui.Image baseImage;
+    Rect sourceRect;
+    late int outputWidth;
+    late int outputHeight;
+
+    if (regionBytes != null) {
+      final ui.Codec codec = await ui.instantiateImageCodec(regionBytes);
+      final ui.FrameInfo frame = await codec.getNextFrame();
+      codec.dispose();
+      baseImage = frame.image;
+      sourceRect = Rect.fromLTWH(
+        0,
+        0,
+        baseImage.width.toDouble(),
+        baseImage.height.toDouble(),
+      );
+      outputWidth = baseImage.width;
+      outputHeight = baseImage.height;
+    } else {
+      baseImage = await renderObject.toImage(pixelRatio: devicePixelRatio);
+      sourceRect = Rect.fromLTWH(
+        cappedRect.left * devicePixelRatio,
+        cappedRect.top * devicePixelRatio,
+        cappedRect.width * devicePixelRatio,
+        cappedRect.height * devicePixelRatio,
+      );
+      outputWidth = max(1, sourceRect.width.round());
+      outputHeight = max(1, sourceRect.height.round());
+    }
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(recorder);
     final Paint paint = Paint();
 
+    final Rect targetRect = Rect.fromLTWH(
+      0,
+      0,
+      outputWidth.toDouble(),
+      outputHeight.toDouble(),
+    );
     canvas.drawImageRect(
-      image,
-      scaledRect,
-      Rect.fromLTWH(0, 0, scaledRect.width, scaledRect.height),
+      baseImage,
+      sourceRect,
+      targetRect,
       paint,
     );
 
@@ -2667,10 +2710,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final ui.Picture picture = recorder.endRecording();
     final ui.Image croppedImage = await picture.toImage(
-      max(1, scaledRect.width.round()),
-      max(1, scaledRect.height.round()),
+      outputWidth,
+      outputHeight,
     );
-    image.dispose();
+    baseImage.dispose();
 
     final ByteData? byteData = await croppedImage.toByteData(
       format: ui.ImageByteFormat.png,

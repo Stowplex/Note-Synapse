@@ -113,13 +113,6 @@ class ShareViewController: SLComposeServiceViewController {
 
     private func redirectToHostApp() {
         let url = URL(string: "\(urlScheme)://share")!
-        var responder: UIResponder? = self
-        while responder != nil {
-            if let application = responder as? UIApplication {
-                application.open(url, options: [:], completionHandler: nil)
-                break
-            }
-            responder = responder?.next
-        }
+        extensionContext?.open(url, completionHandler: nil)
     }
 }

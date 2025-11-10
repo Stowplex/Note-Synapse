@@ -10,7 +10,6 @@ import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/model_selection_screen.dart';
 import 'services/secure_storage_service.dart';
-import 'services/logger_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
 
@@ -45,6 +44,7 @@ class NoteSynapseApp extends StatelessWidget {
               Locale('zh', ''), // Chinese Simplified
             ],
             locale: appProvider.locale,
+            navigatorKey: ShareService.navigatorKey,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,
