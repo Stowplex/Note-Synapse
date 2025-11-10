@@ -437,7 +437,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen> with Tick
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<UserAppType>(
-                            value: _selectedAppType,
+                            initialValue: _selectedAppType,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
                               hintText: l10n.appTypeHint,

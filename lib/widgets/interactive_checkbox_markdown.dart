@@ -1,6 +1,5 @@
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -84,7 +83,7 @@ class _InteractiveCheckboxMarkdownState
           final hasDashPrefix = trimmedLine.startsWith('-');
           final dashPrefix = hasDashPrefix ? '- ' : '';
           final newCheckbox = newValue ? 'x' : ' ';
-          lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
+          lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
           
           _currentContent = lines.join('\n');
           widget.onContentChanged?.call(_currentContent);
@@ -108,7 +107,7 @@ class _InteractiveCheckboxMarkdownState
             final hasDashPrefix = trimmedLine.startsWith('-');
             final dashPrefix = hasDashPrefix ? '- ' : '';
             final newCheckbox = newValue ? 'x' : ' ';
-            lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
+            lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
             
             _currentContent = lines.join('\n');
             widget.onContentChanged?.call(_currentContent);
@@ -355,7 +354,7 @@ class _InteractiveCheckboxMarkdownState
       height: height ?? 100,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(

@@ -16,7 +16,7 @@ class SafeHTag extends BlockMd {
     final GptMarkdownConfig config,
   ) {
     var theme = GptMarkdownTheme.of(context);
-    var match = this.exp.firstMatch(text.trim());
+    var match = exp.firstMatch(text.trim());
     if (match == null) {
       return config.getRich(
         TextSpan(
@@ -99,7 +99,7 @@ class InteractiveCheckboxMd extends BlockMd {
     String text,
     final GptMarkdownConfig config,
   ) {
-    var match = this.exp.firstMatch(text.trim());
+    var match = exp.firstMatch(text.trim());
     final checkboxState = "${match?[1]}" == "x";
     final checkboxText = "${match?[2]}";
     final originalLine = text.trim();

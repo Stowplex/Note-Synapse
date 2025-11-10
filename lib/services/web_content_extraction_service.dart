@@ -179,7 +179,7 @@ class WebContentExtractionService {
       return result;
     } finally {
       try {
-        if (await headlessWebView.isRunning()) {
+        if (headlessWebView.isRunning()) {
           await headlessWebView.dispose();
         }
       } catch (e) {

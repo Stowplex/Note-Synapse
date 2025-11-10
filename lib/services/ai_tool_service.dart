@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/services.dart';
@@ -79,7 +78,7 @@ class AiToolRuntime {
     }
 
     if (_headlessWebView != null) {
-      final isRunning = await _headlessWebView!.isRunning();
+      final isRunning = _headlessWebView!.isRunning();
       if (isRunning) {
         return _loadCompleter?.future ?? Future.value();
       }
@@ -196,7 +195,7 @@ class AiToolRuntime {
   Future<void> dispose() async {
     try {
       if (_headlessWebView != null) {
-        if (await _headlessWebView!.isRunning()) {
+        if (_headlessWebView!.isRunning()) {
           await _headlessWebView!.dispose();
         }
       }

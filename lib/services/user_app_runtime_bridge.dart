@@ -612,7 +612,7 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
 
           LoggerService.debug(
-            '[Synapse.saveTemp] Created $fileName (${result.mimeType}, ${sizeBytes} bytes) in ${duration.inMilliseconds}ms',
+            '[Synapse.saveTemp] Created $fileName (${result.mimeType}, $sizeBytes bytes) in ${duration.inMilliseconds}ms',
           );
           return {'success': true, 'uri': result.uri};
         } catch (e) {
