@@ -37,27 +37,32 @@ class ShareService {
 
   static Future<void> init([AppProvider? appProvider]) async {
     if (_initialized) {
-      _scheduleNavigatorCheck();
-      await _fetchAndQueueSharedContent();
+      final hasNew = await _fetchAndQueueSharedContent();
+      if (hasNew || _pendingSharedQueue.isNotEmpty) {
+        _handlePendingQueue();
+      }
       return;
     }
 
     _initialized = true;
     _attachLifecycleObserver();
-    _scheduleNavigatorCheck();
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'newSharedContent') {
         await handleSharedContent();
       }
     });
 
-    await _fetchAndQueueSharedContent();
-    _scheduleNavigatorCheck(forceFrame: true);
+    final hasNew = await _fetchAndQueueSharedContent();
+    if (hasNew || _pendingSharedQueue.isNotEmpty) {
+      _handlePendingQueue();
+    }
   }
 
   static Future<void> handleSharedContent([AppProvider? appProvider]) async {
-    await _fetchAndQueueSharedContent();
-    _scheduleNavigatorCheck(forceFrame: true);
+    final hasNew = await _fetchAndQueueSharedContent();
+    if (hasNew || _pendingSharedQueue.isNotEmpty) {
+      _handlePendingQueue();
+    }
   }
 
   static void _attachLifecycleObserver() {
@@ -70,13 +75,9 @@ class ShareService {
 
   static void _handleAppResumed() {
     Future<void>(() async {
-      try {
-        await _fetchAndQueueSharedContent();
-      } catch (_) {
-        // Errors already logged inside _fetchAndQueueSharedContent
-      }
-      if (_pendingSharedQueue.isNotEmpty) {
-        _scheduleNavigatorCheck(forceFrame: true);
+      final hasNew = await _fetchAndQueueSharedContent();
+      if (hasNew || _pendingSharedQueue.isNotEmpty) {
+        _handlePendingQueue();
       }
     });
   }
@@ -995,23 +996,24 @@ class ShareService {
     }
   }
 
-  static Future<void> _fetchAndQueueSharedContent() async {
+  static Future<bool> _fetchAndQueueSharedContent() async {
     try {
       final rawShared = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
       if (rawShared == null || rawShared.isEmpty) {
-        return;
+        return false;
       }
 
       final normalized = _normalizeSharedData(rawShared);
       LoggerService.info('ShareService received shared content: ${normalized.keys}');
       _pendingSharedQueue.add(normalized);
-      _scheduleNavigatorCheck(forceFrame: true);
+      return true;
     } catch (e, stackTrace) {
       LoggerService.error(
         'Error retrieving shared content: $e',
         error: e,
         stackTrace: stackTrace,
       );
+      return false;
     }
   }
 
@@ -1037,6 +1039,20 @@ class ShareService {
     return result;
   }
 
+  static void _handlePendingQueue() {
+    if (_pendingSharedQueue.isEmpty) {
+      return;
+    }
+    if (Platform.isIOS) {
+      _scheduleNavigatorCheck(forceFrame: true);
+    } else {
+      final presented = _tryPresentPendingSharedContent();
+      if (!presented) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+    }
+  }
+
   static void _scheduleNavigatorCheck({bool forceFrame = false}) {
     if (_waitingForNavigatorFrame) {
       return;
@@ -1051,10 +1067,10 @@ class ShareService {
     final navigator = navigatorKey.currentState;
     final bool needsDelay = navigator == null || !navigator.mounted;
 
-    final callback = (_) {
+    void callback(_) {
       _waitingForNavigatorFrame = false;
       _tryPresentPendingSharedContent();
-    };
+    }
 
     if (needsDelay) {
       Future.microtask(() => callback(null));
@@ -1063,19 +1079,21 @@ class ShareService {
     }
   }
 
-  static void _tryPresentPendingSharedContent() {
+  static bool _tryPresentPendingSharedContent({bool allowReschedule = true}) {
     if (_pendingSharedQueue.isEmpty) {
-      return;
+      return false;
     }
 
     final navigator = navigatorKey.currentState;
     if (navigator == null || !navigator.mounted) {
-      _scheduleNavigatorCheck();
-      return;
+      if (allowReschedule) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+      return false;
     }
 
     if (_isPresentingShareScreen) {
-      return;
+      return true;
     }
 
     final sharedData = _pendingSharedQueue.removeAt(0);
@@ -1091,8 +1109,8 @@ class ShareService {
       );
       _isPresentingShareScreen = false;
       _pendingSharedQueue.insert(0, sharedData);
-      _scheduleNavigatorCheck(forceFrame: true);
-      return;
+      _handlePendingQueue();
+      return false;
     }
 
     _isPresentingShareScreen = true;
@@ -1100,7 +1118,7 @@ class ShareService {
     navigationFuture.whenComplete(() {
       _isPresentingShareScreen = false;
       if (_pendingSharedQueue.isNotEmpty) {
-        _scheduleNavigatorCheck(forceFrame: true);
+        _handlePendingQueue();
       }
     });
     navigationFuture.catchError((error, stackTrace) {
@@ -1111,8 +1129,10 @@ class ShareService {
       );
       _isPresentingShareScreen = false;
       _pendingSharedQueue.insert(0, sharedData);
-      _scheduleNavigatorCheck(forceFrame: true);
+      _handlePendingQueue();
     });
+
+    return true;
   }
 }
 
