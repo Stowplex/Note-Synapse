@@ -4,6 +4,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_card.dart';
 import '../l10n/app_localizations.dart';
+import '../services/note_selection_service.dart';
 
 class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
@@ -25,6 +26,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   final List<Note> _selectedNotes = [];
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  final NoteSelectionService _noteSelectionService = NoteSelectionService();
 
   @override
   void dispose() {
@@ -127,14 +129,16 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
             Expanded(
               child: Consumer<AppProvider>(
                 builder: (context, appProvider, child) {
+                  // Get all notes from AppProvider - this will automatically update
+                  // when AppProvider.notifyListeners() is called (e.g., when notes
+                  // are added via Synapse API)
                   final allNotes = appProvider.notes;
-                  final filteredNotes = _searchQuery.isEmpty
-                      ? allNotes
-                      : allNotes.where((note) =>
-                          note.title.toLowerCase().contains(_searchQuery) ||
-                          note.content.toLowerCase().contains(_searchQuery) ||
-                          note.tags.any((tag) => tag.toLowerCase().contains(_searchQuery))
-                        ).toList();
+                  
+                  // Use the service to filter notes
+                  final filteredNotes = _noteSelectionService.filterNotes(
+                    allNotes: allNotes,
+                    searchQuery: _searchQuery,
+                  );
                   
                   if (filteredNotes.isEmpty) {
                     return Center(
@@ -165,7 +169,12 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                     itemCount: filteredNotes.length,
                     itemBuilder: (context, index) {
                       final note = filteredNotes[index];
-                      final isSelected = _selectedNotes.contains(note);
+                      // Use note ID comparison instead of object equality
+                      // to ensure newly created notes are properly detected
+                      final isSelected = _noteSelectionService.isNoteSelected(
+                        selectedNotes: _selectedNotes,
+                        note: note,
+                      );
                       
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -239,20 +248,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   void _toggleNoteSelection(Note note) {
     setState(() {
       if (widget.singleSelection) {
-        // In single selection mode, replace the current selection
-        if (_selectedNotes.contains(note)) {
-          _selectedNotes.remove(note);
-        } else {
-          _selectedNotes.clear();
-          _selectedNotes.add(note);
-        }
+        final newSelection = _noteSelectionService.toggleSingleSelection(
+          selectedNotes: _selectedNotes,
+          note: note,
+        );
+        _selectedNotes.clear();
+        _selectedNotes.addAll(newSelection);
       } else {
-        // In multi-selection mode, toggle selection
-        if (_selectedNotes.contains(note)) {
-          _selectedNotes.remove(note);
-        } else {
-          _selectedNotes.add(note);
-        }
+        final newSelection = _noteSelectionService.toggleMultiSelection(
+          selectedNotes: _selectedNotes,
+          note: note,
+        );
+        _selectedNotes.clear();
+        _selectedNotes.addAll(newSelection);
       }
     });
   }
