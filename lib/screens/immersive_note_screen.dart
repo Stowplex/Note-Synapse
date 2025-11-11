@@ -40,6 +40,7 @@ import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'note_selection_dialog.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -530,6 +531,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           appBar: AppBar(
             title: Text(l10n.immersiveMode),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: l10n.addNotes,
+                onPressed: _showNoteSelection,
+              ),
               IconButton(
                 icon: const Icon(Icons.format_list_bulleted),
                 tooltip: l10n.outline,
@@ -1776,6 +1782,68 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
       },
     );
+  }
+
+  Future<void> _showNoteSelection() async {
+    final l10n = AppLocalizations.of(context)!;
+    
+    final selectedNotes = await showDialog<List<Note>>(
+      context: context,
+      builder: (dialogContext) {
+        return NoteSelectionDialog(
+          onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+          title: l10n.selectNotesToAddToContext,
+        );
+      },
+    );
+
+    if (selectedNotes != null && selectedNotes.isNotEmpty) {
+      final existingIds = _noteOrder.toSet();
+      final newNotes = selectedNotes
+          .where((note) => !existingIds.contains(note.id))
+          .toList();
+
+      if (newNotes.isEmpty) {
+        // All selected notes are already in the immersive view
+        return;
+      }
+
+      // Add new notes to the immersive view
+      setState(() {
+        for (final note in newNotes) {
+          _initialNotesById[note.id] = note;
+          _noteOrder.add(note.id);
+        }
+        _conversationNotes.addAll(newNotes);
+      });
+
+      // If there's a conversation, add notes to it
+      if (_conversation != null) {
+        try {
+          final noteIds = newNotes.map((note) => note.id).toList();
+          await _conversationService.addNotesToConversation(
+            _conversation!.id,
+            noteIds,
+          );
+          // Reload conversation notes to ensure consistency
+          final updatedNotes = await _conversationService.getConversationNotes(
+            _conversation!.id,
+          );
+          if (mounted) {
+            setState(() {
+              _conversationNotes = updatedNotes;
+            });
+          }
+        } catch (e) {
+          LoggerService.error('Error adding notes to conversation: $e', error: e);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error adding notes: $e')),
+            );
+          }
+        }
+      }
+    }
   }
 
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
