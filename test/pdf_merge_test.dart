@@ -1,14 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../lib/models/note.dart';
-import '../lib/services/share_service.dart';
-import '../lib/l10n/app_localizations.dart';
-import '../lib/providers/app_provider.dart';
+import 'package:note_synapse/models/note.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
