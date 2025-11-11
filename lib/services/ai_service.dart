@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -647,6 +648,11 @@ class AIService {
       LoggerService.warning('Failed to parse AI dedup rules response: $e');
       return [];
     }
+  }
+
+  @visibleForTesting
+  static List<DedupRule> parseDedupRulesResponseForTest(String response) {
+    return _parseDedupRulesResponse(response);
   }
 
 }

@@ -7,6 +7,7 @@ import '../models/tag.dart';
 import '../models/dedup_rule.dart';
 import '../services/ai_service.dart';
 import '../widgets/tag_detail_dialog.dart';
+import '../utils/dedup_suggestion_utils.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -505,28 +506,6 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     return null;
   }
 
-  String? _resolveTagName(String tagName) {
-    final normalized = tagName.trim();
-    if (normalized.isEmpty) {
-      return null;
-    }
-
-    for (final tagWithUsage in _tagsWithUsage) {
-      if (tagWithUsage.tag.name == normalized) {
-        return tagWithUsage.tag.name;
-      }
-    }
-
-    final normalizedLower = normalized.toLowerCase();
-    for (final tagWithUsage in _tagsWithUsage) {
-      if (tagWithUsage.tag.name.toLowerCase() == normalizedLower) {
-        return tagWithUsage.tag.name;
-      }
-    }
-
-    return null;
-  }
-
   Future<void> _executeDedupRules() async {
     final l10n = AppLocalizations.of(context)!;
 
@@ -632,21 +611,12 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       );
 
       if (mounted && suggestions.isNotEmpty) {
-        final normalizedSuggestions = <DedupRule>[];
-
-        for (final suggestion in suggestions) {
-          final resolvedLeft = _resolveTagName(suggestion.leftTag);
-          final resolvedRight = _resolveTagName(suggestion.rightTag);
-
-          if (resolvedLeft != null && resolvedRight != null) {
-            normalizedSuggestions.add(
-              suggestion.copyWith(
-                leftTag: resolvedLeft,
-                rightTag: resolvedRight,
-              ),
-            );
-          }
-        }
+        final existingTags =
+            _tagsWithUsage.map((tagWithUsage) => tagWithUsage.tag.name).toList();
+        final normalizedSuggestions = DedupSuggestionUtils.normalizeSuggestions(
+          suggestions,
+          existingTags,
+        );
 
         if (normalizedSuggestions.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
