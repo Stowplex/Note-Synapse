@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/models/dedup_rule.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/utils/dedup_suggestion_utils.dart';
 
@@ -157,18 +158,26 @@ void main() {
       );
 
       expect(normalized.length, suggestions.length);
-      expect(normalized.every(
-        (rule) => availableTags.contains(rule.leftTag) &&
-            availableTags.contains(rule.rightTag),
-      ), isTrue);
-
-      final aiRules =
-          normalized.where((rule) => rule.rightTag == 'AI').toList();
-      expect(aiRules, isNotEmpty);
       expect(
-        aiRules.map((rule) => rule.leftTag),
-        containsAll(['AI', 'AI Generated', 'ai-summarized', 'ai_processed', 'llm']),
+        normalized.every((rule) => availableTags.contains(rule.leftTag)),
+        isTrue,
       );
+    });
+
+    test('normalizeSuggestions preserves replacement casing differences', () {
+      final suggestions = [
+        DedupRule(id: 'case', leftTag: ' AI ', rightTag: ' ai '),
+      ];
+
+      final normalized = DedupSuggestionUtils.normalizeSuggestions(
+        suggestions,
+        ['AI'],
+      );
+
+      expect(normalized, hasLength(1));
+      final rule = normalized.single;
+      expect(rule.leftTag, 'AI');
+      expect(rule.rightTag, 'ai');
     });
   });
 }

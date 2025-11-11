@@ -9,20 +9,16 @@ class DedupSuggestionUtils {
       return null;
     }
 
-    for (final tag in existingTags) {
-      if (tag == normalized) {
-        return tag;
-      }
+    return existingTags.contains(normalized) ? normalized : null;
+  }
+
+  static String? _normalizeReplacementTag(String tagName) {
+    final normalized = tagName.trim();
+    if (normalized.isEmpty) {
+      return null;
     }
 
-    final normalizedLower = normalized.toLowerCase();
-    for (final tag in existingTags) {
-      if (tag.toLowerCase() == normalizedLower) {
-        return tag;
-      }
-    }
-
-    return null;
+    return normalized;
   }
 
   static List<DedupRule> normalizeSuggestions(
@@ -33,7 +29,7 @@ class DedupSuggestionUtils {
 
     for (final suggestion in suggestions) {
       final resolvedLeft = resolveTagName(suggestion.leftTag, existingTags);
-      final resolvedRight = resolveTagName(suggestion.rightTag, existingTags);
+      final resolvedRight = _normalizeReplacementTag(suggestion.rightTag);
 
       if (resolvedLeft != null && resolvedRight != null) {
         normalized.add(
