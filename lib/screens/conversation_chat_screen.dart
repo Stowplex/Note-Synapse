@@ -1335,12 +1335,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _showNoteSelection() async {
     final l10n = AppLocalizations.of(context)!;
+    
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
-      builder: (context) => NoteSelectionDialog(
-        onNotesSelected: (notes) => Navigator.of(context).pop(notes),
-        title: l10n.selectNotesToAddToContext,
-      ),
+      builder: (dialogContext) {
+        return NoteSelectionDialog(
+          onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+          title: l10n.selectNotesToAddToContext,
+        );
+      },
     );
 
     if (selectedNotes != null && selectedNotes.isNotEmpty) {

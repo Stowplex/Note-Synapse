@@ -129,12 +129,9 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
             Expanded(
               child: Consumer<AppProvider>(
                 builder: (context, appProvider, child) {
-                  // Get all notes from AppProvider - this will automatically update
-                  // when AppProvider.notifyListeners() is called (e.g., when notes
-                  // are added via Synapse API)
                   final allNotes = appProvider.notes;
                   
-                  // Use the service to filter notes
+                  // Use the service to filter and sort notes
                   final filteredNotes = _noteSelectionService.filterNotes(
                     allNotes: allNotes,
                     searchQuery: _searchQuery,
