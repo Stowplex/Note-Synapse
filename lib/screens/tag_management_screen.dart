@@ -505,6 +505,28 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     return null;
   }
 
+  String? _resolveTagName(String tagName) {
+    final normalized = tagName.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    for (final tagWithUsage in _tagsWithUsage) {
+      if (tagWithUsage.tag.name == normalized) {
+        return tagWithUsage.tag.name;
+      }
+    }
+
+    final normalizedLower = normalized.toLowerCase();
+    for (final tagWithUsage in _tagsWithUsage) {
+      if (tagWithUsage.tag.name.toLowerCase() == normalizedLower) {
+        return tagWithUsage.tag.name;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _executeDedupRules() async {
     final l10n = AppLocalizations.of(context)!;
 
@@ -609,17 +631,48 @@ class _TagManagementScreenState extends State<TagManagementScreen>
         protectedTags: filterTags,
       );
 
-      if (mounted) {
-        setState(() {
-          _dedupRules.addAll(suggestions);
-        });
+      if (mounted && suggestions.isNotEmpty) {
+        final normalizedSuggestions = <DedupRule>[];
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${suggestions.length} dedup rules suggested by AI'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        for (final suggestion in suggestions) {
+          final resolvedLeft = _resolveTagName(suggestion.leftTag);
+          final resolvedRight = _resolveTagName(suggestion.rightTag);
+
+          if (resolvedLeft != null && resolvedRight != null) {
+            normalizedSuggestions.add(
+              suggestion.copyWith(
+                leftTag: resolvedLeft,
+                rightTag: resolvedRight,
+              ),
+            );
+          }
+        }
+
+        if (normalizedSuggestions.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('AI suggestions did not match any existing tags'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          final skippedCount = suggestions.length - normalizedSuggestions.length;
+
+          setState(() {
+            _dedupRules.addAll(normalizedSuggestions);
+          });
+
+          final message = skippedCount > 0
+              ? '${normalizedSuggestions.length} dedup rules added (skipped $skippedCount unknown tags)'
+              : '${normalizedSuggestions.length} dedup rules suggested by AI';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: skippedCount > 0 ? Colors.orange : Colors.green,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
