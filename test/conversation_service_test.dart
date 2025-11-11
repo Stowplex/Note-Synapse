@@ -11,9 +11,13 @@ void main() {
     late DatabaseService databaseService;
 
     setUp(() async {
-      conversationService = ConversationService();
-      databaseService = DatabaseService();
+      databaseService = DatabaseService.createNew();
+      conversationService = ConversationService.createForTesting(databaseService);
       await databaseService.clearAllData();
+    });
+
+    tearDown(() async {
+      await databaseService.close();
     });
 
     group('Basic CRUD Operations', () {

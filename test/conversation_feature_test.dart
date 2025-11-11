@@ -9,9 +9,13 @@ void main() {
     late DatabaseService databaseService;
 
     setUp(() async {
-      conversationService = ConversationService();
-      databaseService = DatabaseService();
+      databaseService = DatabaseService.createNew();
+      conversationService = ConversationService.createForTesting(databaseService);
       await databaseService.clearAllData();
+    });
+
+    tearDown(() async {
+      await databaseService.close();
     });
 
     group('Tree Node Creation Tests', () {
@@ -65,7 +69,7 @@ void main() {
         expect(nodeA, isNotNull);
         expect(nodeA.messageId, equals(aiResponse.id));
         expect(nodeA.level, equals(1));
-        expect(nodeA.parentId, isNull); // First node has no parent (except root)
+        expect(nodeA.parentId, equals('root')); // Level 1 nodes point to root
         expect(nodeA.children, isEmpty); // No children yet
         
         // Root should have Node A as child

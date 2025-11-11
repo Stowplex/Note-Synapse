@@ -6,11 +6,17 @@ import '../services/database_service.dart';
 import '../services/logger_service.dart';
 
 class UserAppLibraryService {
-  static final UserAppLibraryService _instance = UserAppLibraryService._internal();
+  static final UserAppLibraryService _instance = UserAppLibraryService._internal(DatabaseService());
   factory UserAppLibraryService() => _instance;
-  UserAppLibraryService._internal();
 
-  final DatabaseService _databaseService = DatabaseService();
+  final DatabaseService _databaseService;
+
+  UserAppLibraryService._internal(this._databaseService);
+
+  /// Factory for tests to inject their own database instance.
+  factory UserAppLibraryService.createForTesting(DatabaseService databaseService) {
+    return UserAppLibraryService._internal(databaseService);
+  }
 
   /// Add a library to a user app with its dependencies
   Future<UserAppLibrary> addLibrary({
