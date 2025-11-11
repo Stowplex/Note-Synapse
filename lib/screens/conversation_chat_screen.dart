@@ -1151,11 +1151,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 Text(
                   l10n.mcpTools,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.8),
-                      ),
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.8),
+                  ),
                 ),
                 const Spacer(),
                 if (activeMcpCount > 0)
@@ -1335,7 +1335,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _showNoteSelection() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
       builder: (dialogContext) {
@@ -1670,7 +1670,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           // Attached files section
           _buildAttachedFilesSection(),
           // MCP selection section
-          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty) _buildMcpSelectionSection(),
+          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
+            _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),

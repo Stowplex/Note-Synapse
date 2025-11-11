@@ -1786,7 +1786,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _showNoteSelection() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
       builder: (dialogContext) {
@@ -1835,11 +1835,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             });
           }
         } catch (e) {
-          LoggerService.error('Error adding notes to conversation: $e', error: e);
+          LoggerService.error(
+            'Error adding notes to conversation: $e',
+            error: e,
+          );
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error adding notes: $e')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Error adding notes: $e')));
           }
         }
       }
@@ -2684,8 +2687,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     Uint8List? regionBytes;
     if (Platform.isIOS) {
       final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
-      final Offset captureOrigin = boundaryOrigin +
-          Offset(cappedRect.left, cappedRect.top);
+      final Offset captureOrigin =
+          boundaryOrigin + Offset(cappedRect.left, cappedRect.top);
       regionBytes = await NativeCaptureUtils.captureRegion(
         x: captureOrigin.dx * devicePixelRatio,
         y: captureOrigin.dy * devicePixelRatio,
@@ -2738,12 +2741,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       outputWidth.toDouble(),
       outputHeight.toDouble(),
     );
-    canvas.drawImageRect(
-      baseImage,
-      sourceRect,
-      targetRect,
-      paint,
-    );
+    canvas.drawImageRect(baseImage, sourceRect, targetRect, paint);
 
     final List<Offset> scaledPoints = points
         .map(
