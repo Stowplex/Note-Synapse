@@ -131,7 +131,7 @@ class OAuthConfig {
   final String scope;
   final bool usePkce;
   final String? discoveryUrl; // metadata URL used for auto-config
-  final String redirectUri; // we standardize on localhost redirect
+  final String redirectUri; // standard redirect URI used during OAuth flows
   final String? issuer;
   final String? resourceMetadataUrl;
   final String? authorizationServerMetadataUrl;
@@ -159,8 +159,8 @@ class OAuthConfig {
       scope: (json['scope'] as String? ?? '').trim(),
       usePkce: json['usePkce'] as bool? ?? true,
       discoveryUrl: json['discoveryUrl'] as String?,
-      redirectUri:
-          json['redirectUri'] as String? ?? 'http://127.0.0.1:51791/callback',
+      redirectUri: json['redirectUri'] as String? ??
+          'notesynapse://oauth/callback',
       issuer: json['issuer'] as String?,
       resourceMetadataUrl: json['resourceMetadataUrl'] as String?,
       authorizationServerMetadataUrl:

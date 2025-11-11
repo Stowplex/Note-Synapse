@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:app_links/app_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:crypto/crypto.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
+import 'oauth_redirect_helper.dart';
 
 class ResourceDiscoveryResult {
   ResourceDiscoveryResult({
@@ -76,28 +79,45 @@ class OAuthService {
   // Track active OAuth flow for cancellation
   static HttpServer? _activeServer;
   static StreamSubscription<HttpRequest>? _activeSubscription;
+  static StreamSubscription<Uri?>? _activeLinkSubscription;
   static Completer<Map<String, dynamic>>? _activeCompleter;
+  static Completer<Uri>? _activeRedirectCompleter;
   static Future<void>? _activeClosingFuture;
+  static AppLinks? _appLinks;
+
+  static const Duration _defaultFlowTimeout = Duration(minutes: 5);
 
   /// Cancel any active OAuth authorization flow and shut down the local server
   static Future<void> cancelActiveFlow() async {
-    if (_activeServer != null || _activeSubscription != null || _activeCompleter != null) {
+    if (_activeServer != null ||
+        _activeSubscription != null ||
+        _activeLinkSubscription != null ||
+        _activeCompleter != null ||
+        _activeRedirectCompleter != null) {
       LoggerService.debug('OAuthService: Cancelling active OAuth flow');
       
       // Complete the completer with cancellation error if not already completed
       if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
         _activeCompleter!.completeError(Exception('OAuth flow cancelled by user'));
       }
+
+      if (_activeRedirectCompleter != null && !_activeRedirectCompleter!.isCompleted) {
+        _activeRedirectCompleter!
+            .completeError(Exception('OAuth flow cancelled by user'));
+      }
       
       // Save references before any async operations
       final server = _activeServer;
       final subscription = _activeSubscription;
+      final linkSubscription = _activeLinkSubscription;
       final closingFuture = _activeClosingFuture;
       
       // Clear references immediately to prevent race conditions
       _activeServer = null;
       _activeSubscription = null;
+      _activeLinkSubscription = null;
       _activeCompleter = null;
+      _activeRedirectCompleter = null;
       _activeClosingFuture = null;
       
       // Wait for any in-progress closing operation
@@ -122,6 +142,13 @@ class OAuthService {
           await subscription.cancel();
         } catch (_) {
           // Subscription may already be cancelled, ignore errors
+        }
+      }
+      if (linkSubscription != null) {
+        try {
+          await linkSubscription.cancel();
+        } catch (_) {
+          // Stream subscription may already be cancelled, ignore errors
         }
       }
     }
@@ -504,21 +531,54 @@ class OAuthService {
     final verifier = config.usePkce ? _codeVerifier() : null;
     final codeChallenge = config.usePkce && verifier != null ? _codeChallenge(verifier) : null;
 
-    // Cancel any existing active flow first
     await cancelActiveFlow();
+    final redirectUri = OAuthRedirectHelper.resolve(config.redirectUri);
 
-    const port = 51791;
+    if (OAuthRedirectHelper.usesCustomScheme) {
+      return _authorizationCodeFlowWithDeepLink(
+        config: config,
+        state: state,
+        verifier: verifier,
+        codeChallenge: codeChallenge,
+        redirectUri: redirectUri,
+      );
+    }
+
+    return _authorizationCodeFlowWithLoopbackServer(
+      config: config,
+      state: state,
+      verifier: verifier,
+      codeChallenge: codeChallenge,
+      redirectUri: redirectUri,
+    );
+  }
+
+  static Future<Map<String, dynamic>> _authorizationCodeFlowWithLoopbackServer({
+    required OAuthConfig config,
+    required String state,
+    required String redirectUri,
+    String? verifier,
+    String? codeChallenge,
+  }) async {
+    final uri = Uri.tryParse(redirectUri);
+    if (uri == null) {
+      throw Exception('Invalid redirect URI configured: $redirectUri');
+    }
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      throw Exception('Redirect URI must be an http(s) loopback address when running on desktop. Got $redirectUri');
+    }
+
+    final callbackPath = uri.path.isEmpty ? '/' : uri.path;
+    final port = uri.hasPort ? uri.port : Uri.parse(OAuthRedirectHelper.loopbackRedirectUri).port;
+
     late HttpServer server;
     try {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     } catch (e) {
       throw Exception('Unable to bind local redirect server on 127.0.0.1:$port. Ensure the port is free.');
     }
-    
-    // Track this as the active server
+
     _activeServer = server;
-    
-    final redirectUri = 'http://127.0.0.1:$port/callback';
 
     final authParams = <String, String>{
       'response_type': 'code',
@@ -551,7 +611,6 @@ class OAuthService {
         try {
           await subscription.cancel();
         } catch (_) {}
-        // Clear active references
         if (_activeServer == server) {
           _activeServer = null;
         }
@@ -576,7 +635,7 @@ class OAuthService {
 
     subscription = server.listen((HttpRequest request) async {
       try {
-        if (handled || request.uri.path != '/callback') {
+        if (handled || request.uri.path != callbackPath) {
           request.response.statusCode = 404;
           await request.response.close();
           return;
@@ -632,7 +691,6 @@ class OAuthService {
         handled = true;
         await respond(request, '<html><body>You can close this window.</body></html>');
 
-        // Wait a moment for app to return to foreground and network stack to stabilize
         LoggerService.debug('OAuthService: Callback received, waiting for app foreground before token exchange...');
         await Future.delayed(const Duration(milliseconds: 800));
 
@@ -657,9 +715,9 @@ class OAuthService {
             body: tokenBody,
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           );
-          
+
           LoggerService.debug('OAuthService: Token exchange response status: ${tokenResp.statusCode}');
-          
+
           if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
             final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
             final hasAccessToken = tokenData.containsKey('access_token');
@@ -706,15 +764,209 @@ class OAuthService {
         completer.completeError(Exception('OAuth callback server error: $error'));
       }
     });
-    
-    // Track this as the active subscription
+
     _activeSubscription = subscription;
 
     try {
-      final result = await completer.future.timeout(const Duration(minutes: 5));
+      final result = await completer.future.timeout(_defaultFlowTimeout);
       return result;
     } finally {
       await ensureClosed();
+    }
+  }
+
+  static Future<Map<String, dynamic>> _authorizationCodeFlowWithDeepLink({
+    required OAuthConfig config,
+    required String state,
+    required String redirectUri,
+    String? verifier,
+    String? codeChallenge,
+  }) async {
+    final authParams = <String, String>{
+      'response_type': 'code',
+      'client_id': config.clientId,
+      'redirect_uri': redirectUri,
+      'state': state,
+      if (config.usePkce && codeChallenge != null) 'code_challenge': codeChallenge,
+      if (config.usePkce && codeChallenge != null) 'code_challenge_method': 'S256',
+    };
+    final trimmedScope = config.scope.trim();
+    if (trimmedScope.isNotEmpty) {
+      authParams['scope'] = trimmedScope;
+    }
+    final authUri = Uri.parse(config.authorizationEndpoint).replace(queryParameters: authParams);
+
+    LoggerService.debug('OAuthService: Launching auth with deep link redirect: $authUri');
+
+    final completer = Completer<Map<String, dynamic>>();
+    final redirectCompleter = Completer<Uri>();
+
+    _activeCompleter = completer;
+    _activeRedirectCompleter = redirectCompleter;
+
+    void handleUri(Uri? uri) {
+      if (uri == null || redirectCompleter.isCompleted) {
+        return;
+      }
+      if (OAuthRedirectHelper.matchesRedirect(uri, redirectUri)) {
+        redirectCompleter.complete(uri);
+      }
+    }
+
+    final appLinks = _appLinks ??= AppLinks();
+
+    StreamSubscription<Uri?>? subscription;
+    try {
+      subscription = appLinks.uriLinkStream.listen(handleUri, onError: (Object error) {
+        LoggerService.error('OAuthService: Deep link stream error: $error');
+      });
+    } on Exception catch (e) {
+      LoggerService.error('OAuthService: Unable to listen for deep link redirects: $e');
+      throw Exception('Unable to listen for OAuth callback. Ensure app_links is configured correctly.');
+    }
+
+    _activeLinkSubscription = subscription;
+
+    try {
+      try {
+        final initialUri = await appLinks.getInitialLink();
+        handleUri(initialUri);
+      } on PlatformException catch (e) {
+        LoggerService.warning('OAuthService: Failed to obtain initial deep link URI: $e');
+      } catch (e) {
+        LoggerService.warning('OAuthService: Unexpected error obtaining initial deep link URI: $e');
+      }
+
+      final launched = await launchUrl(authUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        throw Exception('Unable to open authorization URL.');
+      }
+
+      final callbackUri = await redirectCompleter.future.timeout(_defaultFlowTimeout);
+
+      final params = Map<String, String>.from(callbackUri.queryParameters);
+      if (callbackUri.fragment.isNotEmpty) {
+        try {
+          params.addAll(Uri.splitQueryString(callbackUri.fragment));
+        } catch (e) {
+          LoggerService.warning('OAuthService: Failed to parse fragment parameters: $e');
+        }
+      }
+
+      LoggerService.debug('OAuthService: Received deep link callback with params: $params');
+
+      final errorParam = params['error'];
+      final errorDescription = params['error_description'] ?? params['errorDescription'];
+      if (errorParam != null) {
+        final message = 'Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}';
+        if (!completer.isCompleted) {
+          completer.completeError(Exception(message));
+        }
+        return await completer.future;
+      }
+
+      final code = params['code'];
+      if (code == null || code.isEmpty) {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Authorization response missing code'));
+        }
+        return await completer.future;
+      }
+
+      final returnedState = params['state'];
+      if (returnedState != null && returnedState != state) {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Authorization response state mismatch'));
+        }
+        return await completer.future;
+      }
+
+      LoggerService.debug('OAuthService: Waiting for app foreground before token exchange...');
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      final tokenBody = <String, String>{
+        'grant_type': 'authorization_code',
+        'code': code,
+        'client_id': config.clientId,
+        'redirect_uri': redirectUri,
+      };
+      if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
+        tokenBody['client_secret'] = config.clientSecret!;
+      }
+      if (config.usePkce && verifier != null) {
+        tokenBody['code_verifier'] = verifier;
+      }
+
+      try {
+        final tokenUri = Uri.parse(config.tokenEndpoint);
+        LoggerService.debug('OAuthService: Exchanging code for token at ${tokenUri.toString()}');
+        final tokenResp = await _postWithRetry(
+          uri: tokenUri,
+          body: tokenBody,
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        );
+
+        LoggerService.debug('OAuthService: Token exchange response status: ${tokenResp.statusCode}');
+
+        if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
+          final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+          final hasAccessToken = tokenData.containsKey('access_token');
+          final hasRefreshToken = tokenData.containsKey('refresh_token');
+          LoggerService.info(
+            'OAuthService: Token exchange succeeded. Has access_token: $hasAccessToken, Has refresh_token: $hasRefreshToken',
+          );
+          if (!completer.isCompleted) {
+            completer.complete(tokenData);
+          } else {
+            LoggerService.warning('OAuthService: Completer already completed, ignoring successful token response');
+          }
+        } else {
+          LoggerService.error(
+            'OAuthService: Token exchange failed with status ${tokenResp.statusCode}. Body: ${tokenResp.body}',
+          );
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+          } else {
+            LoggerService.warning('OAuthService: Completer already completed, ignoring failed token response');
+          }
+        }
+      } catch (e) {
+        LoggerService.error('OAuthService: Token exchange error: $e');
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Network error contacting token endpoint: $e'));
+        } else {
+          LoggerService.warning('OAuthService: Completer already completed, ignoring token exchange error');
+        }
+      }
+
+      final result = await completer.future.timeout(_defaultFlowTimeout);
+      return result;
+    } on TimeoutException catch (_) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('Timed out waiting for OAuth authorization response.'));
+      }
+      rethrow;
+    } finally {
+      if (subscription != null) {
+        try {
+          await subscription.cancel();
+        } catch (_) {}
+      }
+      if (_activeLinkSubscription == subscription) {
+        _activeLinkSubscription = null;
+      }
+      if (_activeRedirectCompleter == redirectCompleter && !redirectCompleter.isCompleted) {
+        redirectCompleter.completeError(Exception('OAuth flow cancelled internally.'));
+      }
+      if (_activeRedirectCompleter == redirectCompleter) {
+        _activeRedirectCompleter = null;
+      }
+      if (_activeCompleter == completer && !completer.isCompleted) {
+        completer.completeError(Exception('OAuth flow cancelled internally.'));
+      }
+      if (_activeCompleter == completer) {
+        _activeCompleter = null;
+      }
     }
   }
 

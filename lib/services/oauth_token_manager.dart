@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
+import 'oauth_redirect_helper.dart';
 
 /// Manages OAuth tokens (access/refresh/id) for a single endpoint.
 /// Stores tokens securely and refreshes them as needed.
@@ -85,7 +86,7 @@ class OAuthTokenManager {
         'grant_type': 'refresh_token',
         'refresh_token': refreshToken,
         'client_id': config.clientId,
-        'redirect_uri': config.redirectUri,
+        'redirect_uri': OAuthRedirectHelper.resolve(config.redirectUri),
       };
       if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
         body['client_secret'] = config.clientSecret!;

@@ -7,6 +7,7 @@ import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
 import 'oauth_discovery_screen.dart';
 import '../services/oauth_service.dart';
+import '../services/oauth_redirect_helper.dart';
 import '../services/oauth_token_manager.dart';
 
 class McpSettingsScreen extends StatefulWidget {
@@ -357,7 +358,8 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                                         discoveryResult
                                                             ?.authorizationServerMetadataUrl,
                                                     redirectUri:
-                                                        'http://127.0.0.1:51791/callback',
+                                                        OAuthRedirectHelper
+                                                            .defaultForCurrentPlatform(),
                                                     issuer:
                                                         discoveryResult?.issuer,
                                                     resourceMetadataUrl:
@@ -565,7 +567,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           discoveryUrl:
                               discoveryResult?.resourceMetadataUrl ??
                               discoveryResult?.authorizationServerMetadataUrl,
-                          redirectUri: 'http://127.0.0.1:51791/callback',
+                          redirectUri: OAuthRedirectHelper.defaultForCurrentPlatform(),
                           issuer: discoveryResult?.issuer,
                           resourceMetadataUrl:
                               discoveryResult?.resourceMetadataUrl,
@@ -629,7 +631,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           discoveryUrl:
                               discoveryResult?.resourceMetadataUrl ??
                               discoveryResult?.authorizationServerMetadataUrl,
-                          redirectUri: 'http://127.0.0.1:51791/callback',
+                          redirectUri: OAuthRedirectHelper.defaultForCurrentPlatform(),
                           issuer: discoveryResult?.issuer,
                           resourceMetadataUrl:
                               discoveryResult?.resourceMetadataUrl,

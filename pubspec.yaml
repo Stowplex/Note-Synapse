@@ -75,6 +75,9 @@ dependencies:
   # URL launcher
   url_launcher: ^6.2.1
   
+  # Deep links for OAuth redirect handling
+  app_links: ^6.0.1
+  
   # Sharing
   share_plus: ^12.0.0
   pdf: ^3.11.3
