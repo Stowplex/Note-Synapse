@@ -1702,7 +1702,8 @@ Here's the complete HTML application:
 
  2. For every tool include:
     - name: Tool identifier (string, snake_case recommended)
-    - description: Concise explanation of what the tool does. IMPORTANT: Description should be placed with YAML quotation block. For example:
+    - description: |
+	Concise explanation of what the tool does. IMPORTANT: Description should be placed with YAML quotation block. For example:
       <example>
       Good:
       description: |
@@ -1726,15 +1727,45 @@ Here's the complete HTML application:
  4. Use `console` logging judiciously for debugging key steps.
  5. If user's intention requires manual configurations, such as setting up an API KEY, the playground is the right place to allow the
     uesr to set it up, and save to the application state, so that in AI headless calls, it can be loaded and used. AI tool call
-    should NOT require user to input API KEY, unless directed by user.
+    should NOT require user to input API KEY, unless directed by user. The playground should explicitly provide UI for user to test
+    saving and loading app state.
 
  GENERAL REQUIREMENTS:
  - Keep the HTML fully self-contained (inline JS/CSS, or use provided Synapse user libraries only).
  - Validate user inputs, surface errors gracefully, and ensure return objects never throw.
  - Document tool usage and parameter expectations in comments or the interactive UI.
  - Use `Synapse.proxyFetch` when you must contact external HTTP APIs; remember to decode base64 results for non-text MIME types.
- - Tools should prefer single parameter object function over multiple parameters. The single parameter MUST NOT be named `param` or `params`
-   to avoid confusion to the caller.
+ - Tool functions are called with a single object parameter. The fields of the object MUST NOT be named `param` or `params`
+   to avoid confusion to the caller. The param object has fields corresponding to the tool spec:
+
+    <example>
+    For the following tool spec:
+
+    - name: example_tool
+      description: |
+        Describe what the tool does succinctly
+      input_params:
+        - query:
+            type: string
+            description: |
+              The search text (REQUIRED)
+        - year:
+            type: int
+            descirption: |
+              The year to query (optional)
+      output_params:
+        - results:
+            type: array
+            items: string
+
+    It maps to the following function:
+
+    window.Synapse.tool.registered.example_tool = (params) => { 
+      const query = params.query;
+      const year = params.year ? params.year : 1960;
+      // code handling query and year...
+    }
+    </example>
  ''';
   }
 
