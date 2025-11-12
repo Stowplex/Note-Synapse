@@ -15,6 +15,8 @@ import '../services/mcp_tool_integration_service.dart';
 import '../services/ai_tool_service.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
+import '../services/prompts/prompt_configuration_service.dart';
+import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
@@ -706,11 +708,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         final messageTimeContext = SystemPromptBuilder.formatTimestamp(
           message.timestamp,
         );
+        final perMessageAddOn = PromptConfigurationService.instance.getValue(
+          ChatPromptConfiguration.perMessageAddendumId,
+        );
+        final buffer = StringBuffer()
+          ..write('Message created at: $messageTimeContext');
+        if (perMessageAddOn != null && perMessageAddOn.trim().isNotEmpty) {
+          buffer
+            ..writeln()
+            ..write(perMessageAddOn.trim());
+        }
         conversationMessages.add(
-          PromptMessage(
-            role: PromptRole.user,
-            content: 'Message created at: $messageTimeContext',
-          ),
+          PromptMessage(role: PromptRole.user, content: buffer.toString()),
         );
       }
 
@@ -784,15 +793,30 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
     }
 
-    final taskContext = lines.join('\n');
-
     final combinedTools = _buildActiveToolsMap();
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
     );
 
+    final taskContext = lines.join('\n');
+    final systemAddOn = PromptConfigurationService.instance.getValue(
+      ChatPromptConfiguration.systemAddendumId,
+    );
+    final contextBuffer = StringBuffer(taskContext);
+    if (systemAddOn != null && systemAddOn.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln('User-defined conversation guidance:')
+        ..writeln(systemAddOn.trim());
+    }
+    if (mcpToolsPrompt.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln(mcpToolsPrompt.trim());
+    }
+
     return SystemPromptBuilder.build(
-      taskContext: '$taskContext\n\n$mcpToolsPrompt',
+      taskContext: contextBuffer.toString(),
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,

@@ -8,6 +8,8 @@ import '../database_service.dart';
 import '../logger_service.dart';
 import 'ai_prompts.dart';
 import 'prompt_models.dart';
+import 'prompt_configuration_service.dart';
+import 'registrations/note_prompt_configuration.dart';
 import 'system_prompt_builder.dart';
 
 /// Utilities to build note-centric prompt context and requests.
@@ -56,14 +58,31 @@ class NotePromptBuilder {
     if (contextNotes.isNotEmpty) {
       buffer.writeln('Base your answer on the supplied note context.');
     } else {
-      buffer.writeln('No note context is provided. Use the system guidance to determine how to answer.');
+      buffer.writeln(
+        'No note context is provided. Use the system guidance to determine how to answer.',
+      );
     }
     if (useOwnKnowledge) {
-      buffer.writeln('Supplement with general knowledge only when it clarifies gaps, and identify assumptions.');
+      buffer.writeln(
+        'Supplement with general knowledge only when it clarifies gaps, and identify assumptions.',
+      );
     } else {
-      buffer.writeln('Do not rely on information outside the provided materials.');
+      buffer.writeln(
+        'Do not rely on information outside the provided materials.',
+      );
     }
-    buffer.writeln('If the answer cannot be found, state explicitly that the information is unavailable.');
+    buffer.writeln(
+      'If the answer cannot be found, state explicitly that the information is unavailable.',
+    );
+
+    final qaAddOn = PromptConfigurationService.instance.getValue(
+      NotePromptConfiguration.qaAddendumId,
+    );
+    if (qaAddOn != null && qaAddOn.trim().isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(qaAddOn.trim());
+    }
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
@@ -104,9 +123,22 @@ class NotePromptBuilder {
 
     final buffer = StringBuffer();
     buffer.writeln('Transformation instruction: "$instruction"');
-    buffer.writeln('Apply the changes while preserving the note\'s existing structure (title, sections, sub-notes, tags, metadata) unless explicitly instructed otherwise.');
-    buffer.writeln('Incorporate relevant linked note context and attachments when appropriate.');
+    buffer.writeln(
+      'Apply the changes while preserving the note\'s existing structure (title, sections, sub-notes, tags, metadata) unless explicitly instructed otherwise.',
+    );
+    buffer.writeln(
+      'Incorporate relevant linked note context and attachments when appropriate.',
+    );
     buffer.writeln('Return only the transformed note content.');
+
+    final transformationAddOn = PromptConfigurationService.instance.getValue(
+      NotePromptConfiguration.transformationAddendumId,
+    );
+    if (transformationAddOn != null && transformationAddOn.trim().isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(transformationAddOn.trim());
+    }
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
@@ -146,7 +178,9 @@ class NotePromptBuilder {
     ];
 
     final buffer = StringBuffer();
-    buffer.writeln('Use the provided note context (previous message) and the instruction below to create new notes.');
+    buffer.writeln(
+      'Use the provided note context (previous message) and the instruction below to create new notes.',
+    );
     buffer.writeln();
     buffer.writeln('User Prompt: "$userInstruction"');
     buffer.writeln();
@@ -173,16 +207,39 @@ class NotePromptBuilder {
 }''');
     buffer.writeln();
     buffer.writeln('Critical JSON rules:');
-    buffer.writeln('1. The response must be valid JSON with no additional commentary.');
-    buffer.writeln('2. Escape all quotes, backslashes, newlines, and control characters.');
-    buffer.writeln('3. When using LaTeX (e.g., \\( E = mc^2 \\)), double-escape backslashes (\\\\) to keep JSON valid.');
+    buffer.writeln(
+      '1. The response must be valid JSON with no additional commentary.',
+    );
+    buffer.writeln(
+      '2. Escape all quotes, backslashes, newlines, and control characters.',
+    );
+    buffer.writeln(
+      '3. When using LaTeX (e.g., \\( E = mc^2 \\)), double-escape backslashes (\\\\) to keep JSON valid.',
+    );
     buffer.writeln('4. Preserve arrays even when empty (e.g., "tags": []).');
     buffer.writeln();
     buffer.writeln('Additional requirements:');
-    buffer.writeln('- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.');
-    buffer.writeln('- Ensure each generated note relates to the user prompt and the supplied context hierarchy.');
-    buffer.writeln('- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.');
-    buffer.writeln('- Follow the LaTeX formatting guidance from the system message when including formulas.');
+    buffer.writeln(
+      '- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.',
+    );
+    buffer.writeln(
+      '- Ensure each generated note relates to the user prompt and the supplied context hierarchy.',
+    );
+    buffer.writeln(
+      '- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.',
+    );
+    buffer.writeln(
+      '- Follow the LaTeX formatting guidance from the system message when including formulas.',
+    );
+
+    final creationAddOn = PromptConfigurationService.instance.getValue(
+      NotePromptConfiguration.creationAddendumId,
+    );
+    if (creationAddOn != null && creationAddOn.trim().isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(creationAddOn.trim());
+    }
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
@@ -251,8 +308,9 @@ class NotePromptBuilder {
     if (relationships.isNotEmpty) {
       buffer.writeln('$indent  Relationships:');
       for (final relationship in relationships) {
-        final targetNoteId =
-            relationship.fromNoteId == note.id ? relationship.toNoteId : relationship.fromNoteId;
+        final targetNoteId = relationship.fromNoteId == note.id
+            ? relationship.toNoteId
+            : relationship.fromNoteId;
         final targetNote = await _databaseService.getNote(targetNoteId);
         if (targetNote == null) continue;
 
@@ -270,7 +328,9 @@ class NotePromptBuilder {
     try {
       return await _databaseService.getRelationships(noteId);
     } catch (e) {
-      LoggerService.warning('Failed to load note relationships for $noteId: $e');
+      LoggerService.warning(
+        'Failed to load note relationships for $noteId: $e',
+      );
       return [];
     }
   }
@@ -285,7 +345,9 @@ class NotePromptBuilder {
 
       final relationships = await _getRelationships(note.id);
       for (final rel in relationships) {
-        final linkedId = rel.fromNoteId == note.id ? rel.toNoteId : rel.fromNoteId;
+        final linkedId = rel.fromNoteId == note.id
+            ? rel.toNoteId
+            : rel.fromNoteId;
         final linkedNote = await _databaseService.getNote(linkedId);
         if (linkedNote == null) {
           continue;
@@ -341,4 +403,3 @@ class NotePromptBuilder {
     );
   }
 }
-

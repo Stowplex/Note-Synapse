@@ -5,6 +5,8 @@
   "appearanceSubtitle": "Theme and display settings",
   "aiApi": "AI API",
   "aiApiSubtitle": "Configure your AI API key",
+  "aiPrompts": "Prompts",
+  "aiPromptsSubtitle": "Customize AI prompt injections and overrides",
   "darkMode": "Dark Mode",
   "darkModeSubtitle": "Toggle between light and dark theme",
   "apiKey": "API Key",
@@ -657,6 +659,26 @@
   "geminiApiKeyDescription": "Get your API key from Google AI Studio",
   "openaiCompatibleApiKeyDescription": "Get your API key from your OpenAI-compatible service provider",
   "errorConfiguringModel": "Error configuring model: {error}",
+  "promptSettingsTitle": "Prompt Configuration",
+  "promptSettingsDescription": "Customize how Note Synapse composes prompts. Empty fields use the default instructions.",
+  "promptSettingsSave": "Save",
+  "promptSettingsReset": "Reset",
+  "promptSettingsSaved": "Saved prompt for {entryTitle}",
+  "@promptSettingsSaved": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "promptSettingsCleared": "Cleared prompt for {entryTitle}",
+  "@promptSettingsCleared": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
   "recovery": "Recovery",
   "recoverySubtitle": "Backup and restore your notes",
   "exportAllNotes": "Export All Notes",

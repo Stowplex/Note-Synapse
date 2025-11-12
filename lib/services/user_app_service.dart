@@ -11,6 +11,8 @@ import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'prompts/note_prompt_builder.dart';
+import 'prompts/prompt_configuration_service.dart';
+import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
 import 'web_content_extraction_service.dart';
 
@@ -1534,7 +1536,19 @@ Here's the complete HTML application:
 ```
 ''';
 
-    return basePrompt;
+    final addOn = PromptConfigurationService.instance.getValue(
+      AppPromptConfiguration.generationAddendumId,
+    );
+    if (addOn == null || addOn.trim().isEmpty) {
+      return basePrompt;
+    }
+
+    final buffer = StringBuffer(basePrompt.trimRight());
+    buffer
+      ..writeln()
+      ..writeln('User-defined guidance:')
+      ..writeln(addOn.trim());
+    return buffer.toString();
   }
 
   static Future<_NoteContextPayload?> _buildNoteContextPayload(

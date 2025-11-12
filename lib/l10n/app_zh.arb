@@ -5,6 +5,8 @@
   "appearanceSubtitle": "主题和显示设置",
   "aiApi": "AI API",
   "aiApiSubtitle": "配置您的AI API密钥",
+  "aiPrompts": "提示词",
+  "aiPromptsSubtitle": "自定义AI提示词注入与覆写",
   "darkMode": "深色模式",
   "darkModeSubtitle": "在浅色和深色主题之间切换",
   "apiKey": "API密钥",
@@ -649,6 +651,26 @@
   "geminiApiKeyDescription": "从Google AI Studio获取您的API密钥",
   "openaiCompatibleApiKeyDescription": "从您的OpenAI兼容服务提供商获取API密钥",
   "errorConfiguringModel": "配置模型时出错：{error}",
+  "promptSettingsTitle": "提示词配置",
+  "promptSettingsDescription": "自定义 Note Synapse 生成提示词的方式。留空则使用默认说明。",
+  "promptSettingsSave": "保存",
+  "promptSettingsReset": "重置",
+  "promptSettingsSaved": "已保存{entryTitle}的提示词",
+  "@promptSettingsSaved": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "promptSettingsCleared": "已清除{entryTitle}的提示词",
+  "@promptSettingsCleared": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
   "recovery": "恢复",
   "recoverySubtitle": "备份和恢复您的笔记",
   "exportAllNotes": "导出所有笔记",

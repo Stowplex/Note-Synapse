@@ -27,6 +27,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiApiSubtitle => 'Configure your AI API key';
 
   @override
+  String get aiPrompts => 'Prompts';
+
+  @override
+  String get aiPromptsSubtitle => 'Customize AI prompt injections and overrides';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
@@ -1966,6 +1972,29 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String errorConfiguringModel(Object error) {
     return 'Error configuring model: $error';
+  }
+
+  @override
+  String get promptSettingsTitle => 'Prompt Configuration';
+
+  @override
+  String get promptSettingsDescription =>
+      'Customize how Note Synapse composes prompts. Empty fields use the default instructions.';
+
+  @override
+  String get promptSettingsSave => 'Save';
+
+  @override
+  String get promptSettingsReset => 'Reset';
+
+  @override
+  String promptSettingsSaved(Object entryTitle) {
+    return 'Saved prompt for $entryTitle';
+  }
+
+  @override
+  String promptSettingsCleared(Object entryTitle) {
+    return 'Cleared prompt for $entryTitle';
   }
 
   @override

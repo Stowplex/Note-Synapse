@@ -27,6 +27,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiApiSubtitle => '配置您的AI API密钥';
 
   @override
+  String get aiPrompts => '提示词';
+
+  @override
+  String get aiPromptsSubtitle => '自定义AI提示词注入与覆写';
+
+  @override
   String get darkMode => '深色模式';
 
   @override
@@ -1912,6 +1918,29 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorConfiguringModel(Object error) {
     return '配置模型时出错：$error';
+  }
+
+  @override
+  String get promptSettingsTitle => '提示词配置';
+
+  @override
+  String get promptSettingsDescription =>
+      '自定义 Note Synapse 生成提示词的方式。留空则使用默认说明。';
+
+  @override
+  String get promptSettingsSave => '保存';
+
+  @override
+  String get promptSettingsReset => '重置';
+
+  @override
+  String promptSettingsSaved(Object entryTitle) {
+    return '已保存$entryTitle的提示词';
+  }
+
+  @override
+  String promptSettingsCleared(Object entryTitle) {
+    return '已清除$entryTitle的提示词';
   }
 
   @override

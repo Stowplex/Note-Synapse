@@ -11,12 +11,14 @@ import 'screens/model_selection_screen.dart';
 import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
+import 'services/prompts/prompt_configuration_bootstrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize secure storage
   await SecureStorageService.initialize();
+  await PromptConfigurationBootstrapper.initialize();
 
   runApp(const NoteSynapseApp());
 }

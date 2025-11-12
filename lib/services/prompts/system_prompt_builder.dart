@@ -1,6 +1,8 @@
 import 'package:intl/intl.dart';
 
 import 'prompt_models.dart';
+import 'prompt_configuration_service.dart';
+import 'registrations/system_prompt_configuration.dart';
 
 /// Centralized builder for system prompts that establishes persona, temporal
 /// context, and task-specific guidance.
@@ -50,6 +52,15 @@ class SystemPromptBuilder {
       }
     }
 
+    final globalAddendum = PromptConfigurationService.instance.getValue(
+      SystemPromptConfiguration.globalAddendumId,
+    );
+    if (globalAddendum != null && globalAddendum.trim().isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('User-defined guidance:');
+      buffer.writeln(globalAddendum.trim());
+    }
+
     return PromptMessage(
       role: PromptRole.system,
       content: buffer.toString().trim(),
@@ -67,7 +78,11 @@ class SystemPromptBuilder {
     final offset = local.timeZoneOffset;
     final sign = offset.isNegative ? '-' : '+';
     final hours = offset.inHours.abs().toString().padLeft(2, '0');
-    final minutes = offset.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
+    final minutes = offset.inMinutes
+        .remainder(60)
+        .abs()
+        .toString()
+        .padLeft(2, '0');
 
     if (needTimeInContext) {
       return '$datePart $timePart UTC$sign$hours:$minutes';
@@ -76,4 +91,3 @@ class SystemPromptBuilder {
     }
   }
 }
-
