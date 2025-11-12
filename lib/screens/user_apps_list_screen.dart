@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -339,6 +340,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                     ),
                   ),
                   PopupMenuItem<String>(
+                    value: 'manageState',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.storage),
+                        const SizedBox(width: 8),
+                        Text(l10n.manageAppState),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -552,6 +563,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       case 'export':
         _navigateToExportApp(context, app);
         break;
+      case 'manageState':
+        _showAppStateDialog(context, app, appProvider);
+        break;
       case 'delete':
         _showDeleteDialog(context, app, appProvider);
         break;
@@ -574,6 +588,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showAppStateDialog(BuildContext context, UserApp app, AppProvider appProvider) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => _AppStateDialog(
+        app: app,
+        appProvider: appProvider,
       ),
     );
   }
@@ -646,5 +670,187 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+class _AppStateDialog extends StatefulWidget {
+  final UserApp app;
+  final AppProvider appProvider;
+
+  const _AppStateDialog({
+    required this.app,
+    required this.appProvider,
+  });
+
+  @override
+  State<_AppStateDialog> createState() => _AppStateDialogState();
+}
+
+class _AppStateDialogState extends State<_AppStateDialog> {
+  late TextEditingController _stateController;
+  bool _isLoading = true;
+  bool _hasState = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _stateController = TextEditingController();
+    _loadState();
+  }
+
+  @override
+  void dispose() {
+    _stateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadState() async {
+    try {
+      final state = await widget.appProvider.getAppState(widget.app.id);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (state != null && state.isNotEmpty) {
+            _hasState = true;
+            // Format JSON with indentation for readability
+            const encoder = JsonEncoder.withIndent('  ');
+            _stateController.text = encoder.convert(state);
+          } else {
+            _hasState = false;
+            _stateController.text = '';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasState = false;
+          _stateController.text = '';
+        });
+      }
+      LoggerService.error('Error loading app state: $e', error: e);
+    }
+  }
+
+  Future<void> _saveState() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final stateText = _stateController.text.trim();
+      Map<String, dynamic> state;
+      
+      if (stateText.isEmpty) {
+        state = <String, dynamic>{};
+      } else {
+        // Try to parse JSON
+        state = jsonDecode(stateText) as Map<String, dynamic>;
+      }
+      
+      await widget.appProvider.saveAppState(widget.app.id, state);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.stateSaved),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invalid JSON: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      LoggerService.error('Error saving app state: $e', error: e);
+    }
+  }
+
+  Future<void> _clearState() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await widget.appProvider.saveAppState(widget.app.id, <String, dynamic>{});
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.stateCleared),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorSavingState(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      LoggerService.error('Error clearing app state: $e', error: e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return AlertDialog(
+      title: Text(l10n.manageAppState),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!_hasState)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Text(
+                        l10n.noState,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontStyle: FontStyle.italic,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                      ),
+                    ),
+                  TextField(
+                    controller: _stateController,
+                    maxLines: 15,
+                    decoration: InputDecoration(
+                      hintText: _hasState ? '' : '{}',
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.appState,
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        if (_hasState)
+          TextButton(
+            onPressed: _clearState,
+            child: Text(l10n.clearState),
+          ),
+        TextButton(
+          onPressed: _saveState,
+          child: Text(l10n.save),
+        ),
+      ],
+    );
   }
 }

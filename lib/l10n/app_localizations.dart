@@ -2810,6 +2810,30 @@ abstract class AppLocalizations {
   /// **'Error loading state: {error}'**
   String errorLoadingState(Object error);
 
+  /// No description provided for @manageAppState.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage App State'**
+  String get manageAppState;
+
+  /// No description provided for @clearState.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear State'**
+  String get clearState;
+
+  /// No description provided for @stateCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'State cleared successfully!'**
+  String get stateCleared;
+
+  /// No description provided for @noState.
+  ///
+  /// In en, this message translates to:
+  /// **'No state'**
+  String get noState;
+
   /// No description provided for @appGenerationPrompt.
   ///
   /// In en, this message translates to:
