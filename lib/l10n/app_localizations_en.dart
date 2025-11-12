@@ -30,7 +30,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPrompts => 'Prompts';
 
   @override
-  String get aiPromptsSubtitle => 'Customize AI prompt injections and overrides';
+  String get aiPromptsSubtitle =>
+      'Customize AI prompt injections and overrides';
 
   @override
   String get darkMode => 'Dark Mode';
@@ -1988,12 +1989,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get promptSettingsReset => 'Reset';
 
   @override
-  String promptSettingsSaved(Object entryTitle) {
+  String promptSettingsSaved(String entryTitle) {
     return 'Saved prompt for $entryTitle';
   }
 
   @override
-  String promptSettingsCleared(Object entryTitle) {
+  String promptSettingsCleared(String entryTitle) {
     return 'Cleared prompt for $entryTitle';
   }
 

@@ -67,3 +67,4 @@ class NotePromptConfiguration {
     _registered = true;
   }
 }
+

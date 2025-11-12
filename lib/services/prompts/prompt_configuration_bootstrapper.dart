@@ -27,3 +27,4 @@ class PromptConfigurationBootstrapper {
     _initialized = true;
   }
 }
+

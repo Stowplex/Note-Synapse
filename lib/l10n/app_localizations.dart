@@ -3624,13 +3624,13 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Saved prompt for {entryTitle}'**
-  String promptSettingsSaved(Object entryTitle);
+  String promptSettingsSaved(String entryTitle);
 
   /// No description provided for @promptSettingsCleared.
   ///
   /// In en, this message translates to:
   /// **'Cleared prompt for {entryTitle}'**
-  String promptSettingsCleared(Object entryTitle);
+  String promptSettingsCleared(String entryTitle);
 
   /// No description provided for @recovery.
   ///

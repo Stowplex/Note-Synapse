@@ -1727,7 +1727,8 @@ Here's the complete HTML application:
       description: the content is on the same line. Special character like {}, [] is a concern to the parser.
       </example>
     
-    - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
+   - input_params: Keys and schemas for accepted arguments (describe type, optional flag, enum values, etc.)
+     * Mark optional parameters explicitly with `optional: true` (omit this field for required params). Do NOT rely on the description text to say "Optional".
     - output_params: Keys and schemas for returned fields the tool produces
 
  3. The YAML must be valid and free of extra commentary so it can be parsed automatically.
@@ -1762,11 +1763,12 @@ Here's the complete HTML application:
         - query:
             type: string
             description: |
-              The search text (REQUIRED)
+              The search text
         - year:
             type: int
             descirption: |
-              The year to query (optional)
+              The year to query
+	    optional: true
       output_params:
         - results:
             type: array

@@ -1934,12 +1934,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get promptSettingsReset => '重置';
 
   @override
-  String promptSettingsSaved(Object entryTitle) {
+  String promptSettingsSaved(String entryTitle) {
     return '已保存$entryTitle的提示词';
   }
 
   @override
-  String promptSettingsCleared(Object entryTitle) {
+  String promptSettingsCleared(String entryTitle) {
     return '已清除$entryTitle的提示词';
   }
 
