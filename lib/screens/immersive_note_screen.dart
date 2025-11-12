@@ -28,6 +28,8 @@ import '../services/mcp_tool_integration_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
+import '../services/prompts/prompt_configuration_service.dart';
+import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
@@ -2269,6 +2271,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ? PromptRole.user
           : PromptRole.assistant;
 
+      if (role == PromptRole.user) {
+        final messageTimeContext = SystemPromptBuilder.formatTimestamp(
+          message.timestamp,
+        );
+        final perMessageAddOn = PromptConfigurationService.instance.getValue(
+          ChatPromptConfiguration.perMessageAddendumId,
+        );
+        final buffer = StringBuffer()
+          ..write('Message created at: $messageTimeContext');
+        if (perMessageAddOn != null && perMessageAddOn.trim().isNotEmpty) {
+          buffer
+            ..writeln()
+            ..write(perMessageAddOn.trim());
+        }
+        messages.add(
+          PromptMessage(role: PromptRole.user, content: buffer.toString()),
+        );
+      }
+
       final attachments = await _loadConversationAttachments(
         message,
         latestAttachments,
@@ -2386,8 +2407,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       combinedTools,
     );
 
+    final systemAddOn = PromptConfigurationService.instance.getValue(
+      ChatPromptConfiguration.systemAddendumId,
+    );
+    final contextBuffer = StringBuffer(taskContext);
+    if (systemAddOn != null && systemAddOn.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln('User-defined conversation guidance:')
+        ..writeln(systemAddOn.trim());
+    }
+    if (mcpToolsPrompt.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln(mcpToolsPrompt.trim());
+    }
+
     return SystemPromptBuilder.build(
-      taskContext: '$taskContext\n\n$mcpToolsPrompt',
+      taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
         AIPrompts.mathFormulaGuidelines,
