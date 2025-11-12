@@ -123,10 +123,18 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
     final result = await showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final maxDialogHeight = MediaQuery.of(context).size.height * 0.8;
-          return AlertDialog(
+      builder: (context) => PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (bool didPop, dynamic result) async {
+          if (didPop) {
+            // Cancel any active OAuth flow when dialog is dismissed
+            await OAuthService.cancelActiveFlow();
+          }
+        },
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            final maxDialogHeight = MediaQuery.of(context).size.height * 0.8;
+            return AlertDialog(
             title: Text(
               isEditing ? l10n.editMcpEndpoint : l10n.addMcpEndpointTitle,
             ),
@@ -392,6 +400,8 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                                                     );
                                                   }
                                                 } catch (e) {
+                                                  // Ensure OAuth state is cleared on failure
+                                                  await OAuthService.cancelActiveFlow();
                                                   if (context.mounted) {
                                                     ScaffoldMessenger.of(
                                                       context,
@@ -701,7 +711,8 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
               ),
             ],
           );
-        },
+          },
+        ),
       ),
     );
 
