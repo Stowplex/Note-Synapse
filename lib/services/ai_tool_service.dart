@@ -71,6 +71,10 @@ class AiToolRuntime {
   InAppWebViewController? _controller;
   UserAppRuntimeBridge? _bridge;
   Completer<void>? _loadCompleter;
+  
+  // Console log collection for invoke operations
+  bool _isCollectingConsoleLogs = false;
+  final List<String> _consoleLogBuffer = [];
 
   Future<void> _ensureRunning() async {
     if (!UserAppService.isWebViewSupported()) {
@@ -125,7 +129,14 @@ class AiToolRuntime {
             .split('.')
             .last
             .toUpperCase();
-        LoggerService.debug('[AiTool.${bundle.app.name}] $levelLabel: ${consoleMessage.message}');
+        final logMessage = '[$levelLabel] ${consoleMessage.message}';
+        
+        // If we're collecting logs for an invoke operation, add to buffer
+        if (_isCollectingConsoleLogs) {
+          _consoleLogBuffer.add(logMessage);
+        }
+        
+        LoggerService.debug('[AiTool.${bundle.app.name}] $logMessage');
       },
       onLoadResourceWithCustomScheme: (controller, request) async {
         final scheme = request.url.scheme.toLowerCase();
@@ -168,27 +179,70 @@ class AiToolRuntime {
       throw Exception('AI tool runtime controller not available for ${bundle.app.name}');
     }
 
-    final jsResult = await controller.callAsyncJavaScript(
-      functionBody:
-          'return window.Synapse && window.Synapse.tool && window.Synapse.tool.invoke ? window.Synapse.tool.invoke(toolName, params) : null;',
-      arguments: {
-        'toolName': toolName,
-        'params': params,
-      },
-    );
-
-    final value = jsResult?.value;
-    if (value == null) {
-      return 'null';
-    }
-    if (value is String) {
-      return value;
-    }
+    // Start collecting console logs
+    _isCollectingConsoleLogs = true;
+    _consoleLogBuffer.clear();
+    final startTime = DateTime.now();
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final endpoint = 'AI Tool Invoke: ${bundle.app.name}.$toolName';
 
     try {
-      return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return value.toString();
+      final jsResult = await controller.callAsyncJavaScript(
+        functionBody:
+            'return window.Synapse && window.Synapse.tool && window.Synapse.tool.invoke ? window.Synapse.tool.invoke(toolName, params) : null;',
+        arguments: {
+          'toolName': toolName,
+          'params': params,
+        },
+      );
+
+      final value = jsResult?.value;
+      final result = value == null
+          ? 'null'
+          : value is String
+              ? value
+              : (() {
+                  try {
+                    return const JsonEncoder.withIndent('  ').convert(value);
+                  } catch (_) {
+                    return value.toString();
+                  }
+                })();
+
+      // Stop collecting and log all console messages as one entry
+      _isCollectingConsoleLogs = false;
+      final duration = DateTime.now().difference(startTime);
+      
+      if (_consoleLogBuffer.isNotEmpty) {
+        final concatenatedLogs = _consoleLogBuffer.join('\n');
+        LoggerService.logAiConsole(
+          consoleOutput: concatenatedLogs,
+          endpoint: endpoint,
+          requestId: requestId,
+          duration: duration,
+        );
+      }
+      
+      _consoleLogBuffer.clear();
+      return result;
+    } catch (e) {
+      // Stop collecting even on error
+      _isCollectingConsoleLogs = false;
+      final duration = DateTime.now().difference(startTime);
+      
+      // Log console messages if any were collected
+      if (_consoleLogBuffer.isNotEmpty) {
+        final concatenatedLogs = _consoleLogBuffer.join('\n');
+        LoggerService.logAiConsole(
+          consoleOutput: concatenatedLogs,
+          endpoint: endpoint,
+          requestId: requestId,
+          duration: duration,
+        );
+      }
+      
+      _consoleLogBuffer.clear();
+      rethrow;
     }
   }
 

@@ -895,12 +895,16 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
                           ? Icons.arrow_upward 
                           : log.type == 'response' 
                               ? Icons.arrow_downward 
-                              : Icons.error,
+                              : log.type == 'console'
+                                  ? Icons.terminal
+                                  : Icons.error,
                       color: log.type == 'request' 
                           ? Colors.blue 
                           : log.type == 'response' 
                               ? Colors.green 
-                              : Colors.red,
+                              : log.type == 'console'
+                                  ? Colors.orange
+                                  : Colors.red,
                     ),
                     title: Text(
                       '${log.type.toUpperCase()} - ${log.endpoint.isNotEmpty ? log.endpoint : 'Unknown Endpoint'}',
@@ -923,6 +927,8 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
                               _buildDataSection(l10n.statusCode, log.data['statusCode']),
                             if (log.data.containsKey('error'))
                               _buildDataSection(l10n.error, log.data['error']),
+                            if (log.data.containsKey('consoleOutput'))
+                              _buildDataSection(l10n.consoleOutput, log.data['consoleOutput']),
                             if (log.data.containsKey('duration'))
                               _buildDataSection(l10n.duration, '${log.data['duration']}ms'),
                           ],
