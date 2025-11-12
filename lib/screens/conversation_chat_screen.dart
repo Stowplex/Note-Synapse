@@ -20,6 +20,7 @@ import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../utils/file_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -1008,6 +1009,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
   }
 
+  Future<void> _previewAttachedFile(PlatformFile file) async {
+    await FileUtils.openPlatformFile(file, context);
+  }
+
   Widget _buildAttachedFilesSection() {
     if (_attachedFiles.isEmpty) return const SizedBox.shrink();
 
@@ -1046,40 +1051,45 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           const SizedBox(height: 8),
           ...List.generate(_attachedFiles.length, (index) {
             final file = _attachedFiles[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            return InkWell(
+              onTap: () => _previewAttachedFile(file),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _getFileIcon(file.extension),
-                    size: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      file.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Icon(
+                      _getFileIcon(file.extension),
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _removeAttachedFile(index),
-                    child: Icon(Icons.close, size: 16, color: Colors.red[600]),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        file.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _removeAttachedFile(index),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.red[600],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -1952,7 +1962,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 message.content,
                 style: Theme.of(context).textTheme.bodyMedium,
               )
-            else ...[
+            else
               SelectionArea(
                 child: InteractiveCheckboxMarkdown(
                   originalContent: message.content,
@@ -1982,6 +1992,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   },
                 ),
               ),
+            if (message.attachmentPaths.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _buildMessageAttachmentChips(message),
+              ),
+            if (!isUser) ...[
               const SizedBox(height: 12),
               ChatMessageActionRow(
                 leading: IconButton(
@@ -2011,6 +2027,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildMessageAttachmentChips(ConversationMessage message) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: message.attachmentPaths.map((path) {
+        final label = path.split(Platform.pathSeparator).last;
+        final extension =
+            label.contains('.') ? label.split('.').last.toLowerCase() : null;
+        return ActionChip(
+          avatar: Icon(_getFileIcon(extension), size: 18),
+          label: Text(label, overflow: TextOverflow.ellipsis),
+          onPressed: () => _openAttachment(path),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _openAttachment(String path) async {
+    await FileUtils.openFile(path, context);
   }
 
   void _openNoteActionAppsForContent(ConversationMessage message) {

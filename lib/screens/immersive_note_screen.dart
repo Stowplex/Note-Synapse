@@ -1558,14 +1558,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       children: List.generate(_pendingAttachments.length, (index) {
         final file = _pendingAttachments[index];
         return InputChip(
-          avatar: const Icon(Icons.image, size: 18),
+          avatar: Icon(
+            _iconForAttachment(file.path ?? file.name),
+            size: 18,
+          ),
           label: Text(file.name, overflow: TextOverflow.ellipsis),
+          showCheckmark: false,
+          onSelected: (_) => _previewPendingAttachment(file),
           onDeleted: () => setState(() {
             _pendingAttachments.removeAt(index);
           }),
         );
       }),
     );
+  }
+
+  Future<void> _previewPendingAttachment(PlatformFile file) async {
+    await FileUtils.openPlatformFile(file, context);
   }
 
   Widget _buildNoteArea(Note note, AppLocalizations l10n) {

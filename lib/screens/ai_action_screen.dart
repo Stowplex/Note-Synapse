@@ -9,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../utils/file_utils.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
 
@@ -521,45 +522,43 @@ class _AIActionScreenState extends State<AIActionScreen> {
           const SizedBox(height: 8),
           ...List.generate(_attachedFiles.length, (index) {
             final file = _attachedFiles[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _getFileIcon(file.extension),
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      file.name,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _formatFileSize(file.size),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            return InkWell(
+              onTap: () => _previewAttachedFile(file),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _getFileIcon(file.extension),
+                      size: 16,
                       color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _removeAttachedFile(index),
-                    child: Icon(
-                      Icons.close,
-                      size: 16,
-                      color: Colors.red[600],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        file.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _removeAttachedFile(index),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.red[600],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -599,10 +598,8 @@ class _AIActionScreenState extends State<AIActionScreen> {
     }
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  Future<void> _previewAttachedFile(PlatformFile file) async {
+    await FileUtils.openPlatformFile(file, context);
   }
 
   void _saveResponse() async {
