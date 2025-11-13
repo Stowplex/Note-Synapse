@@ -314,17 +314,21 @@ class _AIActionScreenState extends State<AIActionScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _clearResponse,
-                  child: Text(l10n.cancel),
+                  onPressed: _selectedAction == AIInteractionType.newNoteCreation
+                      ? () => Navigator.of(context).pop()
+                      : _clearResponse,
+                  child: Text(_selectedAction == AIInteractionType.newNoteCreation ? l10n.close : l10n.cancel),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _saveResponse,
-                  child: Text(_selectedAction == AIInteractionType.noteTransformation ? 'Replace' : 'Save Response'),
+              if (_selectedAction != AIInteractionType.newNoteCreation) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _saveResponse,
+                    child: Text(_selectedAction == AIInteractionType.noteTransformation ? 'Replace' : 'Save Response'),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -356,6 +360,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
     });
 
     try {
+      final l10n = AppLocalizations.of(context)!;
       final appProvider = context.read<AppProvider>();
       String response;
 
@@ -373,7 +378,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
             widget.selectedNotes,
             attachedFiles: _attachedFiles,
           );
-          response = 'Created ${newNotes.length} new notes successfully!';
+          response = l10n.multipleNotesCreatedSuccessfully(newNotes.length);
           break;
         case AIInteractionType.aiConversation:
           // Navigate to conversation screen with selected notes

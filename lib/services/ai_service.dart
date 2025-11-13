@@ -67,43 +67,6 @@ class AIService {
     }, requestId: requestId);
   }
 
-  /// Note Q&A
-  static Future<String> answerNoteQuestion(
-    String question,
-    List<Note> contextNotes, {
-    List<PlatformFile>? attachedFiles,
-    bool useOwnKnowledge = false,
-  }) async {
-    return await _withErrorHandling('note Q&A', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-      LoggerService.debug('Starting note Q&A request', error: {
-        'question': question,
-        'contextNotesCount': contextNotes.length,
-        'attachedFilesCount': attachedFiles?.length ?? 0,
-        'requestId': requestId,
-      });
-
-      final builder = _notePromptBuilder();
-      final request = await builder.buildQuestionPrompt(
-        question: question,
-        contextNotes: contextNotes,
-        useOwnKnowledge: useOwnKnowledge,
-        additionalAttachments: attachedFiles ?? const [],
-      );
-
-      LoggerService.debug('Note Q&A prompt assembled', error: {
-        'requestId': requestId,
-        'contextMessages': request.contextMessages.length,
-        'conversationMessages': request.conversationMessages.length,
-      });
-
-      return await ModelSelector.instance.generateFromPrompt(
-        request,
-        requestId: requestId,
-      );
-    });
-  }
-
   /// Note transformation
   static Future<String> transformNote(
     Note note,

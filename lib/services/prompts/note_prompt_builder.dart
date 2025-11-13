@@ -75,15 +75,6 @@ class NotePromptBuilder {
       'If the answer cannot be found, state explicitly that the information is unavailable.',
     );
 
-    final qaAddOn = PromptConfigurationService.instance.getValue(
-      NotePromptConfiguration.qaAddendumId,
-    );
-    if (qaAddOn != null && qaAddOn.trim().isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln(qaAddOn.trim());
-    }
-
     final userMessage = PromptMessage(
       role: PromptRole.user,
       content: buffer.toString().trim(),

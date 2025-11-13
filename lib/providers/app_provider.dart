@@ -287,28 +287,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> answerNoteQuestion(
-    String question,
-    List<Note> contextNotes, {
-    List<PlatformFile>? attachedFiles,
-    bool useOwnKnowledge = false,
-  }) async {
-    try {
-      final response = await AIService.answerNoteQuestion(
-        question,
-        contextNotes,
-        attachedFiles: attachedFiles,
-        useOwnKnowledge: useOwnKnowledge,
-      );
-
-      return response;
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
-    }
-  }
-
   Future<String> transformNote(
     Note note,
     String transformationPrompt, {
