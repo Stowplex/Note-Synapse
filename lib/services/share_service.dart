@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -17,11 +18,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/file_utils.dart';
 import '../services/logger_service.dart';
+import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
@@ -368,6 +371,7 @@ class ShareService {
         pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(24),
         build: (context) => content,
+        maxPages: 10000, // Allow up to 10000 pages to handle large exports
       ),
     );
 
@@ -634,6 +638,350 @@ class ShareService {
       );
     }
     return null;
+  }
+
+  /// Renders an SVG string to PNG bytes using HeadlessInAppWebView
+  /// The SVG is rendered at 4K resolution (3840x2160) for high quality
+  static Future<Uint8List?> _renderSvgToPng(String svgContent) async {
+    try {
+      // Check if WebView is supported on this platform
+      if (kIsWeb) {
+        // WebView not available on web platform, return null to fall back
+        LoggerService.debug('SVG rendering via WebView not supported on web platform');
+        return null;
+      }
+
+      // Check if WebView is supported on this platform
+      if (!UserAppService.isWebViewSupported()) {
+        LoggerService.debug('WebView not supported on this platform');
+        return null;
+      }
+
+      final completer = Completer<Uint8List?>();
+      
+      // Create HTML page that renders SVG to canvas at 4K resolution
+      // Insert SVG directly into HTML (like interactive_checkbox_markdown.dart does)
+      final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: white;
+      overflow: hidden;
+    }
+    #svgContainer {
+      width: 3840px;
+      height: 2160px;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="svgContainer">
+    $svgContent
+  </div>
+  <canvas id="canvas" width="3840" height="2160"></canvas>
+  <script>
+    (function() {
+      // Override console methods to properly stringify objects (like user_app_runtime_bridge)
+      const originalConsoleLog = console.log;
+      const originalConsoleError = console.error;
+      const originalConsoleWarn = console.warn;
+      
+      console.log = function(...args) {
+        const msg = args.map((arg) => {
+          if (typeof arg === 'string') return arg;
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch (_) {
+            return String(arg);
+          }
+        }).join('\\n');
+        originalConsoleLog(msg);
+      };
+      
+      console.error = function(...args) {
+        const msg = args.map((arg) => {
+          if (typeof arg === 'string') return arg;
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch (_) {
+            return String(arg);
+          }
+        }).join('\\n');
+        originalConsoleError(msg);
+      };
+      
+      console.warn = function(...args) {
+        const msg = args.map((arg) => {
+          if (typeof arg === 'string') return arg;
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch (_) {
+            return String(arg);
+          }
+        }).join('\\n');
+        originalConsoleWarn(msg);
+      };
+      
+      // Wait for DOM to be fully loaded
+      function renderSvg() {
+        const container = document.getElementById('svgContainer');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Get the SVG element from the container
+        const svgElement = container.querySelector('svg');
+        if (!svgElement) {
+          console.error('SVG element not found in container');
+          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('svgRendered', null);
+          }
+          return;
+        }
+        
+        // Create an image element to load the SVG
+        const img = new Image();
+        
+        img.onload = function() {
+          try {
+            // Clear canvas with white background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Get image dimensions (use naturalWidth/Height for accurate SVG dimensions)
+            const imgWidth = img.naturalWidth || img.width || canvas.width;
+            const imgHeight = img.naturalHeight || img.height || canvas.height;
+            
+            // Validate dimensions
+            if (imgWidth <= 0 || imgHeight <= 0) {
+              console.error('Invalid image dimensions:', { imgWidth, imgHeight });
+              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                window.flutter_inappwebview.callHandler('svgRendered', null);
+              }
+              return;
+            }
+            
+            // Calculate aspect ratio and center the image
+            const svgAspect = imgWidth / imgHeight;
+            const canvasAspect = canvas.width / canvas.height;
+            
+            let drawWidth, drawHeight, drawX, drawY;
+            
+            if (svgAspect > canvasAspect) {
+              // SVG is wider - fit to width
+              drawWidth = canvas.width;
+              drawHeight = canvas.width / svgAspect;
+              drawX = 0;
+              drawY = (canvas.height - drawHeight) / 2;
+            } else {
+              // SVG is taller - fit to height
+              drawHeight = canvas.height;
+              drawWidth = canvas.height * svgAspect;
+              drawX = (canvas.width - drawWidth) / 2;
+              drawY = 0;
+            }
+            
+            // Draw the SVG image onto the canvas
+            ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+            
+            // Convert canvas to PNG data URL
+            let dataUrl;
+            try {
+              dataUrl = canvas.toDataURL('image/png');
+            } catch (error) {
+              console.error('Error converting canvas to data URL (possibly tainted):', error);
+              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                window.flutter_inappwebview.callHandler('svgRendered', null);
+              }
+              return;
+            }
+            
+            // Send the data URL back to Dart
+            console.log('SVG rendered successfully, sending data URL to Dart...');
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+              try {
+                window.flutter_inappwebview.callHandler('svgRendered', dataUrl);
+                console.log('Data URL sent to Dart handler');
+              } catch (error) {
+                console.error('Error calling handler:', error);
+                // Try one more time after a short delay
+                setTimeout(function() {
+                  if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                    window.flutter_inappwebview.callHandler('svgRendered', null);
+                  }
+                }, 100);
+              }
+            } else {
+              console.error('flutter_inappwebview handler not available');
+              // Try one more time after a short delay
+              setTimeout(function() {
+                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                  window.flutter_inappwebview.callHandler('svgRendered', null);
+                }
+              }, 100);
+            }
+          } catch (error) {
+            console.error('Error rendering SVG to canvas:', error);
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+              window.flutter_inappwebview.callHandler('svgRendered', null);
+            }
+          }
+        };
+        
+        img.onerror = function(error) {
+          console.error('Error loading SVG image:', error);
+          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('svgRendered', null);
+          }
+        };
+        
+        // Use SVG data URL instead of blob URL to avoid canvas tainting issues
+        try {
+          const svgString = new XMLSerializer().serializeToString(svgElement);
+          // Encode SVG as data URL to avoid CORS/tainting issues
+          const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+          console.log('Created SVG data URL, loading image...');
+          img.src = svgDataUrl;
+        } catch (error) {
+          console.error('Error creating SVG data URL:', error);
+          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('svgRendered', null);
+          }
+        }
+      }
+      
+      // Wait for DOM to be ready, then render
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          // Add a small delay to ensure SVG is fully parsed
+          setTimeout(renderSvg, 100);
+        });
+      } else {
+        // DOM is already loaded, but wait a bit for SVG to be parsed
+        setTimeout(renderSvg, 100);
+      }
+    })();
+  </script>
+</body>
+</html>
+''';
+
+      HeadlessInAppWebView? headlessWebView;
+      
+      headlessWebView = HeadlessInAppWebView(
+        initialData: InAppWebViewInitialData(
+          data: htmlContent,
+          mimeType: 'text/html',
+          encoding: 'utf8',
+        ),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          allowFileAccess: false,
+          allowContentAccess: false,
+          allowFileAccessFromFileURLs: false,
+        ),
+        onWebViewCreated: (controller) {
+          // Register JavaScript handler to receive the rendered image
+          controller.addJavaScriptHandler(
+            handlerName: 'svgRendered',
+            callback: (args) {
+              if (completer.isCompleted) {
+                return;
+              }
+              
+              try {
+                final dataUrl = args.isNotEmpty ? args[0] as String? : null;
+                if (dataUrl == null || dataUrl.isEmpty) {
+                  LoggerService.debug('SVG rendering returned null or empty data URL');
+                  completer.complete(null);
+                  return;
+                }
+                
+                // Parse data URL (format: data:image/png;base64,<base64data>)
+                final base64Data = dataUrl.split(',').last;
+                final imageBytes = base64Decode(base64Data);
+                LoggerService.debug('SVG successfully rendered to PNG: ${imageBytes.length} bytes');
+                completer.complete(Uint8List.fromList(imageBytes));
+              } catch (e, stackTrace) {
+                LoggerService.warning(
+                  'Failed to decode SVG rendered PNG: $e',
+                  error: e,
+                  stackTrace: stackTrace,
+                );
+                completer.complete(null);
+              }
+            },
+          );
+        },
+        onConsoleMessage: (controller, consoleMessage) {
+          // Log console messages for debugging
+          LoggerService.debug('[SVG Render] ${consoleMessage.message}');
+        },
+        onLoadStop: (controller, url) async {
+          LoggerService.debug('SVG rendering page loaded, waiting for render...');
+          // Wait a bit for the SVG to render
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // If not completed yet, trigger a timeout
+          if (!completer.isCompleted) {
+            // Give it more time
+            await Future.delayed(const Duration(milliseconds: 2000));
+            if (!completer.isCompleted) {
+              LoggerService.warning('SVG rendering timeout - handler not called');
+              completer.complete(null);
+            }
+          }
+        },
+        onLoadError: (controller, url, code, message) {
+          if (completer.isCompleted) {
+            return;
+          }
+          LoggerService.warning(
+            'Failed to load SVG rendering page: $message ($code)',
+          );
+          completer.complete(null);
+        },
+      );
+
+      await headlessWebView.run();
+
+      try {
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            LoggerService.warning('SVG rendering timeout');
+            return null;
+          },
+        );
+        return result;
+      } finally {
+        try {
+          if (headlessWebView.isRunning()) {
+            await headlessWebView.dispose();
+          }
+        } catch (e) {
+          LoggerService.warning('Error disposing headless webview: $e');
+        }
+      }
+    } catch (e, stackTrace) {
+      LoggerService.warning(
+        'Failed to render SVG to PNG: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
   }
   
   /// Adds a note to the buffer with proper markdown formatting
@@ -1517,14 +1865,85 @@ class _PdfNoteRenderer {
         );
 
         if (ShareService._isSvgFileName(fileName)) {
-          final svgContent = await ShareService._loadSvgStringFromFilePath(rawPath);
-          if (svgContent != null && svgContent.trim().isNotEmpty) {
+          try {
+            // Check file size before loading to prevent OOM with extremely large SVGs
+            final file = File(rawPath);
+            if (await file.exists()) {
+              final fileSize = await file.length();
+              const maxSvgSize = 10 * 1024 * 1024; // 10MB limit
+              if (fileSize > maxSvgSize) {
+                LoggerService.warning(
+                  'SVG file too large ($fileSize bytes), skipping: $fileName',
+                );
+                widgets.add(
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 6),
+                    child: pw.Text(
+                      '$fileName (SVG too large to include)',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.grey700,
+                        fontFallback: fonts.fallback,
+                      ),
+                    ),
+                  ),
+                );
+                continue;
+              }
+            }
+            
+            final svgContent = await ShareService._loadSvgStringFromFilePath(rawPath);
+            if (svgContent != null && svgContent.trim().isNotEmpty) {
+              // Render SVG to PNG using WebView at 4K resolution
+              final pngBytes = await ShareService._renderSvgToPng(svgContent);
+              if (pngBytes != null) {
+                // Constrain the image to 500px width as per requirements
+                final maxWidth = math.min(_contentWidth, 500.0).toDouble();
+                final image = pw.MemoryImage(pngBytes);
+                widgets.add(
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 4, bottom: 8),
+                    child: pw.Image(
+                      image,
+                      width: maxWidth,
+                      fit: pw.BoxFit.contain,
+                    ),
+                  ),
+                );
+              } else {
+                // Fallback: show error message if rendering failed
+                LoggerService.warning('Failed to render SVG to PNG: $fileName');
+                widgets.add(
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 6),
+                    child: pw.Text(
+                      '$fileName (SVG rendering failed)',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.red700,
+                        fontFallback: fonts.fallback,
+                      ),
+                    ),
+                  ),
+                );
+              }
+            }
+          } catch (e, stackTrace) {
+            LoggerService.warning(
+              'Failed to process SVG attachment $rawPath: $e',
+              error: e,
+              stackTrace: stackTrace,
+            );
             widgets.add(
               pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 4, bottom: 8),
-                child: pw.SvgImage(
-                  svg: svgContent,
-                  width: math.min(_contentWidth, 360),
+                padding: const pw.EdgeInsets.only(top: 6),
+                child: pw.Text(
+                  '$fileName (${l10n.attachmentUnavailable})',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.red700,
+                    fontFallback: fonts.fallback,
+                  ),
                 ),
               ),
             );
@@ -1982,14 +2401,32 @@ class _MarkdownPdfRenderer {
     if (ShareService._isSvgSource(src)) {
       final svgContent = await ShareService._loadSvgStringFromSource(src);
       if (svgContent != null && svgContent.trim().isNotEmpty) {
-        final svgWidget = pw.Container(
-          padding: const pw.EdgeInsets.symmetric(vertical: 4),
-          child: pw.SvgImage(
-            svg: svgContent,
-            width: math.min(maxContentWidth, 360),
-          ),
-        );
-        return [pw.WidgetSpan(child: svgWidget)];
+        // Render SVG to PNG using WebView at 4K resolution
+        final pngBytes = await ShareService._renderSvgToPng(svgContent);
+        if (pngBytes != null) {
+          // Constrain the image to 500px width as per requirements
+          final maxWidth = math.min(maxContentWidth, 500.0).toDouble();
+          final image = pw.MemoryImage(pngBytes);
+          final imageWidget = pw.Container(
+            padding: const pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Image(
+              image,
+              width: maxWidth,
+              fit: pw.BoxFit.contain,
+            ),
+          );
+          return [pw.WidgetSpan(child: imageWidget)];
+        } else {
+          // Fallback: show placeholder if rendering failed
+          LoggerService.warning('Failed to render SVG to PNG from markdown: $src');
+          // Return a placeholder text span
+          return [
+            pw.TextSpan(
+              text: alt.isNotEmpty ? '[$alt]' : '[SVG Image]',
+              style: _imageFallbackStyle,
+            ),
+          ];
+        }
       }
     } else {
       final imageProvider = await _resolveImage(src);
