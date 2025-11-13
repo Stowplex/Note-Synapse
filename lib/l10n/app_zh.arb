@@ -5,6 +5,8 @@
   "appearanceSubtitle": "主题和显示设置",
   "aiApi": "AI API",
   "aiApiSubtitle": "配置您的AI API密钥",
+  "aiPrompts": "提示词",
+  "aiPromptsSubtitle": "自定义AI提示词注入与覆写",
   "darkMode": "深色模式",
   "darkModeSubtitle": "在浅色和深色主题之间切换",
   "apiKey": "API密钥",
@@ -513,6 +515,10 @@
   "stateLoaded": "状态加载成功！",
   "errorSavingState": "保存状态时出错：{error}",
   "errorLoadingState": "加载状态时出错：{error}",
+  "manageAppState": "管理应用状态",
+  "clearState": "清除状态",
+  "stateCleared": "状态清除成功！",
+  "noState": "无状态",
   "appGenerationPrompt": "根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：{name}\n描述：{description}\n步骤：{steps}\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。",
   "editApp": "编辑应用",
   "deleteApp": "删除应用",
@@ -645,6 +651,26 @@
   "geminiApiKeyDescription": "从Google AI Studio获取您的API密钥",
   "openaiCompatibleApiKeyDescription": "从您的OpenAI兼容服务提供商获取API密钥",
   "errorConfiguringModel": "配置模型时出错：{error}",
+  "promptSettingsTitle": "提示词配置",
+  "promptSettingsDescription": "自定义 Note Synapse 生成提示词的方式。留空则使用默认说明。",
+  "promptSettingsSave": "保存",
+  "promptSettingsReset": "重置",
+  "promptSettingsSaved": "已保存{entryTitle}的提示词",
+  "@promptSettingsSaved": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "promptSettingsCleared": "已清除{entryTitle}的提示词",
+  "@promptSettingsCleared": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
   "recovery": "恢复",
   "recoverySubtitle": "备份和恢复您的笔记",
   "exportAllNotes": "导出所有笔记",
@@ -1163,5 +1189,6 @@
             "type": "String"
           }
         }
-      }
+      },
+      "newNoteFromShareCreated": "分享的笔记创建成功！"
 }

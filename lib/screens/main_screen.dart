@@ -28,6 +28,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  // Method channel for native iOS clipboard access
+  static const MethodChannel _iosMethodChannel = MethodChannel('note_synapse/share');
   int _currentIndex = 0;
   
   // Audio recording service
@@ -47,13 +49,28 @@ class _MainScreenState extends State<MainScreen> {
     _setupAudioListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
+      context.read<AppProvider>().addListener(_showNewNoteNotification);
     });
   }
 
   @override
   void dispose() {
     _audioService?.resetState();
+    context.read<AppProvider>().removeListener(_showNewNoteNotification);
     super.dispose();
+  }
+
+  void _showNewNoteNotification() {
+    if (context.read<AppProvider>().newNoteFromShare) {
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.newNoteFromShareCreated),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.read<AppProvider>().newNoteFromShare = false;
+    }
   }
 
   void _setupAudioListeners() {
@@ -106,80 +123,94 @@ class _MainScreenState extends State<MainScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40), // Added bottom padding to prevent overflow
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.addNewContent,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.psychology),
-              title: Text(l10n.newAiAction),
-              subtitle: Text(l10n.newAiActionSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToAIAction(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.note_add),
-              title: Text(l10n.newNote),
-              subtitle: Text(l10n.newNoteSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNewNote(NoteType.note);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.task),
-              title: Text(l10n.newTask),
-              subtitle: Text(l10n.newTaskSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNewNote(NoteType.task);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.mic),
-              title: Text(l10n.newVoice),
-              subtitle: Text(l10n.newVoiceSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToVoiceNote(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.image),
-              title: Text(l10n.newPicture),
-              subtitle: Text(l10n.newPictureSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToImageNote(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_file),
-              title: Text(l10n.attachment),
-              subtitle: Text(l10n.attachmentSubtitle),
-              onTap: () {
-                _navigateToFileAttachment(context);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.content_paste),
-              title: Text(l10n.newNoteFromClipboard),
-              subtitle: Text(l10n.newNoteFromClipboardSubtitle),
-              onTap: () {
-                Navigator.pop(context);
-                _createNoteFromClipboard(context);
-              },
-            ),
-          ],
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.addNewContent,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.psychology),
+                        title: Text(l10n.newAiAction),
+                        subtitle: Text(l10n.newAiActionSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToAIAction(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.note_add),
+                        title: Text(l10n.newNote),
+                        subtitle: Text(l10n.newNoteSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNewNote(NoteType.note);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.task),
+                        title: Text(l10n.newTask),
+                        subtitle: Text(l10n.newTaskSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNewNote(NoteType.task);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.mic),
+                        title: Text(l10n.newVoice),
+                        subtitle: Text(l10n.newVoiceSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToVoiceNote(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.image),
+                        title: Text(l10n.newPicture),
+                        subtitle: Text(l10n.newPictureSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _navigateToImageNote(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.attach_file),
+                        title: Text(l10n.attachment),
+                        subtitle: Text(l10n.attachmentSubtitle),
+                        onTap: () {
+                          _navigateToFileAttachment(context);
+                          Navigator.pop(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.content_paste),
+                        title: Text(l10n.newNoteFromClipboard),
+                        subtitle: Text(l10n.newNoteFromClipboardSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _createNoteFromClipboard(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -468,10 +499,26 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _createNoteFromClipboard(BuildContext context) async {
     try {
-      // Get clipboard data
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      String? clipboardText;
       
-      if (clipboardData?.text == null || clipboardData!.text!.trim().isEmpty) {
+      // On iOS, use native method channel to access clipboard
+      // This avoids the "Operation not authorized" error
+      if (Platform.isIOS) {
+        try {
+          clipboardText = await _iosMethodChannel.invokeMethod<String>('getClipboardText');
+        } catch (e) {
+          LoggerService.error('Error accessing clipboard via native method: $e', error: e);
+          // Fallback to Flutter Clipboard
+          final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+          clipboardText = clipboardData?.text;
+        }
+      } else {
+        // On other platforms, use Flutter Clipboard
+        final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+        clipboardText = clipboardData?.text;
+      }
+      
+      if (clipboardText == null || clipboardText.trim().isEmpty) {
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -484,7 +531,7 @@ class _MainScreenState extends State<MainScreen> {
         return;
       }
 
-      final clipboardText = clipboardData.text!.trim();
+      clipboardText = clipboardText.trim();
       
       // Check if the clipboard content is a URL
       final url = _extractUrl(clipboardText);

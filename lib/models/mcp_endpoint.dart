@@ -22,6 +22,7 @@ class McpEndpoint {
   final String baseUrl;
   final McpTransportType transportType;
   final McpAuthType authType;
+  final Map<String, String> additionalHeaders;
   final OAuthConfig? oauth;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -32,12 +33,27 @@ class McpEndpoint {
     required this.baseUrl,
     this.transportType = McpTransportType.streamableHttp,
     this.authType = McpAuthType.token,
+    Map<String, String>? additionalHeaders,
     this.oauth,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : additionalHeaders = Map.unmodifiable(
+         additionalHeaders == null
+             ? const {}
+             : Map<String, String>.from(additionalHeaders),
+       );
 
   factory McpEndpoint.fromJson(Map<String, dynamic> json) {
+    final headers = <String, String>{};
+    final rawHeaders = json['additionalHeaders'];
+    if (rawHeaders is Map) {
+      rawHeaders.forEach((key, value) {
+        if (key is String && value != null) {
+          headers[key] = value.toString();
+        }
+      });
+    }
+
     return McpEndpoint(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -54,6 +70,7 @@ class McpEndpoint {
               orElse: () => McpAuthType.token,
             )
           : McpAuthType.token,
+      additionalHeaders: headers,
       oauth: json['oauth'] != null
           ? OAuthConfig.fromJson(json['oauth'] as Map<String, dynamic>)
           : null,
@@ -69,6 +86,8 @@ class McpEndpoint {
       'baseUrl': baseUrl,
       'transportType': transportType.name,
       'authType': authType.name,
+      if (additionalHeaders.isNotEmpty)
+        'additionalHeaders': Map<String, String>.from(additionalHeaders),
       if (oauth != null) 'oauth': oauth!.toJson(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -81,6 +100,7 @@ class McpEndpoint {
     String? baseUrl,
     McpTransportType? transportType,
     McpAuthType? authType,
+    Map<String, String>? additionalHeaders,
     OAuthConfig? oauth,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -91,6 +111,7 @@ class McpEndpoint {
       baseUrl: baseUrl ?? this.baseUrl,
       transportType: transportType ?? this.transportType,
       authType: authType ?? this.authType,
+      additionalHeaders: additionalHeaders ?? this.additionalHeaders,
       oauth: oauth ?? this.oauth,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -110,7 +131,7 @@ class OAuthConfig {
   final String scope;
   final bool usePkce;
   final String? discoveryUrl; // metadata URL used for auto-config
-  final String redirectUri; // we standardize on localhost redirect
+  final String redirectUri; // standard redirect URI used during OAuth flows
   final String? issuer;
   final String? resourceMetadataUrl;
   final String? authorizationServerMetadataUrl;
@@ -138,10 +159,12 @@ class OAuthConfig {
       scope: (json['scope'] as String? ?? '').trim(),
       usePkce: json['usePkce'] as bool? ?? true,
       discoveryUrl: json['discoveryUrl'] as String?,
-      redirectUri: json['redirectUri'] as String? ?? 'http://127.0.0.1:51791/callback',
+      redirectUri: json['redirectUri'] as String? ??
+          'notesynapse://oauth/callback',
       issuer: json['issuer'] as String?,
       resourceMetadataUrl: json['resourceMetadataUrl'] as String?,
-      authorizationServerMetadataUrl: json['authorizationServerMetadataUrl'] as String?,
+      authorizationServerMetadataUrl:
+          json['authorizationServerMetadataUrl'] as String?,
     );
   }
 
@@ -156,7 +179,8 @@ class OAuthConfig {
       if (discoveryUrl != null) 'discoveryUrl': discoveryUrl,
       'redirectUri': redirectUri,
       if (issuer != null) 'issuer': issuer,
-      if (resourceMetadataUrl != null) 'resourceMetadataUrl': resourceMetadataUrl,
+      if (resourceMetadataUrl != null)
+        'resourceMetadataUrl': resourceMetadataUrl,
       if (authorizationServerMetadataUrl != null)
         'authorizationServerMetadataUrl': authorizationServerMetadataUrl,
     };
@@ -243,4 +267,3 @@ class McpTool {
     return buffer.toString();
   }
 }
-

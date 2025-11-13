@@ -5,6 +5,8 @@
   "appearanceSubtitle": "Theme and display settings",
   "aiApi": "AI API",
   "aiApiSubtitle": "Configure your AI API key",
+  "aiPrompts": "Prompts",
+  "aiPromptsSubtitle": "Customize AI prompt injections and overrides",
   "darkMode": "Dark Mode",
   "darkModeSubtitle": "Toggle between light and dark theme",
   "apiKey": "API Key",
@@ -521,6 +523,10 @@
   "stateLoaded": "State loaded successfully!",
   "errorSavingState": "Error saving state: {error}",
   "errorLoadingState": "Error loading state: {error}",
+  "manageAppState": "Manage App State",
+  "clearState": "Clear State",
+  "stateCleared": "State cleared successfully!",
+  "noState": "No state",
   "appGenerationPrompt": "Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: {name}\nDescription: {description}\nSteps: {steps}\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app's database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.",
   "editApp": "Edit App",
   "deleteApp": "Delete App",
@@ -653,6 +659,26 @@
   "geminiApiKeyDescription": "Get your API key from Google AI Studio",
   "openaiCompatibleApiKeyDescription": "Get your API key from your OpenAI-compatible service provider",
   "errorConfiguringModel": "Error configuring model: {error}",
+  "promptSettingsTitle": "Prompt Configuration",
+  "promptSettingsDescription": "Customize how Note Synapse composes prompts. Empty fields use the default instructions.",
+  "promptSettingsSave": "Save",
+  "promptSettingsReset": "Reset",
+  "promptSettingsSaved": "Saved prompt for {entryTitle}",
+  "@promptSettingsSaved": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "promptSettingsCleared": "Cleared prompt for {entryTitle}",
+  "@promptSettingsCleared": {
+    "placeholders": {
+      "entryTitle": {
+        "type": "String"
+      }
+    }
+  },
   "recovery": "Recovery",
   "recoverySubtitle": "Backup and restore your notes",
   "exportAllNotes": "Export All Notes",
@@ -1163,5 +1189,6 @@
             "type": "String"
           }
         }
-      }
+      },
+      "newNoteFromShareCreated": "New note from share created successfully!"
 }

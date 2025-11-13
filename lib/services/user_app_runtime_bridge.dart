@@ -50,7 +50,8 @@ class UserAppRuntimeBridge {
     final notesJson = _buildSelectedNotesJson();
     final toolEnvFlag = isInteractive ? 'true' : 'false';
 
-    final script = '''
+    final script =
+        '''
         const originalConsoleLog = console.log;
         const originalConsoleError = console.error;
         const originalConsoleWarn = console.warn;
@@ -150,6 +151,10 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('proxyFetch', payload);
             return result;
           },
+          fetchWebPage: async (url) => {
+            const result = await window.flutter_inappwebview.callHandler('fetchWebPage', url);
+            return result;
+          },
           readAttachment: async (attachmentPath) => {
             const result = await window.flutter_inappwebview.callHandler('readAttachment', attachmentPath);
             return result;
@@ -205,11 +210,16 @@ class UserAppRuntimeBridge {
           LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
           final result = await _databaseService.executeRawQuery(sql);
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms',
+          );
           return {'success': true, 'data': result};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.runQuery] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.runQuery] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -220,15 +230,24 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          final state = (args.isNotEmpty ? args.first : <String, dynamic>{}) as Map<String, dynamic>;
-          LoggerService.debug('[Synapse.storeAppState] Called with state keys: ${state.keys.toList()}');
+          final state =
+              (args.isNotEmpty ? args.first : <String, dynamic>{})
+                  as Map<String, dynamic>;
+          LoggerService.debug(
+            '[Synapse.storeAppState] Called with state keys: ${state.keys.toList()}',
+          );
           await appProvider.saveAppState(app.id, state);
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.storeAppState] Success - State saved in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.storeAppState] Success - State saved in ${duration.inMilliseconds}ms',
+          );
           return {'success': true};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.storeAppState] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.storeAppState] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -239,18 +258,27 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          LoggerService.debug('[Synapse.loadAppState] Called for app: ${app.id}');
+          LoggerService.debug(
+            '[Synapse.loadAppState] Called for app: ${app.id}',
+          );
           final state = await UserAppService.getAppState(app.id);
           final duration = DateTime.now().difference(startTime);
           if (state != null) {
-            LoggerService.debug('[Synapse.loadAppState] Success - State loaded with keys: ${state.keys.toList()} in ${duration.inMilliseconds}ms');
+            LoggerService.debug(
+              '[Synapse.loadAppState] Success - State loaded with keys: ${state.keys.toList()} in ${duration.inMilliseconds}ms',
+            );
           } else {
-            LoggerService.debug('[Synapse.loadAppState] Success - No state found in ${duration.inMilliseconds}ms');
+            LoggerService.debug(
+              '[Synapse.loadAppState] Success - No state found in ${duration.inMilliseconds}ms',
+            );
           }
           return {'success': true, 'data': state};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.loadAppState] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.loadAppState] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -272,7 +300,8 @@ class UserAppRuntimeBridge {
           }
 
           final uri = Uri.parse(urlRaw);
-          final method = (rawOptions['method'] as String?)?.toUpperCase() ?? 'GET';
+          final method =
+              (rawOptions['method'] as String?)?.toUpperCase() ?? 'GET';
 
           final headers = <String, String>{};
           final rawHeaders = rawOptions['headers'];
@@ -299,7 +328,8 @@ class UserAppRuntimeBridge {
                 orElse: () => '',
               );
               if (contentTypeKey.isEmpty) {
-                headers[HttpHeaders.contentTypeHeader] = 'application/json; charset=utf-8';
+                headers[HttpHeaders.contentTypeHeader] =
+                    'application/json; charset=utf-8';
               }
             } catch (e) {
               throw ArgumentError('Failed to encode JSON body: $e');
@@ -311,18 +341,23 @@ class UserAppRuntimeBridge {
               orElse: () => '',
             );
             if (contentTypeKey.isEmpty) {
-              headers[HttpHeaders.contentTypeHeader] = 'text/plain; charset=utf-8';
+              headers[HttpHeaders.contentTypeHeader] =
+                  'text/plain; charset=utf-8';
             }
           }
 
-          LoggerService.debug('[Synapse.proxyFetch] $method $urlRaw with headers: ${headers.keys.toList()}');
+          LoggerService.debug(
+            '[Synapse.proxyFetch] $method $urlRaw with headers: ${headers.keys.toList()}',
+          );
 
           final request = await _proxyHttpClient.openUrl(method, uri);
           headers.forEach((key, value) {
             try {
               request.headers.set(key, value);
             } catch (e) {
-              LoggerService.warning('[Synapse.proxyFetch] Failed to set header "$key": $e');
+              LoggerService.warning(
+                '[Synapse.proxyFetch] Failed to set header "$key": $e',
+              );
             }
           });
 
@@ -337,7 +372,9 @@ class UserAppRuntimeBridge {
           }
           final bytes = bytesBuilder.takeBytes();
 
-          final mime = response.headers.value(HttpHeaders.contentTypeHeader) ?? 'application/octet-stream';
+          final mime =
+              response.headers.value(HttpHeaders.contentTypeHeader) ??
+              'application/octet-stream';
           final normalizedMime = mime.split(';').first.trim().isNotEmpty
               ? mime.split(';').first.trim()
               : 'application/octet-stream';
@@ -359,23 +396,22 @@ class UserAppRuntimeBridge {
               : base64Encode(bytes);
 
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.proxyFetch] Success (${response.statusCode}) in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.proxyFetch] Success (${response.statusCode}) in ${duration.inMilliseconds}ms',
+          );
 
           return {
             'status': 'success',
             'statusCode': response.statusCode,
-            'content': {
-              'mime': normalizedMime,
-              'data': data,
-            },
+            'content': {'mime': normalizedMime, 'data': data},
           };
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.proxyFetch] Error after ${duration.inMilliseconds}ms: $e', error: e);
-          return {
-            'status': 'error',
-            'error': e.toString(),
-          };
+          LoggerService.error(
+            '[Synapse.proxyFetch] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'status': 'error', 'error': e.toString()};
         }
       },
     );
@@ -386,12 +422,20 @@ class UserAppRuntimeBridge {
         final startTime = DateTime.now();
         try {
           final prompt = args.first as String;
-          final options = args.length > 1 ? args[1] as Map<String, dynamic>? : null;
-          LoggerService.debug('[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? '${prompt.substring(0, 100)}...' : prompt}');
-          LoggerService.debug('[Synapse.chatAI] Raw options received: $options');
+          final options = args.length > 1
+              ? args[1] as Map<String, dynamic>?
+              : null;
+          LoggerService.debug(
+            '[Synapse.chatAI] Called with prompt: ${prompt.length > 100 ? '${prompt.substring(0, 100)}...' : prompt}',
+          );
+          LoggerService.debug(
+            '[Synapse.chatAI] Raw options received: $options',
+          );
 
           final validated = _validateChatOptions(options ?? const {});
-          final attachments = await _processMixedAttachments(validated.attachments);
+          final attachments = await _processMixedAttachments(
+            validated.attachments,
+          );
 
           final response = await AIService.chatAI(
             prompt,
@@ -402,11 +446,16 @@ class UserAppRuntimeBridge {
           );
 
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms',
+          );
           return {'success': true, 'response': response};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.chatAI] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.chatAI] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -417,10 +466,15 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         try {
           final message = args.isNotEmpty ? args.first?.toString() ?? '' : '';
-          final level = args.length > 1 ? args[1]?.toString().toUpperCase() ?? 'LOG' : 'LOG';
+          final level = args.length > 1
+              ? args[1]?.toString().toUpperCase() ?? 'LOG'
+              : 'LOG';
           LoggerService.info('[UserApp.$level] $message');
         } catch (e) {
-          LoggerService.error('[UserApp.LOG] Error in log handler: $e', error: e);
+          LoggerService.error(
+            '[UserApp.LOG] Error in log handler: $e',
+            error: e,
+          );
         }
         return null;
       },
@@ -432,10 +486,42 @@ class UserAppRuntimeBridge {
         try {
           final text = args.isNotEmpty ? args.first?.toString() ?? '' : '';
           await Clipboard.setData(ClipboardData(text: text));
-          LoggerService.debug('[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? '${text.substring(0, 50)}...' : text}');
+          LoggerService.debug(
+            '[UserApp.CLIPBOARD] Text copied to clipboard: ${text.length > 50 ? '${text.substring(0, 50)}...' : text}',
+          );
           return {'success': true};
         } catch (e) {
-          LoggerService.error('[UserApp.CLIPBOARD] Error copying to clipboard: $e', error: e);
+          LoggerService.error(
+            '[UserApp.CLIPBOARD] Error copying to clipboard: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'fetchWebPage',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final rawUrl = args.isNotEmpty ? args.first : null;
+          final url = rawUrl == null ? '' : rawUrl.toString().trim();
+          LoggerService.debug('[Synapse.fetchWebPage] Called with URL: $url');
+
+          final result = await UserAppService.fetchWebPage(url);
+          final duration = DateTime.now().difference(startTime);
+          final markdownLength = (result['markdown'] as String?)?.length ?? 0;
+          LoggerService.debug(
+            '[Synapse.fetchWebPage] Success - Markdown length $markdownLength in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'data': result};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.fetchWebPage] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -447,18 +533,34 @@ class UserAppRuntimeBridge {
         final startTime = DateTime.now();
         try {
           final attachmentPath = args.first as String;
-          LoggerService.debug('[Synapse.readAttachment] Called with path: $attachmentPath');
+          LoggerService.debug(
+            '[Synapse.readAttachment] Called with path: $attachmentPath',
+          );
           final result = await _readAttachmentFromPath(attachmentPath);
           final duration = DateTime.now().difference(startTime);
           if (result != null) {
-            LoggerService.debug('[Synapse.readAttachment] Success - Read ${result['data']?.length ?? 0} characters in ${duration.inMilliseconds}ms');
-            return {'success': true, 'data': result['data'], 'mimeType': result['mimeType']};
+            LoggerService.debug(
+              '[Synapse.readAttachment] Success - Read ${result['data']?.length ?? 0} characters in ${duration.inMilliseconds}ms',
+            );
+            return {
+              'success': true,
+              'data': result['data'],
+              'mimeType': result['mimeType'],
+            };
           }
-          LoggerService.warning('[Synapse.readAttachment] Attachment not found in database: $attachmentPath');
-          return {'success': false, 'error': 'Attachment not found in database'};
+          LoggerService.warning(
+            '[Synapse.readAttachment] Attachment not found in database: $attachmentPath',
+          );
+          return {
+            'success': false,
+            'error': 'Attachment not found in database',
+          };
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.readAttachment] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.readAttachment] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -481,7 +583,9 @@ class UserAppRuntimeBridge {
           }
 
           if (dataArg is! Map) {
-            throw Exception('saveTemp data must be an object with text and/or binary fields');
+            throw Exception(
+              'saveTemp data must be an object with text and/or binary fields',
+            );
           }
 
           final dataMap = Map<String, dynamic>.from(dataArg);
@@ -490,7 +594,9 @@ class UserAppRuntimeBridge {
 
           if ((textValue == null || textValue.isEmpty) &&
               (binaryValue == null || binaryValue.isEmpty)) {
-            throw Exception('saveTemp requires either data.text or data.binary');
+            throw Exception(
+              'saveTemp requires either data.text or data.binary',
+            );
           }
 
           final result = await SynapseTempUtils.saveTempData(
@@ -505,11 +611,16 @@ class UserAppRuntimeBridge {
           final sizeBytes = await result.file.length();
           final duration = DateTime.now().difference(startTime);
 
-          LoggerService.debug('[Synapse.saveTemp] Created $fileName (${result.mimeType}, ${sizeBytes} bytes) in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.saveTemp] Created $fileName (${result.mimeType}, $sizeBytes bytes) in ${duration.inMilliseconds}ms',
+          );
           return {'success': true, 'uri': result.uri};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.saveTemp] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.saveTemp] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -520,15 +631,23 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
-          LoggerService.debug('[Synapse.saveNotes] Called with ${notesData.length} notes');
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.saveNotes] Called with ${notesData.length} notes',
+          );
           final savedCount = await _saveNotesFromJavaScript(notesData);
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.saveNotes] Success - Saved $savedCount notes in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.saveNotes] Success - Saved $savedCount notes in ${duration.inMilliseconds}ms',
+          );
           return {'success': true, 'savedCount': savedCount};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.saveNotes] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.saveNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -540,27 +659,41 @@ class UserAppRuntimeBridge {
         final startTime = DateTime.now();
         try {
           if (onOpenNote == null) {
-            return {'success': false, 'error': 'openNote not supported in this context'};
+            return {
+              'success': false,
+              'error': 'openNote not supported in this context',
+            };
           }
 
           final noteId = args.first as String;
-          final replaceWindow = args.length > 1 ? (args[1] as bool? ?? false) : false;
-          LoggerService.debug('[Synapse.openNote] Called with noteId: $noteId, replaceWindow: $replaceWindow');
+          final replaceWindow = args.length > 1
+              ? (args[1] as bool? ?? false)
+              : false;
+          LoggerService.debug(
+            '[Synapse.openNote] Called with noteId: $noteId, replaceWindow: $replaceWindow',
+          );
 
           final note = await _databaseService.getNote(noteId);
           if (note == null) {
             final duration = DateTime.now().difference(startTime);
-            LoggerService.warning('[Synapse.openNote] Note not found: $noteId after ${duration.inMilliseconds}ms');
+            LoggerService.warning(
+              '[Synapse.openNote] Note not found: $noteId after ${duration.inMilliseconds}ms',
+            );
             return {'success': false, 'error': 'Note not found: $noteId'};
           }
 
           await onOpenNote!(note, replaceWindow);
           final duration = DateTime.now().difference(startTime);
-          LoggerService.debug('[Synapse.openNote] Success - Opening note: ${note.title} in ${duration.inMilliseconds}ms');
+          LoggerService.debug(
+            '[Synapse.openNote] Success - Opening note: ${note.title} in ${duration.inMilliseconds}ms',
+          );
           return {'success': true};
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
-          LoggerService.error('[Synapse.openNote] Error after ${duration.inMilliseconds}ms: $e', error: e);
+          LoggerService.error(
+            '[Synapse.openNote] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -580,26 +713,39 @@ class UserAppRuntimeBridge {
       );
 
       if (dependency == null) {
-        LoggerService.warning('[SynapseUser] Dependency not found for path: $path');
+        LoggerService.warning(
+          '[SynapseUser] Dependency not found for path: $path',
+        );
         return CustomSchemeResponse(
           contentType: 'text/plain',
-          data: Uint8List.fromList(utf8.encode('// Dependency not found: $path')),
+          data: Uint8List.fromList(
+            utf8.encode('// Dependency not found: $path'),
+          ),
         );
       }
 
       final bytes = dependency['bytes'] as List<int>;
-      LoggerService.debug('[SynapseUser] Found dependency: ${bytes.length} bytes');
-      final contentType = _getMimeTypeFromExtension(FileTypeUtils.getFileExtension(path));
+      LoggerService.debug(
+        '[SynapseUser] Found dependency: ${bytes.length} bytes',
+      );
+      final contentType = _getMimeTypeFromExtension(
+        FileTypeUtils.getFileExtension(path),
+      );
 
       return CustomSchemeResponse(
         contentType: contentType,
         data: Uint8List.fromList(bytes),
       );
     } catch (e) {
-      LoggerService.error('[SynapseUser] Error handling synapse_user scheme: $e', error: e);
+      LoggerService.error(
+        '[SynapseUser] Error handling synapse_user scheme: $e',
+        error: e,
+      );
       return CustomSchemeResponse(
         contentType: 'text/plain',
-        data: Uint8List.fromList(utf8.encode('// Error loading dependency: $e')),
+        data: Uint8List.fromList(
+          utf8.encode('// Error loading dependency: $e'),
+        ),
       );
     }
   }
@@ -609,16 +755,23 @@ class UserAppRuntimeBridge {
   Future<CustomSchemeResponse?> handleSynapseTempScheme(Uri url) async {
     try {
       final tempFile = await SynapseTempUtils.loadFile(url.toString());
-      LoggerService.debug('[SynapseTemp] Serving ${tempFile.fileName} (${tempFile.bytes.length} bytes)');
+      LoggerService.debug(
+        '[SynapseTemp] Serving ${tempFile.fileName} (${tempFile.bytes.length} bytes)',
+      );
       return CustomSchemeResponse(
         contentType: tempFile.mimeType,
         data: tempFile.bytes,
       );
     } catch (e) {
-      LoggerService.error('[SynapseTemp] Error handling synapsetemp scheme: $e', error: e);
+      LoggerService.error(
+        '[SynapseTemp] Error handling synapsetemp scheme: $e',
+        error: e,
+      );
       return CustomSchemeResponse(
         contentType: 'text/plain',
-        data: Uint8List.fromList(utf8.encode('// Temporary resource unavailable')),
+        data: Uint8List.fromList(
+          utf8.encode('// Temporary resource unavailable'),
+        ),
       );
     }
   }
@@ -628,19 +781,23 @@ class UserAppRuntimeBridge {
       return '[]';
     }
 
-    final notesData = _selectedNotes.map((note) => {
-          'id': note.id,
-          'title': note.title,
-          'content': note.content,
-          'tags': note.tags,
-          'createdAt': note.createdAt.toIso8601String(),
-          'updatedAt': note.updatedAt.toIso8601String(),
-          'isTask': note.isTask,
-          'status': note.isTask ? note.status.toString() : null,
-          'pinned': note.pinned,
-          'isArchived': note.isArchived,
-          'attachmentPaths': note.attachmentPaths,
-        }).toList();
+    final notesData = _selectedNotes
+        .map(
+          (note) => {
+            'id': note.id,
+            'title': note.title,
+            'content': note.content,
+            'tags': note.tags,
+            'createdAt': note.createdAt.toIso8601String(),
+            'updatedAt': note.updatedAt.toIso8601String(),
+            'isTask': note.isTask,
+            'status': note.isTask ? note.status.toString() : null,
+            'pinned': note.pinned,
+            'isArchived': note.isArchived,
+            'attachmentPaths': note.attachmentPaths,
+          },
+        )
+        .toList();
     return jsonEncode(notesData);
   }
 
@@ -655,7 +812,9 @@ class UserAppRuntimeBridge {
       if (tempValue is num) {
         temperature = tempValue.toDouble();
       } else {
-        throw Exception('Parameter validation failed: temperature must be a number, got ${tempValue.runtimeType}');
+        throw Exception(
+          'Parameter validation failed: temperature must be a number, got ${tempValue.runtimeType}',
+        );
       }
     }
 
@@ -663,10 +822,13 @@ class UserAppRuntimeBridge {
       final topKValue = options['topK'];
       if (topKValue is int) {
         topK = topKValue;
-      } else if (topKValue is double && topKValue == topKValue.roundToDouble()) {
+      } else if (topKValue is double &&
+          topKValue == topKValue.roundToDouble()) {
         topK = topKValue.round();
       } else {
-        throw Exception('Parameter validation failed: topK must be an integer, got ${topKValue.runtimeType}');
+        throw Exception(
+          'Parameter validation failed: topK must be an integer, got ${topKValue.runtimeType}',
+        );
       }
     }
 
@@ -675,11 +837,15 @@ class UserAppRuntimeBridge {
       if (topPValue is num) {
         final value = topPValue.toDouble();
         if (value < 0 || value > 1) {
-          throw Exception('Parameter validation failed: topP must be between 0.0 and 1.0, got $value');
+          throw Exception(
+            'Parameter validation failed: topP must be between 0.0 and 1.0, got $value',
+          );
         }
         topP = value;
       } else {
-        throw Exception('Parameter validation failed: topP must be a number, got ${topPValue.runtimeType}');
+        throw Exception(
+          'Parameter validation failed: topP must be a number, got ${topPValue.runtimeType}',
+        );
       }
     }
 
@@ -688,11 +854,15 @@ class UserAppRuntimeBridge {
       if (attachmentValue is List) {
         attachments = attachmentValue;
       } else {
-        throw Exception('Parameter validation failed: attachments must be an array, got ${attachmentValue.runtimeType}');
+        throw Exception(
+          'Parameter validation failed: attachments must be an array, got ${attachmentValue.runtimeType}',
+        );
       }
     }
 
-    LoggerService.debug('[Synapse.chatAI] Validated parameters: temperature=$temperature, topK=$topK, topP=$topP, attachments=${attachments.length}');
+    LoggerService.debug(
+      '[Synapse.chatAI] Validated parameters: temperature=$temperature, topK=$topK, topP=$topP, attachments=${attachments.length}',
+    );
     return _ValidatedChatOptions(
       temperature: temperature,
       topK: topK,
@@ -701,7 +871,9 @@ class UserAppRuntimeBridge {
     );
   }
 
-  Future<List<PlatformFile>> _processMixedAttachments(List<dynamic> attachments) async {
+  Future<List<PlatformFile>> _processMixedAttachments(
+    List<dynamic> attachments,
+  ) async {
     if (attachments.isEmpty) {
       return const [];
     }
@@ -724,16 +896,24 @@ class UserAppRuntimeBridge {
                   bytes: tempFile.bytes,
                 ),
               );
-              LoggerService.debug('[Synapse.chatAI] Added temporary attachment: ${tempFile.fileName} (${tempFile.bytes.length} bytes)');
+              LoggerService.debug(
+                '[Synapse.chatAI] Added temporary attachment: ${tempFile.fileName} (${tempFile.bytes.length} bytes)',
+              );
             } catch (e) {
-              LoggerService.warning('[Synapse.chatAI] Warning: Temporary attachment unavailable: $attachmentPath ($e)');
+              LoggerService.warning(
+                '[Synapse.chatAI] Warning: Temporary attachment unavailable: $attachmentPath ($e)',
+              );
             }
             continue;
           }
 
-          final isValid = await _databaseService.verifyAttachmentPath(attachmentPath);
+          final isValid = await _databaseService.verifyAttachmentPath(
+            attachmentPath,
+          );
           if (!isValid) {
-            LoggerService.warning('[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath');
+            LoggerService.warning(
+              '[Synapse.chatAI] Warning: Attachment path not found in database: $attachmentPath',
+            );
             continue;
           }
 
@@ -749,9 +929,13 @@ class UserAppRuntimeBridge {
                 bytes: bytes,
               ),
             );
-            LoggerService.debug('[Synapse.chatAI] Added file attachment: $fileName (${bytes.length} bytes)');
+            LoggerService.debug(
+              '[Synapse.chatAI] Added file attachment: $fileName (${bytes.length} bytes)',
+            );
           } else {
-            LoggerService.warning('[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath');
+            LoggerService.warning(
+              '[Synapse.chatAI] Warning: Attachment file not found: $attachmentPath',
+            );
           }
         } else if (attachment is Map<String, dynamic>) {
           final type = attachment['type'] as String?;
@@ -764,7 +948,8 @@ class UserAppRuntimeBridge {
             }
             final bytes = base64Decode(base64String);
             final extension = _getExtensionFromMimeType(mimeType);
-            final fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
+            final fileName =
+                'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
             validAttachments.add(
               PlatformFile(
                 name: fileName,
@@ -773,42 +958,56 @@ class UserAppRuntimeBridge {
                 bytes: bytes,
               ),
             );
-            LoggerService.debug('[Synapse.chatAI] Added base64 attachment: $fileName (${bytes.length} bytes, $mimeType)');
+            LoggerService.debug(
+              '[Synapse.chatAI] Added base64 attachment: $fileName (${bytes.length} bytes, $mimeType)',
+            );
           } else {
-            LoggerService.warning('[Synapse.chatAI] Warning: Invalid base64 attachment object at index $i: missing type, mimeType, or data');
+            LoggerService.warning(
+              '[Synapse.chatAI] Warning: Invalid base64 attachment object at index $i: missing type, mimeType, or data',
+            );
           }
         } else {
-          LoggerService.warning('[Synapse.chatAI] Warning: Invalid attachment type at index $i: expected string or object, got ${attachment.runtimeType}');
+          LoggerService.warning(
+            '[Synapse.chatAI] Warning: Invalid attachment type at index $i: expected string or object, got ${attachment.runtimeType}',
+          );
         }
       } catch (e) {
-        LoggerService.error('[Synapse.chatAI] Error processing attachment at index $i: $e', error: e);
+        LoggerService.error(
+          '[Synapse.chatAI] Error processing attachment at index $i: $e',
+          error: e,
+        );
       }
     }
 
     return validAttachments;
   }
 
-  Future<Map<String, dynamic>?> _readAttachmentFromPath(String attachmentPath) async {
+  Future<Map<String, dynamic>?> _readAttachmentFromPath(
+    String attachmentPath,
+  ) async {
     final isValid = await _databaseService.verifyAttachmentPath(attachmentPath);
     if (!isValid) {
-      LoggerService.warning('[Synapse.readAttachment] Attachment path not found in database: $attachmentPath');
+      LoggerService.warning(
+        '[Synapse.readAttachment] Attachment path not found in database: $attachmentPath',
+      );
       return null;
     }
 
     final file = File(attachmentPath);
     if (!await file.exists()) {
-      LoggerService.warning('[Synapse.readAttachment] Attachment file not found: $attachmentPath');
+      LoggerService.warning(
+        '[Synapse.readAttachment] Attachment file not found: $attachmentPath',
+      );
       return null;
     }
 
     final bytes = await file.readAsBytes();
     final fileName = attachmentPath.split('/').last;
-    final mimeType = _getMimeTypeFromExtension(FileTypeUtils.getFileExtension(fileName));
+    final mimeType = _getMimeTypeFromExtension(
+      FileTypeUtils.getFileExtension(fileName),
+    );
     final base64Data = base64Encode(bytes);
-    return {
-      'data': base64Data,
-      'mimeType': mimeType,
-    };
+    return {'data': base64Data, 'mimeType': mimeType};
   }
 
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
@@ -819,9 +1018,14 @@ class UserAppRuntimeBridge {
         final note = await _createNoteFromJavaScriptData(noteData);
         await appProvider.addNote(note);
         savedCount++;
-        LoggerService.debug('[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}');
+        LoggerService.debug(
+          '[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}',
+        );
       } catch (e) {
-        LoggerService.error('[Synapse.saveNotes] Error saving note: $e', error: e);
+        LoggerService.error(
+          '[Synapse.saveNotes] Error saving note: $e',
+          error: e,
+        );
       }
     }
     return savedCount;
@@ -865,8 +1069,12 @@ class UserAppRuntimeBridge {
     if (noteType == NoteType.task) {
       scheduledAt = data['scheduledAt']?.toString();
       completeBy = data['completeBy']?.toString();
-      status = data['status'] != null ? _parseTaskStatus(data['status'].toString()) : TaskStatus.todo;
-      completionPercentage = data['completionPercentage'] != null ? (data['completionPercentage'] as num).toDouble() : 0.0;
+      status = data['status'] != null
+          ? _parseTaskStatus(data['status'].toString())
+          : TaskStatus.todo;
+      completionPercentage = data['completionPercentage'] != null
+          ? (data['completionPercentage'] as num).toDouble()
+          : 0.0;
     }
 
     return Note(
@@ -939,30 +1147,52 @@ class UserAppRuntimeBridge {
       if (isValid) {
         return attachment;
       }
-      throw Exception('Invalid attachment path: $attachment - file not found in database');
+      throw Exception(
+        'Invalid attachment path: $attachment - file not found in database',
+      );
     } else if (attachment is Map<String, dynamic>) {
-      if (attachment['type'] == 'base64' && attachment['data'] != null && attachment['fileName'] != null) {
-        return await _saveBase64Attachment(attachment['data'], attachment['fileName']);
+      if (attachment['type'] == 'base64' &&
+          attachment['data'] != null &&
+          attachment['fileName'] != null) {
+        return await _saveBase64Attachment(
+          attachment['data'],
+          attachment['fileName'],
+        );
       }
-      throw Exception('Invalid base64 attachment format: missing type, data, or fileName');
+      throw Exception(
+        'Invalid base64 attachment format: missing type, data, or fileName',
+      );
     }
 
-    throw Exception('Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}');
+    throw Exception(
+      'Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}',
+    );
   }
 
   Future<String> _promoteSynapseTempAttachment(String uri) async {
     try {
       final tempFile = await SynapseTempUtils.loadFile(uri);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(tempFile.bytes, tempFile.fileName);
-      LoggerService.debug('[Synapse.saveNotes] Promoted temporary attachment ${tempFile.fileName} to $relativePath');
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        tempFile.bytes,
+        tempFile.fileName,
+      );
+      LoggerService.debug(
+        '[Synapse.saveNotes] Promoted temporary attachment ${tempFile.fileName} to $relativePath',
+      );
       return relativePath;
     } catch (e) {
-      LoggerService.error('[Synapse.saveNotes] Error promoting temporary attachment from $uri: $e', error: e);
+      LoggerService.error(
+        '[Synapse.saveNotes] Error promoting temporary attachment from $uri: $e',
+        error: e,
+      );
       throw Exception('Failed to promote temporary attachment: $e');
     }
   }
 
-  Future<String> _saveBase64Attachment(String base64Data, String fileName) async {
+  Future<String> _saveBase64Attachment(
+    String base64Data,
+    String fileName,
+  ) async {
     try {
       var base64String = base64Data;
       if (base64String.contains(',')) {
@@ -970,11 +1200,19 @@ class UserAppRuntimeBridge {
       }
 
       final bytes = base64Decode(base64String);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
-      LoggerService.debug('[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $relativePath');
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        bytes,
+        fileName,
+      );
+      LoggerService.debug(
+        '[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $relativePath',
+      );
       return relativePath;
     } catch (e) {
-      LoggerService.error('[Synapse.saveNotes] Error saving base64 attachment: $e', error: e);
+      LoggerService.error(
+        '[Synapse.saveNotes] Error saving base64 attachment: $e',
+        error: e,
+      );
       rethrow;
     }
   }
@@ -1057,4 +1295,3 @@ class _ValidatedChatOptions {
   final double? topP;
   final List<dynamic> attachments;
 }
-

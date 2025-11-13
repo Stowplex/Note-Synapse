@@ -31,9 +31,12 @@ class MigrationStep {
 }
 
 class DatabaseService {
+  final String? _databaseNameOverride;
+
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
-  DatabaseService._internal() {
+  DatabaseService._internal({String? databaseNameOverride})
+      : _databaseNameOverride = databaseNameOverride {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
@@ -293,8 +296,15 @@ class DatabaseService {
 
   final Uuid _uuid = const Uuid();
 
+  static String _generateTestDatabaseName() {
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final randomSuffix = const Uuid().v4();
+    return 'note_synapse_test_${timestamp}_$randomSuffix.db';
+  }
+
   // For testing, allow creating new instances
-  DatabaseService.createNew() {
+  DatabaseService.createNew({String? databaseName})
+      : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
@@ -308,12 +318,14 @@ class DatabaseService {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'note_synapse.db');
+    final dbName = _databaseNameOverride ?? 'note_synapse.db';
+    final path = join(await getDatabasesPath(), dbName);
     return await openDatabase(
       path,
       version: DATABASE_VERSION,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      singleInstance: _databaseNameOverride == null,
     );
   }
 
@@ -1792,6 +1804,7 @@ class DatabaseService {
   Future<void> close() async {
     final db = await database;
     await db.close();
+    _database = null;
   }
 
   // Helper method to convert string to TaskStatus

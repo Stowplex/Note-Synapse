@@ -31,6 +31,7 @@ class AppProvider extends ChangeNotifier {
   bool _isDarkMode = false;
   Locale _locale = const Locale('en', '');
   ModelConfig? _modelConfig;
+  bool newNoteFromShare = false;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -80,7 +81,7 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNote(Note note) async {
+  Future<void> addNote(Note note, {bool fromShare = false}) async {
     try {
       await _databaseService.insertNote(note);
 
@@ -88,6 +89,9 @@ class AppProvider extends ChangeNotifier {
       final addedNote = await _databaseService.getNote(note.id);
       if (addedNote != null) {
         _notes.add(addedNote);
+        if (fromShare) {
+          newNoteFromShare = true;
+        }
         notifyListeners();
       }
 
@@ -280,28 +284,6 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
       return [];
-    }
-  }
-
-  Future<String> answerNoteQuestion(
-    String question,
-    List<Note> contextNotes, {
-    List<PlatformFile>? attachedFiles,
-    bool useOwnKnowledge = false,
-  }) async {
-    try {
-      final response = await AIService.answerNoteQuestion(
-        question,
-        contextNotes,
-        attachedFiles: attachedFiles,
-        useOwnKnowledge: useOwnKnowledge,
-      );
-
-      return response;
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
     }
   }
 

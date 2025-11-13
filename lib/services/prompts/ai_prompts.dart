@@ -1,3 +1,7 @@
+import 'prompt_configuration_service.dart';
+import 'registrations/app_prompt_configuration.dart';
+import 'registrations/note_prompt_configuration.dart';
+
 /// Centralized AI prompts for all AI services
 /// This ensures consistency across different model providers
 class AIPrompts {
@@ -20,61 +24,25 @@ IMPORTANT - Math Formula Guidelines:
 - How linked notes might provide additional context or clarification
 - The direction of relationships (→ for outgoing, ← for incoming)''';
 
-  /// Build prompt for note Q&A with context
-  static String buildNoteQAPrompt(String question, String context, {bool useOwnKnowledge = false}) {
-    // Check if context is empty (no notes provided)
-    final hasNotes = context.trim().isNotEmpty;
-    
-    final relationshipSection = hasNotes ? '''
-Consider the relationships between the NOTES in the context:
-$relationshipGuidelines
-''' : '';
-
-    if (useOwnKnowledge) {
-      return '''
-Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
-
-${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
-${hasNotes ? context : ''}
-
-Please provide a comprehensive answer using both the information in the notes and your own knowledge.$relationshipSection
-- Your own knowledge to provide additional insights, explanations, or expanded context
-
-$mathFormulaGuidelines
-
-You may supplement the information from the notes with your own knowledge to provide a more complete and helpful answer.
-''';
-    } else {
-      return '''
-Based on the following${hasNotes ? ' notes and their linked relationships' : ''}, please answer the question: "$question"
-
-${hasNotes ? 'Context Notes (including linked notes and their relationships):' : ''}
-${hasNotes ? context : ''}
-
-Please provide a comprehensive answer based ONLY on the information in the notes${hasNotes ? ' and their relationships' : ''}.$relationshipSection
-
-$mathFormulaGuidelines
-
-If the answer cannot be found in the provided context, please state that clearly and do not use your own knowledge to supplement the answer.
-''';
-    }
-  }
-
   /// Build prompt for note transformation
-  static String buildNoteTransformationPrompt(String noteTitle, String noteContent, 
-      String transformationPrompt, {
-      List<String> attachmentPaths = const [],
-      List<String> subNotes = const [],
-      List<String> tags = const [],
-      String linkedNotesContext = '',
-    }) {
+  static String buildNoteTransformationPrompt(
+    String noteTitle,
+    String noteContent,
+    String transformationPrompt, {
+    List<String> attachmentPaths = const [],
+    List<String> subNotes = const [],
+    List<String> tags = const [],
+    String linkedNotesContext = '',
+  }) {
     final buffer = StringBuffer();
-    buffer.writeln('Please transform the following note according to the instruction: "$transformationPrompt"');
+    buffer.writeln(
+      'Please transform the following note according to the instruction: "$transformationPrompt"',
+    );
     buffer.writeln();
     buffer.writeln('Original Note:');
     buffer.writeln('Title: $noteTitle');
     buffer.writeln('Content: $noteContent');
-    
+
     // Add file attachment info if any
     if (attachmentPaths.isNotEmpty) {
       buffer.writeln();
@@ -84,7 +52,7 @@ If the answer cannot be found in the provided context, please state that clearly
         buffer.writeln('- $fileName');
       }
     }
-    
+
     // Add sub-notes if any
     if (subNotes.isNotEmpty) {
       buffer.writeln();
@@ -93,31 +61,45 @@ If the answer cannot be found in the provided context, please state that clearly
         buffer.writeln('- $subNote');
       }
     }
-    
+
     // Add tags if any
     if (tags.isNotEmpty) {
       buffer.writeln();
       buffer.writeln('Tags: ${tags.join(', ')}');
     }
-    
+
     // Add linked notes context if any
     if (linkedNotesContext.isNotEmpty) {
       buffer.writeln();
       buffer.writeln('Linked Notes Context:');
       buffer.writeln(linkedNotesContext);
     }
-    
+
     buffer.writeln();
     buffer.writeln(mathFormulaGuidelines);
     buffer.writeln();
-    buffer.writeln('Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.');
-    
-    return buffer.toString();
+    buffer.writeln(
+      'Please provide the transformed version of this note, maintaining the same structure but with the requested changes applied. Consider the linked notes context when making transformations.',
+    );
+
+    final addOn = PromptConfigurationService.instance.getValue(
+      NotePromptConfiguration.transformationAddendumId,
+    );
+    return _appendAddOn(
+      buffer.toString(),
+      addOn,
+      header: 'User-defined guidance:',
+    );
   }
 
   /// Build prompt for new note creation
   static String buildNewNoteCreationPrompt(String userPrompt, String context) {
-    return '''
+    final addOn = PromptConfigurationService.instance.getValue(
+      NotePromptConfiguration.creationAddendumId,
+    );
+
+    final prompt =
+        '''
 Based on the following context and prompt, please create one or more new notes.
 
 Context Notes (including linked notes and their relationships):
@@ -167,10 +149,15 @@ CRITICAL JSON FORMATTING RULES:
 
 If creating multiple notes, ensure they are related and useful based on the context and prompt. Consider how the new notes might fit into the existing network of relationships shown in the context. For tasks, make sure to set appropriate scheduledAt and completeBy dates based on the user's request and current date context.
 ''';
+    return _appendAddOn(prompt, addOn, header: 'User-defined guidance:');
   }
 
   /// Build prompt for content extraction from text
-  static String buildContentExtractionPrompt(String text, String contentType, String title) {
+  static String buildContentExtractionPrompt(
+    String text,
+    String contentType,
+    String title,
+  ) {
     return '''
 Please analyze and extract the key content from this $contentType. 
 
@@ -192,7 +179,10 @@ Format the response in a clear, organized manner that would be useful for note-t
   }
 
   /// Build prompt for dedup rules suggestion
-  static String buildDedupRulesSuggestionPrompt(List<String> tagNames, {List<String> protectedTags = const []}) {
+  static String buildDedupRulesSuggestionPrompt(
+    List<String> tagNames, {
+    List<String> protectedTags = const [],
+  }) {
     final protectedTagsSection = protectedTags.isNotEmpty
         ? '''
         
@@ -202,7 +192,7 @@ ${protectedTags.join(', ')}
 CRITICAL: These protected tags are used by filters and MUST NOT be replaced. They can only appear as rightTag (the replacement target), never as leftTag (the tag being replaced).
 '''
         : '';
-    
+
     return '''
 Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. 
 
@@ -256,8 +246,18 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
   }
 
   /// Build prompt for app generation
-  static String buildAppGenerationPrompt(String name, String description, List<String> steps, String type) {
-    return '''
+  static String buildAppGenerationPrompt(
+    String name,
+    String description,
+    List<String> steps,
+    String type,
+  ) {
+    final addOn = PromptConfigurationService.instance.getValue(
+      AppPromptConfiguration.generationAddendumId,
+    );
+
+    final prompt =
+        '''
 Create a single-page self-contained HTML application based on the following requirements:
 
 App Name: $name
@@ -275,10 +275,15 @@ Requirements:
 
 Please generate the complete HTML code for this application.
 ''';
+    return _appendAddOn(prompt, addOn, header: 'User-defined guidance:');
   }
 
   /// Build prompt for app editing
-  static String buildAppEditPrompt(String name, String currentCode, String editSuggestion) {
+  static String buildAppEditPrompt(
+    String name,
+    String currentCode,
+    String editSuggestion,
+  ) {
     return '''
 Edit the following HTML application based on the user's suggestion:
 
@@ -301,5 +306,18 @@ HTML:
 Make sure the updated code is complete, functional, and addresses the user's request.
 ''';
   }
-}
 
+  static String _appendAddOn(String prompt, String? addOn, {String? header}) {
+    if (addOn == null || addOn.trim().isEmpty) {
+      return prompt;
+    }
+
+    final buffer = StringBuffer(prompt.trimRight());
+    buffer.writeln();
+    if (header != null && header.trim().isNotEmpty) {
+      buffer.writeln(header.trim());
+    }
+    buffer.writeln(addOn.trim());
+    return buffer.toString();
+  }
+}

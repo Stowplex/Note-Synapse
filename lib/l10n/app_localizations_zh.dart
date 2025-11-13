@@ -27,6 +27,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiApiSubtitle => '配置您的AI API密钥';
 
   @override
+  String get aiPrompts => '提示词';
+
+  @override
+  String get aiPromptsSubtitle => '自定义AI提示词注入与覆写';
+
+  @override
   String get darkMode => '深色模式';
 
   @override
@@ -1483,6 +1489,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get manageAppState => '管理应用状态';
+
+  @override
+  String get clearState => '清除状态';
+
+  @override
+  String get stateCleared => '状态清除成功！';
+
+  @override
+  String get noState => '无状态';
+
+  @override
   String appGenerationPrompt(Object description, Object name, Object steps) {
     return '根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：$name\n描述：$description\n步骤：$steps\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。';
   }
@@ -1900,6 +1918,29 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorConfiguringModel(Object error) {
     return '配置模型时出错：$error';
+  }
+
+  @override
+  String get promptSettingsTitle => '提示词配置';
+
+  @override
+  String get promptSettingsDescription =>
+      '自定义 Note Synapse 生成提示词的方式。留空则使用默认说明。';
+
+  @override
+  String get promptSettingsSave => '保存';
+
+  @override
+  String get promptSettingsReset => '重置';
+
+  @override
+  String promptSettingsSaved(String entryTitle) {
+    return '已保存$entryTitle的提示词';
+  }
+
+  @override
+  String promptSettingsCleared(String entryTitle) {
+    return '已清除$entryTitle的提示词';
   }
 
   @override
@@ -3008,4 +3049,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorAddingTranscription(String error) {
     return '添加转录时出错：$error';
   }
+
+  @override
+  String get newNoteFromShareCreated => '分享的笔记创建成功！';
 }

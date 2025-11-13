@@ -4,6 +4,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_card.dart';
 import '../l10n/app_localizations.dart';
+import '../services/note_selection_service.dart';
 
 class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
@@ -25,6 +26,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   final List<Note> _selectedNotes = [];
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  final NoteSelectionService _noteSelectionService = NoteSelectionService();
 
   @override
   void dispose() {
@@ -36,7 +38,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final dialogTitle = widget.title ?? l10n.selectNotesForNoteActionApp;
-    
+
     return Dialog(
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -78,7 +80,7 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                 ],
               ),
             ),
-            
+
             // Search bar
             Padding(
               padding: const EdgeInsets.all(16),
@@ -98,11 +100,14 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                 },
               ),
             ),
-            
+
             // Selected notes count
             if (_selectedNotes.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 color: Theme.of(context).colorScheme.primaryContainer,
                 child: Row(
                   children: [
@@ -122,20 +127,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                   ],
                 ),
               ),
-            
+
             // Notes list
             Expanded(
               child: Consumer<AppProvider>(
                 builder: (context, appProvider, child) {
                   final allNotes = appProvider.notes;
-                  final filteredNotes = _searchQuery.isEmpty
-                      ? allNotes
-                      : allNotes.where((note) =>
-                          note.title.toLowerCase().contains(_searchQuery) ||
-                          note.content.toLowerCase().contains(_searchQuery) ||
-                          note.tags.any((tag) => tag.toLowerCase().contains(_searchQuery))
-                        ).toList();
-                  
+
+                  // Use the service to filter and sort notes
+                  final filteredNotes = _noteSelectionService.filterNotes(
+                    allNotes: allNotes,
+                    searchQuery: _searchQuery,
+                  );
+
                   if (filteredNotes.isEmpty) {
                     return Center(
                       child: Column(
@@ -148,25 +152,29 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            _searchQuery.isEmpty 
+                            _searchQuery.isEmpty
                                 ? l10n.noNotesAvailable
                                 : l10n.noNotesFoundMatching(_searchQuery),
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ],
                       ),
                     );
                   }
-                  
+
                   return ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: filteredNotes.length,
                     itemBuilder: (context, index) {
                       final note = filteredNotes[index];
-                      final isSelected = _selectedNotes.contains(note);
-                      
+                      // Use note ID comparison instead of object equality
+                      // to ensure newly created notes are properly detected
+                      final isSelected = _noteSelectionService.isNoteSelected(
+                        selectedNotes: _selectedNotes,
+                        note: note,
+                      );
+
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: GestureDetector(
@@ -174,14 +182,17 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                           child: Container(
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: isSelected 
+                                color: isSelected
                                     ? Theme.of(context).colorScheme.primary
                                     : Colors.grey[300]!,
                                 width: isSelected ? 2 : 1,
                               ),
                               borderRadius: BorderRadius.circular(8),
-                              color: isSelected 
-                                  ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
+                              color: isSelected
+                                  ? Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                        .withOpacity(0.3)
                                   : null,
                             ),
                             child: NoteCard(
@@ -189,13 +200,18 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                               isSelected: isSelected,
                               onTap: () => _toggleNoteSelection(note),
                               onLongPress: () => _toggleNoteSelection(note),
-                              onStatusChanged: note.isTask ? (status) => _updateTaskStatus(note.id, status) : null,
+                              onStatusChanged: note.isTask
+                                  ? (status) =>
+                                        _updateTaskStatus(note.id, status)
+                                  : null,
                               onAddSubNote: () {}, // Disabled in selection mode
                               onPinToggle: () {}, // Disabled in selection mode
-                              onArchiveToggle: () {}, // Disabled in selection mode
+                              onArchiveToggle:
+                                  () {}, // Disabled in selection mode
                               // Do not pass onShare to hide share icon
                               showAttachmentIndicator: false,
-                              onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
+                              onContentChanged: (newContent) =>
+                                  _updateNoteContent(note.id, newContent),
                             ),
                           ),
                         ),
@@ -205,14 +221,12 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                 },
               ),
             ),
-            
+
             // Action buttons
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.grey[300]!),
-                ),
+                border: Border(top: BorderSide(color: Colors.grey[300]!)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -222,10 +236,14 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                     child: Text(l10n.cancel),
                   ),
                   ElevatedButton(
-                    onPressed: _selectedNotes.isNotEmpty ? _proceedWithSelectedNotes : null,
-                    child: Text(widget.singleSelection 
-                        ? l10n.proceed
-                        : l10n.proceedWithNotes(_selectedNotes.length)),
+                    onPressed: _selectedNotes.isNotEmpty
+                        ? _proceedWithSelectedNotes
+                        : null,
+                    child: Text(
+                      widget.singleSelection
+                          ? l10n.proceed
+                          : l10n.proceedWithNotes(_selectedNotes.length),
+                    ),
                   ),
                 ],
               ),
@@ -239,20 +257,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   void _toggleNoteSelection(Note note) {
     setState(() {
       if (widget.singleSelection) {
-        // In single selection mode, replace the current selection
-        if (_selectedNotes.contains(note)) {
-          _selectedNotes.remove(note);
-        } else {
-          _selectedNotes.clear();
-          _selectedNotes.add(note);
-        }
+        final newSelection = _noteSelectionService.toggleSingleSelection(
+          selectedNotes: _selectedNotes,
+          note: note,
+        );
+        _selectedNotes.clear();
+        _selectedNotes.addAll(newSelection);
       } else {
-        // In multi-selection mode, toggle selection
-        if (_selectedNotes.contains(note)) {
-          _selectedNotes.remove(note);
-        } else {
-          _selectedNotes.add(note);
-        }
+        final newSelection = _noteSelectionService.toggleMultiSelection(
+          selectedNotes: _selectedNotes,
+          note: note,
+        );
+        _selectedNotes.clear();
+        _selectedNotes.addAll(newSelection);
       }
     });
   }

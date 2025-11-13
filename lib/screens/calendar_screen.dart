@@ -137,79 +137,90 @@ class _CalendarScreenState extends State<CalendarScreen> {
           } else if (_selectedView == 'todo') {
             return _buildTodoView(appProvider, l10n);
           } else {
-            return Column(
-              children: [
-                TableCalendar<Note>(
-                key: ValueKey(_calendarKey),
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                calendarFormat: _calendarFormat,
-                availableCalendarFormats: {
-                  CalendarFormat.month: l10n.month,
-                  CalendarFormat.twoWeeks: l10n.twoWeeks,
-                  CalendarFormat.week: l10n.week,
-                },
-                selectedDayPredicate: (day) {
-                  return isSameDay(_selectedDay, day);
-                },
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                onFormatChanged: (format) {
-                  setState(() {
-                    _calendarFormat = format;
-                    // Force a complete rebuild by updating the key
-                    _calendarKey++;
-                    // Ensure focused day is properly set when format changes
-                    if (_selectedDay != null) {
-                      _focusedDay = _selectedDay!;
-                    } else {
-                      _focusedDay = DateTime.now();
-                    }
-                  });
-                },
-                onPageChanged: (focusedDay) {
-                  setState(() {
-                    _focusedDay = focusedDay;
-                  });
-                },
-                eventLoader: (day) {
-                  final tasks = appProvider.getTasksForDate(day);
-                  if (_selectedTags.isEmpty) {
-                    return tasks;
-                  }
-                  return tasks.where((task) {
-                    return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
-                  }).toList();
-                },
-                calendarStyle: CalendarStyle(
-                  outsideDaysVisible: true,
-                  markersMaxCount: 3,
-                  markerDecoration: BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  TableCalendar<Note>(
+                    key: ValueKey(_calendarKey),
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    availableCalendarFormats: {
+                      CalendarFormat.month: l10n.month,
+                      CalendarFormat.twoWeeks: l10n.twoWeeks,
+                      CalendarFormat.week: l10n.week,
+                    },
+                    selectedDayPredicate: (day) {
+                      return isSameDay(_selectedDay, day);
+                    },
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    onFormatChanged: (format) {
+                      setState(() {
+                        _calendarFormat = format;
+                        // Force a complete rebuild by updating the key
+                        _calendarKey++;
+                        // Ensure focused day is properly set when format changes
+                        if (_selectedDay != null) {
+                          _focusedDay = _selectedDay!;
+                        } else {
+                          _focusedDay = DateTime.now();
+                        }
+                      });
+                    },
+                    onPageChanged: (focusedDay) {
+                      setState(() {
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    eventLoader: (day) {
+                      final tasks = appProvider.getTasksForDate(day);
+                      if (_selectedTags.isEmpty) {
+                        return tasks;
+                      }
+                      return tasks.where((task) {
+                        return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+                      }).toList();
+                    },
+                    calendarStyle: CalendarStyle(
+                      outsideDaysVisible: true,
+                      markersMaxCount: 3,
+                      markerDecoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: true,
+                      titleCentered: true,
+                      formatButtonShowsNext: false,
+                    ),
                   ),
-                ),
-                headerStyle: HeaderStyle(
-                  formatButtonVisible: true,
-                  titleCentered: true,
-                  formatButtonShowsNext: false,
-                ),
+                  const Divider(),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Calculate a reasonable height for content area
+                      final screenHeight = MediaQuery.of(context).size.height;
+                      final contentHeight = (screenHeight * 0.4).clamp(300.0, 500.0);
+                      
+                      return SizedBox(
+                        height: contentHeight,
+                        child: _selectedDay == null
+                            ? const Center(
+                                child: Text('Select a day to view notes and tasks'),
+                              )
+                            : _buildTabbedDayContent(appProvider, l10n),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const Divider(),
-              Expanded(
-                child: _selectedDay == null
-                    ? const Center(
-                        child: Text('Select a day to view notes and tasks'),
-                      )
-                    : _buildTabbedDayContent(appProvider, l10n),
-              ),
-            ],
-          );
+            );
           }
         },
       ),
@@ -280,7 +291,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
             ),
           ),
-          // Tab content
+          // Tab content - use Expanded to fill remaining space
           Expanded(
             child: TabBarView(
               children: [

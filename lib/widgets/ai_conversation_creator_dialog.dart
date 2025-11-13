@@ -10,6 +10,7 @@ import '../services/ai_service.dart';
 import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/prompts/note_prompt_builder.dart';
 
 /// Dialog for creating a conversation using AI with customizable prompt
 /// Similar to AINoteCreatorDialog, but creates a conversation instead
@@ -400,17 +401,19 @@ Conversation content to process:
 ${widget.conversationContent}
 ''';
       
-      // Use AI service to process the conversation content
-      final processedContent = await AIService.answerNoteQuestion(
-        fullPrompt,
-        _selectedNotes,
-        attachedFiles: _attachedFiles.isNotEmpty ? _attachedFiles : null,
+      // Prepare note-aware prompt and execute it
+      final databaseService = DatabaseService();
+      final promptBuilder = NotePromptBuilder(databaseService);
+      final request = await promptBuilder.buildQuestionPrompt(
+        question: fullPrompt,
+        contextNotes: _selectedNotes,
         useOwnKnowledge: true,
+        additionalAttachments: _attachedFiles,
       );
+      final processedContent = await AIService.executePrompt(request);
       
       // Get conversation IDs and note IDs from selected nodes
       final conversationService = ConversationService();
-      final databaseService = DatabaseService();
       final tree = await conversationService.getConversationTree();
       
       if (tree == null) {

@@ -45,5 +45,24 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Note-Synapse needs access to your camera to attach photos and videos to your notes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Note-Synapse needs access to your microphone to record audio for your notes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Note-Synapse needs access to your photo library to attach images and videos to your notes.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Note-Synapse needs access to save images to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>notesynapse</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

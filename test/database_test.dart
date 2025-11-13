@@ -29,19 +29,44 @@ void main() {
 
     test('should create database tables successfully', () async {
       final db = await databaseService.database;
-      
+
       // Check if tables exist
       final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
       );
-      
-      expect(tables.length, 9); // notes, subnotes, tags, note_tags, attachments, relationships, filters, user_apps, app_revisions
-      expect(tables.any((table) => table['name'] == 'notes'), isTrue);
-      expect(tables.any((table) => table['name'] == 'subnotes'), isTrue);
-      expect(tables.any((table) => table['name'] == 'tags'), isTrue);
-      expect(tables.any((table) => table['name'] == 'note_tags'), isTrue);
-      expect(tables.any((table) => table['name'] == 'attachments'), isTrue);
-      expect(tables.any((table) => table['name'] == 'relationships'), isTrue);
+
+      final tableNames = tables.map((table) => table['name'] as String).toSet();
+      const expectedTables = {
+        'notes',
+        'subnotes',
+        'tags',
+        'note_tags',
+        'attachments',
+        'relationships',
+        'filters',
+        'user_apps',
+        'app_revisions',
+        'user_app_libraries',
+        'user_app_library_dependencies',
+        'conversations',
+        'conversation_messages',
+        'conversation_attachments',
+        'conversation_message_mapping',
+        'message_parents',
+        'conversation_note_mapping',
+        'conversation_tags',
+      };
+
+      expect(
+        tableNames.containsAll(expectedTables),
+        isTrue,
+        reason: 'Database should contain all expected core tables',
+      );
+      expect(
+        tableNames.length,
+        greaterThanOrEqualTo(expectedTables.length),
+        reason: 'Database should not be missing tables',
+      );
     });
 
     test('should insert and retrieve note', () async {

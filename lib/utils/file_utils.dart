@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -36,6 +37,36 @@ class FileUtils {
       return true;
     } catch (e) {
       _showErrorSnackBar(context, 'Error opening file: $e');
+      return false;
+    }
+  }
+
+  /// Opens a [PlatformFile] by either using its existing path or writing bytes to a temp file.
+  static Future<bool> openPlatformFile(
+    PlatformFile file,
+    BuildContext context,
+  ) async {
+    try {
+      if (file.path != null && file.path!.isNotEmpty) {
+        final diskFile = File(file.path!);
+        if (await diskFile.exists()) {
+          return await openFile(diskFile.path, context);
+        }
+      }
+
+      if (file.bytes != null && file.bytes!.isNotEmpty) {
+        final tempDir = await getTemporaryDirectory();
+        final baseName = file.name.isNotEmpty ? file.name : 'attachment';
+        final uniqueName = generateUniqueFileName(baseName);
+        final tempFile = File('${tempDir.path}/$uniqueName');
+        await tempFile.writeAsBytes(file.bytes!);
+        return await openFile(tempFile.path, context);
+      }
+
+      _showErrorSnackBar(context, 'Attachment data unavailable.');
+      return false;
+    } catch (e) {
+      _showErrorSnackBar(context, 'Error opening attachment: $e');
       return false;
     }
   }

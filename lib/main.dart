@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_debug_overlay/flutter_debug_overlay.dart';
 import 'l10n/app_localizations.dart';
@@ -10,14 +9,16 @@ import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/model_selection_screen.dart';
 import 'services/secure_storage_service.dart';
-import 'services/logger_service.dart';
 import 'services/ai_service.dart';
+import 'services/share_service.dart';
+import 'services/prompts/prompt_configuration_bootstrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize secure storage
   await SecureStorageService.initialize();
+  await PromptConfigurationBootstrapper.initialize();
 
   runApp(const NoteSynapseApp());
 }
@@ -44,6 +45,7 @@ class NoteSynapseApp extends StatelessWidget {
               Locale('zh', ''), // Chinese Simplified
             ],
             locale: appProvider.locale,
+            navigatorKey: ShareService.navigatorKey,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,
@@ -96,7 +98,6 @@ class AppWrapper extends StatefulWidget {
 class _AppWrapperState extends State<AppWrapper> {
   bool _isLoading = true;
   bool _isModelConfigured = false;
-  Map<String, dynamic>? _sharedData;
 
   @override
   void initState() {
@@ -111,34 +112,13 @@ class _AppWrapperState extends State<AppWrapper> {
     await appProvider.loadData();
 
     await AIService.initialize(appProvider);
+    await ShareService.init(appProvider);
 
     final modelConfig = appProvider.modelConfig;
     final isConfigured = modelConfig?.isConfigured ?? false;
 
     setState(() {
       _isModelConfigured = isConfigured;
-    });
-
-    await _checkSharedContent();
-  }
-
-  Future<void> _checkSharedContent() async {
-    Map<String, dynamic>? sharedData;
-    try {
-      const platform = MethodChannel('note_synapse/share');
-      final result = await platform.invokeMethod('getSharedContent');
-      if (result != null) {
-        sharedData = Map<String, dynamic>.from(result);
-        LoggerService.debug(
-          'AppWrapper: Shared content detected: ${sharedData.keys}',
-        );
-      }
-    } catch (e) {
-      LoggerService.debug('No shared content or error: $e');
-    }
-
-    setState(() {
-      _sharedData = sharedData;
       _isLoading = false;
     });
   }
@@ -147,10 +127,6 @@ class _AppWrapperState extends State<AppWrapper> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_sharedData != null) {
-      return ShareScreen(sharedData: _sharedData!);
     }
 
     if (_isModelConfigured) {

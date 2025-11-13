@@ -10,9 +10,10 @@ import 'logger_service.dart';
 class ConversationService {
   static final ConversationService _instance = ConversationService._internal();
   factory ConversationService() => _instance;
-  ConversationService._internal();
+  ConversationService._internal({DatabaseService? databaseService})
+      : _databaseService = databaseService ?? DatabaseService();
 
-  final DatabaseService _databaseService = DatabaseService();
+  final DatabaseService _databaseService;
   final Uuid _uuid = const Uuid();
 
   // For testing - allow injection of mock database service
@@ -22,6 +23,10 @@ class ConversationService {
   }
 
   static ConversationService getTestInstance() => _testInstance;
+
+  static ConversationService createForTesting(DatabaseService databaseService) {
+    return ConversationService._internal(databaseService: databaseService);
+  }
 
   // Create a new conversation
   Future<Conversation> createConversation({

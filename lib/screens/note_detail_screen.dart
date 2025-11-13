@@ -448,109 +448,154 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 8),
             ...currentNote.subNotes.map(
               (subNote) => Card(
-                child: ListTile(
-                  leading: Icon(
-                    subNote.isCompleted
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: subNote.isCompleted ? Colors.green : Colors.grey,
-                  ),
-                  title: SelectableText(subNote.name),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InteractiveCheckboxMarkdown(
-                        key: ValueKey('subnote_${subNote.id}'),
-                        originalContent: subNote.content,
-                        onContentChanged: (newContent) =>
-                            _updateSubNoteContent(subNote, newContent),
-                        style: Theme.of(context).textTheme.bodySmall,
-                        textDirection: TextDirection.ltr,
-                        onLinkTap: _handleLinkTap,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with completed toggle and three dot menu
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                  trailing: PopupMenuButton(
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 16),
-                            const SizedBox(width: 8),
-                            Text(l10n.editSubNote),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'toggle',
-                        child: Row(
-                          children: [
-                            Icon(
-                              subNote.isCompleted ? Icons.undo : Icons.check,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
+                      child: Row(
+                        children: [
+                          // Completed status toggle
+                          IconButton(
+                            icon: Icon(
                               subNote.isCompleted
-                                  ? l10n.markIncomplete
-                                  : l10n.markComplete,
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: subNote.isCompleted
+                                  ? Colors.green
+                                  : Colors.grey,
                             ),
-                          ],
-                        ),
+                            onPressed: () => _toggleSubNoteCompletion(subNote),
+                            tooltip: subNote.isCompleted
+                                ? l10n.markIncomplete
+                                : l10n.markComplete,
+                          ),
+                          const Spacer(),
+                          // Three dot menu
+                          PopupMenuButton(
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.editSubNote),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      subNote.isCompleted
+                                          ? Icons.undo
+                                          : Icons.check,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      subNote.isCompleted
+                                          ? l10n.markIncomplete
+                                          : l10n.markComplete,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'reparent',
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.move_to_inbox, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(l10n.reparentSubNote),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete, color: Colors.red, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      l10n.deleteSubNote,
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'edit':
+                                  _editSubNote(currentNote, subNote);
+                                  break;
+                                case 'toggle':
+                                  _toggleSubNoteCompletion(subNote);
+                                  break;
+                                case 'reparent':
+                                  _reparentSubNote(currentNote, subNote);
+                                  break;
+                                case 'delete':
+                                  _deleteSubNote(currentNote, subNote);
+                                  break;
+                              }
+                            },
+                          ),
+                        ],
                       ),
-                      PopupMenuItem(
-                        value: 'reparent',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.move_to_inbox, size: 16),
-                            const SizedBox(width: 8),
-                            Text(l10n.reparentSubNote),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, color: Colors.red, size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.deleteSubNote,
-                              style: TextStyle(color: Colors.red),
+                    ),
+                    // Full width content area
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Subnote name
+                          if (subNote.name.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: SelectableText(
+                                subNote.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ],
-                        ),
+                          // Subnote content
+                          SelectionArea(
+                            child: InteractiveCheckboxMarkdown(
+                              key: ValueKey('subnote_${subNote.id}'),
+                              originalContent: subNote.content,
+                              onContentChanged: (newContent) =>
+                                  _updateSubNoteContent(subNote, newContent),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              textDirection: TextDirection.ltr,
+                              onLinkTap: _handleLinkTap,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Created date
+                          Text(
+                            '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.5),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'edit':
-                          _editSubNote(currentNote, subNote);
-                          break;
-                        case 'toggle':
-                          _toggleSubNoteCompletion(subNote);
-                          break;
-                        case 'reparent':
-                          _reparentSubNote(currentNote, subNote);
-                          break;
-                        case 'delete':
-                          _deleteSubNote(currentNote, subNote);
-                          break;
-                      }
-                    },
-                  ),
-                  onTap: () => _toggleSubNoteCompletion(subNote),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1541,68 +1586,117 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          _getFileIcon(fileName),
-          color: fileExists ? null : Colors.grey,
-        ),
-        title: Text(
-          fileName,
-          style: TextStyle(color: fileExists ? null : Colors.grey),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              fileExists
-                  ? _formatFileSize(file.lengthSync())
-                  : 'File not found',
-              style: TextStyle(
-                color: fileExists ? Colors.grey[600] : Colors.red,
-              ),
-            ),
-            if (isAudioFile && fileExists && _audioService != null) ...[
-              const SizedBox(height: 4),
-              _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
-            ],
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isAudioFile && fileExists && _audioService != null) ...[
-              IconButton(
-                icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
-                onPressed: () => _toggleAudioPlayback(attachmentPath),
-                tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
-              ),
-              if (isCurrentlyPlaying)
-                IconButton(
-                  icon: const Icon(Icons.stop),
-                  onPressed: () => _stopAudioPlayback(),
-                  tooltip: 'Stop',
-                ),
-              IconButton(
-                icon: const Icon(Icons.text_fields),
-                onPressed: () => _transcribeAudio(attachmentPath),
-                tooltip: 'Transcribe with AI',
-              ),
-            ] else if (fileExists)
-              IconButton(
-                icon: const Icon(Icons.open_in_new),
-                onPressed: () => FileUtils.openFile(attachmentPath, context),
-                tooltip: 'Open with default application',
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _removeAttachment(attachmentPath, currentNote),
-              tooltip: l10n.removeAttachmentTooltip,
-            ),
-          ],
-        ),
+      child: InkWell(
         onTap: fileExists && !isAudioFile
             ? () => FileUtils.openFile(attachmentPath, context)
             : null,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _getFileIcon(fileName),
+                    color: fileExists ? null : Colors.grey,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fileName,
+                          style: TextStyle(
+                            color: fileExists ? null : Colors.grey,
+                            fontSize: 16,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          fileExists
+                              ? _formatFileSize(file.lengthSync())
+                              : 'File not found',
+                          style: TextStyle(
+                            color: fileExists ? Colors.grey[600] : Colors.red,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAudioFile && fileExists && _audioService != null) ...[
+                        IconButton(
+                          icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
+                          onPressed: () => _toggleAudioPlayback(attachmentPath),
+                          tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                        if (isCurrentlyPlaying)
+                          IconButton(
+                            icon: const Icon(Icons.stop),
+                            onPressed: () => _stopAudioPlayback(),
+                            tooltip: 'Stop',
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.text_fields),
+                          onPressed: () => _transcribeAudio(attachmentPath),
+                          tooltip: 'Transcribe with AI',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      ] else if (fileExists)
+                        IconButton(
+                          icon: const Icon(Icons.open_in_new),
+                          onPressed: () => FileUtils.openFile(attachmentPath, context),
+                          tooltip: 'Open with default application',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _removeAttachment(attachmentPath, currentNote),
+                        tooltip: l10n.removeAttachmentTooltip,
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (isAudioFile && fileExists && _audioService != null) ...[
+                const SizedBox(height: 8),
+                _buildAudioPlayer(attachmentPath, isCurrentlyPlaying),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1669,8 +1763,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024)
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 

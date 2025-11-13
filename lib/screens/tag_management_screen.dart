@@ -7,6 +7,7 @@ import '../models/tag.dart';
 import '../models/dedup_rule.dart';
 import '../services/ai_service.dart';
 import '../widgets/tag_detail_dialog.dart';
+import '../utils/dedup_suggestion_utils.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -609,17 +610,39 @@ class _TagManagementScreenState extends State<TagManagementScreen>
         protectedTags: filterTags,
       );
 
-      if (mounted) {
-        setState(() {
-          _dedupRules.addAll(suggestions);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${suggestions.length} dedup rules suggested by AI'),
-            backgroundColor: Colors.green,
-          ),
+      if (mounted && suggestions.isNotEmpty) {
+        final existingTags =
+            _tagsWithUsage.map((tagWithUsage) => tagWithUsage.tag.name).toList();
+        final normalizedSuggestions = DedupSuggestionUtils.normalizeSuggestions(
+          suggestions,
+          existingTags,
         );
+
+        if (normalizedSuggestions.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('AI suggestions did not match any existing tags'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          final skippedCount = suggestions.length - normalizedSuggestions.length;
+
+          setState(() {
+            _dedupRules.addAll(normalizedSuggestions);
+          });
+
+          final message = skippedCount > 0
+              ? '${normalizedSuggestions.length} dedup rules added (skipped $skippedCount unknown tags)'
+              : '${normalizedSuggestions.length} dedup rules suggested by AI';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: skippedCount > 0 ? Colors.orange : Colors.green,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

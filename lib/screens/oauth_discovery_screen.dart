@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/oauth_service.dart';
+import '../services/oauth_redirect_helper.dart';
 import '../services/logger_service.dart';
 import '../l10n/app_localizations.dart';
 
@@ -170,7 +171,7 @@ class _OAuthDiscoveryScreenState extends State<OAuthDiscoveryScreen> {
       final creds = await OAuthService.registerClient(
         registrationEndpoint: registrationEndpoint,
         clientName: 'NoteSynapse',
-        redirectUri: 'http://127.0.0.1:51791/callback',
+        redirectUri: OAuthRedirectHelper.defaultForCurrentPlatform(),
         usePkce: widget.usePkce,
         scope: scope,
       );

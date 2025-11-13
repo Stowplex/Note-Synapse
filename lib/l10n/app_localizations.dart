@@ -134,6 +134,18 @@ abstract class AppLocalizations {
   /// **'Configure your AI API key'**
   String get aiApiSubtitle;
 
+  /// No description provided for @aiPrompts.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompts'**
+  String get aiPrompts;
+
+  /// No description provided for @aiPromptsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Customize AI prompt injections and overrides'**
+  String get aiPromptsSubtitle;
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:
@@ -2810,6 +2822,30 @@ abstract class AppLocalizations {
   /// **'Error loading state: {error}'**
   String errorLoadingState(Object error);
 
+  /// No description provided for @manageAppState.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage App State'**
+  String get manageAppState;
+
+  /// No description provided for @clearState.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear State'**
+  String get clearState;
+
+  /// No description provided for @stateCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'State cleared successfully!'**
+  String get stateCleared;
+
+  /// No description provided for @noState.
+  ///
+  /// In en, this message translates to:
+  /// **'No state'**
+  String get noState;
+
   /// No description provided for @appGenerationPrompt.
   ///
   /// In en, this message translates to:
@@ -3559,6 +3595,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error configuring model: {error}'**
   String errorConfiguringModel(Object error);
+
+  /// No description provided for @promptSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt Configuration'**
+  String get promptSettingsTitle;
+
+  /// No description provided for @promptSettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Customize how Note Synapse composes prompts. Empty fields use the default instructions.'**
+  String get promptSettingsDescription;
+
+  /// No description provided for @promptSettingsSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get promptSettingsSave;
+
+  /// No description provided for @promptSettingsReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get promptSettingsReset;
+
+  /// No description provided for @promptSettingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved prompt for {entryTitle}'**
+  String promptSettingsSaved(String entryTitle);
+
+  /// No description provided for @promptSettingsCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared prompt for {entryTitle}'**
+  String promptSettingsCleared(String entryTitle);
 
   /// No description provided for @recovery.
   ///
@@ -5539,6 +5611,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error adding transcription: {error}'**
   String errorAddingTranscription(String error);
+
+  /// No description provided for @newNoteFromShareCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'New note from share created successfully!'**
+  String get newNoteFromShareCreated;
 }
 
 class _AppLocalizationsDelegate

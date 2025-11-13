@@ -175,4 +175,26 @@ class LoggerService {
       timestamp: timestamp,
     ));
   }
+
+  static void logAiConsole({
+    required String consoleOutput,
+    required String endpoint,
+    String? requestId,
+    Duration? duration,
+  }) {
+    final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final timestamp = DateTime.now();
+  
+    // Add to log bucket
+    _addToLogBucket(AiLogEntry(
+      id: requestIdStr,
+      type: 'console',
+      endpoint: endpoint,
+      data: {
+        'consoleOutput': consoleOutput,
+        'duration': duration?.inMilliseconds,
+      },
+      timestamp: timestamp,
+    ));
+  }
 }

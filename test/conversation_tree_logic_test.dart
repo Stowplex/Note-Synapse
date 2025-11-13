@@ -8,9 +8,13 @@ void main() {
     late DatabaseService databaseService;
 
     setUp(() async {
-      conversationService = ConversationService();
-      databaseService = DatabaseService();
+      databaseService = DatabaseService.createNew();
+      conversationService = ConversationService.createForTesting(databaseService);
       await databaseService.clearAllData();
+    });
+
+    tearDown(() async {
+      await databaseService.close();
     });
 
     test('Level 1 nodes have isExpanded=true by default', () async {

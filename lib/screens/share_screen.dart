@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -13,6 +12,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
+import '../services/web_content_extraction_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'note_selection_dialog.dart';
@@ -20,10 +20,7 @@ import 'note_selection_dialog.dart';
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
 
-  const ShareScreen({
-    super.key,
-    required this.sharedData,
-  });
+  const ShareScreen({super.key, required this.sharedData});
 
   @override
   State<ShareScreen> createState() => _ShareScreenState();
@@ -59,8 +56,6 @@ class _ShareScreenState extends State<ShareScreen> {
     });
   }
 
-
-
   @override
   void dispose() {
     // Clean up downloaded file if user doesn't proceed
@@ -75,7 +70,10 @@ class _ShareScreenState extends State<ShareScreen> {
   Future<void> _cleanupDownloadedFile() async {
     if (_downloadedFilePath != null) {
       try {
-        final absolutePath = await FileUtils.getFullFilePath(_downloadedFilePath!, true);
+        final absolutePath = await FileUtils.getFullFilePath(
+          _downloadedFilePath!,
+          true,
+        );
         final file = File(absolutePath);
         if (await file.exists()) {
           await file.delete();
@@ -95,14 +93,14 @@ class _ShareScreenState extends State<ShareScreen> {
       });
 
       final result = await ShareService.processSharedContent(widget.sharedData);
-      
+
       if (result['success'] == true) {
         setState(() {
           _contentType = result['contentType'];
           _detectedUrl = result['url'];
           _isLoading = false;
         });
-        
+
         if (result['note'] != null) {
           final note = result['note'] as Note;
           setState(() {
@@ -112,7 +110,8 @@ class _ShareScreenState extends State<ShareScreen> {
           _titleController.text = note.title;
           _tagsController.text = note.tags.join(', ');
           _selectedTags.addAll(note.tags);
-        } else if (result['contentType'] == 'image' || result['contentType'] == 'pdf') {
+        } else if (result['contentType'] == 'image' ||
+            result['contentType'] == 'pdf') {
           // For images and PDFs, show extraction options
           setState(() {
             _preparedNote = null; // Will be created after extraction
@@ -135,16 +134,14 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.sharedContent),
-      ),
+      appBar: AppBar(title: Text(l10n.sharedContent)),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildErrorWidget(l10n)
-              : _buildContentWidget(l10n),
+          ? _buildErrorWidget(l10n)
+          : _buildContentWidget(l10n),
     );
   }
 
@@ -155,11 +152,7 @@ class _ShareScreenState extends State<ShareScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red[300],
-            ),
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
             const SizedBox(height: 16),
             Text(
               l10n.errorProcessingSharedContent,
@@ -184,12 +177,17 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Widget _buildContentWidget(AppLocalizations l10n) {
-    if (_preparedNote == null && _contentType != 'url' && _contentType != 'image' && _contentType != 'pdf') {
+    if (_preparedNote == null &&
+        _contentType != 'url' &&
+        _contentType != 'image' &&
+        _contentType != 'pdf') {
       return Center(child: Text(l10n.noNotesAvailable));
     }
 
     // Show URL detection and extraction option
-    if (_contentType == 'url' && _detectedUrl != null && _preparedNote == null) {
+    if (_contentType == 'url' &&
+        _detectedUrl != null &&
+        _preparedNote == null) {
       return _buildUrlExtractionWidget();
     }
 
@@ -287,18 +285,20 @@ class _ShareScreenState extends State<ShareScreen> {
                                 children: [
                                   Text(
                                     _selectedNote!.title,
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
                                   if (_selectedNote!.content.isNotEmpty)
                                     Text(
                                       _selectedNote!.content.length > 60
                                           ? '${_selectedNote!.content.substring(0, 60)}...'
                                           : _selectedNote!.content,
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: Colors.grey[600],
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: Colors.grey[600]),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -326,20 +326,24 @@ class _ShareScreenState extends State<ShareScreen> {
                           final selectedNotes = await showDialog<List<Note>>(
                             context: context,
                             builder: (context) => NoteSelectionDialog(
-                              onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+                              onNotesSelected: (notes) =>
+                                  Navigator.of(context).pop(notes),
                               title: l10n.selectNoteToAppend,
                               singleSelection: true,
                             ),
                           );
 
-                          if (selectedNotes != null && selectedNotes.isNotEmpty) {
+                          if (selectedNotes != null &&
+                              selectedNotes.isNotEmpty) {
                             setState(() {
                               // Take the first selected note
                               _selectedNote = selectedNotes.first;
                             });
                           }
                         },
-                        icon: Icon(_selectedNote == null ? Icons.note_add : Icons.edit),
+                        icon: Icon(
+                          _selectedNote == null ? Icons.note_add : Icons.edit,
+                        ),
                         label: Text(l10n.selectNote),
                       ),
                     ),
@@ -364,7 +368,7 @@ class _ShareScreenState extends State<ShareScreen> {
                           l10n.noteDetails,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        if (_titleController.text != _preparedNote?.title || 
+                        if (_titleController.text != _preparedNote?.title ||
                             _selectedTags.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(left: 8.0),
@@ -388,7 +392,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         setState(() {
                           // Update the prepared note with new title
                           if (_preparedNote != null) {
-                            _preparedNote = _preparedNote!.copyWith(title: value);
+                            _preparedNote = _preparedNote!.copyWith(
+                              title: value,
+                            );
                           }
                         });
                       },
@@ -429,26 +435,34 @@ class _ShareScreenState extends State<ShareScreen> {
           Row(
             children: [
               Expanded(
-              child: OutlinedButton(
-              onPressed: () async {
-                // Clean up downloaded file on cancel
-                await _cleanupDownloadedFile();
-                Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
-              },
-              child: Text(l10n.cancel),
-            ),
+                child: OutlinedButton(
+                  onPressed: () async {
+                    // Clean up downloaded file on cancel
+                    await _cleanupDownloadedFile();
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/main', (route) => false);
+                  },
+                  child: Text(l10n.cancel),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: (_isCreating || _isExtracting) ? null : _handleAction,
+                  onPressed: (_isCreating || _isExtracting)
+                      ? null
+                      : _handleAction,
                   child: (_isCreating || _isExtracting)
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_action == 'create' ? l10n.createNote : l10n.appendToNote),
+                      : Text(
+                          _action == 'create'
+                              ? l10n.createNote
+                              : l10n.appendToNote,
+                        ),
                 ),
               ),
             ],
@@ -461,23 +475,24 @@ class _ShareScreenState extends State<ShareScreen> {
   Widget _buildTagSelection(AppLocalizations l10n) {
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
-        final allTags = appProvider.tags.map((tag) => tag.name).toList()..sort();
-        
+        final allTags = appProvider.tags.map((tag) => tag.name).toList()
+          ..sort();
+
         // Filter available tags based on search query
-        final availableTags = allTags.where((tag) => 
-          !_selectedTags.contains(tag) && 
-          (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase()))
-        ).toList();
-        
+        final availableTags = allTags
+            .where(
+              (tag) =>
+                  !_selectedTags.contains(tag) &&
+                  (tag.toLowerCase().contains(_tagSearchQuery.toLowerCase())),
+            )
+            .toList();
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.tags,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text(l10n.tags, style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
-            
+
             // Scrollable tags container with constrained height
             Container(
               height: 200, // Fixed height for scrollable area
@@ -496,7 +511,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         l10n.selectedTags,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -518,7 +535,7 @@ class _ShareScreenState extends State<ShareScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    
+
                     // Add new tag
                     Row(
                       children: [
@@ -537,7 +554,8 @@ class _ShareScreenState extends State<ShareScreen> {
                               });
                             },
                             onSubmitted: (value) {
-                              if (value.trim().isNotEmpty && !_selectedTags.contains(value.trim())) {
+                              if (value.trim().isNotEmpty &&
+                                  !_selectedTags.contains(value.trim())) {
                                 setState(() {
                                   _selectedTags.add(value.trim());
                                   _newTagController.clear();
@@ -552,7 +570,8 @@ class _ShareScreenState extends State<ShareScreen> {
                         IconButton(
                           onPressed: () {
                             final value = _newTagController.text.trim();
-                            if (value.isNotEmpty && !_selectedTags.contains(value)) {
+                            if (value.isNotEmpty &&
+                                !_selectedTags.contains(value)) {
                               setState(() {
                                 _selectedTags.add(value);
                                 _newTagController.clear();
@@ -563,13 +582,17 @@ class _ShareScreenState extends State<ShareScreen> {
                           },
                           icon: const Icon(Icons.add),
                           style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onPrimary,
                           ),
                         ),
                       ],
                     ),
-                    
+
                     // Available tags to select from
                     if (availableTags.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -577,7 +600,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         l10n.availableTags,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -648,11 +673,7 @@ class _ShareScreenState extends State<ShareScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      Icon(
-                        Icons.warning,
-                        color: Colors.orange[700],
-                        size: 32,
-                      ),
+                      Icon(Icons.warning, color: Colors.orange[700], size: 32),
                       const SizedBox(height: 8),
                       Text(
                         l10n.webContentExtractionNotSupportedLinux,
@@ -665,9 +686,7 @@ class _ShareScreenState extends State<ShareScreen> {
                       const SizedBox(height: 8),
                       Text(
                         l10n.pleaseUseOtherPlatformsForWebExtraction,
-                        style: TextStyle(
-                          color: Colors.orange[600],
-                        ),
+                        style: TextStyle(color: Colors.orange[600]),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -682,17 +701,24 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _isLinux ? null : () => _extractWebContent(false),
-                    icon: _isExtracting 
+                    onPressed: _isLinux
+                        ? null
+                        : () => _extractWebContent(false),
+                    icon: _isExtracting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.web),
-                    label: Text(_isExtracting ? l10n.extracting : l10n.extractWebContent),
+                    label: Text(
+                      _isExtracting ? l10n.extracting : l10n.extractWebContent,
+                    ),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -701,20 +727,33 @@ class _ShareScreenState extends State<ShareScreen> {
                   width: double.infinity,
                   child: Tooltip(
                     message: l10n.extractContentUsingAiForBetterResults,
-                      child: ElevatedButton.icon(
-                      onPressed: _isLinux ? null : () => _extractWebContent(true),
-                      icon: _isExtracting 
+                    child: ElevatedButton.icon(
+                      onPressed: _isLinux
+                          ? null
+                          : () => _extractWebContent(true),
+                      icon: _isExtracting
                           ? const SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
+                      label: Text(
+                        _isExtracting
+                            ? l10n.extractingWithAi
+                            : l10n.extractWithAi,
+                      ),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        backgroundColor: Theme.of(context).colorScheme.secondary,
-                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.secondary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onSecondary,
                       ),
                     ),
                   ),
@@ -759,8 +798,8 @@ class _ShareScreenState extends State<ShareScreen> {
         _isExtracting = false;
       });
     } catch (e) {
-    setState(() {
-      _error = l10n.failedToPrepareNote(e.toString());
+      setState(() {
+        _error = l10n.failedToPrepareNote(e.toString());
         _isExtracting = false;
       });
     }
@@ -779,14 +818,16 @@ class _ShareScreenState extends State<ShareScreen> {
     try {
       // Show a dialog with the WebView for content extraction
       final result = await _showWebExtractionDialog(_detectedUrl!, useAI);
-      
+
       if (result['success'] == true) {
         final note = result['note'] as Note;
         // Handle downloaded file path - only track it for cleanup, don't add it again if already in note
         if (result['downloadedFilePath'] != null) {
           _downloadedFilePath = result['downloadedFilePath'] as String;
           // Check if the attachment is already in the note's attachmentPaths
-          final attachmentAlreadyInNote = note.attachmentPaths.contains(_downloadedFilePath!);
+          final attachmentAlreadyInNote = note.attachmentPaths.contains(
+            _downloadedFilePath!,
+          );
           if (!attachmentAlreadyInNote) {
             // Only add if not already present
             final noteWithAttachment = note.copyWith(
@@ -822,16 +863,19 @@ class _ShareScreenState extends State<ShareScreen> {
         });
       }
     } catch (e) {
-    setState(() {
-      _error = l10n.errorExtractingWebContent(e.toString());
+      setState(() {
+        _error = l10n.errorExtractingWebContent(e.toString());
         _isExtracting = false;
       });
     }
   }
 
-  Future<Map<String, dynamic>> _showWebExtractionDialog(String url, bool useAI) async {
+  Future<Map<String, dynamic>> _showWebExtractionDialog(
+    String url,
+    bool useAI,
+  ) async {
     final completer = Completer<Map<String, dynamic>>();
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -844,15 +888,14 @@ class _ShareScreenState extends State<ShareScreen> {
         },
       ),
     );
-    
+
     return completer.future;
   }
-
 
   Widget _buildImageExtractionWidget() {
     final l10n = AppLocalizations.of(context)!;
     final fileName = widget.sharedData['fileName'] as String?;
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -886,16 +929,23 @@ class _ShareScreenState extends State<ShareScreen> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () => _extractImageContent(false),
-                    icon: _isExtracting 
+                    icon: _isExtracting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.image),
-                    label: Text(_isExtracting ? l10n.extracting : l10n.extractImageContent),
+                    label: Text(
+                      _isExtracting
+                          ? l10n.extracting
+                          : l10n.extractImageContent,
+                    ),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -906,18 +956,29 @@ class _ShareScreenState extends State<ShareScreen> {
                     message: 'Extract content using AI for better results',
                     child: ElevatedButton.icon(
                       onPressed: () => _extractImageContent(true),
-                      icon: _isExtracting 
+                      icon: _isExtracting
                           ? const SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
+                      label: Text(
+                        _isExtracting
+                            ? l10n.extractingWithAi
+                            : l10n.extractWithAi,
+                      ),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        backgroundColor: Theme.of(context).colorScheme.secondary,
-                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.secondary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onSecondary,
                       ),
                     ),
                   ),
@@ -938,7 +999,7 @@ class _ShareScreenState extends State<ShareScreen> {
   Widget _buildPdfExtractionWidget() {
     final l10n = AppLocalizations.of(context)!;
     final fileName = widget.sharedData['fileName'] as String?;
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -972,16 +1033,21 @@ class _ShareScreenState extends State<ShareScreen> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () => _extractPdfContent(false),
-                    icon: _isExtracting 
+                    icon: _isExtracting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.picture_as_pdf),
-                    label: Text(_isExtracting ? l10n.extracting : l10n.extractPdfContent),
+                    label: Text(
+                      _isExtracting ? l10n.extracting : l10n.extractPdfContent,
+                    ),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -992,18 +1058,29 @@ class _ShareScreenState extends State<ShareScreen> {
                     message: l10n.extractContentUsingAiForBetterResults,
                     child: ElevatedButton.icon(
                       onPressed: () => _extractPdfContent(true),
-                      icon: _isExtracting 
+                      icon: _isExtracting
                           ? const SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.psychology),
-                      label: Text(_isExtracting ? l10n.extractingWithAi : l10n.extractWithAi),
+                      label: Text(
+                        _isExtracting
+                            ? l10n.extractingWithAi
+                            : l10n.extractWithAi,
+                      ),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        backgroundColor: Theme.of(context).colorScheme.secondary,
-                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.secondary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onSecondary,
                       ),
                     ),
                   ),
@@ -1025,7 +1102,7 @@ class _ShareScreenState extends State<ShareScreen> {
     final l10n = AppLocalizations.of(context)!;
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
-    
+
     if (filePath == null) return;
 
     setState(() {
@@ -1036,10 +1113,10 @@ class _ShareScreenState extends State<ShareScreen> {
     try {
       String content;
       List<String> tags = ['shared', 'image'];
-      
+
       if (useAI) {
         // Let AI service handle API key validation
-        
+
         // Extract content using AI
         final result = await AIService.extractContentFromImage(filePath);
         if (result['success'] == true) {
@@ -1053,9 +1130,10 @@ class _ShareScreenState extends State<ShareScreen> {
         content = 'Image shared from ${fileName ?? 'unknown source'}';
       }
 
-        final note = Note(
+      final note = Note(
         id: const Uuid().v4(),
-        title: '${l10n.sharedImage} - ${DateTime.now().toString().substring(0, 16)}',
+        title:
+            '${l10n.sharedImage} - ${DateTime.now().toString().substring(0, 16)}',
         content: content,
         type: NoteType.note,
         createdAt: DateTime.now(),
@@ -1068,7 +1146,7 @@ class _ShareScreenState extends State<ShareScreen> {
         _preparedNote = note;
         _isExtracting = false;
       });
-      
+
       // Initialize the text controllers with the extracted note's data
       _titleController.text = note.title;
       _tagsController.text = note.tags.join(', ');
@@ -1081,12 +1159,11 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-
   Future<void> _extractPdfContent(bool useAI) async {
     final l10n = AppLocalizations.of(context)!;
     final filePath = widget.sharedData['filePath'] as String?;
     final fileName = widget.sharedData['fileName'] as String?;
-    
+
     if (filePath == null) return;
 
     setState(() {
@@ -1113,12 +1190,15 @@ class _ShareScreenState extends State<ShareScreen> {
 
       Note note = result['note'] as Note;
       final relativePath = note.attachmentPaths.first;
-      
+
       if (useAI) {
         // Let AI service handle API key validation
-        
+
         // Extract content using AI - use the saved file path
-        final absolutePath = await FileUtils.getFullFilePath(relativePath, true);
+        final absolutePath = await FileUtils.getFullFilePath(
+          relativePath,
+          true,
+        );
         final aiResult = await AIService.extractContentFromPdf(absolutePath);
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
@@ -1139,7 +1219,7 @@ class _ShareScreenState extends State<ShareScreen> {
         _preparedNote = note;
         _isExtracting = false;
       });
-      
+
       // Initialize the text controllers with the extracted note's data
       _titleController.text = note.title;
       _tagsController.text = note.tags.join(', ');
@@ -1155,17 +1235,17 @@ class _ShareScreenState extends State<ShareScreen> {
   Widget _buildContentPreview() {
     final l10n = AppLocalizations.of(context)!;
     final note = _preparedNote!;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-            Text(
-              '${l10n.title}: ${_titleController.text.isNotEmpty ? _titleController.text : note.title}',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${l10n.content}:',
+        Text(
+          '${l10n.title}: ${_titleController.text.isNotEmpty ? _titleController.text : note.title}',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${l10n.content}:',
           style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: 4),
@@ -1188,13 +1268,15 @@ class _ShareScreenState extends State<ShareScreen> {
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 4),
-          ...note.attachmentPaths.map((path) => Padding(
-            padding: const EdgeInsets.only(left: 8, top: 2),
-            child: Text(
-              '• ${path.split('/').last}',
-              style: Theme.of(context).textTheme.bodySmall,
+          ...note.attachmentPaths.map(
+            (path) => Padding(
+              padding: const EdgeInsets.only(left: 8, top: 2),
+              child: Text(
+                '• ${path.split('/').last}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
-          )),
+          ),
         ],
         if (_selectedTags.isNotEmpty || note.tags.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -1213,9 +1295,9 @@ class _ShareScreenState extends State<ShareScreen> {
     final l10n = AppLocalizations.of(context)!;
 
     if (_action == 'append' && _selectedNote == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.pleaseSelectNoteToAppend)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.pleaseSelectNoteToAppend)));
       return;
     }
 
@@ -1229,8 +1311,12 @@ class _ShareScreenState extends State<ShareScreen> {
       if (_action == 'create') {
         // Create note with edited title and tags
         final finalNote = _preparedNote!.copyWith(
-          title: _titleController.text.isNotEmpty ? _titleController.text : _preparedNote!.title,
-          tags: _selectedTags.isNotEmpty ? _selectedTags.toList() : _preparedNote!.tags,
+          title: _titleController.text.isNotEmpty
+              ? _titleController.text
+              : _preparedNote!.title,
+          tags: _selectedTags.isNotEmpty
+              ? _selectedTags.toList()
+              : _preparedNote!.tags,
         );
         await appProvider.addNote(finalNote);
         // Clear downloaded file path after successful note creation
@@ -1243,12 +1329,15 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
           );
           // Navigate to main screen instead of just popping
-          Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
         // Append to existing note
         final updatedNote = _selectedNote!.copyWith(
-          content: '${_selectedNote!.content}\n\n--- Shared Content ---\n${_preparedNote!.content}',
+          content:
+              '${_selectedNote!.content}\n\n--- Shared Content ---\n${_preparedNote!.content}',
           updatedAt: DateTime.now(),
           attachmentPaths: [
             ..._selectedNote!.attachmentPaths,
@@ -1256,7 +1345,9 @@ class _ShareScreenState extends State<ShareScreen> {
           ],
           tags: [
             ..._selectedNote!.tags,
-            ..._preparedNote!.tags.where((tag) => !_selectedNote!.tags.contains(tag)),
+            ..._preparedNote!.tags.where(
+              (tag) => !_selectedNote!.tags.contains(tag),
+            ),
           ],
         );
 
@@ -1271,26 +1362,24 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
           );
           // Navigate to main screen instead of just popping
-          Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       }
     } catch (e) {
       setState(() {
         _isCreating = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 }
-
 
 class _WebExtractionDialog extends StatefulWidget {
   final String url;
@@ -1312,6 +1401,8 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   late String _status;
   String? _downloadedFilePath;
   bool _isDownloading = false;
+  bool _fileDownloaded = false; // Track if file was successfully downloaded
+  bool _downloadFailed = false; // Track if download failed
 
   @override
   void initState() {
@@ -1333,11 +1424,12 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   Future<void> _checkAndDownloadFile() async {
     try {
       final l10n = AppLocalizations.of(context)!;
-      
+
       // First, check the URL extension for quick detection
       final uri = Uri.parse(widget.url);
       final path = uri.path.toLowerCase();
-      final hasFileExtension = path.endsWith('.pdf') ||
+      final hasFileExtension =
+          path.endsWith('.pdf') ||
           path.endsWith('.doc') ||
           path.endsWith('.docx') ||
           path.endsWith('.xls') ||
@@ -1348,7 +1440,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           path.endsWith('.rar') ||
           path.endsWith('.tar') ||
           path.endsWith('.gz');
-      
+
       // Check content-type header to detect files even if URL has no extension
       String? detectedContentType;
       if (!hasFileExtension) {
@@ -1358,15 +1450,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
         try {
           final headResponse = await http.head(Uri.parse(widget.url));
-          detectedContentType = headResponse.headers['content-type']?.toLowerCase();
+          detectedContentType = headResponse.headers['content-type']
+              ?.toLowerCase();
         } catch (e) {
           // If HEAD fails, proceed with webview
         }
       }
-      
+
       // Check if it's a binary/static file based on extension or content-type
       final contentType = detectedContentType ?? '';
-      final isPdfOrStaticFile = hasFileExtension || 
+      final isPdfOrStaticFile =
+          hasFileExtension ||
           contentType.startsWith('application/pdf') ||
           contentType.startsWith('application/msword') ||
           contentType.startsWith('application/vnd.ms-word') ||
@@ -1377,66 +1471,82 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           contentType.startsWith('application/x-rar') ||
           contentType.startsWith('application/x-tar') ||
           contentType.startsWith('application/gzip') ||
-          (contentType.startsWith('application/') && 
-           !contentType.startsWith('application/json') &&
-           !contentType.startsWith('application/xml') &&
-           !contentType.startsWith('application/javascript'));
-      
+          (contentType.startsWith('application/') &&
+              !contentType.startsWith('application/json') &&
+              !contentType.startsWith('application/xml') &&
+              !contentType.startsWith('application/javascript'));
+
       if (isPdfOrStaticFile) {
         // Download the file
         setState(() {
           _isDownloading = true;
           _status = 'Downloading file...';
         });
-        
+
         try {
           final response = await http.get(Uri.parse(widget.url));
-          
+
           if (response.statusCode == 200) {
             // Get content type from actual response headers
-            final responseContentType = response.headers['content-type']?.toLowerCase() ?? contentType;
-            final isBinaryContent = responseContentType.startsWith('application/pdf') ||
+            final responseContentType =
+                response.headers['content-type']?.toLowerCase() ?? contentType;
+            final isBinaryContent =
+                responseContentType.startsWith('application/pdf') ||
                 responseContentType.startsWith('application/msword') ||
                 responseContentType.startsWith('application/vnd.ms-word') ||
                 responseContentType.startsWith('application/vnd.ms-excel') ||
-                responseContentType.startsWith('application/vnd.ms-powerpoint') ||
-                responseContentType.startsWith('application/vnd.openxmlformats') ||
+                responseContentType.startsWith(
+                  'application/vnd.ms-powerpoint',
+                ) ||
+                responseContentType.startsWith(
+                  'application/vnd.openxmlformats',
+                ) ||
                 responseContentType.startsWith('application/zip') ||
                 responseContentType.startsWith('application/x-rar') ||
                 responseContentType.startsWith('application/x-tar') ||
                 responseContentType.startsWith('application/gzip') ||
-                (responseContentType.startsWith('application/') && 
-                 !responseContentType.startsWith('application/json') &&
-                 !responseContentType.startsWith('application/xml') &&
-                 !responseContentType.startsWith('application/javascript')) ||
-                !responseContentType.startsWith('text/') && 
-                !responseContentType.startsWith('image/') &&
-                !responseContentType.startsWith('video/');
-            
+                (responseContentType.startsWith('application/') &&
+                    !responseContentType.startsWith('application/json') &&
+                    !responseContentType.startsWith('application/xml') &&
+                    !responseContentType.startsWith(
+                      'application/javascript',
+                    )) ||
+                !responseContentType.startsWith('text/') &&
+                    !responseContentType.startsWith('image/') &&
+                    !responseContentType.startsWith('video/');
+
             if (isBinaryContent || isPdfOrStaticFile) {
               // Extract filename from URL or Content-Disposition header
               String fileName = path.split('/').last;
               if (fileName.isEmpty || !fileName.contains('.')) {
                 // Try to get filename from Content-Disposition header
-                final contentDisposition = response.headers['content-disposition'];
+                final contentDisposition =
+                    response.headers['content-disposition'];
                 if (contentDisposition != null) {
                   // Try to extract filename from Content-Disposition header
                   // Pattern: filename="..." or filename=...
-                  final filenameRegex = RegExp(r'filename\s*=\s*(?:"([^"]+)"|([^;]+))');
-                  final filenameMatch = filenameRegex.firstMatch(contentDisposition);
+                  final filenameRegex = RegExp(
+                    r'filename\s*=\s*(?:"([^"]+)"|([^;]+))',
+                  );
+                  final filenameMatch = filenameRegex.firstMatch(
+                    contentDisposition,
+                  );
                   if (filenameMatch != null) {
-                    final matchedFilename = filenameMatch.group(1) ?? filenameMatch.group(2);
-                    if (matchedFilename != null && matchedFilename.trim().isNotEmpty) {
+                    final matchedFilename =
+                        filenameMatch.group(1) ?? filenameMatch.group(2);
+                    if (matchedFilename != null &&
+                        matchedFilename.trim().isNotEmpty) {
                       fileName = matchedFilename.trim();
                     }
                   }
                 }
-                
+
                 // Fallback filename based on content type
                 if (fileName.isEmpty || !fileName.contains('.')) {
                   if (responseContentType.contains('pdf')) {
                     fileName = 'document.pdf';
-                  } else if (responseContentType.contains('msword') || responseContentType.contains('wordprocessingml')) {
+                  } else if (responseContentType.contains('msword') ||
+                      responseContentType.contains('wordprocessingml')) {
                     fileName = 'document.doc';
                   } else if (responseContentType.contains('spreadsheetml')) {
                     fileName = 'document.xls';
@@ -1451,7 +1561,8 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               // Determine the most reliable MIME type from response header or bytes
               final currentExt = FileTypeUtils.getFileExtension(fileName);
               String effectiveMime = responseContentType;
-              if (effectiveMime.isEmpty || effectiveMime.startsWith('application/octet-stream')) {
+              if (effectiveMime.isEmpty ||
+                  effectiveMime.startsWith('application/octet-stream')) {
                 // Try to detect from content if header is missing/generic
                 effectiveMime = FileTypeUtils.getMimeTypeForBytes(
                   response.bodyBytes,
@@ -1459,10 +1570,15 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 );
               }
               // Correct or add extension if needed
-              final expectedExt = FileTypeUtils.getExtensionForMime(effectiveMime);
+              final expectedExt = FileTypeUtils.getExtensionForMime(
+                effectiveMime,
+              );
               if (currentExt.isEmpty && expectedExt.isNotEmpty) {
                 fileName = '$fileName.$expectedExt';
-              } else if (currentExt.isNotEmpty && expectedExt.isNotEmpty && expectedExt != 'bin' && currentExt != expectedExt) {
+              } else if (currentExt.isNotEmpty &&
+                  expectedExt.isNotEmpty &&
+                  expectedExt != 'bin' &&
+                  currentExt != expectedExt) {
                 // Replace the existing extension with the expected one
                 final base = fileName.substring(0, fileName.lastIndexOf('.'));
                 fileName = '$base.$expectedExt';
@@ -1473,13 +1589,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 response.bodyBytes,
                 fileName,
               );
-              
-              setState(() {
-                _downloadedFilePath = relativePath;
-                _isDownloading = false;
-                _status = 'File downloaded successfully';
-              });
-              
+
               // Create a note with the downloaded file as attachment
               final note = Note(
                 id: const Uuid().v4(),
@@ -1491,10 +1601,19 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 attachmentPaths: [relativePath],
                 tags: ['shared', 'download', 'file'],
               );
-              
+
+              // Mark file as downloaded and close dialog immediately
+              setState(() {
+                _downloadedFilePath = relativePath;
+                _fileDownloaded = true;
+                _isDownloading = false;
+                _isLoading = false;
+                _status = 'File downloaded successfully';
+              });
+
               // Return the result after a short delay to show success message
               await Future.delayed(const Duration(milliseconds: 500));
-              
+
               widget.onComplete({
                 'success': true,
                 'note': note,
@@ -1503,16 +1622,37 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               });
               return;
             }
+            // If detected as file but content is not binary, fall through to webview
+          } else {
+            // HTTP status code is not 200, treat as download failure
+            setState(() {
+              _downloadFailed = true;
+              _isDownloading = false;
+              _isLoading = false;
+              _status = 'Download failed: HTTP ${response.statusCode}';
+            });
+            widget.onComplete({
+              'success': false,
+              'error': l10n.errorDownloading('HTTP ${response.statusCode}', widget.url),
+            });
+            return;
           }
         } catch (e) {
-          // If download fails, fall through to webview
+          // If download fails, signal error and don't show webview
           setState(() {
+            _downloadFailed = true;
             _isDownloading = false;
-            _status = l10n.loadingWebPage;
+            _isLoading = false;
+            _status = 'Download failed: ${e.toString()}';
           });
+          widget.onComplete({
+            'success': false,
+            'error': l10n.errorDownloading(e.toString(), widget.url),
+          });
+          return;
         }
       }
-      
+
       // If not a static file or download failed, proceed with webview
       // The webview will be shown in the build method
     } catch (e) {
@@ -1528,7 +1668,47 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
+    // If file was successfully downloaded, don't show webview - dialog will close via onComplete
+    if (_fileDownloaded) {
+      return Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(_status),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // If download failed, don't show webview - dialog will close via onComplete with error
+    if (_downloadFailed) {
+      return Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _status,
+                style: TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     // Show downloading status if downloading
     if (_isDownloading) {
       return Dialog(
@@ -1546,7 +1726,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         ),
       );
     }
-    
+
     return Dialog(
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -1570,9 +1750,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   Expanded(
                     child: Text(
                       l10n.extractingWebContent,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: Colors.white),
                     ),
                   ),
                   IconButton(
@@ -1580,7 +1760,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                       // Clean up downloaded file if exists
                       if (_downloadedFilePath != null) {
                         try {
-                          final absolutePath = await FileUtils.getFullFilePath(_downloadedFilePath!, true);
+                          final absolutePath = await FileUtils.getFullFilePath(
+                            _downloadedFilePath!,
+                            true,
+                          );
                           final file = File(absolutePath);
                           if (await file.exists()) {
                             await file.delete();
@@ -1604,157 +1787,127 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  if (_isLoading) const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   const SizedBox(width: 8),
                   Expanded(child: Text(_status)),
                 ],
               ),
             ),
-             // WebView
-             Expanded(
-               child: InAppWebView(
-                 initialUrlRequest: URLRequest(url: WebUri(widget.url)),
-                 shouldOverrideUrlLoading: (controller, navigationAction) async {
-                   final url = navigationAction.request.url;
-                   if (url == null) return NavigationActionPolicy.CANCEL;
-                   
-                   final scheme = url.scheme.toLowerCase();
-                   
-                   // Allow only safe URL schemes
-                   if (['http', 'https', 'data', 'about', 'file', 'javascript'].contains(scheme)) {
-                     return NavigationActionPolicy.ALLOW;
-                   }
-                   
-                   // Reject all other schemes (like app://, intent://, etc.)
-                   return NavigationActionPolicy.CANCEL;
-                 },
+            // WebView
+            Expanded(
+              child: InAppWebView(
+                initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+                shouldOverrideUrlLoading: (controller, navigationAction) async {
+                  final url = navigationAction.request.url;
+                  if (url == null) return NavigationActionPolicy.CANCEL;
+
+                  final scheme = url.scheme.toLowerCase();
+
+                  // Allow only safe URL schemes
+                  if ([
+                    'http',
+                    'https',
+                    'data',
+                    'about',
+                    'file',
+                    'javascript',
+                  ].contains(scheme)) {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+
+                  // Reject all other schemes (like app://, intent://, etc.)
+                  return NavigationActionPolicy.CANCEL;
+                },
                 onLoadStart: (controller, url) {
                   setState(() {
                     _status = l10n.loadingWebPage;
-                     _isLoading = true;
-                   });
-                 },
+                    _isLoading = true;
+                  });
+                },
                 onLoadStop: (controller, url) async {
                   setState(() {
                     _status = l10n.extractingContent;
                   });
-                  
+
                   try {
-                    // Load Readability.js from assets
-                    final jsLib = await rootBundle.loadString('assets/scripts/Readability.min.js');
-                    
-                    // Inject Readability.js
-                    await controller.evaluateJavascript(source: jsLib);
-                    
-                    // Extract content using Readability
-                    final result = await controller.evaluateJavascript(source: '''
-                      (function() {
-                        try {
-                          const article = new Readability(document).parse();
-                          if (article) {
-                            return {
-                              title: article.title || document.title || '',
-                              content: article.content || '',
-                              textContent: article.textContent || '',
-                              excerpt: article.excerpt || ''
-                            };
-                          }
-                          return null;
-                        } catch (e) {
-                          return { error: e.toString() };
-                        }
-                      })();
-                    ''');
-                    
-                    if (result != null && result is Map) {
-                      if (result.containsKey('error')) {
-                        widget.onComplete({
-                          'success': false,
-                          'error': l10n.readabilityExtractionFailed(result['error'].toString()),
-                        });
-                        return;
-                      }
-                      
-                      final extractedTitle = result['title']?.toString();
-                      final extractedContent = result['content']?.toString();
-
-                      if (extractedContent == null || extractedContent.isEmpty) {
-                        widget.onComplete({
-                          'success': false,
-                          'error': l10n.failedToExtractContentFromWebPage,
-                        });
-                        return;
-                      }
-
-                      // Process content based on extraction method
-                      String finalContent;
-                      List<String> tags = ['shared', 'web', 'extracted'];
-                      
-                      if (widget.useAI) {
-                        setState(() {
-                          _status = l10n.checkingApiKey;
-                        });
-                        
-                        // Let AI service handle API key validation
-                        
-                        setState(() {
-                          _status = l10n.processingWithAi;
-                        });
-                        
-                        // Convert HTML to markdown first
-                        final markdownContent = convert(extractedContent);
-                        
-                        // Send to AI for better extraction
-                        final aiResult = await AIService.extractContentFromText(
-                          markdownContent,
-                          'web_content',
-                          extractedTitle ?? 'Web Content',
+                    final article =
+                        await WebContentExtractionService.extractFromController(
+                          controller,
                         );
-                        
-                        if (aiResult['success'] == true) {
-                          finalContent = aiResult['content'] ?? markdownContent;
-                          tags.add('ai_processed');
-                        } else {
-                          // Fallback to markdown if AI fails
-                          finalContent = markdownContent;
-                        }
-                      } else {
-                        // Convert HTML to markdown
-                        finalContent = convert(extractedContent);
-                        tags.add('markdown');
-                      }
+                    final extractedTitle = article.title.isNotEmpty
+                        ? article.title
+                        : null;
+                    final extractedContent = article.htmlContent;
 
-                      final note = Note(
-                        id: const Uuid().v4(),
-                        title: (extractedTitle?.isNotEmpty == true) 
-                            ? extractedTitle! 
-                            : 'Web Content - ${DateTime.now().toString().substring(0, 16)}',
-                        content: finalContent,
-                        type: NoteType.note,
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                        tags: tags,
-                      );
-
-                      widget.onComplete({
-                        'success': true,
-                        'note': note,
-                        'contentType': 'web',
-                        'preview': (extractedTitle?.isNotEmpty == true) 
-                            ? extractedTitle! 
-                            : 'Web content extracted from ${widget.url}',
-                        'url': widget.url,
-                      });
-                    } else {
+                    if (extractedContent.isEmpty) {
                       widget.onComplete({
                         'success': false,
                         'error': l10n.failedToExtractContentFromWebPage,
                       });
+                      return;
                     }
+
+                    String finalContent;
+                    List<String> tags = ['shared', 'web', 'extracted'];
+
+                    if (widget.useAI) {
+                      setState(() {
+                        _status = l10n.checkingApiKey;
+                      });
+
+                      setState(() {
+                        _status = l10n.processingWithAi;
+                      });
+
+                      final markdownContent = convert(extractedContent);
+                      final aiResult = await AIService.extractContentFromText(
+                        markdownContent,
+                        'web_content',
+                        extractedTitle ?? 'Web Content',
+                      );
+
+                      if (aiResult['success'] == true) {
+                        finalContent = aiResult['content'] ?? markdownContent;
+                        tags.add('ai_processed');
+                      } else {
+                        finalContent = markdownContent;
+                      }
+                    } else {
+                      finalContent = convert(extractedContent);
+                      tags.add('markdown');
+                    }
+
+                    final note = Note(
+                      id: const Uuid().v4(),
+                      title: (extractedTitle?.isNotEmpty == true)
+                          ? extractedTitle!
+                          : 'Web Content - ${DateTime.now().toString().substring(0, 16)}',
+                      content: finalContent,
+                      type: NoteType.note,
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                      tags: tags,
+                    );
+
+                    widget.onComplete({
+                      'success': true,
+                      'note': note,
+                      'contentType': 'web',
+                      'preview': (extractedTitle?.isNotEmpty == true)
+                          ? extractedTitle!
+                          : 'Web content extracted from ${widget.url}',
+                      'url': widget.url,
+                    });
+                  } on ReadabilityExtractionException catch (e) {
+                    widget.onComplete({
+                      'success': false,
+                      'error': l10n.readabilityExtractionFailed(e.message),
+                    });
                   } catch (e) {
                     widget.onComplete({
                       'success': false,
@@ -1773,7 +1926,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   allowContentAccess: false,
                   allowFileAccessFromFileURLs: false,
                 ),
-               ),
+              ),
             ),
           ],
         ),

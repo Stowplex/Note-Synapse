@@ -11,9 +11,13 @@ void main() {
     late DatabaseService databaseService;
 
     setUp(() async {
-      conversationService = ConversationService();
-      databaseService = DatabaseService();
+      databaseService = DatabaseService.createNew();
+      conversationService = ConversationService.createForTesting(databaseService);
       await databaseService.clearAllData();
+    });
+
+    tearDown(() async {
+      await databaseService.close();
     });
 
     group('Basic CRUD Operations', () {
@@ -649,7 +653,7 @@ void main() {
     });
 
     group('Selected node compilation', () {
-      Future<_SelectionTestData> _buildSelectionScenario() async {
+      Future<_SelectionTestData> buildSelectionScenario() async {
         final originalConversation = await conversationService
             .createConversation(title: 'Original Scenario');
 
@@ -710,7 +714,7 @@ void main() {
       }
 
       test('buildInteractionSnippets returns only selected nodes', () async {
-        final data = await _buildSelectionScenario();
+        final data = await buildSelectionScenario();
 
         final snippets = await conversationService.buildInteractionSnippets(
           existingTree: data.tree,
@@ -729,7 +733,7 @@ void main() {
       test(
         'createConversationFromSelectedNodes preserves selected interactions',
         () async {
-          final data = await _buildSelectionScenario();
+          final data = await buildSelectionScenario();
 
           final newConversation = await conversationService
               .createConversationFromSelectedNodes(
@@ -752,7 +756,7 @@ void main() {
       test(
         'prepareForkContextSelection skips prompt when contexts equivalent',
         () async {
-          final data = await _buildSelectionScenario();
+          final data = await buildSelectionScenario();
 
           final selection = await conversationService
               .prepareForkContextSelection(data.aiA.id);
@@ -765,7 +769,7 @@ void main() {
       test(
         'formatInteractionSnippets includes initial context for level 1 nodes',
         () async {
-          final data = await _buildSelectionScenario();
+          final data = await buildSelectionScenario();
 
           final snippets = await conversationService.buildInteractionSnippets(
             existingTree: data.tree,
@@ -784,7 +788,7 @@ void main() {
       test(
         'formatInteractionSnippets does not add initial context for deeper nodes',
         () async {
-          final data = await _buildSelectionScenario();
+          final data = await buildSelectionScenario();
 
           final deeperNode = data.tree.nodes.values.firstWhere(
             (node) => node.messageId != null && node.level > 1,

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/services.dart';
@@ -72,6 +71,10 @@ class AiToolRuntime {
   InAppWebViewController? _controller;
   UserAppRuntimeBridge? _bridge;
   Completer<void>? _loadCompleter;
+  
+  // Console log collection for invoke operations
+  bool _isCollectingConsoleLogs = false;
+  final List<String> _consoleLogBuffer = [];
 
   Future<void> _ensureRunning() async {
     if (!UserAppService.isWebViewSupported()) {
@@ -79,7 +82,7 @@ class AiToolRuntime {
     }
 
     if (_headlessWebView != null) {
-      final isRunning = await _headlessWebView!.isRunning();
+      final isRunning = _headlessWebView!.isRunning();
       if (isRunning) {
         return _loadCompleter?.future ?? Future.value();
       }
@@ -126,7 +129,14 @@ class AiToolRuntime {
             .split('.')
             .last
             .toUpperCase();
-        LoggerService.debug('[AiTool.${bundle.app.name}] $levelLabel: ${consoleMessage.message}');
+        final logMessage = '[$levelLabel] ${consoleMessage.message}';
+        
+        // If we're collecting logs for an invoke operation, add to buffer
+        if (_isCollectingConsoleLogs) {
+          _consoleLogBuffer.add(logMessage);
+        }
+        
+        LoggerService.debug('[AiTool.${bundle.app.name}] $logMessage');
       },
       onLoadResourceWithCustomScheme: (controller, request) async {
         final scheme = request.url.scheme.toLowerCase();
@@ -169,34 +179,77 @@ class AiToolRuntime {
       throw Exception('AI tool runtime controller not available for ${bundle.app.name}');
     }
 
-    final jsResult = await controller.callAsyncJavaScript(
-      functionBody:
-          'return window.Synapse && window.Synapse.tool && window.Synapse.tool.invoke ? window.Synapse.tool.invoke(toolName, params) : null;',
-      arguments: {
-        'toolName': toolName,
-        'params': params,
-      },
-    );
-
-    final value = jsResult?.value;
-    if (value == null) {
-      return 'null';
-    }
-    if (value is String) {
-      return value;
-    }
+    // Start collecting console logs
+    _isCollectingConsoleLogs = true;
+    _consoleLogBuffer.clear();
+    final startTime = DateTime.now();
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final endpoint = 'AI Tool Invoke: ${bundle.app.name}.$toolName';
 
     try {
-      return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return value.toString();
+      final jsResult = await controller.callAsyncJavaScript(
+        functionBody:
+            'return window.Synapse && window.Synapse.tool && window.Synapse.tool.invoke ? window.Synapse.tool.invoke(toolName, params) : null;',
+        arguments: {
+          'toolName': toolName,
+          'params': params,
+        },
+      );
+
+      final value = jsResult?.value;
+      final result = value == null
+          ? 'null'
+          : value is String
+              ? value
+              : (() {
+                  try {
+                    return const JsonEncoder.withIndent('  ').convert(value);
+                  } catch (_) {
+                    return value.toString();
+                  }
+                })();
+
+      // Stop collecting and log all console messages as one entry
+      _isCollectingConsoleLogs = false;
+      final duration = DateTime.now().difference(startTime);
+      
+      if (_consoleLogBuffer.isNotEmpty) {
+        final concatenatedLogs = _consoleLogBuffer.join('\n');
+        LoggerService.logAiConsole(
+          consoleOutput: concatenatedLogs,
+          endpoint: endpoint,
+          requestId: requestId,
+          duration: duration,
+        );
+      }
+      
+      _consoleLogBuffer.clear();
+      return result;
+    } catch (e) {
+      // Stop collecting even on error
+      _isCollectingConsoleLogs = false;
+      final duration = DateTime.now().difference(startTime);
+      
+      // Log console messages if any were collected
+      if (_consoleLogBuffer.isNotEmpty) {
+        final concatenatedLogs = _consoleLogBuffer.join('\n');
+        LoggerService.logAiConsole(
+          consoleOutput: concatenatedLogs,
+          endpoint: endpoint,
+          requestId: requestId,
+          duration: duration,
+        );
+      }
+      
+      _consoleLogBuffer.clear();
+      rethrow;
     }
   }
 
   Future<void> dispose() async {
     try {
       if (_headlessWebView != null) {
-        if (await _headlessWebView!.isRunning()) {
+        if (_headlessWebView!.isRunning()) {
           await _headlessWebView!.dispose();
         }
       }
@@ -378,28 +431,116 @@ class AiToolService {
     return null;
   }
 
-  static Map<String, dynamic> _schemaFromSpec(YamlMap spec) {
+  static Map<String, dynamic> _schemaFromSpec(dynamic spec) {
+    if (spec is YamlMap) {
+      return _schemaFromYamlMap(spec);
+    } else if (spec is Map) {
+      return _schemaFromYamlMap(YamlMap.wrap(spec));
+    } else if (spec is String) {
+      return _schemaFromType(spec);
+    } else if (spec != null) {
+      return _schemaFromType(spec.toString());
+    }
+    return _schemaFromType('string');
+  }
+
+  static Map<String, dynamic> _schemaFromYamlMap(YamlMap spec) {
     final typeValue = spec['type']?.toString() ?? 'string';
     final schema = _schemaFromType(typeValue);
 
-    if (spec['description'] != null) {
-      schema['description'] = spec['description'].toString();
+    void copyKey(String yamlKey, {String? targetKey}) {
+      if (spec.containsKey(yamlKey)) {
+        final value = spec[yamlKey];
+        if (value != null) {
+          schema[targetKey ?? yamlKey] = value;
+        }
+      }
     }
 
-    if (spec['enum'] is YamlList) {
-      schema['enum'] = List<dynamic>.from(spec['enum']);
+    copyKey('description');
+    copyKey('default');
+    copyKey('title');
+    copyKey('format');
+    copyKey('pattern');
+    copyKey('minimum');
+    copyKey('maximum');
+    copyKey('exclusiveMinimum');
+    copyKey('exclusiveMaximum');
+    copyKey('multipleOf');
+    copyKey('minLength');
+    copyKey('maxLength');
+    copyKey('minItems');
+    copyKey('maxItems');
+    copyKey('uniqueItems');
+    copyKey('examples');
+    copyKey('const');
+    copyKey('deprecated');
+
+    final enumValue = spec['enum'];
+    if (enumValue is YamlList) {
+      schema['enum'] = List<dynamic>.from(enumValue);
+    } else if (enumValue is List) {
+      schema['enum'] = List<dynamic>.from(enumValue);
     }
 
-    if (schema['type'] == 'array' && spec['items'] != null) {
-      final items = spec['items'];
-      if (items is YamlMap) {
-        schema['items'] = _schemaFromSpec(items);
-      } else if (items is String) {
-        schema['items'] = _schemaFromType(items);
+    if (schema['type'] == 'array' && spec.containsKey('items')) {
+      schema['items'] = _schemaFromItemsSpec(spec['items']);
+    }
+
+    if (schema['type'] == 'object') {
+      final propertiesSpec = spec['properties'];
+      final requiredSet = <String>{};
+
+      if (propertiesSpec != null) {
+        final nestedSchema = _buildParameterSchema(propertiesSpec);
+        schema['properties'] =
+            Map<String, dynamic>.from(nestedSchema['properties'] ?? <String, dynamic>{});
+
+        final nestedRequired = nestedSchema['required'];
+        if (nestedRequired is List) {
+          requiredSet.addAll(nestedRequired.map((e) => e.toString()));
+        }
+      } else {
+        schema['properties'] = schema['properties'] ?? <String, dynamic>{};
+      }
+
+      final explicitRequired = spec['required'];
+      if (explicitRequired is YamlList) {
+        requiredSet.addAll(explicitRequired.map((e) => e.toString()));
+      } else if (explicitRequired is List) {
+        requiredSet.addAll(explicitRequired.map((e) => e.toString()));
+      }
+
+      if (requiredSet.isNotEmpty) {
+        schema['required'] = requiredSet.toList();
+      } else {
+        schema.remove('required');
+      }
+
+      if (spec.containsKey('additionalProperties')) {
+        final additional = spec['additionalProperties'];
+        if (additional is bool || additional == null) {
+          schema['additionalProperties'] = additional;
+        } else if (additional is YamlMap || additional is Map) {
+          schema['additionalProperties'] = _schemaFromSpec(additional);
+        } else if (additional is String) {
+          schema['additionalProperties'] = _schemaFromType(additional);
+        }
       }
     }
 
     return schema;
+  }
+
+  static dynamic _schemaFromItemsSpec(dynamic items) {
+    if (items is YamlMap || items is Map || items is String) {
+      return _schemaFromSpec(items);
+    } else if (items is YamlList) {
+      return items.map((item) => _schemaFromSpec(item)).toList();
+    } else if (items is List) {
+      return items.map((item) => _schemaFromSpec(item)).toList();
+    }
+    return _schemaFromType('string');
   }
 
   static Map<String, dynamic> _schemaFromType(String typeName) {

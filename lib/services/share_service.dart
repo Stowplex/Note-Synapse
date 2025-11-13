@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +26,61 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
 class ShareService {
+  static const MethodChannel _channel = MethodChannel('com.github.kkspeed/share');
+  static bool _initialized = false;
+  static bool _waitingForNavigatorFrame = false;
+  static bool _isPresentingShareScreen = false;
+  static final List<Map<String, dynamic>> _pendingSharedQueue = <Map<String, dynamic>>[];
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final _ShareLifecycleObserver _lifecycleObserver = _ShareLifecycleObserver();
+  static bool _observerAttached = false;
+
+  static Future<void> init([AppProvider? appProvider]) async {
+    if (_initialized) {
+      final hasNew = await _fetchAndQueueSharedContent();
+      if (hasNew || _pendingSharedQueue.isNotEmpty) {
+        _handlePendingQueue();
+      }
+      return;
+    }
+
+    _initialized = true;
+    _attachLifecycleObserver();
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'newSharedContent') {
+        await handleSharedContent();
+      }
+    });
+
+    final hasNew = await _fetchAndQueueSharedContent();
+    if (hasNew || _pendingSharedQueue.isNotEmpty) {
+      _handlePendingQueue();
+    }
+  }
+
+  static Future<void> handleSharedContent([AppProvider? appProvider]) async {
+    final hasNew = await _fetchAndQueueSharedContent();
+    if (hasNew || _pendingSharedQueue.isNotEmpty) {
+      _handlePendingQueue();
+    }
+  }
+
+  static void _attachLifecycleObserver() {
+    if (_observerAttached) {
+      return;
+    }
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _observerAttached = true;
+  }
+
+  static void _handleAppResumed() {
+    Future<void>(() async {
+      final hasNew = await _fetchAndQueueSharedContent();
+      if (hasNew || _pendingSharedQueue.isNotEmpty) {
+        _handlePendingQueue();
+      }
+    });
+  }
   
   /// Generates markdown text from a list of notes with optional sub-notes and linked notes
   static Future<String> generateMarkdownText({
@@ -144,7 +198,7 @@ class ShareService {
           ext: 'pdf',
           mimeType: MimeType.pdf,
         );
-      } else if (Platform.isAndroid || Platform.isIOS) {
+      } else if (Platform.isAndroid) {
         final tempFile = cacheFile!;
         await Share.shareXFiles(
           [
@@ -156,6 +210,50 @@ class ShareService {
           ],
           subject: l10n.shareDialogTitle,
         );
+      } else if (Platform.isIOS) {
+        // On iOS, try to use save dialog first, then fall back to share sheet if needed
+        final tempFile = cacheFile!;
+        try {
+          // Try to use file picker save dialog (if supported on iOS)
+          final result = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: const ['pdf'],
+          );
+
+          if (result != null) {
+            // User selected a location, save the file
+            final destination = File(result);
+            await destination.writeAsBytes(pdfBytes, flush: true);
+          } else {
+            // User cancelled save dialog, show share sheet instead
+            // Share sheet allows saving to Files app and sharing to other apps
+            await Share.shareXFiles(
+              [
+                XFile(
+                  tempFile.path,
+                  mimeType: 'application/pdf',
+                  name: fileName,
+                ),
+              ],
+              subject: l10n.shareDialogTitle,
+            );
+          }
+        } catch (e) {
+          // If save dialog is not supported or fails, use share sheet
+          // Share sheet is the standard iOS way and allows saving to Files app
+          await Share.shareXFiles(
+            [
+              XFile(
+                tempFile.path,
+                mimeType: 'application/pdf',
+                name: fileName,
+              ),
+            ],
+            subject: l10n.shareDialogTitle,
+          );
+        }
       } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
         final result = await FilePicker.platform.saveFile(
           dialogTitle: l10n.selectFileLocation,
@@ -895,6 +993,154 @@ class ShareService {
         'success': false,
         'error': 'Error processing PDF content: $e',
       };
+    }
+  }
+
+  static Future<bool> _fetchAndQueueSharedContent() async {
+    try {
+      final rawShared = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
+      if (rawShared == null || rawShared.isEmpty) {
+        return false;
+      }
+
+      final normalized = _normalizeSharedData(rawShared);
+      LoggerService.info('ShareService received shared content: ${normalized.keys}');
+      _pendingSharedQueue.add(normalized);
+      return true;
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error retrieving shared content: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  static Map<String, dynamic> _normalizeSharedData(Map<dynamic, dynamic> input) {
+    final result = <String, dynamic>{};
+    input.forEach((key, value) {
+      if (key == null) {
+        return;
+      }
+      final stringKey = key.toString();
+      if (value is Map) {
+        result[stringKey] = _normalizeSharedData(value.cast<dynamic, dynamic>());
+      } else if (value is List) {
+        result[stringKey] = value
+            .map((item) => item is Map
+                ? _normalizeSharedData(item.cast<dynamic, dynamic>())
+                : item)
+            .toList();
+      } else {
+        result[stringKey] = value;
+      }
+    });
+    return result;
+  }
+
+  static void _handlePendingQueue() {
+    if (_pendingSharedQueue.isEmpty) {
+      return;
+    }
+    if (Platform.isIOS) {
+      _scheduleNavigatorCheck(forceFrame: true);
+    } else {
+      final presented = _tryPresentPendingSharedContent();
+      if (!presented) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+    }
+  }
+
+  static void _scheduleNavigatorCheck({bool forceFrame = false}) {
+    if (_waitingForNavigatorFrame) {
+      return;
+    }
+    if (_pendingSharedQueue.isEmpty) {
+      return;
+    }
+    _waitingForNavigatorFrame = true;
+    if (forceFrame) {
+      WidgetsBinding.instance.scheduleFrame();
+    }
+    final navigator = navigatorKey.currentState;
+    final bool needsDelay = navigator == null || !navigator.mounted;
+
+    void callback(_) {
+      _waitingForNavigatorFrame = false;
+      _tryPresentPendingSharedContent();
+    }
+
+    if (needsDelay) {
+      Future.microtask(() => callback(null));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback(callback);
+    }
+  }
+
+  static bool _tryPresentPendingSharedContent({bool allowReschedule = true}) {
+    if (_pendingSharedQueue.isEmpty) {
+      return false;
+    }
+
+    final navigator = navigatorKey.currentState;
+    if (navigator == null || !navigator.mounted) {
+      if (allowReschedule) {
+        _scheduleNavigatorCheck(forceFrame: true);
+      }
+      return false;
+    }
+
+    if (_isPresentingShareScreen) {
+      return true;
+    }
+
+    final sharedData = _pendingSharedQueue.removeAt(0);
+
+    late final Future<dynamic> navigationFuture;
+    try {
+      navigationFuture = navigator.pushNamed('/share', arguments: sharedData);
+    } catch (error, stackTrace) {
+      LoggerService.error(
+        'ShareService failed to present share screen: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _isPresentingShareScreen = false;
+      _pendingSharedQueue.insert(0, sharedData);
+      _handlePendingQueue();
+      return false;
+    }
+
+    _isPresentingShareScreen = true;
+
+    navigationFuture.whenComplete(() {
+      _isPresentingShareScreen = false;
+      if (_pendingSharedQueue.isNotEmpty) {
+        _handlePendingQueue();
+      }
+    });
+    navigationFuture.catchError((error, stackTrace) {
+      LoggerService.error(
+        'ShareService encountered navigation error: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _isPresentingShareScreen = false;
+      _pendingSharedQueue.insert(0, sharedData);
+      _handlePendingQueue();
+    });
+
+    return true;
+  }
+}
+
+class _ShareLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ShareService._handleAppResumed();
     }
   }
 }

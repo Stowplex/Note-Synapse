@@ -15,9 +15,12 @@ import '../services/mcp_tool_integration_service.dart';
 import '../services/ai_tool_service.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
+import '../services/prompts/prompt_configuration_service.dart';
+import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../utils/file_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -706,11 +709,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         final messageTimeContext = SystemPromptBuilder.formatTimestamp(
           message.timestamp,
         );
+        final perMessageAddOn = PromptConfigurationService.instance.getValue(
+          ChatPromptConfiguration.perMessageAddendumId,
+        );
+        final buffer = StringBuffer()
+          ..write('Message created at: $messageTimeContext');
+        if (perMessageAddOn != null && perMessageAddOn.trim().isNotEmpty) {
+          buffer
+            ..writeln()
+            ..write(perMessageAddOn.trim());
+        }
         conversationMessages.add(
-          PromptMessage(
-            role: PromptRole.user,
-            content: 'Message created at: $messageTimeContext',
-          ),
+          PromptMessage(role: PromptRole.user, content: buffer.toString()),
         );
       }
 
@@ -784,15 +794,30 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
     }
 
-    final taskContext = lines.join('\n');
-
     final combinedTools = _buildActiveToolsMap();
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
     );
 
+    final taskContext = lines.join('\n');
+    final systemAddOn = PromptConfigurationService.instance.getValue(
+      ChatPromptConfiguration.systemAddendumId,
+    );
+    final contextBuffer = StringBuffer(taskContext);
+    if (systemAddOn != null && systemAddOn.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln('User-defined conversation guidance:')
+        ..writeln(systemAddOn.trim());
+    }
+    if (mcpToolsPrompt.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln(mcpToolsPrompt.trim());
+    }
+
     return SystemPromptBuilder.build(
-      taskContext: '$taskContext\n\n$mcpToolsPrompt',
+      taskContext: contextBuffer.toString(),
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,
@@ -984,6 +1009,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
   }
 
+  Future<void> _previewAttachedFile(PlatformFile file) async {
+    await FileUtils.openPlatformFile(file, context);
+  }
+
   Widget _buildAttachedFilesSection() {
     if (_attachedFiles.isEmpty) return const SizedBox.shrink();
 
@@ -1022,40 +1051,45 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           const SizedBox(height: 8),
           ...List.generate(_attachedFiles.length, (index) {
             final file = _attachedFiles[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            return InkWell(
+              onTap: () => _previewAttachedFile(file),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _getFileIcon(file.extension),
-                    size: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      file.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Icon(
+                      _getFileIcon(file.extension),
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _removeAttachedFile(index),
-                    child: Icon(Icons.close, size: 16, color: Colors.red[600]),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        file.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _removeAttachedFile(index),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.red[600],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -1151,11 +1185,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 Text(
                   l10n.mcpTools,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.8),
-                      ),
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.8),
+                  ),
                 ),
                 const Spacer(),
                 if (activeMcpCount > 0)
@@ -1335,12 +1369,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _showNoteSelection() async {
     final l10n = AppLocalizations.of(context)!;
+
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
-      builder: (context) => NoteSelectionDialog(
-        onNotesSelected: (notes) => Navigator.of(context).pop(notes),
-        title: l10n.selectNotesToAddToContext,
-      ),
+      builder: (dialogContext) {
+        return NoteSelectionDialog(
+          onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+          title: l10n.selectNotesToAddToContext,
+        );
+      },
     );
 
     if (selectedNotes != null && selectedNotes.isNotEmpty) {
@@ -1667,7 +1704,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           // Attached files section
           _buildAttachedFilesSection(),
           // MCP selection section
-          if (_availableMcpEndpoints.isNotEmpty) _buildMcpSelectionSection(),
+          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
+            _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),
@@ -1924,7 +1962,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 message.content,
                 style: Theme.of(context).textTheme.bodyMedium,
               )
-            else ...[
+            else
               SelectionArea(
                 child: InteractiveCheckboxMarkdown(
                   originalContent: message.content,
@@ -1954,6 +1992,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   },
                 ),
               ),
+            if (message.attachmentPaths.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _buildMessageAttachmentChips(message),
+              ),
+            if (!isUser) ...[
               const SizedBox(height: 12),
               ChatMessageActionRow(
                 leading: IconButton(
@@ -1983,6 +2027,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildMessageAttachmentChips(ConversationMessage message) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: message.attachmentPaths.map((path) {
+        final label = path.split(Platform.pathSeparator).last;
+        final extension =
+            label.contains('.') ? label.split('.').last.toLowerCase() : null;
+        return ActionChip(
+          avatar: Icon(_getFileIcon(extension), size: 18),
+          label: Text(label, overflow: TextOverflow.ellipsis),
+          onPressed: () => _openAttachment(path),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _openAttachment(String path) async {
+    await FileUtils.openFile(path, context);
   }
 
   void _openNoteActionAppsForContent(ConversationMessage message) {

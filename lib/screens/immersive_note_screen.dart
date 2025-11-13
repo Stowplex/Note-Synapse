@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -29,10 +28,13 @@ import '../services/mcp_tool_integration_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
+import '../services/prompts/prompt_configuration_service.dart';
+import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
@@ -40,6 +42,7 @@ import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'note_selection_dialog.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -82,6 +85,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final ConversationAiEngine _aiEngine = const ConversationAiEngine();
   Conversation? _conversation;
   List<Note> _conversationNotes = [];
+  bool _hasAssociatedConversations = false;
 
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
@@ -111,9 +115,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   static const double _aiPanelHeightFraction = 0.45;
   static const double _aiLandscapePanelFraction = 0.4;
   static const double _aiHandleMargin = 12.0;
+  static const double _aiHandlePadding = 12.0;
+  static const double _aiHandleControlWidth = 44.0;
+  static const double _aiHandleControlGap = 8.0;
   double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
   _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
+  bool _isHandleDragFromComposerArea = false;
 
   @override
   void initState() {
@@ -124,6 +132,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
+      _hasAssociatedConversations = true;
     }
 
     if (widget.initialMessages.isNotEmpty) {
@@ -192,6 +201,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _initialNotesById[note.id] = note;
         }
       });
+
+      // Check for associated conversations
+      await _checkAssociatedConversations();
     } catch (e, stackTrace) {
       LoggerService.error(
         'Failed to load notes for immersive view: $e',
@@ -201,6 +213,50 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     } finally {
       if (mounted) {
         setState(() => _isLoadingConversation = false);
+      }
+    }
+  }
+
+  /// Check if there are any conversations associated with the notes
+  Future<void> _checkAssociatedConversations() async {
+    try {
+      // If there's already a conversation, we have associated conversations
+      if (_conversation != null) {
+        if (mounted) {
+          setState(() {
+            _hasAssociatedConversations = true;
+          });
+        }
+        return;
+      }
+
+      // Check if any notes have associated conversations
+      final appProvider = context.read<AppProvider>();
+      final noteIds = List<String>.from(_noteOrder);
+      bool hasConversations = false;
+
+      for (final noteId in noteIds) {
+        final conversationIds = await appProvider.getNoteConversationIds(
+          noteId,
+        );
+        if (conversationIds.isNotEmpty) {
+          hasConversations = true;
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _hasAssociatedConversations = hasConversations;
+        });
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to check associated conversations: $e');
+      // On error, default to false to hide the tree icon
+      if (mounted) {
+        setState(() {
+          _hasAssociatedConversations = false;
+        });
       }
     }
   }
@@ -222,6 +278,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       setState(() {
         _conversation = conversation;
+        _hasAssociatedConversations = true;
       });
     } catch (e, stackTrace) {
       LoggerService.error(
@@ -472,19 +529,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         final activeNote = notes[_activeNoteIndex.clamp(0, notes.length - 1)];
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           appBar: AppBar(
             title: Text(l10n.immersiveMode),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: l10n.addNotes,
+                onPressed: _showNoteSelection,
+              ),
               IconButton(
                 icon: const Icon(Icons.format_list_bulleted),
                 tooltip: l10n.outline,
                 onPressed: () => _showOutline(notes, l10n),
               ),
-              IconButton(
-                icon: const Icon(Icons.account_tree),
-                tooltip: l10n.viewTree,
-                onPressed: () => _openConversationTree(),
-              ),
+              if (_hasAssociatedConversations)
+                IconButton(
+                  icon: const Icon(Icons.account_tree),
+                  tooltip: l10n.viewTree,
+                  onPressed: () => _openConversationTree(),
+                ),
               if (_conversation != null)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
@@ -570,6 +634,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Widget> _buildVerticalAiOverlays(Size size, AppLocalizations l10n) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
@@ -579,7 +644,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
       _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin - keyboardHeight,
     );
 
     double handleTop;
@@ -599,17 +664,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       } else {
         overlays.add(
           Positioned(
-            bottom: 0,
+            bottom: keyboardHeight, // Adjusted for keyboard
             left: _aiHandleMargin,
             right: _aiHandleMargin,
             height: panelHeight,
             child: _buildAiPanelContent(l10n),
           ),
         );
-        handleTop = totalHeight - panelHeight - handleHeight - _aiHandleMargin;
+        handleTop =
+            totalHeight -
+            panelHeight -
+            handleHeight -
+            _aiHandleMargin -
+            keyboardHeight; // Adjusted for keyboard
       }
     } else {
-      final trackHeight = max(0.0, totalHeight - handleHeight);
+      final trackHeight = max(
+        0.0,
+        totalHeight - handleHeight - keyboardHeight,
+      ); // Adjusted for keyboard
       handleTop = trackHeight <= 0
           ? _aiHandleMargin
           : _aiHandleFraction * trackHeight;
@@ -640,6 +713,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   List<Widget> _buildHorizontalAiOverlays(Size size, AppLocalizations l10n) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
@@ -648,10 +722,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
       _aiHandleMargin,
-      totalHeight - handleHeight - _aiHandleMargin,
+      totalHeight - handleHeight - _aiHandleMargin - keyboardHeight,
     );
 
-    final trackHeight = max(0.0, totalHeight - handleHeight);
+    final trackHeight = max(0.0, totalHeight - handleHeight - keyboardHeight);
     double handleTop = trackHeight <= 0
         ? _aiHandleMargin
         : _aiHandleFraction * trackHeight;
@@ -662,7 +736,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     double panelWidth = 0.0;
     if (_isAiPanelExpanded) {
       panelWidth = _computeLandscapePanelWidth(size.width, handleWidth);
-      if (panelWidth > 0)
+      if (panelWidth > 0) {
         overlays.add(
           Positioned(
             top: _aiHandleMargin,
@@ -673,6 +747,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             child: _buildAiPanelContent(l10n),
           ),
         );
+      }
     }
 
     double? handleLeft;
@@ -855,7 +930,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => _updateHandleDrag(details.delta, canvasSize),
+      onPanStart: (details) =>
+          _onAiHandlePanStart(details.localPosition, handleWidth),
+      onPanUpdate: (details) => _onAiHandlePanUpdate(details, canvasSize),
+      onPanEnd: (_) => _onAiHandlePanEnd(),
+      onPanCancel: _onAiHandlePanEnd,
       child: Material(
         color: theme.colorScheme.surface.withOpacity(0.85),
         elevation: 6,
@@ -874,7 +953,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 44, child: controlWidget),
+                    SizedBox(
+                      width: _aiHandleControlWidth,
+                      child: controlWidget,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(child: _buildAiComposer(l10n)),
                   ],
@@ -1318,6 +1400,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  void _onAiHandlePanStart(Offset localPosition, double handleWidth) {
+    _isHandleDragFromComposerArea = _isPointInsideComposerArea(
+      localPosition,
+      handleWidth,
+    );
+  }
+
+  void _onAiHandlePanUpdate(DragUpdateDetails details, Size canvasSize) {
+    if (_isHandleDragFromComposerArea) {
+      return;
+    }
+    _updateHandleDrag(details.delta, canvasSize);
+  }
+
+  void _onAiHandlePanEnd() {
+    _isHandleDragFromComposerArea = false;
+  }
+
+  bool _isPointInsideComposerArea(Offset localPosition, double handleWidth) {
+    final double composerLeft =
+        _aiHandlePadding + _aiHandleControlWidth + _aiHandleControlGap;
+    final double composerRight = handleWidth - _aiHandlePadding;
+    if (composerRight <= composerLeft) {
+      return false;
+    }
+    return localPosition.dx >= composerLeft &&
+        localPosition.dx <= composerRight;
+  }
+
   void _updateHandleDrag(Offset delta, Size canvasSize) {
     final totalHeight = canvasSize.height;
     final handleHeight = _currentHandleHeight();
@@ -1447,14 +1558,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       children: List.generate(_pendingAttachments.length, (index) {
         final file = _pendingAttachments[index];
         return InputChip(
-          avatar: const Icon(Icons.image, size: 18),
+          avatar: Icon(
+            _iconForAttachment(file.path ?? file.name),
+            size: 18,
+          ),
           label: Text(file.name, overflow: TextOverflow.ellipsis),
+          showCheckmark: false,
+          onSelected: (_) => _previewPendingAttachment(file),
           onDeleted: () => setState(() {
             _pendingAttachments.removeAt(index);
           }),
         );
       }),
     );
+  }
+
+  Future<void> _previewPendingAttachment(PlatformFile file) async {
+    await FileUtils.openPlatformFile(file, context);
   }
 
   Widget _buildNoteArea(Note note, AppLocalizations l10n) {
@@ -1673,6 +1793,71 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
       },
     );
+  }
+
+  Future<void> _showNoteSelection() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final selectedNotes = await showDialog<List<Note>>(
+      context: context,
+      builder: (dialogContext) {
+        return NoteSelectionDialog(
+          onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+          title: l10n.selectNotesToAddToContext,
+        );
+      },
+    );
+
+    if (selectedNotes != null && selectedNotes.isNotEmpty) {
+      final existingIds = _noteOrder.toSet();
+      final newNotes = selectedNotes
+          .where((note) => !existingIds.contains(note.id))
+          .toList();
+
+      if (newNotes.isEmpty) {
+        // All selected notes are already in the immersive view
+        return;
+      }
+
+      // Add new notes to the immersive view
+      setState(() {
+        for (final note in newNotes) {
+          _initialNotesById[note.id] = note;
+          _noteOrder.add(note.id);
+        }
+        _conversationNotes.addAll(newNotes);
+      });
+
+      // If there's a conversation, add notes to it
+      if (_conversation != null) {
+        try {
+          final noteIds = newNotes.map((note) => note.id).toList();
+          await _conversationService.addNotesToConversation(
+            _conversation!.id,
+            noteIds,
+          );
+          // Reload conversation notes to ensure consistency
+          final updatedNotes = await _conversationService.getConversationNotes(
+            _conversation!.id,
+          );
+          if (mounted) {
+            setState(() {
+              _conversationNotes = updatedNotes;
+            });
+          }
+        } catch (e) {
+          LoggerService.error(
+            'Error adding notes to conversation: $e',
+            error: e,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Error adding notes: $e')));
+          }
+        }
+      }
+    }
   }
 
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
@@ -2095,6 +2280,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ? PromptRole.user
           : PromptRole.assistant;
 
+      if (role == PromptRole.user) {
+        final messageTimeContext = SystemPromptBuilder.formatTimestamp(
+          message.timestamp,
+        );
+        final perMessageAddOn = PromptConfigurationService.instance.getValue(
+          ChatPromptConfiguration.perMessageAddendumId,
+        );
+        final buffer = StringBuffer()
+          ..write('Message created at: $messageTimeContext');
+        if (perMessageAddOn != null && perMessageAddOn.trim().isNotEmpty) {
+          buffer
+            ..writeln()
+            ..write(perMessageAddOn.trim());
+        }
+        messages.add(
+          PromptMessage(role: PromptRole.user, content: buffer.toString()),
+        );
+      }
+
       final attachments = await _loadConversationAttachments(
         message,
         latestAttachments,
@@ -2212,8 +2416,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       combinedTools,
     );
 
+    final systemAddOn = PromptConfigurationService.instance.getValue(
+      ChatPromptConfiguration.systemAddendumId,
+    );
+    final contextBuffer = StringBuffer(taskContext);
+    if (systemAddOn != null && systemAddOn.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln('User-defined conversation guidance:')
+        ..writeln(systemAddOn.trim());
+    }
+    if (mcpToolsPrompt.trim().isNotEmpty) {
+      contextBuffer
+        ..writeln()
+        ..writeln(mcpToolsPrompt.trim());
+    }
+
     return SystemPromptBuilder.build(
-      taskContext: '$taskContext\n\n$mcpToolsPrompt',
+      taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
         AIPrompts.mathFormulaGuidelines,
@@ -2406,6 +2626,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _resetPdfState();
         _disposeImageResources();
         _conversation = result.conversation;
+        _hasAssociatedConversations = true;
         _messages
           ..clear()
           ..addAll(result.messages);
@@ -2509,27 +2730,64 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-    final ui.Image image = await renderObject.toImage(
-      pixelRatio: devicePixelRatio,
-    );
+    Uint8List? regionBytes;
+    if (Platform.isIOS) {
+      final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
+      final Offset captureOrigin =
+          boundaryOrigin + Offset(cappedRect.left, cappedRect.top);
+      regionBytes = await NativeCaptureUtils.captureRegion(
+        x: captureOrigin.dx * devicePixelRatio,
+        y: captureOrigin.dy * devicePixelRatio,
+        width: cappedRect.width * devicePixelRatio,
+        height: cappedRect.height * devicePixelRatio,
+        devicePixelRatio: devicePixelRatio,
+      );
+      if (regionBytes != null && regionBytes.isEmpty) {
+        regionBytes = null;
+      }
+    }
 
-    final Rect scaledRect = Rect.fromLTWH(
-      cappedRect.left * devicePixelRatio,
-      cappedRect.top * devicePixelRatio,
-      cappedRect.width * devicePixelRatio,
-      cappedRect.height * devicePixelRatio,
-    );
+    ui.Image baseImage;
+    Rect sourceRect;
+    late int outputWidth;
+    late int outputHeight;
+
+    if (regionBytes != null) {
+      final ui.Codec codec = await ui.instantiateImageCodec(regionBytes);
+      final ui.FrameInfo frame = await codec.getNextFrame();
+      codec.dispose();
+      baseImage = frame.image;
+      sourceRect = Rect.fromLTWH(
+        0,
+        0,
+        baseImage.width.toDouble(),
+        baseImage.height.toDouble(),
+      );
+      outputWidth = baseImage.width;
+      outputHeight = baseImage.height;
+    } else {
+      baseImage = await renderObject.toImage(pixelRatio: devicePixelRatio);
+      sourceRect = Rect.fromLTWH(
+        cappedRect.left * devicePixelRatio,
+        cappedRect.top * devicePixelRatio,
+        cappedRect.width * devicePixelRatio,
+        cappedRect.height * devicePixelRatio,
+      );
+      outputWidth = max(1, sourceRect.width.round());
+      outputHeight = max(1, sourceRect.height.round());
+    }
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(recorder);
     final Paint paint = Paint();
 
-    canvas.drawImageRect(
-      image,
-      scaledRect,
-      Rect.fromLTWH(0, 0, scaledRect.width, scaledRect.height),
-      paint,
+    final Rect targetRect = Rect.fromLTWH(
+      0,
+      0,
+      outputWidth.toDouble(),
+      outputHeight.toDouble(),
     );
+    canvas.drawImageRect(baseImage, sourceRect, targetRect, paint);
 
     final List<Offset> scaledPoints = points
         .map(
@@ -2564,10 +2822,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final ui.Picture picture = recorder.endRecording();
     final ui.Image croppedImage = await picture.toImage(
-      max(1, scaledRect.width.round()),
-      max(1, scaledRect.height.round()),
+      outputWidth,
+      outputHeight,
     );
-    image.dispose();
+    baseImage.dispose();
 
     final ByteData? byteData = await croppedImage.toByteData(
       format: ui.ImageByteFormat.png,

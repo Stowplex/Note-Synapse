@@ -1,5 +1,5 @@
+import 'dart:collection';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -9,6 +9,10 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 
 import '../utils/synapse_temp_utils.dart';
 import 'interactive_checkbox_component.dart';
@@ -79,7 +83,7 @@ class _InteractiveCheckboxMarkdownState
           final hasDashPrefix = trimmedLine.startsWith('-');
           final dashPrefix = hasDashPrefix ? '- ' : '';
           final newCheckbox = newValue ? 'x' : ' ';
-          lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
+          lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
           
           _currentContent = lines.join('\n');
           widget.onContentChanged?.call(_currentContent);
@@ -103,7 +107,7 @@ class _InteractiveCheckboxMarkdownState
             final hasDashPrefix = trimmedLine.startsWith('-');
             final dashPrefix = hasDashPrefix ? '- ' : '';
             final newCheckbox = newValue ? 'x' : ' ';
-            lines[i] = '${indent}$dashPrefix[$newCheckbox] ${textAfterCheckbox}';
+            lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
             
             _currentContent = lines.join('\n');
             widget.onContentChanged?.call(_currentContent);
@@ -350,7 +354,7 @@ class _InteractiveCheckboxMarkdownState
       height: height ?? 100,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(
@@ -504,6 +508,19 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  Widget _buildCodeBlock(
+    BuildContext context,
+    String name,
+    String code,
+    bool closed,
+  ) {
+    return _HighlightedCodeBlock(
+      code: code,
+      languageHint: name,
+      textStyle: widget.style,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Create custom components list with our safe HTag and optional interactive checkbox component
@@ -536,8 +553,401 @@ class _InteractiveCheckboxMarkdownState
       overflow: widget.overflow,
       latexBuilder: _customLatexBuilder,
       imageBuilder: _customImageBuilder,
+      codeBuilder: _buildCodeBlock,
       components: components,
     );
   }
+}
+
+class _HighlightedCodeBlock extends StatefulWidget {
+  const _HighlightedCodeBlock({
+    required this.code,
+    required this.languageHint,
+    this.textStyle,
+  });
+
+  final String code;
+  final String languageHint;
+  final TextStyle? textStyle;
+
+  @override
+  State<_HighlightedCodeBlock> createState() => _HighlightedCodeBlockState();
+}
+
+class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
+  bool _copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final Map<String, TextStyle> themeMap =
+        isDark ? atomOneDarkTheme : atomOneLightTheme;
+    final TextStyle baseStyle = _buildBaseStyle(context);
+    final int styleSignature = _styleSignature(baseStyle);
+
+    final _HighlightResult highlightResult =
+        _CodeHighlightEngine.instance.highlight(
+      code: widget.code,
+      languageHint: widget.languageHint,
+      baseStyle: baseStyle,
+      theme: themeMap,
+      isDarkTheme: isDark,
+      styleSignature: styleSignature,
+    );
+
+    final String? resolvedLanguage = highlightResult.language;
+    final String? fallbackLabel =
+        _CodeHighlightEngine.instance.displayLabel(widget.languageHint);
+    final String headerLabel = (resolvedLanguage ?? fallbackLabel ?? 'code')
+        .toUpperCase();
+
+    final Color backgroundColor = isDark
+        ? Color.alphaBlend(
+            Colors.black.withOpacity(0.35),
+            colorScheme.surface,
+          )
+        : Color.alphaBlend(
+            colorScheme.primary.withOpacity(0.05),
+            colorScheme.surface,
+          );
+
+    return Material(
+      color: backgroundColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: colorScheme.outline.withOpacity(0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  headerLabel,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.onSurface,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    textStyle: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onPressed: widget.code.isEmpty ? null : _handleCopy,
+                  icon: Icon(
+                    _copied ? Icons.done : Icons.content_paste,
+                    size: 14,
+                  ),
+                  label: Text(_copied ? 'Copied!' : 'Copy code'),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: 0.8,
+            color: colorScheme.outline.withOpacity(0.08),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: SelectableText.rich(
+              highlightResult.span,
+              style: baseStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle _buildBaseStyle(BuildContext context) {
+    final theme = Theme.of(context);
+    final TextStyle effectiveBase =
+        widget.textStyle ?? theme.textTheme.bodyMedium ?? const TextStyle();
+    final double baseSize =
+        effectiveBase.fontSize ?? theme.textTheme.bodyMedium?.fontSize ?? 14;
+    return effectiveBase.copyWith(
+      fontFamily: 'JetBrainsMono',
+      fontFamilyFallback: const ['SourceCodePro', 'monospace'],
+      fontSize: (baseSize * 0.92),
+      height: 1.42,
+      letterSpacing: 0.05,
+      color: effectiveBase.color ?? theme.colorScheme.onSurface,
+    );
+  }
+
+  int _styleSignature(TextStyle style) {
+    return Object.hash(
+      style.fontFamily,
+      style.fontSize,
+      style.fontWeight,
+      style.fontStyle,
+      style.letterSpacing,
+      style.wordSpacing,
+      style.height,
+      style.decoration,
+      style.decorationColor?.value,
+      style.color?.value,
+      style.backgroundColor?.value,
+    );
+  }
+
+  Future<void> _handleCopy() async {
+    await Clipboard.setData(ClipboardData(text: widget.code));
+    if (!mounted) return;
+    setState(() {
+      _copied = true;
+    });
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    setState(() {
+      _copied = false;
+    });
+  }
+}
+
+class _CodeHighlightEngine {
+  _CodeHighlightEngine._internal() {
+    for (final String language in _preloadLanguages) {
+      _ensureLanguageRegistered(language);
+    }
+  }
+
+  static final _CodeHighlightEngine instance =
+      _CodeHighlightEngine._internal();
+
+  final Highlight _highlight = Highlight();
+  final LinkedHashMap<_HighlightCacheKey, _HighlightResult> _cache =
+      LinkedHashMap<_HighlightCacheKey, _HighlightResult>();
+
+  static const int _maxCacheEntries = 64;
+
+  static const Set<String> _preloadLanguages = {
+    'bash',
+    'c',
+    'cpp',
+    'csharp',
+    'css',
+    'dart',
+    'diff',
+    'dockerfile',
+    'go',
+    'graphql',
+    'html',
+    'ini',
+    'java',
+    'javascript',
+    'json',
+    'kotlin',
+    'latex',
+    'markdown',
+    'objectivec',
+    'php',
+    'plaintext',
+    'powershell',
+    'python',
+    'ruby',
+    'rust',
+    'shell',
+    'sql',
+    'swift',
+    'typescript',
+    'xml',
+    'yaml',
+  };
+
+  _HighlightResult highlight({
+    required String code,
+    required String languageHint,
+    required TextStyle baseStyle,
+    required Map<String, TextStyle> theme,
+    required bool isDarkTheme,
+    required int styleSignature,
+  }) {
+    if (code.isEmpty) {
+      return _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: null,
+      );
+    }
+
+    final String? normalizedHint = _normalizeLanguage(languageHint);
+    if (normalizedHint == null || normalizedHint.isEmpty) {
+      return _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: null,
+      );
+    }
+
+    final _HighlightCacheKey cacheKey = _HighlightCacheKey(
+      code: code,
+      languageHint: normalizedHint,
+      isDarkTheme: isDarkTheme,
+      styleSignature: styleSignature,
+    );
+
+    final _HighlightResult? cachedResult = _takeFromCache(cacheKey);
+    if (cachedResult != null) {
+      return cachedResult;
+    }
+
+    HighlightResult? result;
+    String? resolvedLanguage;
+
+    if (_ensureLanguageRegistered(normalizedHint)) {
+      try {
+        result = _highlight.highlight(
+          code: code,
+          language: normalizedHint,
+        );
+        resolvedLanguage = normalizedHint;
+      } on Object catch (error, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('Code highlight failed for $normalizedHint: $error');
+          debugPrint('$stackTrace');
+        }
+      }
+    }
+
+    if (result == null) {
+      final _HighlightResult fallback = _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: resolvedLanguage,
+      );
+      _storeInCache(cacheKey, fallback);
+      return fallback;
+    }
+
+    final TextSpanRenderer renderer = TextSpanRenderer(baseStyle, theme);
+    try {
+      result.render(renderer);
+    } on Object catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('Code highlight render error: $error');
+        debugPrint('$stackTrace');
+      }
+      final _HighlightResult fallback = _HighlightResult(
+        span: TextSpan(text: code, style: baseStyle),
+        language: resolvedLanguage,
+      );
+      _storeInCache(cacheKey, fallback);
+      return fallback;
+    }
+
+    final TextSpan? highlightedSpan = renderer.span;
+    final _HighlightResult output = _HighlightResult(
+      span: highlightedSpan ?? TextSpan(text: code, style: baseStyle),
+      language: resolvedLanguage,
+    );
+    _storeInCache(cacheKey, output);
+    return output;
+  }
+
+  String? displayLabel(String? raw) {
+    return raw?.trim().isEmpty ?? true ? null : raw?.trim();
+  }
+
+  static String? _normalizeLanguage(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final String trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final String candidate =
+        trimmed.split(RegExp(r'[\s:{(]')).first.trim().toLowerCase();
+    if (candidate.isEmpty) {
+      return null;
+    }
+    return candidate;
+  }
+
+  _HighlightResult? _takeFromCache(_HighlightCacheKey key) {
+    final _HighlightResult? cached = _cache.remove(key);
+    if (cached != null) {
+      _cache[key] = cached;
+    }
+    return cached;
+  }
+
+  void _storeInCache(_HighlightCacheKey key, _HighlightResult value) {
+    if (_cache.length >= _maxCacheEntries) {
+      final _HighlightCacheKey oldestKey = _cache.keys.first;
+      _cache.remove(oldestKey);
+    }
+    _cache[key] = value;
+  }
+
+  bool _ensureLanguageRegistered(String language) {
+    if (_highlight.getLanguage(language) != null) {
+      return true;
+    }
+    final Mode? mode = builtinAllLanguages[language];
+    if (mode == null) {
+      return false;
+    }
+    _highlight.registerLanguage(language, mode);
+    return true;
+  }
+}
+
+class _HighlightResult {
+  const _HighlightResult({
+    required this.span,
+    this.language,
+  });
+
+  final TextSpan span;
+  final String? language;
+}
+
+class _HighlightCacheKey {
+  const _HighlightCacheKey({
+    required this.code,
+    required this.languageHint,
+    required this.isDarkTheme,
+    required this.styleSignature,
+  });
+
+  final String code;
+  final String languageHint;
+  final bool isDarkTheme;
+  final int styleSignature;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is _HighlightCacheKey &&
+        code == other.code &&
+        languageHint == other.languageHint &&
+        isDarkTheme == other.isDarkTheme &&
+        styleSignature == other.styleSignature;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        code,
+        languageHint,
+        isDarkTheme,
+        styleSignature,
+      );
 }
 

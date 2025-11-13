@@ -9,9 +9,15 @@ void main() {
     late DatabaseService databaseService;
     late UserAppLibraryService libraryService;
 
-    setUp(() {
+    setUp(() async {
       databaseService = DatabaseService.createNew();
-      libraryService = UserAppLibraryService();
+      await databaseService.database; // Ensure database is initialized
+      await databaseService.clearAllData();
+      libraryService = UserAppLibraryService.createForTesting(databaseService);
+    });
+
+    tearDown(() async {
+      await databaseService.close();
     });
 
     test('should create user app library', () async {

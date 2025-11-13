@@ -12,6 +12,7 @@ import 'setup_screen.dart';
 import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
 import 'mcp_settings_screen.dart';
+import 'prompt_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,15 +22,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.settings),
-      ),
+      appBar: AppBar(title: Text(l10n.settings)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -41,7 +39,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const AppearanceSettingsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const AppearanceSettingsScreen(),
+                ),
               ),
             ),
           ),
@@ -54,7 +54,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const LanguageSettingsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const LanguageSettingsScreen(),
+                ),
               ),
             ),
           ),
@@ -67,7 +69,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const AIModelSettingsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const AIModelSettingsScreen(),
+                ),
               ),
             ),
           ),
@@ -80,7 +84,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const AIDebugOverlayScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const AIDebugOverlayScreen(),
+                ),
               ),
             ),
           ),
@@ -101,7 +107,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
 }
 
 class AppearanceSettingsScreen extends StatelessWidget {
@@ -110,11 +115,9 @@ class AppearanceSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.appearance),
-      ),
+      appBar: AppBar(title: Text(l10n.appearance)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -145,11 +148,9 @@ class LanguageSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.language),
-      ),
+      appBar: AppBar(title: Text(l10n.language)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -240,7 +241,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         _currentModel = modelType;
         _isLoading = false;
       });
-      
+
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -254,7 +255,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       setState(() {
         _isLoading = false;
       });
-      
+
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -283,24 +284,31 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
   Future<void> _openModelConfiguration(ModelType modelType) async {
     if (mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ModelConfigurationScreen(modelType: modelType),
-        ),
-      ).then((result) {
-        // Refresh the current model after configuration
-        _loadCurrentModel();
-        if (result == true) {
-          // Show success message if configuration was successful
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(l10n.modelConfigurationUpdatedSuccessfully(modelType.displayName)),
-              backgroundColor: Colors.green,
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ModelConfigurationScreen(modelType: modelType),
             ),
-          );
-        }
-      });
+          )
+          .then((result) {
+            // Refresh the current model after configuration
+            _loadCurrentModel();
+            if (result == true) {
+              // Show success message if configuration was successful
+              final l10n = AppLocalizations.of(context)!;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    l10n.modelConfigurationUpdatedSuccessfully(
+                      modelType.displayName,
+                    ),
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          });
     }
   }
 
@@ -311,7 +319,9 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.resetModelConfiguration(modelType.displayName)),
-        content: Text(l10n.resetModelConfigurationConfirmation(modelType.displayName)),
+        content: Text(
+          l10n.resetModelConfigurationConfirmation(modelType.displayName),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -332,14 +342,16 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
       try {
         await ModelStorageService.resetModelConfiguration(modelType);
-        
+
         if (mounted) {
           setState(() {
             _isLoading = false;
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(l10n.modelConfigurationResetSuccessfully(modelType.displayName)),
+              content: Text(
+                l10n.modelConfigurationResetSuccessfully(modelType.displayName),
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -350,7 +362,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         setState(() {
           _isLoading = false;
         });
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -366,11 +378,9 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.aiModelSettings),
-      ),
+      appBar: AppBar(title: Text(l10n.aiModelSettings)),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -385,7 +395,24 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const McpSettingsScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const McpSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: Text(l10n.aiPrompts),
+                    subtitle: Text(l10n.aiPromptsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PromptSettingsScreen(),
+                      ),
                     ),
                   ),
                 ),
@@ -398,20 +425,24 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       children: [
                         Text(
                           l10n.currentModel,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         if (_currentModel != null) ...[
                           Row(
                             children: [
-                              Icon(_getModelIcon(_currentModel!), color: Theme.of(context).primaryColor),
+                              Icon(
+                                _getModelIcon(_currentModel!),
+                                color: Theme.of(context).primaryColor,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   _currentModel!.displayName,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
                               ),
                             ],
@@ -419,9 +450,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                           const SizedBox(height: 8),
                           Text(
                             _getModelDescription(_currentModel!, l10n),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ] else ...[
                           Text(l10n.noModelSelected),
@@ -457,15 +487,23 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    isConfigured ? Icons.check_circle : Icons.error_outline,
+                                    isConfigured
+                                        ? Icons.check_circle
+                                        : Icons.error_outline,
                                     size: 16,
-                                    color: isConfigured ? Colors.green : Colors.orange,
+                                    color: isConfigured
+                                        ? Colors.green
+                                        : Colors.orange,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    isConfigured ? l10n.configured : l10n.notConfigured,
+                                    isConfigured
+                                        ? l10n.configured
+                                        : l10n.notConfigured,
                                     style: TextStyle(
-                                      color: isConfigured ? Colors.green : Colors.orange,
+                                      color: isConfigured
+                                          ? Colors.green
+                                          : Colors.orange,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -492,7 +530,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                             ],
                           ),
                           trailing: PopupMenuButton<String>(
-                            onSelected: (value) => _handleModelAction(value, modelType),
+                            onSelected: (value) =>
+                                _handleModelAction(value, modelType),
                             itemBuilder: (BuildContext context) => [
                               if (!isCurrentModel)
                                 PopupMenuItem<String>(
@@ -533,7 +572,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                     },
                   );
                 }),
-
               ],
             ),
     );
@@ -572,11 +610,9 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.aiApi),
-      ),
+      appBar: AppBar(title: Text(l10n.aiApi)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -590,18 +626,18 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return Text(l10n.loading);
                   }
-                  
+
                   final apiKey = snapshot.data;
                   if (apiKey == null || apiKey.isEmpty) {
                     return Text(l10n.noApiKeyConfigured);
                   }
-                  
+
                   return Text(
-                    _obscureApiKey 
-                        ? '•' * 20 
-                        : apiKey.length > 20 
-                            ? '${apiKey.substring(0, 20)}...' 
-                            : apiKey,
+                    _obscureApiKey
+                        ? '•' * 20
+                        : apiKey.length > 20
+                        ? '${apiKey.substring(0, 20)}...'
+                        : apiKey,
                     style: const TextStyle(fontFamily: 'monospace'),
                   );
                 },
@@ -610,7 +646,9 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: Icon(_obscureApiKey ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                      _obscureApiKey ? Icons.visibility : Icons.visibility_off,
+                    ),
                     onPressed: () {
                       setState(() {
                         _obscureApiKey = !_obscureApiKey;
@@ -626,13 +664,13 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
           const SizedBox(height: 16),
           Card(
             child: ListTile(
-              leading: _isLoading 
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh),
+              leading: _isLoading
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
               title: Text(l10n.updateApiKey),
               subtitle: Text(l10n.updateApiKeySubtitle),
               trailing: const Icon(Icons.chevron_right),
@@ -656,7 +694,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
 
   void _showApiKeyDialog() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -667,12 +705,12 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const CircularProgressIndicator();
             }
-            
+
             final apiKey = snapshot.data;
             if (apiKey == null || apiKey.isEmpty) {
               return Text(l10n.noApiKeyConfigured);
             }
-            
+
             return SelectableText(
               apiKey,
               style: const TextStyle(fontFamily: 'monospace'),
@@ -692,7 +730,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
   void _showUpdateApiKeyDialog() {
     final l10n = AppLocalizations.of(context)!;
     final TextEditingController controller = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -734,7 +772,7 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
 
   void _showResetApiKeyDialog() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -759,14 +797,14 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
 
   Future<void> _updateApiKey(String newApiKey) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await SecureStorageService.saveApiKey(newApiKey);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -796,14 +834,14 @@ class _AIApiSettingsScreenState extends State<AIApiSettingsScreen> {
 
   Future<void> _resetApiKey() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await SecureStorageService.deleteApiKey();
-      
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const SetupScreen()),
@@ -840,7 +878,7 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
   Widget build(BuildContext context) {
     final logs = LoggerService.aiLogBucket;
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.aiDebugOverlayTitle),
@@ -891,16 +929,20 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ExpansionTile(
                     leading: Icon(
-                      log.type == 'request' 
-                          ? Icons.arrow_upward 
-                          : log.type == 'response' 
-                              ? Icons.arrow_downward 
-                              : Icons.error,
-                      color: log.type == 'request' 
-                          ? Colors.blue 
-                          : log.type == 'response' 
-                              ? Colors.green 
-                              : Colors.red,
+                      log.type == 'request'
+                          ? Icons.arrow_upward
+                          : log.type == 'response'
+                          ? Icons.arrow_downward
+                          : log.type == 'console'
+                          ? Icons.terminal
+                          : Icons.error,
+                      color: log.type == 'request'
+                          ? Colors.blue
+                          : log.type == 'response'
+                          ? Colors.green
+                          : log.type == 'console'
+                          ? Colors.orange
+                          : Colors.red,
                     ),
                     title: Text(
                       '${log.type.toUpperCase()} - ${log.endpoint.isNotEmpty ? log.endpoint : 'Unknown Endpoint'}',
@@ -916,15 +958,29 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (log.data.containsKey('headers'))
-                              _buildDataSection(l10n.headers, log.data['headers']),
+                              _buildDataSection(
+                                l10n.headers,
+                                log.data['headers'],
+                              ),
                             if (log.data.containsKey('body'))
                               _buildDataSection(l10n.body, log.data['body']),
                             if (log.data.containsKey('statusCode'))
-                              _buildDataSection(l10n.statusCode, log.data['statusCode']),
+                              _buildDataSection(
+                                l10n.statusCode,
+                                log.data['statusCode'],
+                              ),
                             if (log.data.containsKey('error'))
                               _buildDataSection(l10n.error, log.data['error']),
+                            if (log.data.containsKey('consoleOutput'))
+                              _buildDataSection(
+                                l10n.consoleOutput,
+                                log.data['consoleOutput'],
+                              ),
                             if (log.data.containsKey('duration'))
-                              _buildDataSection(l10n.duration, '${log.data['duration']}ms'),
+                              _buildDataSection(
+                                l10n.duration,
+                                '${log.data['duration']}ms',
+                              ),
                           ],
                         ),
                       ),
@@ -938,7 +994,7 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
 
   Widget _buildDataSection(String title, dynamic data) {
     final theme = Theme.of(context);
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -959,10 +1015,7 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.dividerColor,
-                width: 1,
-              ),
+              border: Border.all(color: theme.dividerColor, width: 1),
             ),
             child: SelectableText(
               data is Map || data is List
@@ -980,4 +1033,3 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
     );
   }
 }
-

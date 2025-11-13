@@ -27,6 +27,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiApiSubtitle => 'Configure your AI API key';
 
   @override
+  String get aiPrompts => 'Prompts';
+
+  @override
+  String get aiPromptsSubtitle =>
+      'Customize AI prompt injections and overrides';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
@@ -1524,6 +1531,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get manageAppState => 'Manage App State';
+
+  @override
+  String get clearState => 'Clear State';
+
+  @override
+  String get stateCleared => 'State cleared successfully!';
+
+  @override
+  String get noState => 'No state';
+
+  @override
   String appGenerationPrompt(Object description, Object name, Object steps) {
     return 'Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: $name\nDescription: $description\nSteps: $steps\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app\'s database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.';
   }
@@ -1954,6 +1973,29 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String errorConfiguringModel(Object error) {
     return 'Error configuring model: $error';
+  }
+
+  @override
+  String get promptSettingsTitle => 'Prompt Configuration';
+
+  @override
+  String get promptSettingsDescription =>
+      'Customize how Note Synapse composes prompts. Empty fields use the default instructions.';
+
+  @override
+  String get promptSettingsSave => 'Save';
+
+  @override
+  String get promptSettingsReset => 'Reset';
+
+  @override
+  String promptSettingsSaved(String entryTitle) {
+    return 'Saved prompt for $entryTitle';
+  }
+
+  @override
+  String promptSettingsCleared(String entryTitle) {
+    return 'Cleared prompt for $entryTitle';
   }
 
   @override
@@ -3137,4 +3179,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorAddingTranscription(String error) {
     return 'Error adding transcription: $error';
   }
+
+  @override
+  String get newNoteFromShareCreated =>
+      'New note from share created successfully!';
 }

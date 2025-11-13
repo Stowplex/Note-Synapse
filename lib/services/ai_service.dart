@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -64,43 +65,6 @@ class AIService {
         requestId: actualRequestId,
       );
     }, requestId: requestId);
-  }
-
-  /// Note Q&A
-  static Future<String> answerNoteQuestion(
-    String question,
-    List<Note> contextNotes, {
-    List<PlatformFile>? attachedFiles,
-    bool useOwnKnowledge = false,
-  }) async {
-    return await _withErrorHandling('note Q&A', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-      LoggerService.debug('Starting note Q&A request', error: {
-        'question': question,
-        'contextNotesCount': contextNotes.length,
-        'attachedFilesCount': attachedFiles?.length ?? 0,
-        'requestId': requestId,
-      });
-
-      final builder = _notePromptBuilder();
-      final request = await builder.buildQuestionPrompt(
-        question: question,
-        contextNotes: contextNotes,
-        useOwnKnowledge: useOwnKnowledge,
-        additionalAttachments: attachedFiles ?? const [],
-      );
-
-      LoggerService.debug('Note Q&A prompt assembled', error: {
-        'requestId': requestId,
-        'contextMessages': request.contextMessages.length,
-        'conversationMessages': request.conversationMessages.length,
-      });
-
-      return await ModelSelector.instance.generateFromPrompt(
-        request,
-        requestId: requestId,
-      );
-    });
   }
 
   /// Note transformation
@@ -647,6 +611,11 @@ class AIService {
       LoggerService.warning('Failed to parse AI dedup rules response: $e');
       return [];
     }
+  }
+
+  @visibleForTesting
+  static List<DedupRule> parseDedupRulesResponseForTest(String response) {
+    return _parseDedupRulesResponse(response);
   }
 
 }

@@ -11,7 +11,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "note_synapse/share"
+    private val CHANNEL = "com.github.kkspeed/share"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

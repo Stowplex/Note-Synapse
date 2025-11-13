@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_saver
   file_selector_linux
   flutter_secure_storage_linux
+  gtk
   open_file_linux
   printing
   record_linux
