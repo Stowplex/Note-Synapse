@@ -680,6 +680,80 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     }
   }
 
+  void _cutSelectedText() {
+    final selection = _codeController.selection;
+    if (!selection.isCollapsed) {
+      // Get the selected text using the proper CodeLineSelection methods
+      final codeLines = _codeController.value.codeLines;
+      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
+
+      // Copy to clipboard
+      Clipboard.setData(ClipboardData(text: selectedText));
+
+      // Delete the selected text
+      _deleteSelection(codeLines, selection);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cut: ${selectedText.length} characters')),
+      );
+    }
+  }
+
+  void _deleteSelection(CodeLines codeLines, CodeLineSelection selection) {
+    final startIndex = selection.startIndex;
+    final endIndex = selection.endIndex;
+    final startOffset = selection.startOffset;
+    final endOffset = selection.endOffset;
+
+    // Convert CodeLines to a list for easier manipulation
+    final linesList = <CodeLine>[];
+    for (int i = 0; i < codeLines.length; i++) {
+      linesList.add(codeLines[i]);
+    }
+
+    final newCodeLines = <CodeLine>[];
+
+    if (startIndex == endIndex) {
+      // Selection is within a single line
+      final line = linesList[startIndex];
+      final newText = line.text.substring(0, startOffset) +
+          line.text.substring(endOffset);
+      newCodeLines.addAll(linesList.sublist(0, startIndex));
+      newCodeLines.add(CodeLine(newText));
+      newCodeLines.addAll(linesList.sublist(startIndex + 1));
+
+      // Update selection to cursor position at startOffset
+      _codeController.value = CodeLineEditingValue(
+        codeLines: CodeLines.of(newCodeLines),
+        selection: CodeLineSelection.collapsed(
+          index: startIndex,
+          offset: startOffset,
+        ),
+      );
+    } else {
+      // Selection spans multiple lines
+      final firstLine = linesList[startIndex];
+      final lastLine = linesList[endIndex];
+      final mergedText = firstLine.text.substring(0, startOffset) +
+          lastLine.text.substring(endOffset);
+
+      newCodeLines.addAll(linesList.sublist(0, startIndex));
+      if (mergedText.isNotEmpty || newCodeLines.isEmpty) {
+        newCodeLines.add(CodeLine(mergedText));
+      }
+      newCodeLines.addAll(linesList.sublist(endIndex + 1));
+
+      // Update selection to cursor position at startIndex, startOffset
+      _codeController.value = CodeLineEditingValue(
+        codeLines: CodeLines.of(newCodeLines),
+        selection: CodeLineSelection.collapsed(
+          index: startIndex,
+          offset: startOffset,
+        ),
+      );
+    }
+  }
+
   String _getSelectedTextFromCodeLines(
     CodeLines codeLines,
     CodeLineSelection selection,
@@ -808,7 +882,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: 100, // Increased width to accommodate both buttons
+          width: hasSelection ? 140 : 100, // Wider when Cut/Copy buttons are visible
           height: 40,
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
@@ -824,6 +898,17 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              // Cut button when text is selected
+              if (hasSelection)
+                _buildCompactToolbarButton(
+                  context: context,
+                  icon: Icons.content_cut,
+                  onPressed: () {
+                    _cutSelectedText();
+                    onDismiss();
+                    onRefresh();
+                  },
+                ),
               // Copy button when text is selected
               if (hasSelection)
                 _buildCompactToolbarButton(
