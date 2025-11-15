@@ -68,6 +68,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
   final GlobalKey _noteBoundaryKey = GlobalKey();
 
   static const double _strokeCaptureMargin = 16;
@@ -169,6 +170,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   void dispose() {
     _messageController.dispose();
     _chatScrollController.dispose();
+    _messageFocusNode.dispose();
     _disposePdfResources();
     _disposeImageResources();
     for (final runtime in _aiToolRuntimes.values) {
@@ -1056,6 +1058,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     Expanded(
                       child: TextField(
                         controller: _messageController,
+                        focusNode: _messageFocusNode,
                         maxLines: 6,
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
@@ -1494,11 +1497,44 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                  SelectableText(
-                    message.content,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: SelectableText(
+                          message.content,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(
+                          Icons.edit,
+                          size: 16,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        onPressed: () {
+                          _messageController.text = message.content;
+                          // Scroll to bottom to show the input field
+                          _scrollToBottom();
+                          // Focus the text field after a short delay to ensure it's visible
+                          Future.delayed(const Duration(milliseconds: 200), () {
+                            _messageFocusNode.requestFocus();
+                          });
+                        },
+                        tooltip: 'Use this message',
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
                   )
                 else
                   SelectionArea(
