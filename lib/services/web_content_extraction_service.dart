@@ -47,6 +47,12 @@ class WebContentExtractionService {
     );
   }
 
+  /// Exposes the Readability script so other widgets (like manual extraction
+  /// flows) can inject it into a WebView without triggering a full extraction.
+  static Future<String> getReadabilityScript() async {
+    return _loadReadabilityScript();
+  }
+
   static Future<WebContentExtractionResult> extractFromController(
     InAppWebViewController controller,
   ) async {
