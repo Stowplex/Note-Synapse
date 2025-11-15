@@ -204,11 +204,6 @@ class _ShareScreenState extends State<ShareScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
-            if (_preparedNote != null) ...[
-              _buildMediaSelection(l10n),
-              const SizedBox(height: 16),
-            ],
-
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -471,6 +466,11 @@ class _ShareScreenState extends State<ShareScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // Media selection (only for create new note with remote images)
+            if (_preparedNote != null && _remoteImages.isNotEmpty) ...[
+              _buildMediaSelection(l10n),
+              const SizedBox(height: 16),
+            ],
           ],
 
           const SizedBox(height: 24),
