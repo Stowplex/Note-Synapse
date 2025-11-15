@@ -30,5 +30,3 @@ class SystemPromptConfiguration {
     _registered = true;
   }
 }
-
-

@@ -32,5 +32,3 @@ class AppPromptConfiguration {
     _registered = true;
   }
 }
-
-

@@ -71,5 +71,3 @@ class PromptConfigurationService extends ChangeNotifier {
     }
   }
 }
-
-
