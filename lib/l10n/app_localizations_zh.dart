@@ -3052,4 +3052,81 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get newNoteFromShareCreated => '分享的笔记创建成功！';
+
+  @override
+  String get mediaDownloadsHeader => '媒体附件';
+
+  @override
+  String get mediaDownloadsDescription => '选择要下载到本地的图片，以便离线使用。';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get clearAll => '全不选';
+
+  @override
+  String get noRemoteImagesDetected => '此内容中没有检测到网络图片。';
+
+  @override
+  String get mediaPreviewLabel => '预览';
+
+  @override
+  String get imageUrlLabel => '图片地址';
+
+  @override
+  String get downloadToLocalLabel => '下载到本地？';
+
+  @override
+  String mediaDownloadFailed(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 张图片',
+      one: '# 张图片',
+    );
+    return '未能下载$_temp0。';
+  }
+
+  @override
+  String get mediaDownloadNoneAvailable => '此笔记中没有网络图片。';
+
+  @override
+  String get mediaDownloadAlreadyCached => '所有网络图片已缓存到本地。';
+
+  @override
+  String mediaDownloadSuccess(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 张图片',
+      one: '# 张图片',
+    );
+    return '已将$_temp0下载为附件。';
+  }
+
+  @override
+  String mediaDownloadPartial(num successCount, num failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: '# 张',
+      one: '# 张',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: '# 张',
+      one: '# 张',
+    );
+    return '已下载$_temp0，失败$_temp1。';
+  }
+
+  @override
+  String mediaDownloadFailedGeneric(Object error) {
+    return '下载图片失败：$error';
+  }
+
+  @override
+  String get fetchRemoteImages => '抓取网络图片';
 }

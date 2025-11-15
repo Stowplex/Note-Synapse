@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../models/note.dart';
 import '../../models/relationship.dart';
+import '../../utils/remote_image_storage.dart';
+import '../../utils/remote_image_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'ai_prompts.dart';
@@ -374,6 +376,49 @@ class NotePromptBuilder {
         );
       } catch (e) {
         LoggerService.warning('Failed to read attachment $path: $e');
+      }
+    }
+
+    await _addRemoteImageAttachments(target, note, processed);
+  }
+
+  Future<void> _addRemoteImageAttachments(
+    List<PlatformFile> target,
+    Note note,
+    Set<String> processed,
+  ) async {
+    final remoteImages = RemoteImageUtils.extractRemoteImages(note.content);
+    if (remoteImages.isEmpty) {
+      return;
+    }
+
+    for (final image in remoteImages) {
+      try {
+        final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
+          noteId: note.id,
+          imageUrl: image.url,
+        );
+        if (absolutePath == null || processed.contains(absolutePath)) {
+          continue;
+        }
+        final file = File(absolutePath);
+        if (!await file.exists()) {
+          continue;
+        }
+        processed.add(absolutePath);
+        final bytes = await file.readAsBytes();
+        target.add(
+          PlatformFile(
+            name: absolutePath.split('/').last,
+            path: absolutePath,
+            size: bytes.length,
+            bytes: bytes,
+          ),
+        );
+      } catch (e) {
+        LoggerService.warning(
+          'Failed to include cached remote image for note ${note.id}: $e',
+        );
       }
     }
   }

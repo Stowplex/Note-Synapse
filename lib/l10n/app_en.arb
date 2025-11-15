@@ -1190,5 +1190,49 @@
           }
         }
       },
-      "newNoteFromShareCreated": "New note from share created successfully!"
+      "newNoteFromShareCreated": "New note from share created successfully!",
+      "mediaDownloadsHeader": "Media attachments",
+      "mediaDownloadsDescription": "Choose which images to download locally for offline use.",
+      "selectAll": "Select all",
+      "clearAll": "Clear all",
+      "noRemoteImagesDetected": "No remote images detected in this content.",
+      "mediaPreviewLabel": "Preview",
+      "imageUrlLabel": "Image URL",
+      "downloadToLocalLabel": "Download to local?",
+      "mediaDownloadFailed": "Failed to download {count, plural, one {# image} other {# images}}.",
+      "@mediaDownloadFailed": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadNoneAvailable": "No remote images available in this note.",
+      "mediaDownloadAlreadyCached": "All remote images are already cached locally.",
+      "mediaDownloadSuccess": "Downloaded {count, plural, one {# image} other {# images}} to attachments.",
+      "@mediaDownloadSuccess": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadPartial": "Downloaded {successCount, plural, one {# image} other {# images}}, failed {failureCount, plural, one {#} other {#}}.",
+      "@mediaDownloadPartial": {
+        "placeholders": {
+          "successCount": {
+            "type": "num"
+          },
+          "failureCount": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadFailedGeneric": "Failed to download images: {error}",
+      "@mediaDownloadFailedGeneric": {
+        "placeholders": {
+          "error": {}
+        }
+      },
+      "fetchRemoteImages": "Fetch remote images"
 }

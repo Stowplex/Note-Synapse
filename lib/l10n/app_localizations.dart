@@ -5617,6 +5617,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New note from share created successfully!'**
   String get newNoteFromShareCreated;
+
+  /// No description provided for @mediaDownloadsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Media attachments'**
+  String get mediaDownloadsHeader;
+
+  /// No description provided for @mediaDownloadsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose which images to download locally for offline use.'**
+  String get mediaDownloadsDescription;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @clearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get clearAll;
+
+  /// No description provided for @noRemoteImagesDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote images detected in this content.'**
+  String get noRemoteImagesDetected;
+
+  /// No description provided for @mediaPreviewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get mediaPreviewLabel;
+
+  /// No description provided for @imageUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Image URL'**
+  String get imageUrlLabel;
+
+  /// No description provided for @downloadToLocalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Download to local?'**
+  String get downloadToLocalLabel;
+
+  /// No description provided for @mediaDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download {count, plural, one {# image} other {# images}}.'**
+  String mediaDownloadFailed(num count);
+
+  /// No description provided for @mediaDownloadNoneAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote images available in this note.'**
+  String get mediaDownloadNoneAvailable;
+
+  /// No description provided for @mediaDownloadAlreadyCached.
+  ///
+  /// In en, this message translates to:
+  /// **'All remote images are already cached locally.'**
+  String get mediaDownloadAlreadyCached;
+
+  /// No description provided for @mediaDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {count, plural, one {# image} other {# images}} to attachments.'**
+  String mediaDownloadSuccess(num count);
+
+  /// No description provided for @mediaDownloadPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {successCount, plural, one {# image} other {# images}}, failed {failureCount, plural, one {#} other {#}}.'**
+  String mediaDownloadPartial(num successCount, num failureCount);
+
+  /// No description provided for @mediaDownloadFailedGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download images: {error}'**
+  String mediaDownloadFailedGeneric(Object error);
+
+  /// No description provided for @fetchRemoteImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch remote images'**
+  String get fetchRemoteImages;
 }
 
 class _AppLocalizationsDelegate

@@ -13,8 +13,10 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/web_content_extraction_service.dart';
+import '../services/media_attachment_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
+import '../utils/remote_image_utils.dart';
 import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -38,6 +40,8 @@ class _ShareScreenState extends State<ShareScreen> {
   String? _contentType;
   String _tagSearchQuery = '';
   String? _downloadedFilePath; // Track downloaded file path for cleanup
+  List<RemoteImageReference> _remoteImages = const [];
+  final Set<String> _selectedImageUrls = <String>{};
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
@@ -85,6 +89,41 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+  void _applyPreparedNote(Note? note) {
+    _preparedNote = note;
+    if (note == null) {
+      _remoteImages = const [];
+      _selectedImageUrls.clear();
+    } else {
+      _remoteImages = RemoteImageUtils.extractRemoteImages(note.content);
+      _selectedImageUrls
+        ..clear()
+        ..addAll(_remoteImages.map((image) => image.url));
+    }
+  }
+
+  void _toggleAllMediaSelection(bool selectAll) {
+    setState(() {
+      if (selectAll) {
+        _selectedImageUrls
+          ..clear()
+          ..addAll(_remoteImages.map((image) => image.url));
+      } else {
+        _selectedImageUrls.clear();
+      }
+    });
+  }
+
+  void _toggleMediaUrl(String url, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedImageUrls.add(url);
+      } else {
+        _selectedImageUrls.remove(url);
+      }
+    });
+  }
+
   Future<void> _processSharedData() async {
     try {
       setState(() {
@@ -104,7 +143,7 @@ class _ShareScreenState extends State<ShareScreen> {
         if (result['note'] != null) {
           final note = result['note'] as Note;
           setState(() {
-            _preparedNote = note;
+            _applyPreparedNote(note);
           });
           // Initialize the text controllers with the prepared note's data
           _titleController.text = note.title;
@@ -114,7 +153,7 @@ class _ShareScreenState extends State<ShareScreen> {
             result['contentType'] == 'pdf') {
           // For images and PDFs, show extraction options
           setState(() {
-            _preparedNote = null; // Will be created after extraction
+            _applyPreparedNote(null); // Will be created after extraction
           });
         }
       } else {
@@ -165,6 +204,11 @@ class _ShareScreenState extends State<ShareScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
+            if (_preparedNote != null) ...[
+              _buildMediaSelection(l10n),
+              const SizedBox(height: 16),
+            ],
+
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -794,7 +838,7 @@ class _ShareScreenState extends State<ShareScreen> {
       );
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
     } catch (e) {
@@ -834,19 +878,19 @@ class _ShareScreenState extends State<ShareScreen> {
               attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
             );
             setState(() {
-              _preparedNote = noteWithAttachment;
+              _applyPreparedNote(noteWithAttachment);
               _isExtracting = false;
             });
           } else {
             // Already in note, just use the note as-is
             setState(() {
-              _preparedNote = note;
+              _applyPreparedNote(note);
               _isExtracting = false;
             });
           }
         } else {
           setState(() {
-            _preparedNote = note;
+            _applyPreparedNote(note);
             _isExtracting = false;
           });
         }
@@ -1143,7 +1187,7 @@ class _ShareScreenState extends State<ShareScreen> {
       );
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
 
@@ -1216,7 +1260,7 @@ class _ShareScreenState extends State<ShareScreen> {
       }
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
 
@@ -1256,9 +1300,17 @@ class _ShareScreenState extends State<ShareScreen> {
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            note.content,
-            style: Theme.of(context).textTheme.bodyMedium,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 600),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                child: Text(
+                  note.content,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ),
           ),
         ),
         if (note.attachmentPaths.isNotEmpty) ...[
@@ -1291,6 +1343,204 @@ class _ShareScreenState extends State<ShareScreen> {
     );
   }
 
+  Widget _buildMediaSelection(AppLocalizations l10n) {
+    if (_remoteImages.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Icon(
+                Icons.photo_library_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.noRemoteImagesDetected,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final allSelected = _selectedImageUrls.length == _remoteImages.length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  l10n.mediaDownloadsHeader,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => _toggleAllMediaSelection(!allSelected),
+                  child: Text(allSelected ? l10n.clearAll : l10n.selectAll),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.mediaDownloadsDescription,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildMediaSelectionTable(l10n),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaSelectionTable(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              l10n.mediaPreviewLabel,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                l10n.imageUrlLabel,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              l10n.downloadToLocalLabel,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _remoteImages.length,
+              itemBuilder: (context, index) =>
+                  _buildMediaRow(_remoteImages[index]),
+              separatorBuilder: (context, index) => const Divider(height: 16),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaRow(RemoteImageReference media) {
+    final isSelected = _selectedImageUrls.contains(media.url);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 72,
+            height: 72,
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceVariant.withOpacity(0.3),
+            child: Image.network(
+              media.url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.broken_image,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SelectableText(
+            media.url,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 3,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Checkbox(
+          value: isSelected,
+          onChanged: (value) => _toggleMediaUrl(media.url, value ?? false),
+        ),
+      ],
+    );
+  }
+
+  List<String> _mergeAttachmentPaths(
+    List<String> base,
+    Iterable<String> additional,
+  ) {
+    final merged = <String>[];
+    final seen = <String>{};
+
+    void addPath(String path) {
+      if (path.isEmpty) return;
+      final normalized = _normalizeAttachmentPath(path);
+      final key = _attachmentKey(normalized);
+      if (seen.add(key)) {
+        merged.add(normalized);
+      }
+    }
+
+    for (final path in base) {
+      addPath(path);
+    }
+    for (final path in additional) {
+      addPath(path);
+    }
+
+    return merged;
+  }
+
+  String _attachmentKey(String path) {
+    return path.toLowerCase();
+  }
+
+  String _normalizeAttachmentPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    const marker = 'attachments/';
+    final index = normalized.lastIndexOf(marker);
+    if (index != -1) {
+      return normalized.substring(index);
+    }
+    return path;
+  }
+
+  void _showMediaDownloadFailures(
+    RemoteImageDownloadReport? report,
+    AppLocalizations l10n,
+  ) {
+    if (!mounted || report == null || report.failedUrls.isEmpty) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.mediaDownloadFailed(report.failedUrls.length)),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
   Future<void> _handleAction() async {
     final l10n = AppLocalizations.of(context)!;
 
@@ -1310,7 +1560,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
       if (_action == 'create') {
         // Create note with edited title and tags
-        final finalNote = _preparedNote!.copyWith(
+        var finalNote = _preparedNote!.copyWith(
           title: _titleController.text.isNotEmpty
               ? _titleController.text
               : _preparedNote!.title,
@@ -1318,9 +1568,25 @@ class _ShareScreenState extends State<ShareScreen> {
               ? _selectedTags.toList()
               : _preparedNote!.tags,
         );
+
+        RemoteImageDownloadReport? downloadReport;
+        if (_selectedImageUrls.isNotEmpty) {
+          downloadReport = await MediaAttachmentService.downloadRemoteImages(
+            noteId: finalNote.id,
+            imageUrls: _selectedImageUrls,
+          );
+          finalNote = finalNote.copyWith(
+            attachmentPaths: _mergeAttachmentPaths(
+              finalNote.attachmentPaths,
+              downloadReport.urlToRelativePath.values,
+            ),
+          );
+        }
+
         await appProvider.addNote(finalNote);
         // Clear downloaded file path after successful note creation
         _downloadedFilePath = null;
+        _showMediaDownloadFailures(downloadReport, l10n);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1334,15 +1600,23 @@ class _ShareScreenState extends State<ShareScreen> {
           ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
+        RemoteImageDownloadReport? downloadReport;
+        if (_selectedImageUrls.isNotEmpty) {
+          downloadReport = await MediaAttachmentService.downloadRemoteImages(
+            noteId: _selectedNote!.id,
+            imageUrls: _selectedImageUrls,
+          );
+        }
+
         // Append to existing note
         final updatedNote = _selectedNote!.copyWith(
           content:
               '${_selectedNote!.content}\n\n--- Shared Content ---\n${_preparedNote!.content}',
           updatedAt: DateTime.now(),
-          attachmentPaths: [
+          attachmentPaths: _mergeAttachmentPaths([
             ..._selectedNote!.attachmentPaths,
             ..._preparedNote!.attachmentPaths,
-          ],
+          ], downloadReport?.urlToRelativePath.values ?? const []),
           tags: [
             ..._selectedNote!.tags,
             ..._preparedNote!.tags.where(
@@ -1354,6 +1628,7 @@ class _ShareScreenState extends State<ShareScreen> {
         await appProvider.updateNote(updatedNote);
         // Clear downloaded file path after successful note update
         _downloadedFilePath = null;
+        _showMediaDownloadFailures(downloadReport, l10n);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1633,7 +1908,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             });
             widget.onComplete({
               'success': false,
-              'error': l10n.errorDownloading('HTTP ${response.statusCode}', widget.url),
+              'error': l10n.errorDownloading(
+                'HTTP ${response.statusCode}',
+                widget.url,
+              ),
             });
             return;
           }

@@ -25,10 +25,12 @@ import 'note_selection_dialog.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
+import '../services/media_attachment_service.dart';
 import '../models/conversation.dart';
 import 'conversation_chat_screen.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
+import '../utils/remote_image_utils.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -187,7 +189,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
       if (_hasChanges) {
-        _autoSave();
+        unawaited(_autoSave());
       }
     });
   }
@@ -204,7 +206,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
       if (_hasChanges) {
-        _autoSave();
+        unawaited(_autoSave());
       }
     });
   }
@@ -291,9 +293,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => ImmersiveNoteScreen(
-                            notes: [currentNote],
-                          ),
+                          builder: (context) =>
+                              ImmersiveNoteScreen(notes: [currentNote]),
                         ),
                       );
                     },
@@ -307,6 +308,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             const Icon(Icons.share),
                             const SizedBox(width: 8),
                             Text(l10n.shareNote),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'fetch_images',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.download),
+                            const SizedBox(width: 8),
+                            Text(l10n.fetchRemoteImages),
                           ],
                         ),
                       ),
@@ -375,6 +386,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onSelected: (value) {
                       if (value == 'share') {
                         _shareNote();
+                      } else if (value == 'fetch_images') {
+                        _fetchRemoteImages();
                       } else if (value == 'delete') {
                         _deleteNote();
                       } else if (value == 'convert') {
@@ -417,6 +430,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           SelectionArea(
             child: InteractiveCheckboxMarkdown(
               key: ValueKey('note_${currentNote.id}'),
+              noteId: currentNote.id,
               originalContent: currentNote.content,
               onContentChanged: _updateNoteContent,
               style: Theme.of(context).textTheme.bodyLarge,
@@ -521,7 +535,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete, color: Colors.red, size: 16),
+                                    Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                      size: 16,
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(
                                       l10n.deleteSubNote,
@@ -563,9 +581,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                               padding: const EdgeInsets.only(bottom: 8.0),
                               child: SelectableText(
                                 subNote.name,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
+                                style: Theme.of(context).textTheme.titleSmall
                                     ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -573,6 +589,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           SelectionArea(
                             child: InteractiveCheckboxMarkdown(
                               key: ValueKey('subnote_${subNote.id}'),
+                              noteId: currentNote.id,
                               originalContent: subNote.content,
                               onContentChanged: (newContent) =>
                                   _updateSubNoteContent(subNote, newContent),
@@ -585,12 +602,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           // Created date
                           Text(
                             '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.5),
-                              fontSize: 11,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.5),
+                                  fontSize: 11,
+                                ),
                           ),
                         ],
                       ),
@@ -1196,15 +1214,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String _formatDate(DateTime date) {
     final locale = Localizations.localeOf(context);
     String dateStr;
-    
+
     // Format date part based on locale
     if (locale.languageCode == 'zh') {
-      dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      dateStr =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     } else {
       // Default to mm/dd/yyyy for English and other locales
-      dateStr = '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+      dateStr =
+          '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
     }
-    
+
     return '$dateStr at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
@@ -1261,7 +1281,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
   }
 
-  void _autoSave() {
+  Future<void> _autoSave() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_titleController.text.trim().isEmpty &&
         _contentController.text.trim().isEmpty) {
       return; // Don't save empty notes
@@ -1279,6 +1300,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       orElse: () => widget.note,
     );
 
+    final remoteImages = RemoteImageUtils.extractRemoteImages(
+      _contentController.text,
+    );
+    RemoteImageDownloadReport? downloadReport;
+    if (remoteImages.isNotEmpty) {
+      downloadReport = await MediaAttachmentService.downloadRemoteImages(
+        noteId: currentNote.id,
+        imageUrls: remoteImages.map((image) => image.url),
+      );
+    }
+
     final updatedNote = currentNote.copyWith(
       title: _titleController.text.trim().isEmpty
           ? 'Untitled'
@@ -1291,22 +1323,172 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       completeBy: _completeBy != null
           ? AppDateUtils.formatDateOnly(_completeBy!)
           : null,
+      attachmentPaths: _mergeAttachmentPaths(
+        currentNote.attachmentPaths,
+        downloadReport?.urlToRelativePath.values ?? const [],
+      ),
     );
 
-    if (!_hasBeenSaved) {
-      // First save: Add new note to the database
-      appProvider.addNote(updatedNote);
+    try {
+      if (!_hasBeenSaved) {
+        await appProvider.addNote(updatedNote);
+        setState(() {
+          _hasBeenSaved = true; // Mark as saved after first insert
+        });
+      } else {
+        await appProvider.updateNote(updatedNote);
+      }
+
       setState(() {
-        _hasBeenSaved = true; // Mark as saved after first insert
+        _hasChanges = false;
       });
-    } else {
-      // Subsequent saves: Update existing note
-      appProvider.updateNote(updatedNote);
+
+      if ((downloadReport?.failedUrls.isNotEmpty ?? false) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.mediaDownloadFailed(downloadReport!.failedUrls.length),
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Auto-save failed: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  List<String> _mergeAttachmentPaths(
+    List<String> base,
+    Iterable<String> additional,
+  ) {
+    final merged = <String>[];
+    final seen = <String>{};
+
+    void addPath(String path) {
+      if (path.isEmpty) return;
+      final normalized = _normalizeAttachmentPath(path);
+      final key = normalized.toLowerCase();
+      if (seen.add(key)) {
+        merged.add(normalized);
+      }
     }
 
-    setState(() {
-      _hasChanges = false;
-    });
+    for (final path in base) {
+      addPath(path);
+    }
+    for (final path in additional) {
+      addPath(path);
+    }
+    return merged;
+  }
+
+  String _normalizeAttachmentPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    const marker = 'attachments/';
+    final index = normalized.lastIndexOf(marker);
+    if (index != -1) {
+      return normalized.substring(index);
+    }
+    return path;
+  }
+
+  Future<void> _fetchRemoteImages() async {
+    final l10n = AppLocalizations.of(context)!;
+    final remoteUrls = RemoteImageUtils.extractRemoteImages(
+      _contentController.text,
+    ).map((image) => image.url).toSet();
+
+    if (remoteUrls.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.mediaDownloadNoneAvailable)),
+        );
+      }
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final report = await MediaAttachmentService.downloadRemoteImages(
+        noteId: widget.note.id,
+        imageUrls: remoteUrls,
+      );
+
+      if (report.downloadedRelativePaths.isEmpty && report.failedUrls.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.mediaDownloadAlreadyCached)),
+          );
+        }
+        return;
+      }
+
+      final appProvider = context.read<AppProvider>();
+      final currentNote = appProvider.notes.firstWhere(
+        (note) => note.id == widget.note.id,
+        orElse: () => widget.note,
+      );
+
+      final updatedNote = currentNote.copyWith(
+        attachmentPaths: _mergeAttachmentPaths(
+          currentNote.attachmentPaths,
+          report.urlToRelativePath.values,
+        ),
+        updatedAt: DateTime.now(),
+      );
+
+      await appProvider.updateNote(updatedNote);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (report.failedUrls.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.mediaDownloadSuccess(report.downloadedRelativePaths.length),
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.mediaDownloadPartial(
+                report.downloadedRelativePaths.length,
+                report.failedUrls.length,
+              ),
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.mediaDownloadFailedGeneric(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
   }
 
   void _deleteNote() async {
@@ -1633,9 +1815,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (isAudioFile && fileExists && _audioService != null) ...[
+                      if (isAudioFile &&
+                          fileExists &&
+                          _audioService != null) ...[
                         IconButton(
-                          icon: Icon(isCurrentlyPlaying ? Icons.pause : Icons.play_arrow),
+                          icon: Icon(
+                            isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                          ),
                           onPressed: () => _toggleAudioPlayback(attachmentPath),
                           tooltip: isCurrentlyPlaying ? 'Pause' : 'Play',
                           padding: const EdgeInsets.all(8),
@@ -1668,7 +1854,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ] else if (fileExists)
                         IconButton(
                           icon: const Icon(Icons.open_in_new),
-                          onPressed: () => FileUtils.openFile(attachmentPath, context),
+                          onPressed: () =>
+                              FileUtils.openFile(attachmentPath, context),
                           tooltip: 'Open with default application',
                           padding: const EdgeInsets.all(8),
                           constraints: const BoxConstraints(
@@ -1678,7 +1865,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _removeAttachment(attachmentPath, currentNote),
+                        onPressed: () =>
+                            _removeAttachment(attachmentPath, currentNote),
                         tooltip: l10n.removeAttachmentTooltip,
                         padding: const EdgeInsets.all(8),
                         constraints: const BoxConstraints(
@@ -2414,7 +2602,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // Audio transcription methods
   Future<void> _transcribeAudio(String audioPath) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       // Show loading dialog
       showDialog(
@@ -2472,7 +2660,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _addTranscriptionToNote(String transcription) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final currentNote = context.read<AppProvider>().notes.firstWhere(
         (note) => note.id == widget.note.id,
@@ -2998,9 +3186,7 @@ class _RelationshipTypeSelectionDialogState
               Navigator.pop(context, relationshipType);
             }
           },
-          child: Text(
-            l10n.linkNotes(widget.noteCount),
-          ),
+          child: Text(l10n.linkNotes(widget.noteCount)),
         ),
       ],
     );
@@ -3075,7 +3261,8 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                             activeConversationIds: widget.conversations
                                 .map((c) => c.id)
                                 .toList(),
-                            filterByActiveConversations: true, // Filter mode (from note)
+                            filterByActiveConversations:
+                                true, // Filter mode (from note)
                           ),
                         ),
                       );

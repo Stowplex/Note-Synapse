@@ -1504,9 +1504,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       Flexible(
                         child: SelectableText(
                           message.content,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -1594,10 +1595,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       children: List.generate(_pendingAttachments.length, (index) {
         final file = _pendingAttachments[index];
         return InputChip(
-          avatar: Icon(
-            _iconForAttachment(file.path ?? file.name),
-            size: 18,
-          ),
+          avatar: Icon(_iconForAttachment(file.path ?? file.name), size: 18),
           label: Text(file.name, overflow: TextOverflow.ellipsis),
           showCheckmark: false,
           onSelected: (_) => _previewPendingAttachment(file),
@@ -1644,6 +1642,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 key: ValueKey(
                   'immersive_note_${note.id}_${note.updatedAt.toIso8601String()}',
                 ),
+                noteId: note.id,
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
@@ -1703,6 +1702,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 key: ValueKey(
                                   'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
                                 ),
+                                noteId: note.id,
                                 originalContent: subNote.content,
                                 onContentChanged: (_) {},
                                 style: Theme.of(context).textTheme.bodyMedium,

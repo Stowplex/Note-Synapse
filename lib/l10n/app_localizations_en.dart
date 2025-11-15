@@ -3183,4 +3183,85 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get newNoteFromShareCreated =>
       'New note from share created successfully!';
+
+  @override
+  String get mediaDownloadsHeader => 'Media attachments';
+
+  @override
+  String get mediaDownloadsDescription =>
+      'Choose which images to download locally for offline use.';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get clearAll => 'Clear all';
+
+  @override
+  String get noRemoteImagesDetected =>
+      'No remote images detected in this content.';
+
+  @override
+  String get mediaPreviewLabel => 'Preview';
+
+  @override
+  String get imageUrlLabel => 'Image URL';
+
+  @override
+  String get downloadToLocalLabel => 'Download to local?';
+
+  @override
+  String mediaDownloadFailed(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Failed to download $_temp0.';
+  }
+
+  @override
+  String get mediaDownloadNoneAvailable =>
+      'No remote images available in this note.';
+
+  @override
+  String get mediaDownloadAlreadyCached =>
+      'All remote images are already cached locally.';
+
+  @override
+  String mediaDownloadSuccess(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Downloaded $_temp0 to attachments.';
+  }
+
+  @override
+  String mediaDownloadPartial(num successCount, num failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: '#',
+      one: '#',
+    );
+    return 'Downloaded $_temp0, failed $_temp1.';
+  }
+
+  @override
+  String mediaDownloadFailedGeneric(Object error) {
+    return 'Failed to download images: $error';
+  }
+
+  @override
+  String get fetchRemoteImages => 'Fetch remote images';
 }

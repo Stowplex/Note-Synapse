@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -9,12 +10,14 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:path/path.dart' as p;
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
 import '../utils/synapse_temp_utils.dart';
+import '../utils/remote_image_storage.dart';
 import 'interactive_checkbox_component.dart';
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
@@ -27,6 +30,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
   final Function(String, String)? onLinkTap;
   final int? maxLines;
   final TextOverflow? overflow;
+  final String? noteId;
 
   const InteractiveCheckboxMarkdown({
     super.key,
@@ -37,6 +41,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.onLinkTap,
     this.maxLines,
     this.overflow,
+    this.noteId,
   });
 
   @override
@@ -62,21 +67,27 @@ class _InteractiveCheckboxMarkdownState
     }
   }
 
-  void _handleCheckboxToggle(String checkboxLine, String checkboxText, bool newValue) {
+  void _handleCheckboxToggle(
+    String checkboxLine,
+    String checkboxText,
+    bool newValue,
+  ) {
     // Find the checkbox line in the content and update it
     // checkboxLine contains the original matched line (trimmed), checkboxText is the text after [x] or [ ]
     final lines = _currentContent.split('\n');
-    
-    // Match checkboxes with pattern: [ ] or [x] optionally prefixed with - 
+
+    // Match checkboxes with pattern: [ ] or [x] optionally prefixed with -
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
       final trimmedLine = line.trim();
-      
+
       // Try to match the checkbox line by comparing the trimmed versions
       // The checkboxLine passed from the component is already trimmed
       if (trimmedLine == checkboxLine) {
         // This is the exact line - update it
-        final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
+        final checkboxMatch = RegExp(
+          r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$',
+        ).firstMatch(line);
         if (checkboxMatch != null) {
           final indent = checkboxMatch.group(1) ?? '';
           final textAfterCheckbox = checkboxMatch.group(3) ?? '';
@@ -84,7 +95,7 @@ class _InteractiveCheckboxMarkdownState
           final dashPrefix = hasDashPrefix ? '- ' : '';
           final newCheckbox = newValue ? 'x' : ' ';
           lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
-          
+
           _currentContent = lines.join('\n');
           widget.onContentChanged?.call(_currentContent);
           setState(() {});
@@ -93,22 +104,24 @@ class _InteractiveCheckboxMarkdownState
       } else {
         // Try to match by the text content after the checkbox
         // This handles cases where there might be slight differences in whitespace
-        final checkboxMatch = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$').firstMatch(line);
+        final checkboxMatch = RegExp(
+          r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$',
+        ).firstMatch(line);
         if (checkboxMatch != null) {
           final textAfterCheckbox = checkboxMatch.group(3) ?? '';
           // Match by checking if the text portions match
           // Compare the raw text (without markdown processing)
           if (textAfterCheckbox.trim() == checkboxText.trim() ||
-              (textAfterCheckbox.trim().isNotEmpty && 
-               checkboxText.trim().isNotEmpty &&
-               textAfterCheckbox.contains(checkboxText.trim()))) {
+              (textAfterCheckbox.trim().isNotEmpty &&
+                  checkboxText.trim().isNotEmpty &&
+                  textAfterCheckbox.contains(checkboxText.trim()))) {
             // Update the checkbox state
             final indent = checkboxMatch.group(1) ?? '';
             final hasDashPrefix = trimmedLine.startsWith('-');
             final dashPrefix = hasDashPrefix ? '- ' : '';
             final newCheckbox = newValue ? 'x' : ' ';
             lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
-            
+
             _currentContent = lines.join('\n');
             widget.onContentChanged?.call(_currentContent);
             setState(() {});
@@ -138,7 +151,8 @@ class _InteractiveCheckboxMarkdownState
         options: MathOptions(
           sizeUnderTextStyle: MathSize.large,
           color: widget.style?.color ?? Theme.of(context).colorScheme.onSurface,
-          fontSize: widget.style?.fontSize ??
+          fontSize:
+              widget.style?.fontSize ??
               Theme.of(context).textTheme.bodyMedium?.fontSize,
           mathFontOptions: FontOptions(
             fontFamily: "Main",
@@ -157,9 +171,7 @@ class _InteractiveCheckboxMarkdownState
             tex,
             textDirection: widget.textDirection,
             style: textStyle.copyWith(
-              color: (!kDebugMode)
-                  ? null
-                  : Theme.of(context).colorScheme.error,
+              color: (!kDebugMode) ? null : Theme.of(context).colorScheme.error,
             ),
           );
         },
@@ -175,8 +187,8 @@ class _InteractiveCheckboxMarkdownState
       builder: (context, constraints) {
         // Provide a finite maxHeight to prevent layout issues with transforms in selection containers
         // Use a large but finite value if constraints are unbounded
-        final maxHeight = constraints.maxHeight.isFinite &&
-                constraints.maxHeight > 0
+        final maxHeight =
+            constraints.maxHeight.isFinite && constraints.maxHeight > 0
             ? constraints.maxHeight
             : 10000.0; // Large finite value as fallback
 
@@ -184,9 +196,7 @@ class _InteractiveCheckboxMarkdownState
           scrollDirection: Axis.horizontal,
           clipBehavior: Clip.hardEdge,
           child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: maxHeight,
-            ),
+            constraints: BoxConstraints(maxHeight: maxHeight),
             child: mathWidget,
           ),
         );
@@ -217,7 +227,11 @@ class _InteractiveCheckboxMarkdownState
             if (snapshot.hasError && kDebugMode) {
               debugPrint('SynapseTemp image load error: ${snapshot.error}');
             }
-            return _buildPlaceholder(width, height, 'Unable to load temporary image');
+            return _buildPlaceholder(
+              width,
+              height,
+              'Unable to load temporary image',
+            );
           }
 
           final tempFile = snapshot.data!;
@@ -244,13 +258,21 @@ class _InteractiveCheckboxMarkdownState
                 tempFile.bytes,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholder(width, height, 'Failed to render image');
+                  return _buildPlaceholder(
+                    width,
+                    height,
+                    'Failed to render image',
+                  );
                 },
               ),
             );
           }
 
-          return _buildPlaceholder(width, height, 'Unsupported image type: ${tempFile.mimeType}');
+          return _buildPlaceholder(
+            width,
+            height,
+            'Unsupported image type: ${tempFile.mimeType}',
+          );
         },
       );
     }
@@ -282,7 +304,9 @@ class _InteractiveCheckboxMarkdownState
         if (mimetype.toLowerCase() == 'image/svg+xml') {
           // Render SVG using InAppWebView for better compatibility and edge case handling
           try {
-            final svgContent = isBase64 ? utf8.decode(base64.decode(data)) : Uri.decodeComponent(data);
+            final svgContent = isBase64
+                ? utf8.decode(base64.decode(data))
+                : Uri.decodeComponent(data);
             return _buildSvgWebView(svgContent, width, height);
           } catch (e) {
             if (kDebugMode) {
@@ -294,7 +318,11 @@ class _InteractiveCheckboxMarkdownState
 
         if (mimetype.startsWith('image/')) {
           if (!isBase64) {
-            return _buildPlaceholder(width, height, 'Only base64 encoded images are supported');
+            return _buildPlaceholder(
+              width,
+              height,
+              'Only base64 encoded images are supported',
+            );
           }
 
           final bytes = base64.decode(data);
@@ -305,46 +333,63 @@ class _InteractiveCheckboxMarkdownState
               bytes,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
-                return _buildPlaceholder(width, height, 'Failed to render image');
+                return _buildPlaceholder(
+                  width,
+                  height,
+                  'Failed to render image',
+                );
               },
             ),
           );
         }
 
-        return _buildPlaceholder(width, height, 'Unsupported image type: $mimetype');
+        return _buildPlaceholder(
+          width,
+          height,
+          'Unsupported image type: $mimetype',
+        );
       } catch (e) {
         return _buildPlaceholder(width, height, 'Error loading image: $e');
       }
     }
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Image(
-        image: NetworkImage(url),
-        loadingBuilder: (
-          BuildContext context,
-          Widget child,
-          ImageChunkEvent? loadingProgress,
-        ) {
-          if (loadingProgress == null) {
-            return child;
+    if (widget.noteId != null && _isHttpUrl(url)) {
+      return FutureBuilder<_LocalImageSource?>(
+        future: _resolveLocalImageSource(url),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _buildLoadingPlaceholder(width, height);
           }
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                  : null,
-            ),
-          );
+          if (snapshot.hasError) {
+            return _buildNetworkImage(url, width, height);
+          }
+          final source = snapshot.data;
+          if (source != null) {
+            if (source.svgContent != null) {
+              return _buildSvgWebView(source.svgContent!, width, height);
+            }
+            return SizedBox(
+              width: width,
+              height: height,
+              child: Image.file(
+                File(source.path),
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholder(
+                    width,
+                    height,
+                    'Failed to render local image',
+                  );
+                },
+              ),
+            );
+          }
+          return _buildNetworkImage(url, width, height);
         },
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          return const Icon(Icons.broken_image, size: 48);
-        },
-      ),
-    );
+      );
+    }
+
+    return _buildNetworkImage(url, width, height);
   }
 
   /// Builds a placeholder widget for unsupported or error cases.
@@ -378,8 +423,38 @@ class _InteractiveCheckboxMarkdownState
     return SizedBox(
       width: width,
       height: height ?? 100,
-      child: const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
+      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    );
+  }
+
+  Widget _buildNetworkImage(String url, double? width, double? height) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Image(
+        image: NetworkImage(url),
+        loadingBuilder:
+            (
+              BuildContext context,
+              Widget child,
+              ImageChunkEvent? loadingProgress,
+            ) {
+              if (loadingProgress == null) {
+                return child;
+              }
+              return Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              );
+            },
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.broken_image, size: 48);
+        },
       ),
     );
   }
@@ -457,11 +532,11 @@ class _InteractiveCheckboxMarkdownState
   /// Builds an InAppWebView widget to render SVG content with pan and zoom support.
   Widget _buildSvgWebView(String svgContent, double? width, double? height) {
     final htmlContent = _createSvgHtmlWrapper(svgContent);
-    
+
     // Determine the height for the WebView
     // If height is not provided, calculate based on width with a reasonable aspect ratio
     final webViewHeight = height ?? (width != null ? width * 0.75 : 300.0);
-    
+
     // Wrap in GestureDetector to capture touches and prevent parent scroll
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -489,13 +564,13 @@ class _InteractiveCheckboxMarkdownState
             disableHorizontalScroll: false,
           ),
           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(
-              () => EagerGestureRecognizer(),
-            ),
+            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
           },
           onLoadResourceWithCustomScheme: (controller, request) async {
             if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+              final data = await rootBundle.loadString(
+                "assets/scripts/${request.url.host}",
+              );
               return CustomSchemeResponse(
                 contentType: 'application/javascript',
                 data: Uint8List.fromList(utf8.encode(data)),
@@ -506,6 +581,43 @@ class _InteractiveCheckboxMarkdownState
         ),
       ),
     );
+  }
+
+  Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
+    if (widget.noteId == null) {
+      return null;
+    }
+
+    try {
+      final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
+        noteId: widget.noteId!,
+        imageUrl: url,
+      );
+      if (absolutePath == null) {
+        return null;
+      }
+      final file = File(absolutePath);
+      if (!await file.exists()) {
+        return null;
+      }
+      final extension = p.extension(absolutePath).toLowerCase();
+      if (extension == '.svg') {
+        final content = await file.readAsString();
+        return _LocalImageSource(
+          path: absolutePath,
+          extension: extension,
+          svgContent: content,
+        );
+      }
+      return _LocalImageSource(path: absolutePath, extension: extension);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isHttpUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
   }
 
   Widget _buildCodeBlock(
@@ -536,7 +648,8 @@ class _InteractiveCheckboxMarkdownState
       RadioButtonMd(),
       if (widget.onContentChanged != null)
         InteractiveCheckboxMd(
-          onToggle: (line, text, value) => _handleCheckboxToggle(line, text, value),
+          onToggle: (line, text, value) =>
+              _handleCheckboxToggle(line, text, value),
         )
       else
         CheckBoxMd(), // Use regular checkbox if not interactive
@@ -557,6 +670,18 @@ class _InteractiveCheckboxMarkdownState
       components: components,
     );
   }
+}
+
+class _LocalImageSource {
+  const _LocalImageSource({
+    required this.path,
+    required this.extension,
+    this.svgContent,
+  });
+
+  final String path;
+  final String extension;
+  final String? svgContent;
 }
 
 class _HighlightedCodeBlock extends StatefulWidget {
@@ -582,32 +707,31 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final Map<String, TextStyle> themeMap =
-        isDark ? atomOneDarkTheme : atomOneLightTheme;
+    final Map<String, TextStyle> themeMap = isDark
+        ? atomOneDarkTheme
+        : atomOneLightTheme;
     final TextStyle baseStyle = _buildBaseStyle(context);
     final int styleSignature = _styleSignature(baseStyle);
 
-    final _HighlightResult highlightResult =
-        _CodeHighlightEngine.instance.highlight(
-      code: widget.code,
-      languageHint: widget.languageHint,
-      baseStyle: baseStyle,
-      theme: themeMap,
-      isDarkTheme: isDark,
-      styleSignature: styleSignature,
-    );
+    final _HighlightResult highlightResult = _CodeHighlightEngine.instance
+        .highlight(
+          code: widget.code,
+          languageHint: widget.languageHint,
+          baseStyle: baseStyle,
+          theme: themeMap,
+          isDarkTheme: isDark,
+          styleSignature: styleSignature,
+        );
 
     final String? resolvedLanguage = highlightResult.language;
-    final String? fallbackLabel =
-        _CodeHighlightEngine.instance.displayLabel(widget.languageHint);
+    final String? fallbackLabel = _CodeHighlightEngine.instance.displayLabel(
+      widget.languageHint,
+    );
     final String headerLabel = (resolvedLanguage ?? fallbackLabel ?? 'code')
         .toUpperCase();
 
     final Color backgroundColor = isDark
-        ? Color.alphaBlend(
-            Colors.black.withOpacity(0.35),
-            colorScheme.surface,
-          )
+        ? Color.alphaBlend(Colors.black.withOpacity(0.35), colorScheme.surface)
         : Color.alphaBlend(
             colorScheme.primary.withOpacity(0.05),
             colorScheme.surface,
@@ -617,9 +741,7 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
       color: backgroundColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(
-          color: colorScheme.outline.withOpacity(0.12),
-        ),
+        side: BorderSide(color: colorScheme.outline.withOpacity(0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -665,10 +787,7 @@ class _HighlightedCodeBlockState extends State<_HighlightedCodeBlock> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: SelectableText.rich(
-              highlightResult.span,
-              style: baseStyle,
-            ),
+            child: SelectableText.rich(highlightResult.span, style: baseStyle),
           ),
         ],
       ),
@@ -728,8 +847,7 @@ class _CodeHighlightEngine {
     }
   }
 
-  static final _CodeHighlightEngine instance =
-      _CodeHighlightEngine._internal();
+  static final _CodeHighlightEngine instance = _CodeHighlightEngine._internal();
 
   final Highlight _highlight = Highlight();
   final LinkedHashMap<_HighlightCacheKey, _HighlightResult> _cache =
@@ -811,10 +929,7 @@ class _CodeHighlightEngine {
 
     if (_ensureLanguageRegistered(normalizedHint)) {
       try {
-        result = _highlight.highlight(
-          code: code,
-          language: normalizedHint,
-        );
+        result = _highlight.highlight(code: code, language: normalizedHint);
         resolvedLanguage = normalizedHint;
       } on Object catch (error, stackTrace) {
         if (kDebugMode) {
@@ -870,8 +985,11 @@ class _CodeHighlightEngine {
     if (trimmed.isEmpty) {
       return null;
     }
-    final String candidate =
-        trimmed.split(RegExp(r'[\s:{(]')).first.trim().toLowerCase();
+    final String candidate = trimmed
+        .split(RegExp(r'[\s:{(]'))
+        .first
+        .trim()
+        .toLowerCase();
     if (candidate.isEmpty) {
       return null;
     }
@@ -908,10 +1026,7 @@ class _CodeHighlightEngine {
 }
 
 class _HighlightResult {
-  const _HighlightResult({
-    required this.span,
-    this.language,
-  });
+  const _HighlightResult({required this.span, this.language});
 
   final TextSpan span;
   final String? language;
@@ -943,11 +1058,6 @@ class _HighlightCacheKey {
   }
 
   @override
-  int get hashCode => Object.hash(
-        code,
-        languageHint,
-        isDarkTheme,
-        styleSignature,
-      );
+  int get hashCode =>
+      Object.hash(code, languageHint, isDarkTheme, styleSignature);
 }
-

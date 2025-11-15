@@ -37,10 +37,12 @@ class NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Card(
       elevation: isSelected ? 8 : 2,
-      color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+      color: isSelected
+          ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+          : null,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -61,7 +63,9 @@ class NoteCard extends StatelessWidget {
                       note.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        decoration: note.isCompleted ? TextDecoration.lineThrough : null,
+                        decoration: note.isCompleted
+                            ? TextDecoration.lineThrough
+                            : null,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -71,7 +75,11 @@ class NoteCard extends StatelessWidget {
                     IconButton(
                       icon: Icon(
                         note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                        color: note.pinned ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        color: note.pinned
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.6),
                         size: 20,
                       ),
                       onPressed: onPinToggle,
@@ -83,7 +91,9 @@ class NoteCard extends StatelessWidget {
                     IconButton(
                       icon: Icon(
                         Icons.share,
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
                         size: 20,
                       ),
                       onPressed: onShare,
@@ -94,12 +104,20 @@ class NoteCard extends StatelessWidget {
                   if (onArchiveToggle != null)
                     IconButton(
                       icon: Icon(
-                        note.isArchived ? Icons.archive : Icons.archive_outlined,
-                        color: note.isArchived ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        note.isArchived
+                            ? Icons.archive
+                            : Icons.archive_outlined,
+                        color: note.isArchived
+                            ? Theme.of(context).colorScheme.secondary
+                            : Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.6),
                         size: 20,
                       ),
                       onPressed: onArchiveToggle,
-                      tooltip: note.isArchived ? l10n.unarchiveNote : l10n.archiveNote,
+                      tooltip: note.isArchived
+                          ? l10n.unarchiveNote
+                          : l10n.archiveNote,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -113,17 +131,25 @@ class NoteCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              _buildSafeMarkdown(note.content, context),
+              _buildSafeMarkdown(note, context),
               if (note.subNotes.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.list, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
+                    Icon(
+                      Icons.list,
+                      size: 16,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${note.subNotes.length} sub-notes',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                     if (note.isTask && note.subNotes.isNotEmpty) ...[
@@ -131,7 +157,9 @@ class NoteCard extends StatelessWidget {
                       Text(
                         '(${note.subNotes.where((sn) => sn.isCompleted).length}/${note.subNotes.length} completed)',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
                         ),
                       ),
                     ],
@@ -143,16 +171,23 @@ class NoteCard extends StatelessWidget {
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
-                  children: note.tags.take(3).map((tag) => Chip(
-                    label: Text(
-                      tag,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    labelStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  )).toList(),
+                  children: note.tags
+                      .take(3)
+                      .map(
+                        (tag) => Chip(
+                          label: Text(
+                            tag,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.1),
+                          labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               const SizedBox(height: 8),
@@ -160,14 +195,17 @@ class NoteCard extends StatelessWidget {
               LayoutBuilder(
                 builder: (context, constraints) {
                   // Check if we have enough space for horizontal layout
-                  final hasTaskDates = note.isTask && (note.scheduledAt != null || note.completeBy != null);
+                  final hasTaskDates =
+                      note.isTask &&
+                      (note.scheduledAt != null || note.completeBy != null);
                   double estimatedWidth = 200.0; // Base width for created date
                   if (hasTaskDates) {
                     if (note.scheduledAt != null) estimatedWidth += 120.0;
                     if (note.completeBy != null) estimatedWidth += 120.0;
                   }
-                  final useHorizontalLayout = constraints.maxWidth > estimatedWidth;
-                  
+                  final useHorizontalLayout =
+                      constraints.maxWidth > estimatedWidth;
+
                   if (useHorizontalLayout) {
                     // Horizontal layout when there's enough space
                     return Row(
@@ -176,14 +214,19 @@ class NoteCard extends StatelessWidget {
                         Icon(
                           Icons.access_time,
                           size: 14,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           _formatDate(note.createdAt, context),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.6),
+                              ),
                         ),
                         // Task dates
                         if (hasTaskDates) ...[
@@ -197,10 +240,11 @@ class NoteCard extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text(
                               'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.green[600],
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Colors.green[600],
+                                    fontWeight: FontWeight.bold,
+                                  ),
                             ),
                           ],
                           if (note.completeBy != null) ...[
@@ -211,13 +255,14 @@ class NoteCard extends StatelessWidget {
                               color: Colors.orange[600],
                             ),
                             const SizedBox(width: 4),
-                                  Text(
-                                    'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.orange[600],
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                            Text(
+                              'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Colors.orange[600],
+                                    fontWeight: FontWeight.bold,
                                   ),
+                            ),
                           ],
                         ],
                         const Spacer(),
@@ -230,11 +275,14 @@ class NoteCard extends StatelessWidget {
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                           ),
-                        if (showAttachmentIndicator && note.attachmentPaths.isNotEmpty)
+                        if (showAttachmentIndicator &&
+                            note.attachmentPaths.isNotEmpty)
                           Icon(
                             Icons.attach_file,
                             size: 16,
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
                           ),
                       ],
                     );
@@ -249,14 +297,19 @@ class NoteCard extends StatelessWidget {
                             Icon(
                               Icons.access_time,
                               size: 14,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.6),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               _formatDate(note.createdAt, context),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                                  ),
                             ),
                             const Spacer(),
                             // Action buttons
@@ -268,11 +321,14 @@ class NoteCard extends StatelessWidget {
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
-                            if (showAttachmentIndicator && note.attachmentPaths.isNotEmpty)
+                            if (showAttachmentIndicator &&
+                                note.attachmentPaths.isNotEmpty)
                               Icon(
                                 Icons.attach_file,
                                 size: 16,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                           ],
                         ),
@@ -290,10 +346,11 @@ class NoteCard extends StatelessWidget {
                                 const SizedBox(width: 4),
                                 Text(
                                   'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.green[600],
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.green[600],
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                 ),
                               ],
                             ),
@@ -309,10 +366,11 @@ class NoteCard extends StatelessWidget {
                                 const SizedBox(width: 4),
                                 Text(
                                   'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.orange[600],
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.orange[600],
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                 ),
                               ],
                             ),
@@ -332,10 +390,10 @@ class NoteCard extends StatelessWidget {
 
   Widget _buildStatusIcon(Note note) {
     if (!note.isTask) return const SizedBox.shrink();
-    
+
     IconData iconData;
     Color iconColor;
-    
+
     switch (note.status) {
       case TaskStatus.complete:
         iconData = Icons.check_circle;
@@ -355,18 +413,14 @@ class NoteCard extends StatelessWidget {
         iconColor = Colors.grey;
         break;
     }
-    
-    return Icon(
-      iconData,
-      color: iconColor,
-      size: 20,
-    );
+
+    return Icon(iconData, color: iconColor, size: 20);
   }
 
   Widget _buildStatusDropdown(Note note, BuildContext context) {
     if (!note.isTask || onStatusChanged == null) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
-    
+
     return PopupMenuButton<TaskStatus>(
       onSelected: (TaskStatus status) {
         onStatusChanged?.call(status);
@@ -416,7 +470,9 @@ class NoteCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+          ),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -453,7 +509,7 @@ class NoteCard extends StatelessWidget {
     final now = DateTime.now();
     final difference = now.difference(date);
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (difference.inDays == 0) {
       return l10n.today;
     } else if (difference.inDays == 1) {
@@ -465,22 +521,26 @@ class NoteCard extends StatelessWidget {
     }
   }
 
-  Widget _buildSafeMarkdown(String content, BuildContext context) {
+  Widget _buildSafeMarkdown(Note note, BuildContext context) {
+    final content = note.content;
     try {
       // Use InteractiveCheckboxMarkdown approach but limit to first 3 lines
       final lines = content.split('\n');
       final limitedLines = lines.take(3).toList();
       final limitedContent = limitedLines.join('\n');
-      
+
       return ClipRect(
         child: Align(
           alignment: Alignment.topLeft,
           heightFactor: 1.0,
           child: InteractiveCheckboxMarkdown(
+            noteId: note.id,
             originalContent: limitedContent,
-            onContentChanged: onContentChanged ?? (newContent) {
-              // No-op if no callback provided
-            },
+            onContentChanged:
+                onContentChanged ??
+                (newContent) {
+                  // No-op if no callback provided
+                },
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
@@ -495,9 +555,9 @@ class NoteCard extends StatelessWidget {
       // Fallback to simple text if InteractiveCheckboxMarkdown fails
       return Text(
         content,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: Colors.grey[600],
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
         maxLines: 3,
         overflow: TextOverflow.ellipsis,
       );

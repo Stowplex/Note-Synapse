@@ -1190,5 +1190,49 @@
           }
         }
       },
-      "newNoteFromShareCreated": "分享的笔记创建成功！"
+      "newNoteFromShareCreated": "分享的笔记创建成功！",
+      "mediaDownloadsHeader": "媒体附件",
+      "mediaDownloadsDescription": "选择要下载到本地的图片，以便离线使用。",
+      "selectAll": "全选",
+      "clearAll": "全不选",
+      "noRemoteImagesDetected": "此内容中没有检测到网络图片。",
+      "mediaPreviewLabel": "预览",
+      "imageUrlLabel": "图片地址",
+      "downloadToLocalLabel": "下载到本地？",
+      "mediaDownloadFailed": "未能下载{count, plural, one {# 张图片} other {# 张图片}}。",
+      "@mediaDownloadFailed": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadNoneAvailable": "此笔记中没有网络图片。",
+      "mediaDownloadAlreadyCached": "所有网络图片已缓存到本地。",
+      "mediaDownloadSuccess": "已将{count, plural, one {# 张图片} other {# 张图片}}下载为附件。",
+      "@mediaDownloadSuccess": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadPartial": "已下载{successCount, plural, one {# 张} other {# 张}}，失败{failureCount, plural, one {# 张} other {# 张}}。",
+      "@mediaDownloadPartial": {
+        "placeholders": {
+          "successCount": {
+            "type": "num"
+          },
+          "failureCount": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadFailedGeneric": "下载图片失败：{error}",
+      "@mediaDownloadFailedGeneric": {
+        "placeholders": {
+          "error": {}
+        }
+      },
+      "fetchRemoteImages": "抓取网络图片"
 }
