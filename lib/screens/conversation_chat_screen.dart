@@ -413,6 +413,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final newLimit = await _showIterationLimitDialog(
       prompt.exhaustedIterations,
     );
+    if (!mounted) return;
     if (newLimit == null) {
       return;
     }

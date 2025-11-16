@@ -462,6 +462,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final newLimit = await _showIterationLimitDialog(
       prompt.exhaustedIterations,
     );
+    if (!mounted) return;
     if (newLimit == null) {
       return;
     }
