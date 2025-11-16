@@ -8,7 +8,7 @@
   "aiPrompts": "提示词",
   "aiPromptsSubtitle": "自定义AI提示词注入与覆写",
   "aiConversationSettings": "AI 会话",
-  "aiConversationSettingsSubtitle": "控制工具调用安全上限",
+  "aiConversationSettingsSubtitle": "调整AI对话参数",
   "aiConversationSettingsDescription": "设置默认的工具调用次数，超过此次数时会提示你确认。每个会话仍可单独调整。",
   "iterationLimitLabel": "工具迭代上限",
   "iterationLimitValueLabel": "当前上限",

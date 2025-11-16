@@ -8,7 +8,7 @@
   "aiPrompts": "Prompts",
   "aiPromptsSubtitle": "Customize AI prompt injections and overrides",
   "aiConversationSettings": "AI conversations",
-  "aiConversationSettingsSubtitle": "Control tool iteration safety limits",
+  "aiConversationSettingsSubtitle": "Control AI conversation settings",
   "aiConversationSettingsDescription": "Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.",
   "iterationLimitLabel": "Tool iteration limit",
   "iterationLimitValueLabel": "Current limit",

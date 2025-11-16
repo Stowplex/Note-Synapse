@@ -38,7 +38,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiConversationSettingsSubtitle =>
-      'Control tool iteration safety limits';
+      'Control AI conversation settings';
 
   @override
   String get aiConversationSettingsDescription =>

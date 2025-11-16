@@ -36,7 +36,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConversationSettings => 'AI 会话';
 
   @override
-  String get aiConversationSettingsSubtitle => '控制工具调用安全上限';
+  String get aiConversationSettingsSubtitle => '调整AI对话参数';
 
   @override
   String get aiConversationSettingsDescription =>

@@ -155,7 +155,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiConversationSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Control tool iteration safety limits'**
+  /// **'Control AI conversation settings'**
   String get aiConversationSettingsSubtitle;
 
   /// No description provided for @aiConversationSettingsDescription.
