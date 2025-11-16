@@ -2658,6 +2658,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         'Highlight referenced note sections explicitly when possible.',
         AIPrompts.mathFormulaGuidelines,
         AIPrompts.relationshipGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
       needTimeInContext: false,

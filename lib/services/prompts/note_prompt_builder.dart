@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../models/note.dart';
 import '../../models/relationship.dart';
+import '../../utils/prompt_injection_protection.dart';
 import '../../utils/remote_image_storage.dart';
 import '../../utils/remote_image_utils.dart';
 import '../database_service.dart';
@@ -45,7 +46,10 @@ class NotePromptBuilder {
       taskContext:
           'You answer detailed questions about the user\'s notes. The next message contains note context with optional attachments. '
           '${useOwnKnowledge ? 'You may augment answers with general knowledge when helpful.' : 'Do not use outside knowledge unless the notes lack the answer.'}',
-      guidelines: guidelines,
+      guidelines: [
+        ...guidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
+      ],
     );
 
     final contextMessage = await buildContextMessage(contextNotes);
@@ -104,6 +108,7 @@ class NotePromptBuilder {
         'Preserve critical information unless explicitly told to remove it.',
         'Indicate any assumptions made during transformation.',
         AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
     );
 
@@ -160,6 +165,7 @@ class NotePromptBuilder {
         'Derive relative dates using the current date/time context before responding.',
         'Create related notes that align with observed relationships.',
         AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
     );
 
@@ -272,9 +278,15 @@ class NotePromptBuilder {
     processed.add(note.id);
 
     final indent = '  ' * depth;
-    buffer.writeln('$indent- ${note.title} (${note.type.name})');
+    // Quote title to prevent injection
+    final safeTitle = PromptInjectionProtection.formatTitleAsData(note.title);
+    buffer.writeln('$indent- Title: $safeTitle (${note.type.name})');
     if (note.content.trim().isNotEmpty) {
-      buffer.writeln('$indent  Content: ${note.content.trim()}');
+      // Quote content as data to prevent prompt injection
+      buffer.writeln('$indent  Content (data only):');
+      buffer.writeln(
+        '$indent  ${PromptInjectionProtection.formatNoteContentAsData(note.content.trim())}',
+      );
     }
 
     if (note.tags.isNotEmpty) {
@@ -284,9 +296,13 @@ class NotePromptBuilder {
     if (note.subNotes.isNotEmpty) {
       buffer.writeln('$indent  Sub-notes:');
       for (final subNote in note.subNotes) {
+        // Quote sub-note content as data
+        final safeSubNoteContent =
+            PromptInjectionProtection.formatNoteContentAsData(subNote.content);
         buffer.writeln(
-          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}: ${subNote.content}',
+          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}:',
         );
+        buffer.writeln('$indent      $safeSubNoteContent');
       }
     }
 

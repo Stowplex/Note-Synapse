@@ -972,6 +972,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,
         AIPrompts.relationshipGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _conversationStartTime,
       needTimeInContext: false, // Precise time comes with user message.
