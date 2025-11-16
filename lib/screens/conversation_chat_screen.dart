@@ -440,7 +440,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       text: (currentLimit + 5).toString(),
     );
     try {
-      return await showDialog<int>(
+      final result = await showDialog<int>(
         context: context,
         builder: (dialogContext) {
           String? errorText;
@@ -491,8 +491,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           );
         },
       );
-    } finally {
+      // Delay disposal to ensure dialog has fully closed
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.dispose();
+      });
+      return result;
+    } catch (e) {
+      // Dispose immediately on error
       controller.dispose();
+      rethrow;
     }
   }
 

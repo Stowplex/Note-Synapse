@@ -419,21 +419,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.tune),
-                    title: Text(l10n.aiPrompts),
-                    subtitle: Text(l10n.aiPromptsSubtitle),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PromptSettingsScreen(),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -674,6 +659,21 @@ class _AiConversationSettingsScreenState
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: Text(l10n.aiPrompts),
+                    subtitle: Text(l10n.aiPromptsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PromptSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
