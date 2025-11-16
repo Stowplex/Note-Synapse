@@ -740,13 +740,13 @@ class _ShareScreenState extends State<ShareScreen> {
               const SizedBox(height: 16),
             ],
             Text(
-              'Choose how to handle this link.',
+              l10n.shareUrlChoiceTitle,
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Extract lets you review the page before capturing it, or keep the URL as-is.',
+              l10n.shareUrlChoiceDescription,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -767,7 +767,7 @@ class _ShareScreenState extends State<ShareScreen> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Extract'),
+                        : Text(l10n.webExtractionManualExtract),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1639,31 +1639,21 @@ class _WebExtractionDialog extends StatefulWidget {
 }
 
 class _WebExtractionDialogState extends State<_WebExtractionDialog> {
-  static const String _interactionStatus =
-      'Interact with the page before extracting. Expand or toggle anything you need, then choose how to extract.';
-
   bool _isLoading = true;
   bool _isProcessing = false;
   bool _isApplyingReadability = false;
-  bool _readabilityEnabled = false;
-  bool _readabilityScriptInjected = false;
+  bool _readabilityEnabled = true;
   bool _isDownloading = false;
   bool _fileDownloaded = false;
   bool _downloadFailed = false;
   bool _fileCheckCompleted = false;
   bool _hasStartedFileCheck = false;
-  String _status = 'Loading...';
+  String _status = '';
   String? _errorMessage;
   String? _downloadedFilePath;
   String? _activeAction;
   InAppWebViewController? _controller;
   WebUri? _currentUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _status = 'Loading...';
-  }
 
   @override
   void didChangeDependencies() {
@@ -1698,7 +1688,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       String? detectedContentType;
       if (!hasFileExtension) {
         setState(() {
-          _status = 'Checking file type...';
+          _status = l10n.webExtractionStatusCheckingFileType;
         });
         try {
           final headResponse = await http.head(Uri.parse(widget.url));
@@ -1730,7 +1720,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       if (isPdfOrStaticFile) {
         setState(() {
           _isDownloading = true;
-          _status = 'Downloading file...';
+          _status = l10n.webExtractionStatusDownloadingFile;
         });
 
         try {
@@ -1849,7 +1839,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 _fileDownloaded = true;
                 _isDownloading = false;
                 _isLoading = false;
-                _status = 'File downloaded successfully';
+                _status = l10n.webExtractionStatusFileDownloaded;
               });
 
               await Future.delayed(const Duration(milliseconds: 500));
@@ -1870,7 +1860,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               _downloadFailed = true;
               _isDownloading = false;
               _isLoading = false;
-              _status = 'Download failed: HTTP ${response.statusCode}';
+              _status = l10n.webExtractionStatusDownloadFailed(
+                'HTTP ${response.statusCode}',
+              );
             });
             widget.onComplete({
               'success': false,
@@ -1889,7 +1881,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             _downloadFailed = true;
             _isDownloading = false;
             _isLoading = false;
-            _status = 'Download failed: ${e.toString()}';
+            _status = l10n.webExtractionStatusDownloadFailed(
+              e.toString(),
+            );
           });
           widget.onComplete({
             'success': false,
@@ -1948,11 +1942,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
+
     if (!enabled) {
       setState(() {
         _readabilityEnabled = false;
         _isApplyingReadability = true;
-        _status = 'Reloading original page...';
+        _status = l10n.webExtractionStatusReloadingOriginal;
       });
       await _reloadCurrentPage();
       if (!mounted) {
@@ -1960,29 +1956,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
       setState(() {
         _isApplyingReadability = false;
+        _status = l10n.loadingWebPage;
       });
       return;
     }
 
     setState(() {
       _readabilityEnabled = true;
-      _isApplyingReadability = true;
-      _status = 'Applying readability view...';
       _errorMessage = null;
     });
 
-    final success = await _applyReadabilityMode();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _isApplyingReadability = false;
-      if (success) {
-        _status = 'Readability view enabled.';
-      } else {
-        _readabilityEnabled = false;
-      }
-    });
+    await _applyReadabilityMode();
   }
 
   Future<void> _reloadCurrentPage() async {
@@ -1998,55 +1982,46 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       return false;
     }
 
-    try {
-      await _ensureReadabilityScript();
-      final result = await _controller!.evaluateJavascript(source: '''
-        (function() {
-          try {
-            const article = new Readability(document).parse();
-            if (!article || !article.content) {
-              return { success: false, error: 'No readable content found' };
-            }
-            var styleId = '__ns_readability_style';
-            var style = document.getElementById(styleId);
-            if (!style) {
-              style = document.createElement('style');
-              style.id = styleId;
-              style.innerHTML = 'body { margin: 0 auto; max-width: 720px; padding: 24px; font-size: 18px; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #ffffff; color: #111111; } img { max-width: 100%; height: auto; }';
-              document.head.appendChild(style);
-            }
-            document.body.innerHTML = article.content;
-            document.title = article.title || document.title;
-            window.scrollTo(0, 0);
-            return { success: true };
-          } catch (e) {
-            return { success: false, error: e.toString() };
-          }
-        })();
-      ''');
+    final l10n = AppLocalizations.of(context)!;
 
-      if (result is Map && result['success'] == true) {
+    setState(() {
+      _isApplyingReadability = true;
+      _status = l10n.webExtractionStatusApplyingReadability;
+      _errorMessage = null;
+    });
+
+    try {
+      await WebContentExtractionService.applyReadabilityView(_controller!);
+      if (!mounted) {
         return true;
       }
       setState(() {
-        _errorMessage = (result is Map ? result['error'] : null)?.toString() ??
-            'Unable to build readability view.';
+        _isApplyingReadability = false;
+        _status = l10n.webExtractionStatusReadabilityEnabled;
+      });
+      return true;
+    } on ReadabilityExtractionException catch (e) {
+      if (!mounted) {
+        return false;
+      }
+      setState(() {
+        _isApplyingReadability = false;
+        _readabilityEnabled = false;
+        _status = l10n.webExtractionStatusReady;
+        _errorMessage = l10n.readabilityExtractionFailed(e.message);
       });
     } catch (e) {
+      if (!mounted) {
+        return false;
+      }
       setState(() {
+        _isApplyingReadability = false;
+        _readabilityEnabled = false;
+        _status = l10n.webExtractionStatusReady;
         _errorMessage = e.toString();
       });
     }
     return false;
-  }
-
-  Future<void> _ensureReadabilityScript() async {
-    if (_readabilityScriptInjected || _controller == null) {
-      return;
-    }
-    final script = await WebContentExtractionService.getReadabilityScript();
-    await _controller!.evaluateJavascript(source: script);
-    _readabilityScriptInjected = true;
   }
 
   Future<String> _getCurrentPageBodyHtml() async {
@@ -2218,14 +2193,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            _interactionStatus,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Colors.grey[700]),
-          ),
           if (_errorMessage != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -2238,7 +2205,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     );
   }
 
-  Widget _buildReadabilityToggle() {
+  Widget _buildReadabilityToggle(AppLocalizations l10n) {
     final toggleBackground =
         Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3);
 
@@ -2254,12 +2221,12 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Readability',
+                  l10n.webExtractionReadabilityLabel,
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Simplify the page before extracting. Turning it off reloads the page.',
+                  l10n.webExtractionReadabilityDescription,
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -2300,7 +2267,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Extract'),
+                      : Text(l10n.webExtractionManualExtract),
                 ),
               ),
               const SizedBox(width: 12),
@@ -2324,7 +2291,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('AI-Extract'),
+                        : Text(l10n.webExtractionAiExtract),
                   ),
                 ),
               ),
@@ -2372,9 +2339,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _isLoading = true;
           _status = l10n.loadingWebPage;
           _errorMessage = null;
-          _readabilityEnabled = false;
           _isApplyingReadability = false;
-          _readabilityScriptInjected = false;
         });
       },
       onLoadStop: (controller, url) async {
@@ -2384,9 +2349,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         setState(() {
           _currentUrl = url;
           _isLoading = false;
-          _status = _interactionStatus;
+          _status = l10n.webExtractionStatusReady;
           _errorMessage = null;
         });
+
+        if (_readabilityEnabled) {
+          await _applyReadabilityMode();
+        }
       },
       onLoadError: (controller, url, code, message) {
         widget.onComplete({
@@ -2469,7 +2438,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           children: [
             _buildHeader(l10n),
             _buildStatusSection(),
-            _buildReadabilityToggle(),
+            _buildReadabilityToggle(l10n),
             Expanded(child: _buildWebView(l10n)),
             _buildActionButtons(l10n),
           ],

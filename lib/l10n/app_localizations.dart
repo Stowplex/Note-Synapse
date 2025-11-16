@@ -5024,6 +5024,90 @@ abstract class AppLocalizations {
   /// **'Please use Android, iOS, or Web to extract web content.'**
   String get pleaseUseOtherPlatformsForWebExtraction;
 
+  /// No description provided for @shareUrlChoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to handle this link.'**
+  String get shareUrlChoiceTitle;
+
+  /// No description provided for @shareUrlChoiceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract lets you review the page before capturing it, or keep the URL as-is.'**
+  String get shareUrlChoiceDescription;
+
+  /// No description provided for @webExtractionStatusCheckingFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking file type...'**
+  String get webExtractionStatusCheckingFileType;
+
+  /// No description provided for @webExtractionStatusDownloadingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading file...'**
+  String get webExtractionStatusDownloadingFile;
+
+  /// No description provided for @webExtractionStatusFileDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'File downloaded successfully'**
+  String get webExtractionStatusFileDownloaded;
+
+  /// No description provided for @webExtractionStatusDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {reason}'**
+  String webExtractionStatusDownloadFailed(String reason);
+
+  /// No description provided for @webExtractionStatusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Page ready. Interact before extracting.'**
+  String get webExtractionStatusReady;
+
+  /// No description provided for @webExtractionStatusApplyingReadability.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying readability view...'**
+  String get webExtractionStatusApplyingReadability;
+
+  /// No description provided for @webExtractionStatusReloadingOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Reloading original page...'**
+  String get webExtractionStatusReloadingOriginal;
+
+  /// No description provided for @webExtractionStatusReadabilityEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Readability view enabled.'**
+  String get webExtractionStatusReadabilityEnabled;
+
+  /// No description provided for @webExtractionReadabilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Readability'**
+  String get webExtractionReadabilityLabel;
+
+  /// No description provided for @webExtractionReadabilityDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Simplify the page before extracting. Turning it off reloads the page.'**
+  String get webExtractionReadabilityDescription;
+
+  /// No description provided for @webExtractionManualExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract'**
+  String get webExtractionManualExtract;
+
+  /// No description provided for @webExtractionAiExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'AI-Extract'**
+  String get webExtractionAiExtract;
+
   /// No description provided for @extractWebContent.
   ///
   /// In en, this message translates to:

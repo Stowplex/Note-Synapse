@@ -995,6 +995,27 @@
   "urlDetected": "检测到URL",
   "webContentExtractionNotSupportedLinux": "Linux不支持网页内容提取。",
   "pleaseUseOtherPlatformsForWebExtraction": "请使用Android、iOS或Web版本来提取网页内容。",
+  "shareUrlChoiceTitle": "选择如何处理此链接。",
+  "shareUrlChoiceDescription": "“提取”允许你在保存前预览网页，或直接保留原始链接。",
+  "webExtractionStatusCheckingFileType": "正在检查文件类型...",
+  "webExtractionStatusDownloadingFile": "正在下载文件...",
+  "webExtractionStatusFileDownloaded": "文件下载成功",
+  "webExtractionStatusDownloadFailed": "下载失败：{reason}",
+  "@webExtractionStatusDownloadFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "webExtractionStatusReady": "页面已就绪，可在提取前进行交互。",
+  "webExtractionStatusApplyingReadability": "正在启用阅读模式...",
+  "webExtractionStatusReloadingOriginal": "正在重新加载原始页面...",
+  "webExtractionStatusReadabilityEnabled": "已启用阅读模式。",
+  "webExtractionReadabilityLabel": "阅读模式",
+  "webExtractionReadabilityDescription": "在提取前简化页面，关闭后将重新加载原始页面。",
+  "webExtractionManualExtract": "提取",
+  "webExtractionAiExtract": "AI提取",
   "extractWebContent": "提取网页内容",
   "extracting": "提取中...",
   "extractContentUsingAiForBetterResults": "使用AI提取内容以获得更好的结果",

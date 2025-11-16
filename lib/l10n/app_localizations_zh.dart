@@ -2730,6 +2730,50 @@ class AppLocalizationsZh extends AppLocalizations {
       '请使用Android、iOS或Web版本来提取网页内容。';
 
   @override
+  String get shareUrlChoiceTitle => '选择如何处理此链接。';
+
+  @override
+  String get shareUrlChoiceDescription => '“提取”允许你在保存前预览网页，或直接保留原始链接。';
+
+  @override
+  String get webExtractionStatusCheckingFileType => '正在检查文件类型...';
+
+  @override
+  String get webExtractionStatusDownloadingFile => '正在下载文件...';
+
+  @override
+  String get webExtractionStatusFileDownloaded => '文件下载成功';
+
+  @override
+  String webExtractionStatusDownloadFailed(String reason) {
+    return '下载失败：$reason';
+  }
+
+  @override
+  String get webExtractionStatusReady => '页面已就绪，可在提取前进行交互。';
+
+  @override
+  String get webExtractionStatusApplyingReadability => '正在启用阅读模式...';
+
+  @override
+  String get webExtractionStatusReloadingOriginal => '正在重新加载原始页面...';
+
+  @override
+  String get webExtractionStatusReadabilityEnabled => '已启用阅读模式。';
+
+  @override
+  String get webExtractionReadabilityLabel => '阅读模式';
+
+  @override
+  String get webExtractionReadabilityDescription => '在提取前简化页面，关闭后将重新加载原始页面。';
+
+  @override
+  String get webExtractionManualExtract => '提取';
+
+  @override
+  String get webExtractionAiExtract => 'AI提取';
+
+  @override
   String get extractWebContent => '提取网页内容';
 
   @override

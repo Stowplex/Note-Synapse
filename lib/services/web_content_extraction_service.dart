@@ -86,6 +86,33 @@ class WebContentExtractionService {
     );
   }
 
+  /// Applies the Readability DOM transformation to the currently loaded page.
+  /// Throws [ReadabilityExtractionException] if the transformation fails.
+  static Future<void> applyReadabilityView(
+    InAppWebViewController controller,
+  ) async {
+    final script = await _loadReadabilityScript();
+    await controller.evaluateJavascript(source: script);
+
+    final result = await controller.evaluateJavascript(
+      source: _readabilityDomApplyScript,
+    );
+
+    if (result is Map) {
+      if (result['success'] == true) {
+        return;
+      }
+
+      final error =
+          result['error']?.toString() ?? 'Readability returned empty result';
+      throw ReadabilityExtractionException(error);
+    }
+
+    throw ReadabilityExtractionException(
+      'Unexpected response while applying Readability',
+    );
+  }
+
   static Future<WebContentExtractionResult> extractFromUrl(
     String url, {
     Duration timeout = const Duration(seconds: 45),
@@ -211,6 +238,34 @@ class WebContentExtractionService {
         return { error: 'Readability returned empty result' };
       } catch (e) {
         return { error: e.toString() };
+      }
+    })();
+  ''';
+
+  static const String _readabilityDomApplyScript = '''
+    (function() {
+      try {
+        const article = new Readability(document).parse();
+        if (!article || !article.content) {
+          return { success: false, error: 'Readability returned empty result' };
+        }
+
+        const styleId = '__ns_readability_style';
+        let style = document.getElementById(styleId);
+        if (!style) {
+          style = document.createElement('style');
+          style.id = styleId;
+          style.innerHTML = 'body { margin: 0 auto; max-width: 720px; padding: 24px; font-size: 18px; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #ffffff; color: #111111; } img { max-width: 100%; height: auto; }';
+          document.head.appendChild(style);
+        }
+
+        document.body.innerHTML = article.content;
+        document.title = article.title || document.title;
+        window.scrollTo(0, 0);
+
+        return { success: true, title: article.title || '' };
+      } catch (e) {
+        return { success: false, error: e.toString() };
       }
     })();
   ''';

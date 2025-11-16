@@ -2840,6 +2840,57 @@ class AppLocalizationsEn extends AppLocalizations {
       'Please use Android, iOS, or Web to extract web content.';
 
   @override
+  String get shareUrlChoiceTitle => 'Choose how to handle this link.';
+
+  @override
+  String get shareUrlChoiceDescription =>
+      'Extract lets you review the page before capturing it, or keep the URL as-is.';
+
+  @override
+  String get webExtractionStatusCheckingFileType => 'Checking file type...';
+
+  @override
+  String get webExtractionStatusDownloadingFile => 'Downloading file...';
+
+  @override
+  String get webExtractionStatusFileDownloaded =>
+      'File downloaded successfully';
+
+  @override
+  String webExtractionStatusDownloadFailed(String reason) {
+    return 'Download failed: $reason';
+  }
+
+  @override
+  String get webExtractionStatusReady =>
+      'Page ready. Interact before extracting.';
+
+  @override
+  String get webExtractionStatusApplyingReadability =>
+      'Applying readability view...';
+
+  @override
+  String get webExtractionStatusReloadingOriginal =>
+      'Reloading original page...';
+
+  @override
+  String get webExtractionStatusReadabilityEnabled =>
+      'Readability view enabled.';
+
+  @override
+  String get webExtractionReadabilityLabel => 'Readability';
+
+  @override
+  String get webExtractionReadabilityDescription =>
+      'Simplify the page before extracting. Turning it off reloads the page.';
+
+  @override
+  String get webExtractionManualExtract => 'Extract';
+
+  @override
+  String get webExtractionAiExtract => 'AI-Extract';
+
+  @override
   String get extractWebContent => 'Extract Web Content';
 
   @override

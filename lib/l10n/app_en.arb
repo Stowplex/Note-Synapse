@@ -995,6 +995,27 @@
   "urlDetected": "URL Detected",
   "webContentExtractionNotSupportedLinux": "Web content extraction is not supported on Linux.",
   "pleaseUseOtherPlatformsForWebExtraction": "Please use Android, iOS, or Web to extract web content.",
+  "shareUrlChoiceTitle": "Choose how to handle this link.",
+  "shareUrlChoiceDescription": "Extract lets you review the page before capturing it, or keep the URL as-is.",
+  "webExtractionStatusCheckingFileType": "Checking file type...",
+  "webExtractionStatusDownloadingFile": "Downloading file...",
+  "webExtractionStatusFileDownloaded": "File downloaded successfully",
+  "webExtractionStatusDownloadFailed": "Download failed: {reason}",
+  "@webExtractionStatusDownloadFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "webExtractionStatusReady": "Page ready. Interact before extracting.",
+  "webExtractionStatusApplyingReadability": "Applying readability view...",
+  "webExtractionStatusReloadingOriginal": "Reloading original page...",
+  "webExtractionStatusReadabilityEnabled": "Readability view enabled.",
+  "webExtractionReadabilityLabel": "Readability",
+  "webExtractionReadabilityDescription": "Simplify the page before extracting. Turning it off reloads the page.",
+  "webExtractionManualExtract": "Extract",
+  "webExtractionAiExtract": "AI-Extract",
   "extractWebContent": "Extract Web Content",
   "extracting": "Extracting...",
   "extractContentUsingAiForBetterResults": "Extract content using AI for better results",
