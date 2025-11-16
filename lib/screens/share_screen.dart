@@ -1524,6 +1524,15 @@ class _ShareScreenState extends State<ShareScreen> {
       _isCreating = true;
     });
 
+    // Capture ScaffoldMessenger and Navigator before any async operations
+    // to avoid using deactivated context
+    ScaffoldMessengerState? scaffoldMessenger;
+    NavigatorState? navigator;
+    if (mounted) {
+      scaffoldMessenger = ScaffoldMessenger.of(context);
+      navigator = Navigator.of(context);
+    }
+
     try {
       final appProvider = context.read<AppProvider>();
 
@@ -1556,17 +1565,15 @@ class _ShareScreenState extends State<ShareScreen> {
         // Clear downloaded file path after successful note creation
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted && scaffoldMessenger != null && navigator != null) {
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text(l10n.noteCreatedSuccessfully(finalNote.title)),
               backgroundColor: Colors.green,
             ),
           );
           // Navigate to main screen instead of just popping
-          Navigator.of(
-            context,
-          ).pushNamedAndRemoveUntil('/main', (route) => false);
+          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
         RemoteImageDownloadReport? downloadReport;
@@ -1598,17 +1605,15 @@ class _ShareScreenState extends State<ShareScreen> {
         // Clear downloaded file path after successful note update
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted && scaffoldMessenger != null && navigator != null) {
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text(l10n.contentAppendedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
           // Navigate to main screen instead of just popping
-          Navigator.of(
-            context,
-          ).pushNamedAndRemoveUntil('/main', (route) => false);
+          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
         }
       }
     } catch (e) {
@@ -1616,8 +1621,8 @@ class _ShareScreenState extends State<ShareScreen> {
         _isCreating = false;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted && scaffoldMessenger != null) {
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
