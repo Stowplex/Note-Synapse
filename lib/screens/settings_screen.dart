@@ -13,6 +13,7 @@ import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
 import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
+import '../services/conversation_settings_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -86,6 +87,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AIDebugOverlayScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.repeat),
+              title: Text(l10n.aiConversationSettings),
+              subtitle: Text(l10n.aiConversationSettingsSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AiConversationSettingsScreen(),
                 ),
               ),
             ),
@@ -593,6 +609,151 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       case ModelType.openaiCompatible:
         return l10n.openaiCompatibleModelDescription;
     }
+  }
+}
+
+class AiConversationSettingsScreen extends StatefulWidget {
+  const AiConversationSettingsScreen({super.key});
+
+  @override
+  State<AiConversationSettingsScreen> createState() =>
+      _AiConversationSettingsScreenState();
+}
+
+class _AiConversationSettingsScreenState
+    extends State<AiConversationSettingsScreen> {
+  int _maxIterations = ConversationSettingsService.defaultMaxToolIterations;
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    final value = await ConversationSettingsService.getMaxToolIterations();
+    if (!mounted) return;
+    setState(() {
+      _maxIterations = value;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _updatePreference(int newValue) async {
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      await ConversationSettingsService.setMaxToolIterations(newValue);
+      if (!mounted) return;
+      setState(() {
+        _maxIterations = newValue;
+      });
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.iterationLimitUpdated(newValue))),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.aiConversationSettings)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.iterationLimitLabel,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.aiConversationSettingsDescription,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              l10n.iterationLimitValueLabel,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            Text(
+                              l10n.iterationLimitValue(_maxIterations),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Slider(
+                          value: _maxIterations.toDouble(),
+                          min: ConversationSettingsService.minToolIterations
+                              .toDouble(),
+                          max: ConversationSettingsService.maxToolIterationsCap
+                              .toDouble(),
+                          divisions:
+                              ConversationSettingsService.maxToolIterationsCap -
+                              ConversationSettingsService.minToolIterations,
+                          label: '$_maxIterations',
+                          onChanged: (value) {
+                            setState(() {
+                              _maxIterations = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updatePreference(value.round()),
+                        ),
+                        Text(
+                          l10n.iterationLimitHelper(
+                            ConversationSettingsService.minToolIterations,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                        ),
+                        if (_isSaving) ...[
+                          const SizedBox(height: 12),
+                          const LinearProgressIndicator(minHeight: 2),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
   }
 }
 

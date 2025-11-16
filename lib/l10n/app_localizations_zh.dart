@@ -33,6 +33,64 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPromptsSubtitle => '自定义AI提示词注入与覆写';
 
   @override
+  String get aiConversationSettings => 'AI 会话';
+
+  @override
+  String get aiConversationSettingsSubtitle => '控制工具调用安全上限';
+
+  @override
+  String get aiConversationSettingsDescription =>
+      '设置默认的工具调用次数，超过此次数时会提示你确认。每个会话仍可单独调整。';
+
+  @override
+  String get iterationLimitLabel => '工具迭代上限';
+
+  @override
+  String get iterationLimitValueLabel => '当前上限';
+
+  @override
+  String iterationLimitValue(Object count) {
+    return '$count 次迭代';
+  }
+
+  @override
+  String iterationLimitPrompt(Object count) {
+    return '已达到允许的工具调用次数（$count）。要继续吗？';
+  }
+
+  @override
+  String get iterationLimitContinue => '继续';
+
+  @override
+  String get iterationLimitAbort => '停止';
+
+  @override
+  String get iterationLimitDialogTitle => '允许更多迭代';
+
+  @override
+  String iterationLimitDialogDescription(Object currentLimit) {
+    return '输入一个大于 $currentLimit 的数值，以提升该会话的上限。';
+  }
+
+  @override
+  String get iterationLimitInputLabel => '新的最大次数';
+
+  @override
+  String iterationLimitHelper(Object minLimit) {
+    return '最小允许值：$minLimit';
+  }
+
+  @override
+  String iterationLimitDialogError(Object minLimit) {
+    return '请输入大于 $minLimit 的数值。';
+  }
+
+  @override
+  String iterationLimitUpdated(Object count) {
+    return '迭代上限已更新为 $count';
+  }
+
+  @override
   String get darkMode => '深色模式';
 
   @override

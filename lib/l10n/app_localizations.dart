@@ -146,6 +146,96 @@ abstract class AppLocalizations {
   /// **'Customize AI prompt injections and overrides'**
   String get aiPromptsSubtitle;
 
+  /// No description provided for @aiConversationSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'AI conversations'**
+  String get aiConversationSettings;
+
+  /// No description provided for @aiConversationSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Control tool iteration safety limits'**
+  String get aiConversationSettingsSubtitle;
+
+  /// No description provided for @aiConversationSettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.'**
+  String get aiConversationSettingsDescription;
+
+  /// No description provided for @iterationLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool iteration limit'**
+  String get iterationLimitLabel;
+
+  /// No description provided for @iterationLimitValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current limit'**
+  String get iterationLimitValueLabel;
+
+  /// No description provided for @iterationLimitValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} iterations'**
+  String iterationLimitValue(Object count);
+
+  /// No description provided for @iterationLimitPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Reached the allowed tool iterations ({count}). Continue?'**
+  String iterationLimitPrompt(Object count);
+
+  /// No description provided for @iterationLimitContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get iterationLimitContinue;
+
+  /// No description provided for @iterationLimitAbort.
+  ///
+  /// In en, this message translates to:
+  /// **'Abort'**
+  String get iterationLimitAbort;
+
+  /// No description provided for @iterationLimitDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow more iterations'**
+  String get iterationLimitDialogTitle;
+
+  /// No description provided for @iterationLimitDialogDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a value greater than {currentLimit} to extend this conversation\'s limit.'**
+  String iterationLimitDialogDescription(Object currentLimit);
+
+  /// No description provided for @iterationLimitInputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New maximum'**
+  String get iterationLimitInputLabel;
+
+  /// No description provided for @iterationLimitHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum allowed: {minLimit}'**
+  String iterationLimitHelper(Object minLimit);
+
+  /// No description provided for @iterationLimitDialogError.
+  ///
+  /// In en, this message translates to:
+  /// **'Value must be greater than {minLimit}.'**
+  String iterationLimitDialogError(Object minLimit);
+
+  /// No description provided for @iterationLimitUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Iteration limit updated to {count}'**
+  String iterationLimitUpdated(Object count);
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:

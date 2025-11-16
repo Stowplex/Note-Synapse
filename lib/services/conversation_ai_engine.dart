@@ -7,9 +7,12 @@ import '../services/logger_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
 import '../services/prompts/prompt_models.dart';
+import 'conversation_settings_service.dart';
 
 class ConversationCancelledException implements Exception {
-  const ConversationCancelledException([this.message = 'Request cancelled by user']);
+  const ConversationCancelledException([
+    this.message = 'Request cancelled by user',
+  ]);
 
   final String message;
 
@@ -24,13 +27,15 @@ class ConversationAiResponse {
   final Map<String, dynamic>? metadata;
 }
 
-typedef ToolExecutionCallback = Future<String> Function(
-  String serviceName,
-  String toolName,
-  Map<String, dynamic> params,
-);
+typedef ToolExecutionCallback =
+    Future<String> Function(
+      String serviceName,
+      String toolName,
+      Map<String, dynamic> params,
+    );
 
 typedef CancellationCheck = bool Function();
+typedef IterationsExhaustedHandler = Future<int?> Function(int exhaustedLimit);
 
 class ConversationAiEngine {
   const ConversationAiEngine();
@@ -42,17 +47,15 @@ class ConversationAiEngine {
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
     String? requestId,
+    int? maxToolIterations,
+    IterationsExhaustedHandler? onIterationsExhausted,
   }) async {
     if (isCancelled()) {
       throw const ConversationCancelledException();
     }
 
     if (!enableTools || activeTools.isEmpty) {
-      return _generateWithoutTools(
-        request,
-        isCancelled,
-        requestId,
-      );
+      return _generateWithoutTools(request, isCancelled, requestId);
     }
 
     return _generateWithTools(
@@ -61,6 +64,8 @@ class ConversationAiEngine {
       executeTool: executeTool,
       isCancelled: isCancelled,
       requestId: requestId,
+      maxToolIterations: maxToolIterations,
+      onIterationsExhausted: onIterationsExhausted,
     );
   }
 
@@ -105,6 +110,8 @@ class ConversationAiEngine {
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
     String? requestId,
+    int? maxToolIterations,
+    IterationsExhaustedHandler? onIterationsExhausted,
   }) async {
     try {
       if (isCancelled()) {
@@ -124,21 +131,61 @@ class ConversationAiEngine {
 
       LoggerService.info(
         'Starting tool-enabled conversation with ${activeTools.length} services',
-        error: {
-          if (requestId != null) 'requestId': requestId,
-        },
+        error: {if (requestId != null) 'requestId': requestId},
       );
 
-      const maxIterations = 10;
+      int iterationLimit =
+          maxToolIterations ??
+          ConversationSettingsService.defaultMaxToolIterations;
+      iterationLimit =
+          iterationLimit < ConversationSettingsService.minToolIterations
+          ? ConversationSettingsService.minToolIterations
+          : (iterationLimit > ConversationSettingsService.maxToolIterationsCap
+                ? ConversationSettingsService.maxToolIterationsCap
+                : iterationLimit);
+      var iteration = 0;
       final conversationParts = <String>[];
       Map<String, dynamic>? lastAssistantMetadata;
 
-      for (int iteration = 0; iteration < maxIterations; iteration++) {
+      while (true) {
+        if (iteration >= iterationLimit) {
+          if (onIterationsExhausted != null) {
+            final nextLimit = await onIterationsExhausted(iterationLimit);
+            if (nextLimit == null) {
+              throw const ConversationCancelledException(
+                'Tool iteration limit reached and user aborted.',
+              );
+            }
+            final sanitizedNext =
+                nextLimit < ConversationSettingsService.minToolIterations
+                ? ConversationSettingsService.minToolIterations
+                : (nextLimit > ConversationSettingsService.maxToolIterationsCap
+                      ? ConversationSettingsService.maxToolIterationsCap
+                      : nextLimit);
+            if (sanitizedNext <= iterationLimit) {
+              LoggerService.warning(
+                'Rejected iteration limit $nextLimit (must be greater than $iterationLimit)',
+              );
+              continue;
+            }
+            iterationLimit = sanitizedNext;
+            continue;
+          }
+
+          LoggerService.warning(
+            'MCP tool loop exceeded $iterationLimit iterations',
+          );
+          return const ConversationAiResponse(
+            content:
+                'I was unable to complete the request with the available tools. Please try again later.',
+          );
+        }
+
         if (isCancelled()) {
           throw const ConversationCancelledException();
         }
 
-        LoggerService.debug('MCP iteration ${iteration + 1}/$maxIterations');
+        LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
         final response = await ModelSelector.instance
             .generateWithToolsAndMessages(currentMessages, [callToolFunction]);
@@ -202,8 +249,7 @@ class ConversationAiEngine {
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
               if (currentModelType == ModelType.openaiCompatible) {
-                final timestamp = DateTime.now()
-                    .millisecondsSinceEpoch
+                final timestamp = DateTime.now().millisecondsSinceEpoch
                     .toRadixString(36);
                 final shortName = toolName.length > 10
                     ? toolName.substring(0, 10)
@@ -261,8 +307,9 @@ class ConversationAiEngine {
             } else {
               final toolMessages = <PromptMessage>[];
               for (int i = 0; i < toolResults.length; i++) {
-                final functionCall =
-                    i < functionCalls.length ? functionCalls[i] : null;
+                final functionCall = i < functionCalls.length
+                    ? functionCalls[i]
+                    : null;
                 toolMessages.add(
                   PromptMessage(
                     role: PromptRole.user,
@@ -284,6 +331,7 @@ class ConversationAiEngine {
               ];
             }
 
+            iteration++;
             continue;
           }
         }
@@ -298,16 +346,9 @@ class ConversationAiEngine {
 
         LoggerService.warning('AI returned empty response after tool calls');
         return const ConversationAiResponse(
-          content:
-              'I was unable to generate a response. Please try again.',
+          content: 'I was unable to generate a response. Please try again.',
         );
       }
-
-      LoggerService.warning('MCP tool loop exceeded $maxIterations iterations');
-      return const ConversationAiResponse(
-        content:
-            'I was unable to complete the request with the available tools. Please try again later.',
-      );
     } on ConversationCancelledException {
       rethrow;
     } catch (e, stackTrace) {
@@ -323,4 +364,3 @@ class ConversationAiEngine {
     }
   }
 }
-

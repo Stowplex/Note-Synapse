@@ -34,6 +34,65 @@ class AppLocalizationsEn extends AppLocalizations {
       'Customize AI prompt injections and overrides';
 
   @override
+  String get aiConversationSettings => 'AI conversations';
+
+  @override
+  String get aiConversationSettingsSubtitle =>
+      'Control tool iteration safety limits';
+
+  @override
+  String get aiConversationSettingsDescription =>
+      'Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.';
+
+  @override
+  String get iterationLimitLabel => 'Tool iteration limit';
+
+  @override
+  String get iterationLimitValueLabel => 'Current limit';
+
+  @override
+  String iterationLimitValue(Object count) {
+    return '$count iterations';
+  }
+
+  @override
+  String iterationLimitPrompt(Object count) {
+    return 'Reached the allowed tool iterations ($count). Continue?';
+  }
+
+  @override
+  String get iterationLimitContinue => 'Continue';
+
+  @override
+  String get iterationLimitAbort => 'Abort';
+
+  @override
+  String get iterationLimitDialogTitle => 'Allow more iterations';
+
+  @override
+  String iterationLimitDialogDescription(Object currentLimit) {
+    return 'Enter a value greater than $currentLimit to extend this conversation\'s limit.';
+  }
+
+  @override
+  String get iterationLimitInputLabel => 'New maximum';
+
+  @override
+  String iterationLimitHelper(Object minLimit) {
+    return 'Minimum allowed: $minLimit';
+  }
+
+  @override
+  String iterationLimitDialogError(Object minLimit) {
+    return 'Value must be greater than $minLimit.';
+  }
+
+  @override
+  String iterationLimitUpdated(Object count) {
+    return 'Iteration limit updated to $count';
+  }
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
