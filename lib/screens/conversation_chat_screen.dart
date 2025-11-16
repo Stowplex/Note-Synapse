@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/conversation.dart';
+import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/conversation_service.dart';
@@ -19,6 +21,7 @@ import '../services/prompts/prompt_configuration_service.dart';
 import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
+import '../services/conversation_settings_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../utils/file_utils.dart';
 import '../l10n/app_localizations.dart';
@@ -82,6 +85,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   final Set<String> _selectedAiToolServices = {};
   final Map<String, AiToolRuntime> _aiToolRuntimes = {};
   String? _toolExecutionStatus;
+  int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
+  ToolIterationPrompt? _iterationPrompt;
 
   bool _hasInitialized = false;
 
@@ -89,6 +94,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   void initState() {
     super.initState();
     _loadMcpEndpoints();
+    _loadIterationPreference();
   }
 
   @override
@@ -164,6 +170,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     } catch (e) {
       LoggerService.error('Error loading MCP endpoints: $e');
     }
+  }
+
+  Future<void> _loadIterationPreference() async {
+    final value = await ConversationSettingsService.getMaxToolIterations();
+    if (!mounted) return;
+    setState(() {
+      _maxToolIterations = value;
+    });
   }
 
   Future<void> _refreshConversationTags() async {
@@ -357,6 +371,128 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
 
     return combined;
+  }
+
+  Future<int?> _handleIterationsExhausted(int exhaustedLimit) async {
+    if (!mounted) return null;
+    final prompt = ToolIterationPrompt(exhaustedIterations: exhaustedLimit);
+    setState(() {
+      _iterationPrompt = prompt;
+      _toolExecutionStatus = null;
+    });
+
+    final result = await prompt.completer.future;
+    if (!mounted) {
+      return result;
+    }
+    if (identical(_iterationPrompt, prompt)) {
+      setState(() {
+        _iterationPrompt = null;
+      });
+    }
+    return result;
+  }
+
+  void _resolveIterationPrompt(int? value) {
+    final prompt = _iterationPrompt;
+    if (prompt == null) return;
+    prompt.resolve(value);
+    if (mounted && identical(_iterationPrompt, prompt)) {
+      setState(() {
+        _iterationPrompt = null;
+      });
+    }
+  }
+
+  Future<void> _onIterationPromptContinue() async {
+    final prompt = _iterationPrompt;
+    if (prompt == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final newLimit = await _showIterationLimitDialog(
+      prompt.exhaustedIterations,
+    );
+    if (newLimit == null) {
+      return;
+    }
+    if (newLimit <= prompt.exhaustedIterations) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            l10n.iterationLimitDialogError(prompt.exhaustedIterations + 1),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _maxToolIterations = newLimit;
+    });
+    _resolveIterationPrompt(newLimit);
+  }
+
+  Future<int?> _showIterationLimitDialog(int currentLimit) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(
+      text: (currentLimit + 5).toString(),
+    );
+    try {
+      return await showDialog<int>(
+        context: context,
+        builder: (dialogContext) {
+          String? errorText;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text(l10n.iterationLimitDialogTitle),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.iterationLimitDialogDescription(currentLimit)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: l10n.iterationLimitInputLabel,
+                        helperText: l10n.iterationLimitHelper(currentLimit + 1),
+                        errorText: errorText,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(l10n.cancel),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final parsed = int.tryParse(controller.text.trim());
+                      if (parsed == null || parsed <= currentLimit) {
+                        setDialogState(() {
+                          errorText = l10n.iterationLimitDialogError(
+                            currentLimit + 1,
+                          );
+                        });
+                        return;
+                      }
+                      Navigator.of(dialogContext).pop(parsed);
+                    },
+                    child: Text(l10n.update),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<String> _runWithToolStatus(
@@ -607,6 +743,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       _isAborting = true;
     });
 
+    if (_iterationPrompt != null) {
+      _resolveIterationPrompt(null);
+    }
+
     // Mark the current request as cancelled
     _cancelledRequestIds.add(_currentRequestId!);
 
@@ -668,6 +808,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         },
         isCancelled: () => _cancelledRequestIds.contains(requestId),
         requestId: requestId,
+        maxToolIterations: _maxToolIterations,
+        onIterationsExhausted: _handleIterationsExhausted,
       );
 
       if (_cancelledRequestIds.contains(requestId)) {
@@ -1061,7 +1203,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withOpacity(0.3),
                   ),
                 ),
                 child: Row(
@@ -1069,7 +1213,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                     Icon(
                       _getFileIcon(file.extension),
                       size: 16,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1792,6 +1938,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Widget _buildToolExecutionIndicator() {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    final prompt = _iterationPrompt;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       transitionBuilder: (child, animation) => FadeTransition(
@@ -1802,7 +1950,42 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           child: child,
         ),
       ),
-      child: _toolExecutionStatus == null
+      child: prompt != null
+          ? Container(
+              key: const ValueKey('tool-iteration-prompt'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.loop, size: 18, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.iterationLimitPrompt(prompt.exhaustedIterations),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _onIterationPromptContinue,
+                    child: Text(l10n.iterationLimitContinue),
+                  ),
+                  TextButton(
+                    onPressed: () => _resolveIterationPrompt(null),
+                    child: Text(l10n.iterationLimitAbort),
+                  ),
+                ],
+              ),
+            )
+          : _toolExecutionStatus == null
           ? const SizedBox.shrink(key: ValueKey('tool-status-empty'))
           : Padding(
               key: ValueKey(_toolExecutionStatus),
@@ -2035,8 +2218,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       runSpacing: 6,
       children: message.attachmentPaths.map((path) {
         final label = path.split(Platform.pathSeparator).last;
-        final extension =
-            label.contains('.') ? label.split('.').last.toLowerCase() : null;
+        final extension = label.contains('.')
+            ? label.split('.').last.toLowerCase()
+            : null;
         return ActionChip(
           avatar: Icon(_getFileIcon(extension), size: 18),
           label: Text(label, overflow: TextOverflow.ellipsis),
@@ -2138,6 +2322,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   @override
   void dispose() {
+    _resolveIterationPrompt(null);
     _messageController.dispose();
     _scrollController.dispose();
     _messageFocusNode.dispose();

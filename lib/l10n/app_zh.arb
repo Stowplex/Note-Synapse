@@ -7,6 +7,21 @@
   "aiApiSubtitle": "配置您的AI API密钥",
   "aiPrompts": "提示词",
   "aiPromptsSubtitle": "自定义AI提示词注入与覆写",
+  "aiConversationSettings": "AI 会话",
+  "aiConversationSettingsSubtitle": "控制工具调用安全上限",
+  "aiConversationSettingsDescription": "设置默认的工具调用次数，超过此次数时会提示你确认。每个会话仍可单独调整。",
+  "iterationLimitLabel": "工具迭代上限",
+  "iterationLimitValueLabel": "当前上限",
+  "iterationLimitValue": "{count} 次迭代",
+  "iterationLimitPrompt": "已达到允许的工具调用次数（{count}）。要继续吗？",
+  "iterationLimitContinue": "继续",
+  "iterationLimitAbort": "停止",
+  "iterationLimitDialogTitle": "允许更多迭代",
+  "iterationLimitDialogDescription": "输入一个大于 {currentLimit} 的数值，以提升该会话的上限。",
+  "iterationLimitInputLabel": "新的最大次数",
+  "iterationLimitHelper": "最小允许值：{minLimit}",
+  "iterationLimitDialogError": "请输入大于 {minLimit} 的数值。",
+  "iterationLimitUpdated": "迭代上限已更新为 {count}",
   "darkMode": "深色模式",
   "darkModeSubtitle": "在浅色和深色主题之间切换",
   "apiKey": "API密钥",
@@ -995,6 +1010,27 @@
   "urlDetected": "检测到URL",
   "webContentExtractionNotSupportedLinux": "Linux不支持网页内容提取。",
   "pleaseUseOtherPlatformsForWebExtraction": "请使用Android、iOS或Web版本来提取网页内容。",
+  "shareUrlChoiceTitle": "选择如何处理此链接。",
+  "shareUrlChoiceDescription": "“提取”允许你在保存前预览网页，或直接保留原始链接。",
+  "webExtractionStatusCheckingFileType": "正在检查文件类型...",
+  "webExtractionStatusDownloadingFile": "正在下载文件...",
+  "webExtractionStatusFileDownloaded": "文件下载成功",
+  "webExtractionStatusDownloadFailed": "下载失败：{reason}",
+  "@webExtractionStatusDownloadFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "webExtractionStatusReady": "页面已就绪，可在提取前进行交互。",
+  "webExtractionStatusApplyingReadability": "正在启用阅读模式...",
+  "webExtractionStatusReloadingOriginal": "正在重新加载原始页面...",
+  "webExtractionStatusReadabilityEnabled": "已启用阅读模式。",
+  "webExtractionReadabilityLabel": "阅读模式",
+  "webExtractionReadabilityDescription": "在提取前简化页面，关闭后将重新加载原始页面。",
+  "webExtractionManualExtract": "提取",
+  "webExtractionAiExtract": "AI提取",
   "extractWebContent": "提取网页内容",
   "extracting": "提取中...",
   "extractContentUsingAiForBetterResults": "使用AI提取内容以获得更好的结果",
@@ -1190,5 +1226,49 @@
           }
         }
       },
-      "newNoteFromShareCreated": "分享的笔记创建成功！"
+      "newNoteFromShareCreated": "分享的笔记创建成功！",
+      "mediaDownloadsHeader": "媒体附件",
+      "mediaDownloadsDescription": "选择要下载到本地的图片，以便离线使用。",
+      "selectAll": "全选",
+      "clearAll": "全不选",
+      "noRemoteImagesDetected": "此内容中没有检测到网络图片。",
+      "mediaPreviewLabel": "预览",
+      "imageUrlLabel": "图片地址",
+      "downloadToLocalLabel": "下载到本地？",
+      "mediaDownloadFailed": "未能下载{count, plural, one {# 张图片} other {# 张图片}}。",
+      "@mediaDownloadFailed": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadNoneAvailable": "此笔记中没有网络图片。",
+      "mediaDownloadAlreadyCached": "所有网络图片已缓存到本地。",
+      "mediaDownloadSuccess": "已将{count, plural, one {# 张图片} other {# 张图片}}下载为附件。",
+      "@mediaDownloadSuccess": {
+        "placeholders": {
+          "count": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadPartial": "已下载{successCount, plural, one {# 张} other {# 张}}，失败{failureCount, plural, one {# 张} other {# 张}}。",
+      "@mediaDownloadPartial": {
+        "placeholders": {
+          "successCount": {
+            "type": "num"
+          },
+          "failureCount": {
+            "type": "num"
+          }
+        }
+      },
+      "mediaDownloadFailedGeneric": "下载图片失败：{error}",
+      "@mediaDownloadFailedGeneric": {
+        "placeholders": {
+          "error": {}
+        }
+      },
+      "fetchRemoteImages": "抓取网络图片"
 }

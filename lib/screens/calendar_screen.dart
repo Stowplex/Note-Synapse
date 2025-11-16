@@ -36,7 +36,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
-
   void _loadTags() {
     final appProvider = context.read<AppProvider>();
     final allTags = appProvider.getAllAvailableTags();
@@ -48,7 +47,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_getViewTitle(l10n)),
@@ -126,12 +125,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           // Load tags when data becomes available
-          if (!appProvider.isLoading && appProvider.notes.isNotEmpty && _availableTags.length <= 1) {
+          if (!appProvider.isLoading &&
+              appProvider.notes.isNotEmpty &&
+              _availableTags.length <= 1) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadTags();
             });
           }
-          
+
           if (_selectedView == 'timeline') {
             return _buildTimelineView(appProvider, l10n);
           } else if (_selectedView == 'todo') {
@@ -184,7 +185,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         return tasks;
                       }
                       return tasks.where((task) {
-                        return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+                        return _selectedTags.any(
+                          (selectedTag) => task.tags.contains(selectedTag),
+                        );
                       }).toList();
                     },
                     calendarStyle: CalendarStyle(
@@ -206,13 +209,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     builder: (context, constraints) {
                       // Calculate a reasonable height for content area
                       final screenHeight = MediaQuery.of(context).size.height;
-                      final contentHeight = (screenHeight * 0.4).clamp(300.0, 500.0);
-                      
+                      final contentHeight = (screenHeight * 0.4).clamp(
+                        300.0,
+                        500.0,
+                      );
+
                       return SizedBox(
                         height: contentHeight,
                         child: _selectedDay == null
                             ? const Center(
-                                child: Text('Select a day to view notes and tasks'),
+                                child: Text(
+                                  'Select a day to view notes and tasks',
+                                ),
                               )
                             : _buildTabbedDayContent(appProvider, l10n),
                       );
@@ -227,21 +235,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildTabbedDayContent(AppProvider appProvider, AppLocalizations l10n) {
+  Widget _buildTabbedDayContent(
+    AppProvider appProvider,
+    AppLocalizations l10n,
+  ) {
     final selectedDate = _selectedDay!;
     final allTasks = appProvider.getTasksForDate(selectedDate);
     final allNotes = appProvider.getNotesForDate(selectedDate);
-    
+
     // Filter by selected tags (OR logic)
-    final tasks = _selectedTags.isEmpty 
-        ? allTasks 
+    final tasks = _selectedTags.isEmpty
+        ? allTasks
         : allTasks.where((task) {
-            return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+            return _selectedTags.any(
+              (selectedTag) => task.tags.contains(selectedTag),
+            );
           }).toList();
-    final notes = _selectedTags.isEmpty 
-        ? allNotes 
+    final notes = _selectedTags.isEmpty
+        ? allNotes
         : allNotes.where((note) {
-            return _selectedTags.any((selectedTag) => note.tags.contains(selectedTag));
+            return _selectedTags.any(
+              (selectedTag) => note.tags.contains(selectedTag),
+            );
           }).toList();
 
     return DefaultTabController(
@@ -253,9 +268,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             padding: const EdgeInsets.all(16),
             child: Text(
               AppDateUtils.formatDateNumeric(selectedDate, context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           // Tab bar
@@ -285,10 +300,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ],
               labelColor: Theme.of(context).colorScheme.onSurface,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              unselectedLabelColor: Theme.of(
+                context,
+              ).colorScheme.onSurface.withOpacity(0.6),
               indicatorColor: Theme.of(context).colorScheme.primary,
               indicatorWeight: 2.0,
-              dividerColor: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+              dividerColor: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacity(0.2),
             ),
           ),
           // Tab content - use Expanded to fill remaining space
@@ -305,7 +324,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildTasksTab(List<Note> tasks, AppProvider appProvider, AppLocalizations l10n) {
+  Widget _buildTasksTab(
+    List<Note> tasks,
+    AppProvider appProvider,
+    AppLocalizations l10n,
+  ) {
     if (tasks.isEmpty) {
       return Center(
         child: Column(
@@ -314,17 +337,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.task_alt, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? l10n.noTasksForToday : l10n.noTasksWithSelectedTagsForThisDay,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.grey[600],
-              ),
+              _selectedTags.isEmpty
+                  ? l10n.noTasksForToday
+                  : l10n.noTasksWithSelectedTagsForThisDay,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTags.isEmpty ? l10n.createFirstTask : l10n.trySelectingDifferentTags,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[500],
-              ),
+              _selectedTags.isEmpty
+                  ? l10n.createFirstTask
+                  : l10n.trySelectingDifferentTags,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
             ),
           ],
         ),
@@ -343,13 +370,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
             title: Text(
               task.title,
               style: TextStyle(
-                decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                decoration: task.isCompleted
+                    ? TextDecoration.lineThrough
+                    : null,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: SelectionArea(
               child: InteractiveCheckboxMarkdown(
+                noteId: task.id,
                 originalContent: task.content,
                 style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 3,
@@ -374,17 +404,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.note, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? l10n.noNotesForToday : l10n.noNotesWithSelectedTagsForThisDay,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.grey[600],
-              ),
+              _selectedTags.isEmpty
+                  ? l10n.noNotesForToday
+                  : l10n.noNotesWithSelectedTagsForThisDay,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
-              _selectedTags.isEmpty ? l10n.createFirstNote : l10n.trySelectingDifferentTags,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[500],
-              ),
+              _selectedTags.isEmpty
+                  ? l10n.createFirstNote
+                  : l10n.trySelectingDifferentTags,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
             ),
           ],
         ),
@@ -405,9 +439,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: SelectionArea(
-              child: _buildSafeMarkdown(note.content, context),
-            ),
+            subtitle: SelectionArea(child: _buildSafeMarkdown(note, context)),
             onTap: () => _openNoteDetail(note),
           ),
         );
@@ -417,16 +449,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   void _openNoteDetail(Note note) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(note: note),
-      ),
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: note)),
     );
   }
 
   Widget _buildStatusIcon(Note task) {
     IconData iconData;
     Color iconColor;
-    
+
     switch (task.status) {
       case TaskStatus.complete:
         iconData = Icons.check_circle;
@@ -446,12 +476,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         iconColor = Colors.grey;
         break;
     }
-    
-    return Icon(
-      iconData,
-      color: iconColor,
-      size: 24,
-    );
+
+    return Icon(iconData, color: iconColor, size: 24);
   }
 
   Widget _buildStatusDropdown(Note task, AppProvider appProvider) {
@@ -557,7 +583,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     final notes = _filterNotes(appProvider.notes);
     final groupedNotes = _groupNotesByDate(notes);
-    
+
     if (notes.isEmpty) {
       return Center(
         child: Column(
@@ -566,7 +592,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.timeline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? l10n.createFirstTimelineNote : l10n.noTasksWithSelectedTags,
+              _selectedTags.isEmpty
+                  ? l10n.createFirstTimelineNote
+                  : l10n.noTasksWithSelectedTags,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
@@ -574,9 +602,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               _selectedTags.isEmpty
                   ? l10n.createFirstTimelineNote
                   : l10n.trySelectingDifferentTags,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
           ],
@@ -591,7 +619,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final entry = groupedNotes.entries.elementAt(index);
         final date = entry.key;
         final dayNotes = entry.value;
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -614,70 +642,83 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ...dayNotes.map((note) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Card(
-                child: InkWell(
-                  onTap: () => _openNoteDetail(note),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (note.isTask) ...[
-                              _buildStatusIcon(note),
-                              const SizedBox(width: 8),
-                            ],
-                            Expanded(
-                              child: Text(
-                                note.title,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  decoration: note.isCompleted ? TextDecoration.lineThrough : null,
+            ...dayNotes.map(
+              (note) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  child: InkWell(
+                    onTap: () => _openNoteDetail(note),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (note.isTask) ...[
+                                _buildStatusIcon(note),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  note.title,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        decoration: note.isCompleted
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            if (note.isTask)
-                              _buildStatusDropdown(note, appProvider),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          note.content,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
+                              if (note.isTask)
+                                _buildStatusDropdown(note, appProvider),
+                            ],
                           ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (note.tags.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: note.tags.take(3).map((tag) => Chip(
-                              label: Text(
-                                tag,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                              labelStyle: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            )).toList(),
+                          Text(
+                            note.content,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: Colors.grey[600]),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          if (note.tags.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: note.tags
+                                  .take(3)
+                                  .map(
+                                    (tag) => Chip(
+                                      label: Text(
+                                        tag,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      backgroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.1),
+                                      labelStyle: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            )),
+            ),
             const SizedBox(height: 16),
           ],
         );
@@ -691,7 +732,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     final tasks = _filterTasks(appProvider.notes);
-    
+
     if (tasks.isEmpty) {
       return Center(
         child: Column(
@@ -700,7 +741,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              _selectedTags.isEmpty ? l10n.createFirstTask : l10n.noTasksWithSelectedTags,
+              _selectedTags.isEmpty
+                  ? l10n.createFirstTask
+                  : l10n.noTasksWithSelectedTags,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
@@ -708,9 +751,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               _selectedTags.isEmpty
                   ? l10n.createFirstTask
                   : l10n.trySelectingDifferentTags,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
           ],
@@ -723,8 +766,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         final task = tasks[index];
-        final completionPercentage = appProvider.calculateTaskCompletionPercentage(task);
-        
+        final completionPercentage = appProvider
+            .calculateTaskCompletionPercentage(task);
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Card(
@@ -743,10 +787,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         Expanded(
                           child: Text(
                             task.title,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  decoration: task.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -757,20 +804,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     const SizedBox(height: 8),
                     Text(
                       task.content,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (task.scheduledAt != null || task.completeBy != null) ...[
+                    if (task.scheduledAt != null ||
+                        task.completeBy != null) ...[
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           if (task.scheduledAt != null)
                             Container(
                               margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.green[100],
                                 borderRadius: BorderRadius.circular(12),
@@ -786,16 +837,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             ),
                           if (task.completeBy != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[100] : Colors.blue[100],
+                                color: AppDateUtils.isOverdue(task.completeBy)
+                                    ? Colors.red[100]
+                                    : Colors.blue[100],
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 '${l10n.due}: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: AppDateUtils.isOverdue(task.completeBy) ? Colors.red[700] : Colors.blue[700],
+                                  color: AppDateUtils.isOverdue(task.completeBy)
+                                      ? Colors.red[700]
+                                      : Colors.blue[700],
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -809,7 +867,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         value: completionPercentage,
                         backgroundColor: Colors.grey[300],
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          completionPercentage == 1.0 ? Colors.green : Colors.blue,
+                          completionPercentage == 1.0
+                              ? Colors.green
+                              : Colors.blue,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -818,18 +878,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           Icon(Icons.list, size: 16, color: Colors.grey[500]),
                           const SizedBox(width: 4),
                           Text(
-                            l10n.subtasksCompleted(task.subNotes.where((sn) => sn.isCompleted).length, task.subNotes.length),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[500],
+                            l10n.subtasksCompleted(
+                              task.subNotes
+                                  .where((sn) => sn.isCompleted)
+                                  .length,
+                              task.subNotes.length,
                             ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[500]),
                           ),
                           const Spacer(),
                           Text(
                             '${(completionPercentage * 100).toInt()}%',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                         ],
                       ),
@@ -839,18 +904,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
-                        children: task.tags.take(3).map((tag) => Chip(
-                          label: Text(
-                            tag,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                          labelStyle: TextStyle(
-                            color: Theme.of(context).brightness == Brightness.dark 
-                              ? Colors.white 
-                              : Theme.of(context).colorScheme.primary,
-                          ),
-                        )).toList(),
+                        children: task.tags
+                            .take(3)
+                            .map(
+                              (tag) => Chip(
+                                label: Text(
+                                  tag,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withOpacity(0.2),
+                                labelStyle: TextStyle(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white
+                                      : Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
@@ -865,35 +939,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   List<Note> _filterNotes(List<Note> notes) {
     // Filter to only show tasks that are not archived
-    final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
-    
+    final tasks = notes
+        .where((note) => note.isTask && !note.isArchived)
+        .toList();
+
     if (_selectedTags.isEmpty) {
       return tasks;
     }
-    
+
     return tasks.where((task) {
-      return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+      return _selectedTags.any(
+        (selectedTag) => task.tags.contains(selectedTag),
+      );
     }).toList();
   }
 
   List<Note> _filterTasks(List<Note> notes) {
-    final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
-    
+    final tasks = notes
+        .where((note) => note.isTask && !note.isArchived)
+        .toList();
+
     if (_selectedTags.isEmpty) {
       return tasks;
     }
-    
+
     return tasks.where((task) {
-      return _selectedTags.any((selectedTag) => task.tags.contains(selectedTag));
+      return _selectedTags.any(
+        (selectedTag) => task.tags.contains(selectedTag),
+      );
     }).toList();
   }
 
   Map<DateTime, List<Note>> _groupNotesByDate(List<Note> notes) {
     final Map<DateTime, List<Note>> grouped = {};
-    
+
     for (final note in notes) {
       DateTime dateToUse;
-      
+
       // Use scheduledAt if available, otherwise fall back to createdAt
       if (note.scheduledAt != null && note.scheduledAt!.isNotEmpty) {
         try {
@@ -906,18 +988,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
         // If no scheduledAt, use createdAt
         dateToUse = note.createdAt;
       }
-      
+
       final date = DateTime(dateToUse.year, dateToUse.month, dateToUse.day);
       if (grouped[date] == null) {
         grouped[date] = [];
       }
       grouped[date]!.add(note);
     }
-    
+
     // Sort by date (most recent first)
     final sortedEntries = grouped.entries.toList()
       ..sort((a, b) => b.key.compareTo(a.key));
-    
+
     return Map.fromEntries(sortedEntries);
   }
 
@@ -926,33 +1008,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final dateOnly = DateTime(date.year, date.month, date.day);
-    
+
     if (dateOnly == today) {
       return l10n.today;
     } else if (dateOnly == yesterday) {
       return l10n.yesterday;
     } else {
       final months = [
-        l10n.january, l10n.february, l10n.march, l10n.april, l10n.may, l10n.june,
-        l10n.july, l10n.august, l10n.september, l10n.october, l10n.november, l10n.december
+        l10n.january,
+        l10n.february,
+        l10n.march,
+        l10n.april,
+        l10n.may,
+        l10n.june,
+        l10n.july,
+        l10n.august,
+        l10n.september,
+        l10n.october,
+        l10n.november,
+        l10n.december,
       ];
       return '${months[date.month - 1]} ${date.day}, ${date.year}';
     }
   }
 
-
-  Widget _buildSafeMarkdown(String content, BuildContext context) {
+  Widget _buildSafeMarkdown(Note note, BuildContext context) {
+    final content = note.content;
     try {
       // Use InteractiveCheckboxMarkdown approach but limit to first 3 lines
       final lines = content.split('\n');
       final limitedLines = lines.take(3).toList();
       final limitedContent = limitedLines.join('\n');
-      
+
       return ClipRect(
         child: Align(
           alignment: Alignment.topLeft,
           heightFactor: 1.0,
           child: InteractiveCheckboxMarkdown(
+            noteId: note.id,
             originalContent: limitedContent,
             onContentChanged: (newContent) {
               // No-op for read-only display

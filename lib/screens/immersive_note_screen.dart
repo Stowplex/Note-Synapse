@@ -16,6 +16,7 @@ import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
+import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
@@ -25,6 +26,7 @@ import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
+import '../services/conversation_settings_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
@@ -68,6 +70,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
   final GlobalKey _noteBoundaryKey = GlobalKey();
 
   static const double _strokeCaptureMargin = 16;
@@ -106,6 +109,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Set<String> _selectedAiToolServices = {};
   final Map<String, AiToolRuntime> _aiToolRuntimes = {};
   String? _toolExecutionStatus;
+  int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
+  ToolIterationPrompt? _iterationPrompt;
   final List<Offset> _penStrokePoints = [];
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
@@ -129,6 +134,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _initialNotesById = {for (final note in widget.notes) note.id: note};
     _noteOrder = widget.notes.map((note) => note.id).toList();
     _conversationNotes = List<Note>.from(widget.notes);
+    _loadIterationPreference();
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
@@ -165,10 +171,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  Future<void> _loadIterationPreference() async {
+    final value = await ConversationSettingsService.getMaxToolIterations();
+    if (!mounted) return;
+    setState(() {
+      _maxToolIterations = value;
+    });
+  }
+
   @override
   void dispose() {
+    _resolveIterationPrompt(null);
     _messageController.dispose();
     _chatScrollController.dispose();
+    _messageFocusNode.dispose();
     _disposePdfResources();
     _disposeImageResources();
     for (final runtime in _aiToolRuntimes.values) {
@@ -407,6 +423,125 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     return combined;
+  }
+
+  Future<int?> _handleIterationsExhausted(int exhaustedLimit) async {
+    if (!mounted) return null;
+    final prompt = ToolIterationPrompt(exhaustedIterations: exhaustedLimit);
+    setState(() {
+      _iterationPrompt = prompt;
+      _toolExecutionStatus = null;
+    });
+
+    final result = await prompt.completer.future;
+    if (!mounted) return result;
+    if (identical(_iterationPrompt, prompt)) {
+      setState(() {
+        _iterationPrompt = null;
+      });
+    }
+    return result;
+  }
+
+  void _resolveIterationPrompt(int? value) {
+    final prompt = _iterationPrompt;
+    if (prompt == null) return;
+    prompt.resolve(value);
+    if (mounted && identical(_iterationPrompt, prompt)) {
+      setState(() {
+        _iterationPrompt = null;
+      });
+    }
+  }
+
+  Future<void> _onIterationPromptContinue() async {
+    final prompt = _iterationPrompt;
+    if (prompt == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final newLimit = await _showIterationLimitDialog(
+      prompt.exhaustedIterations,
+    );
+    if (newLimit == null) {
+      return;
+    }
+    if (newLimit <= prompt.exhaustedIterations) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            l10n.iterationLimitDialogError(prompt.exhaustedIterations + 1),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _maxToolIterations = newLimit;
+    });
+    _resolveIterationPrompt(newLimit);
+  }
+
+  Future<int?> _showIterationLimitDialog(int currentLimit) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(
+      text: (currentLimit + 5).toString(),
+    );
+    try {
+      return await showDialog<int>(
+        context: context,
+        builder: (dialogContext) {
+          String? errorText;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text(l10n.iterationLimitDialogTitle),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.iterationLimitDialogDescription(currentLimit)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: l10n.iterationLimitInputLabel,
+                        helperText: l10n.iterationLimitHelper(currentLimit + 1),
+                        errorText: errorText,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(l10n.cancel),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final parsed = int.tryParse(controller.text.trim());
+                      if (parsed == null || parsed <= currentLimit) {
+                        setDialogState(() {
+                          errorText = l10n.iterationLimitDialogError(
+                            currentLimit + 1,
+                          );
+                        });
+                        return;
+                      }
+                      Navigator.of(dialogContext).pop(parsed);
+                    },
+                    child: Text(l10n.update),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<String> _runWithToolStatus(
@@ -971,6 +1106,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Widget _buildToolExecutionIndicator() {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    final prompt = _iterationPrompt;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       transitionBuilder: (child, animation) => FadeTransition(
@@ -981,7 +1118,42 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: child,
         ),
       ),
-      child: _toolExecutionStatus == null
+      child: prompt != null
+          ? Container(
+              key: const ValueKey('tool-iteration-prompt'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.loop, size: 18, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.iterationLimitPrompt(prompt.exhaustedIterations),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _onIterationPromptContinue,
+                    child: Text(l10n.iterationLimitContinue),
+                  ),
+                  TextButton(
+                    onPressed: () => _resolveIterationPrompt(null),
+                    child: Text(l10n.iterationLimitAbort),
+                  ),
+                ],
+              ),
+            )
+          : _toolExecutionStatus == null
           ? const SizedBox.shrink(key: ValueKey('tool-status-empty'))
           : Padding(
               key: ValueKey(_toolExecutionStatus),
@@ -1056,6 +1228,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     Expanded(
                       child: TextField(
                         controller: _messageController,
+                        focusNode: _messageFocusNode,
                         maxLines: 6,
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
@@ -1494,11 +1667,45 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   : CrossAxisAlignment.start,
               children: [
                 if (isUser)
-                  SelectableText(
-                    message.content,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: SelectableText(
+                          message.content,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(
+                          Icons.edit,
+                          size: 16,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        onPressed: () {
+                          _messageController.text = message.content;
+                          // Scroll to bottom to show the input field
+                          _scrollToBottom();
+                          // Focus the text field after a short delay to ensure it's visible
+                          Future.delayed(const Duration(milliseconds: 200), () {
+                            _messageFocusNode.requestFocus();
+                          });
+                        },
+                        tooltip: 'Use this message',
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
                   )
                 else
                   SelectionArea(
@@ -1558,10 +1765,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       children: List.generate(_pendingAttachments.length, (index) {
         final file = _pendingAttachments[index];
         return InputChip(
-          avatar: Icon(
-            _iconForAttachment(file.path ?? file.name),
-            size: 18,
-          ),
+          avatar: Icon(_iconForAttachment(file.path ?? file.name), size: 18),
           label: Text(file.name, overflow: TextOverflow.ellipsis),
           showCheckmark: false,
           onSelected: (_) => _previewPendingAttachment(file),
@@ -1608,6 +1812,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 key: ValueKey(
                   'immersive_note_${note.id}_${note.updatedAt.toIso8601String()}',
                 ),
+                noteId: note.id,
                 originalContent: note.content,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
@@ -1667,6 +1872,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 key: ValueKey(
                                   'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
                                 ),
+                                noteId: note.id,
                                 originalContent: subNote.content,
                                 onContentChanged: (_) {},
                                 style: Theme.of(context).textTheme.bodyMedium,
@@ -2241,6 +2447,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _isAborting = true;
     });
 
+    if (_iterationPrompt != null) {
+      _resolveIterationPrompt(null);
+    }
+
     _cancelledRequestIds.add(_currentRequestId!);
 
     if (mounted) {
@@ -2381,6 +2591,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       },
       isCancelled: () => _cancelledRequestIds.contains(requestId),
       requestId: requestId,
+      maxToolIterations: _maxToolIterations,
+      onIterationsExhausted: _handleIterationsExhausted,
     );
 
     if (_cancelledRequestIds.contains(requestId)) {

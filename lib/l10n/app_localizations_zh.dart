@@ -33,6 +33,64 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPromptsSubtitle => '自定义AI提示词注入与覆写';
 
   @override
+  String get aiConversationSettings => 'AI 会话';
+
+  @override
+  String get aiConversationSettingsSubtitle => '控制工具调用安全上限';
+
+  @override
+  String get aiConversationSettingsDescription =>
+      '设置默认的工具调用次数，超过此次数时会提示你确认。每个会话仍可单独调整。';
+
+  @override
+  String get iterationLimitLabel => '工具迭代上限';
+
+  @override
+  String get iterationLimitValueLabel => '当前上限';
+
+  @override
+  String iterationLimitValue(Object count) {
+    return '$count 次迭代';
+  }
+
+  @override
+  String iterationLimitPrompt(Object count) {
+    return '已达到允许的工具调用次数（$count）。要继续吗？';
+  }
+
+  @override
+  String get iterationLimitContinue => '继续';
+
+  @override
+  String get iterationLimitAbort => '停止';
+
+  @override
+  String get iterationLimitDialogTitle => '允许更多迭代';
+
+  @override
+  String iterationLimitDialogDescription(Object currentLimit) {
+    return '输入一个大于 $currentLimit 的数值，以提升该会话的上限。';
+  }
+
+  @override
+  String get iterationLimitInputLabel => '新的最大次数';
+
+  @override
+  String iterationLimitHelper(Object minLimit) {
+    return '最小允许值：$minLimit';
+  }
+
+  @override
+  String iterationLimitDialogError(Object minLimit) {
+    return '请输入大于 $minLimit 的数值。';
+  }
+
+  @override
+  String iterationLimitUpdated(Object count) {
+    return '迭代上限已更新为 $count';
+  }
+
+  @override
   String get darkMode => '深色模式';
 
   @override
@@ -2730,6 +2788,50 @@ class AppLocalizationsZh extends AppLocalizations {
       '请使用Android、iOS或Web版本来提取网页内容。';
 
   @override
+  String get shareUrlChoiceTitle => '选择如何处理此链接。';
+
+  @override
+  String get shareUrlChoiceDescription => '“提取”允许你在保存前预览网页，或直接保留原始链接。';
+
+  @override
+  String get webExtractionStatusCheckingFileType => '正在检查文件类型...';
+
+  @override
+  String get webExtractionStatusDownloadingFile => '正在下载文件...';
+
+  @override
+  String get webExtractionStatusFileDownloaded => '文件下载成功';
+
+  @override
+  String webExtractionStatusDownloadFailed(String reason) {
+    return '下载失败：$reason';
+  }
+
+  @override
+  String get webExtractionStatusReady => '页面已就绪，可在提取前进行交互。';
+
+  @override
+  String get webExtractionStatusApplyingReadability => '正在启用阅读模式...';
+
+  @override
+  String get webExtractionStatusReloadingOriginal => '正在重新加载原始页面...';
+
+  @override
+  String get webExtractionStatusReadabilityEnabled => '已启用阅读模式。';
+
+  @override
+  String get webExtractionReadabilityLabel => '阅读模式';
+
+  @override
+  String get webExtractionReadabilityDescription => '在提取前简化页面，关闭后将重新加载原始页面。';
+
+  @override
+  String get webExtractionManualExtract => '提取';
+
+  @override
+  String get webExtractionAiExtract => 'AI提取';
+
+  @override
   String get extractWebContent => '提取网页内容';
 
   @override
@@ -3052,4 +3154,81 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get newNoteFromShareCreated => '分享的笔记创建成功！';
+
+  @override
+  String get mediaDownloadsHeader => '媒体附件';
+
+  @override
+  String get mediaDownloadsDescription => '选择要下载到本地的图片，以便离线使用。';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get clearAll => '全不选';
+
+  @override
+  String get noRemoteImagesDetected => '此内容中没有检测到网络图片。';
+
+  @override
+  String get mediaPreviewLabel => '预览';
+
+  @override
+  String get imageUrlLabel => '图片地址';
+
+  @override
+  String get downloadToLocalLabel => '下载到本地？';
+
+  @override
+  String mediaDownloadFailed(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 张图片',
+      one: '# 张图片',
+    );
+    return '未能下载$_temp0。';
+  }
+
+  @override
+  String get mediaDownloadNoneAvailable => '此笔记中没有网络图片。';
+
+  @override
+  String get mediaDownloadAlreadyCached => '所有网络图片已缓存到本地。';
+
+  @override
+  String mediaDownloadSuccess(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 张图片',
+      one: '# 张图片',
+    );
+    return '已将$_temp0下载为附件。';
+  }
+
+  @override
+  String mediaDownloadPartial(num successCount, num failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: '# 张',
+      one: '# 张',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: '# 张',
+      one: '# 张',
+    );
+    return '已下载$_temp0，失败$_temp1。';
+  }
+
+  @override
+  String mediaDownloadFailedGeneric(Object error) {
+    return '下载图片失败：$error';
+  }
+
+  @override
+  String get fetchRemoteImages => '抓取网络图片';
 }

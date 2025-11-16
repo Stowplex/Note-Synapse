@@ -34,6 +34,65 @@ class AppLocalizationsEn extends AppLocalizations {
       'Customize AI prompt injections and overrides';
 
   @override
+  String get aiConversationSettings => 'AI conversations';
+
+  @override
+  String get aiConversationSettingsSubtitle =>
+      'Control tool iteration safety limits';
+
+  @override
+  String get aiConversationSettingsDescription =>
+      'Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.';
+
+  @override
+  String get iterationLimitLabel => 'Tool iteration limit';
+
+  @override
+  String get iterationLimitValueLabel => 'Current limit';
+
+  @override
+  String iterationLimitValue(Object count) {
+    return '$count iterations';
+  }
+
+  @override
+  String iterationLimitPrompt(Object count) {
+    return 'Reached the allowed tool iterations ($count). Continue?';
+  }
+
+  @override
+  String get iterationLimitContinue => 'Continue';
+
+  @override
+  String get iterationLimitAbort => 'Abort';
+
+  @override
+  String get iterationLimitDialogTitle => 'Allow more iterations';
+
+  @override
+  String iterationLimitDialogDescription(Object currentLimit) {
+    return 'Enter a value greater than $currentLimit to extend this conversation\'s limit.';
+  }
+
+  @override
+  String get iterationLimitInputLabel => 'New maximum';
+
+  @override
+  String iterationLimitHelper(Object minLimit) {
+    return 'Minimum allowed: $minLimit';
+  }
+
+  @override
+  String iterationLimitDialogError(Object minLimit) {
+    return 'Value must be greater than $minLimit.';
+  }
+
+  @override
+  String iterationLimitUpdated(Object count) {
+    return 'Iteration limit updated to $count';
+  }
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
@@ -2840,6 +2899,57 @@ class AppLocalizationsEn extends AppLocalizations {
       'Please use Android, iOS, or Web to extract web content.';
 
   @override
+  String get shareUrlChoiceTitle => 'Choose how to handle this link.';
+
+  @override
+  String get shareUrlChoiceDescription =>
+      'Extract lets you review the page before capturing it, or keep the URL as-is.';
+
+  @override
+  String get webExtractionStatusCheckingFileType => 'Checking file type...';
+
+  @override
+  String get webExtractionStatusDownloadingFile => 'Downloading file...';
+
+  @override
+  String get webExtractionStatusFileDownloaded =>
+      'File downloaded successfully';
+
+  @override
+  String webExtractionStatusDownloadFailed(String reason) {
+    return 'Download failed: $reason';
+  }
+
+  @override
+  String get webExtractionStatusReady =>
+      'Page ready. Interact before extracting.';
+
+  @override
+  String get webExtractionStatusApplyingReadability =>
+      'Applying readability view...';
+
+  @override
+  String get webExtractionStatusReloadingOriginal =>
+      'Reloading original page...';
+
+  @override
+  String get webExtractionStatusReadabilityEnabled =>
+      'Readability view enabled.';
+
+  @override
+  String get webExtractionReadabilityLabel => 'Readability';
+
+  @override
+  String get webExtractionReadabilityDescription =>
+      'Simplify the page before extracting. Turning it off reloads the page.';
+
+  @override
+  String get webExtractionManualExtract => 'Extract';
+
+  @override
+  String get webExtractionAiExtract => 'AI-Extract';
+
+  @override
   String get extractWebContent => 'Extract Web Content';
 
   @override
@@ -3183,4 +3293,85 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get newNoteFromShareCreated =>
       'New note from share created successfully!';
+
+  @override
+  String get mediaDownloadsHeader => 'Media attachments';
+
+  @override
+  String get mediaDownloadsDescription =>
+      'Choose which images to download locally for offline use.';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get clearAll => 'Clear all';
+
+  @override
+  String get noRemoteImagesDetected =>
+      'No remote images detected in this content.';
+
+  @override
+  String get mediaPreviewLabel => 'Preview';
+
+  @override
+  String get imageUrlLabel => 'Image URL';
+
+  @override
+  String get downloadToLocalLabel => 'Download to local?';
+
+  @override
+  String mediaDownloadFailed(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Failed to download $_temp0.';
+  }
+
+  @override
+  String get mediaDownloadNoneAvailable =>
+      'No remote images available in this note.';
+
+  @override
+  String get mediaDownloadAlreadyCached =>
+      'All remote images are already cached locally.';
+
+  @override
+  String mediaDownloadSuccess(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Downloaded $_temp0 to attachments.';
+  }
+
+  @override
+  String mediaDownloadPartial(num successCount, num failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: '#',
+      one: '#',
+    );
+    return 'Downloaded $_temp0, failed $_temp1.';
+  }
+
+  @override
+  String mediaDownloadFailedGeneric(Object error) {
+    return 'Failed to download images: $error';
+  }
+
+  @override
+  String get fetchRemoteImages => 'Fetch remote images';
 }

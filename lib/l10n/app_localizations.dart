@@ -146,6 +146,96 @@ abstract class AppLocalizations {
   /// **'Customize AI prompt injections and overrides'**
   String get aiPromptsSubtitle;
 
+  /// No description provided for @aiConversationSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'AI conversations'**
+  String get aiConversationSettings;
+
+  /// No description provided for @aiConversationSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Control tool iteration safety limits'**
+  String get aiConversationSettingsSubtitle;
+
+  /// No description provided for @aiConversationSettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.'**
+  String get aiConversationSettingsDescription;
+
+  /// No description provided for @iterationLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool iteration limit'**
+  String get iterationLimitLabel;
+
+  /// No description provided for @iterationLimitValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current limit'**
+  String get iterationLimitValueLabel;
+
+  /// No description provided for @iterationLimitValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} iterations'**
+  String iterationLimitValue(Object count);
+
+  /// No description provided for @iterationLimitPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Reached the allowed tool iterations ({count}). Continue?'**
+  String iterationLimitPrompt(Object count);
+
+  /// No description provided for @iterationLimitContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get iterationLimitContinue;
+
+  /// No description provided for @iterationLimitAbort.
+  ///
+  /// In en, this message translates to:
+  /// **'Abort'**
+  String get iterationLimitAbort;
+
+  /// No description provided for @iterationLimitDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow more iterations'**
+  String get iterationLimitDialogTitle;
+
+  /// No description provided for @iterationLimitDialogDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a value greater than {currentLimit} to extend this conversation\'s limit.'**
+  String iterationLimitDialogDescription(Object currentLimit);
+
+  /// No description provided for @iterationLimitInputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New maximum'**
+  String get iterationLimitInputLabel;
+
+  /// No description provided for @iterationLimitHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum allowed: {minLimit}'**
+  String iterationLimitHelper(Object minLimit);
+
+  /// No description provided for @iterationLimitDialogError.
+  ///
+  /// In en, this message translates to:
+  /// **'Value must be greater than {minLimit}.'**
+  String iterationLimitDialogError(Object minLimit);
+
+  /// No description provided for @iterationLimitUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Iteration limit updated to {count}'**
+  String iterationLimitUpdated(Object count);
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:
@@ -5024,6 +5114,90 @@ abstract class AppLocalizations {
   /// **'Please use Android, iOS, or Web to extract web content.'**
   String get pleaseUseOtherPlatformsForWebExtraction;
 
+  /// No description provided for @shareUrlChoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to handle this link.'**
+  String get shareUrlChoiceTitle;
+
+  /// No description provided for @shareUrlChoiceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract lets you review the page before capturing it, or keep the URL as-is.'**
+  String get shareUrlChoiceDescription;
+
+  /// No description provided for @webExtractionStatusCheckingFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking file type...'**
+  String get webExtractionStatusCheckingFileType;
+
+  /// No description provided for @webExtractionStatusDownloadingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading file...'**
+  String get webExtractionStatusDownloadingFile;
+
+  /// No description provided for @webExtractionStatusFileDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'File downloaded successfully'**
+  String get webExtractionStatusFileDownloaded;
+
+  /// No description provided for @webExtractionStatusDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {reason}'**
+  String webExtractionStatusDownloadFailed(String reason);
+
+  /// No description provided for @webExtractionStatusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Page ready. Interact before extracting.'**
+  String get webExtractionStatusReady;
+
+  /// No description provided for @webExtractionStatusApplyingReadability.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying readability view...'**
+  String get webExtractionStatusApplyingReadability;
+
+  /// No description provided for @webExtractionStatusReloadingOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Reloading original page...'**
+  String get webExtractionStatusReloadingOriginal;
+
+  /// No description provided for @webExtractionStatusReadabilityEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Readability view enabled.'**
+  String get webExtractionStatusReadabilityEnabled;
+
+  /// No description provided for @webExtractionReadabilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Readability'**
+  String get webExtractionReadabilityLabel;
+
+  /// No description provided for @webExtractionReadabilityDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Simplify the page before extracting. Turning it off reloads the page.'**
+  String get webExtractionReadabilityDescription;
+
+  /// No description provided for @webExtractionManualExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract'**
+  String get webExtractionManualExtract;
+
+  /// No description provided for @webExtractionAiExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'AI-Extract'**
+  String get webExtractionAiExtract;
+
   /// No description provided for @extractWebContent.
   ///
   /// In en, this message translates to:
@@ -5617,6 +5791,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New note from share created successfully!'**
   String get newNoteFromShareCreated;
+
+  /// No description provided for @mediaDownloadsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Media attachments'**
+  String get mediaDownloadsHeader;
+
+  /// No description provided for @mediaDownloadsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose which images to download locally for offline use.'**
+  String get mediaDownloadsDescription;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @clearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get clearAll;
+
+  /// No description provided for @noRemoteImagesDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote images detected in this content.'**
+  String get noRemoteImagesDetected;
+
+  /// No description provided for @mediaPreviewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get mediaPreviewLabel;
+
+  /// No description provided for @imageUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Image URL'**
+  String get imageUrlLabel;
+
+  /// No description provided for @downloadToLocalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Download to local?'**
+  String get downloadToLocalLabel;
+
+  /// No description provided for @mediaDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download {count, plural, one {# image} other {# images}}.'**
+  String mediaDownloadFailed(num count);
+
+  /// No description provided for @mediaDownloadNoneAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote images available in this note.'**
+  String get mediaDownloadNoneAvailable;
+
+  /// No description provided for @mediaDownloadAlreadyCached.
+  ///
+  /// In en, this message translates to:
+  /// **'All remote images are already cached locally.'**
+  String get mediaDownloadAlreadyCached;
+
+  /// No description provided for @mediaDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {count, plural, one {# image} other {# images}} to attachments.'**
+  String mediaDownloadSuccess(num count);
+
+  /// No description provided for @mediaDownloadPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {successCount, plural, one {# image} other {# images}}, failed {failureCount, plural, one {#} other {#}}.'**
+  String mediaDownloadPartial(num successCount, num failureCount);
+
+  /// No description provided for @mediaDownloadFailedGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download images: {error}'**
+  String mediaDownloadFailedGeneric(Object error);
+
+  /// No description provided for @fetchRemoteImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch remote images'**
+  String get fetchRemoteImages;
 }
 
 class _AppLocalizationsDelegate

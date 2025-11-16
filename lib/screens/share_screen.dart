@@ -13,8 +13,10 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/web_content_extraction_service.dart';
+import '../services/media_attachment_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
+import '../utils/remote_image_utils.dart';
 import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -38,6 +40,8 @@ class _ShareScreenState extends State<ShareScreen> {
   String? _contentType;
   String _tagSearchQuery = '';
   String? _downloadedFilePath; // Track downloaded file path for cleanup
+  List<RemoteImageReference> _remoteImages = const [];
+  final Set<String> _selectedImageUrls = <String>{};
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
@@ -85,6 +89,41 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+  void _applyPreparedNote(Note? note) {
+    _preparedNote = note;
+    if (note == null) {
+      _remoteImages = const [];
+      _selectedImageUrls.clear();
+    } else {
+      _remoteImages = RemoteImageUtils.extractRemoteImages(note.content);
+      _selectedImageUrls
+        ..clear()
+        ..addAll(_remoteImages.map((image) => image.url));
+    }
+  }
+
+  void _toggleAllMediaSelection(bool selectAll) {
+    setState(() {
+      if (selectAll) {
+        _selectedImageUrls
+          ..clear()
+          ..addAll(_remoteImages.map((image) => image.url));
+      } else {
+        _selectedImageUrls.clear();
+      }
+    });
+  }
+
+  void _toggleMediaUrl(String url, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedImageUrls.add(url);
+      } else {
+        _selectedImageUrls.remove(url);
+      }
+    });
+  }
+
   Future<void> _processSharedData() async {
     try {
       setState(() {
@@ -104,7 +143,7 @@ class _ShareScreenState extends State<ShareScreen> {
         if (result['note'] != null) {
           final note = result['note'] as Note;
           setState(() {
-            _preparedNote = note;
+            _applyPreparedNote(note);
           });
           // Initialize the text controllers with the prepared note's data
           _titleController.text = note.title;
@@ -114,7 +153,7 @@ class _ShareScreenState extends State<ShareScreen> {
             result['contentType'] == 'pdf') {
           // For images and PDFs, show extraction options
           setState(() {
-            _preparedNote = null; // Will be created after extraction
+            _applyPreparedNote(null); // Will be created after extraction
           });
         }
       } else {
@@ -427,6 +466,11 @@ class _ShareScreenState extends State<ShareScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // Media selection (only for create new note with remote images)
+            if (_preparedNote != null && _remoteImages.isNotEmpty) ...[
+              _buildMediaSelection(l10n),
+              const SizedBox(height: 16),
+            ],
           ],
 
           const SizedBox(height: 24),
@@ -695,75 +739,46 @@ class _ShareScreenState extends State<ShareScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            // Extract options
+            Text(
+              l10n.shareUrlChoiceTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.shareUrlChoiceDescription,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[700]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
             Column(
               children: [
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLinux
-                        ? null
-                        : () => _extractWebContent(false),
-                    icon: _isExtracting
+                  child: ElevatedButton(
+                    onPressed:
+                        _isLinux || _isExtracting ? null : _extractWebContent,
+                    child: _isExtracting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.web),
-                    label: Text(
-                      _isExtracting ? l10n.extracting : l10n.extractWebContent,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                    ),
+                        : Text(l10n.webExtractionManualExtract),
                   ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: Tooltip(
-                    message: l10n.extractContentUsingAiForBetterResults,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLinux
-                          ? null
-                          : () => _extractWebContent(true),
-                      icon: _isExtracting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.psychology),
-                      label: Text(
-                        _isExtracting
-                            ? l10n.extractingWithAi
-                            : l10n.extractWithAi,
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.secondary,
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onSecondary,
-                      ),
-                    ),
+                  child: OutlinedButton(
+                    onPressed: _isExtracting ? null : _createUrlAsIs,
+                    child: Text(l10n.asIs),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => _createUrlAsIs(),
-              child: Text(l10n.asIs),
             ),
           ],
         ),
@@ -794,7 +809,7 @@ class _ShareScreenState extends State<ShareScreen> {
       );
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
     } catch (e) {
@@ -805,7 +820,7 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-  Future<void> _extractWebContent(bool useAI) async {
+  Future<void> _extractWebContent() async {
     if (_detectedUrl == null) return;
 
     final l10n = AppLocalizations.of(context)!;
@@ -817,7 +832,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
     try {
       // Show a dialog with the WebView for content extraction
-      final result = await _showWebExtractionDialog(_detectedUrl!, useAI);
+      final result = await _showWebExtractionDialog(_detectedUrl!);
 
       if (result['success'] == true) {
         final note = result['note'] as Note;
@@ -834,19 +849,19 @@ class _ShareScreenState extends State<ShareScreen> {
               attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
             );
             setState(() {
-              _preparedNote = noteWithAttachment;
+              _applyPreparedNote(noteWithAttachment);
               _isExtracting = false;
             });
           } else {
             // Already in note, just use the note as-is
             setState(() {
-              _preparedNote = note;
+              _applyPreparedNote(note);
               _isExtracting = false;
             });
           }
         } else {
           setState(() {
-            _preparedNote = note;
+            _applyPreparedNote(note);
             _isExtracting = false;
           });
         }
@@ -872,7 +887,6 @@ class _ShareScreenState extends State<ShareScreen> {
 
   Future<Map<String, dynamic>> _showWebExtractionDialog(
     String url,
-    bool useAI,
   ) async {
     final completer = Completer<Map<String, dynamic>>();
 
@@ -881,7 +895,6 @@ class _ShareScreenState extends State<ShareScreen> {
       barrierDismissible: false,
       builder: (context) => _WebExtractionDialog(
         url: url,
-        useAI: useAI,
         onComplete: (result) {
           completer.complete(result);
           Navigator.of(context).pop();
@@ -1143,7 +1156,7 @@ class _ShareScreenState extends State<ShareScreen> {
       );
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
 
@@ -1216,7 +1229,7 @@ class _ShareScreenState extends State<ShareScreen> {
       }
 
       setState(() {
-        _preparedNote = note;
+        _applyPreparedNote(note);
         _isExtracting = false;
       });
 
@@ -1256,9 +1269,17 @@ class _ShareScreenState extends State<ShareScreen> {
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            note.content,
-            style: Theme.of(context).textTheme.bodyMedium,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 600),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                child: Text(
+                  note.content,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ),
           ),
         ),
         if (note.attachmentPaths.isNotEmpty) ...[
@@ -1291,6 +1312,204 @@ class _ShareScreenState extends State<ShareScreen> {
     );
   }
 
+  Widget _buildMediaSelection(AppLocalizations l10n) {
+    if (_remoteImages.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Icon(
+                Icons.photo_library_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.noRemoteImagesDetected,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final allSelected = _selectedImageUrls.length == _remoteImages.length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  l10n.mediaDownloadsHeader,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => _toggleAllMediaSelection(!allSelected),
+                  child: Text(allSelected ? l10n.clearAll : l10n.selectAll),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.mediaDownloadsDescription,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildMediaSelectionTable(l10n),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaSelectionTable(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              l10n.mediaPreviewLabel,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                l10n.imageUrlLabel,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              l10n.downloadToLocalLabel,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _remoteImages.length,
+              itemBuilder: (context, index) =>
+                  _buildMediaRow(_remoteImages[index]),
+              separatorBuilder: (context, index) => const Divider(height: 16),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaRow(RemoteImageReference media) {
+    final isSelected = _selectedImageUrls.contains(media.url);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 72,
+            height: 72,
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceVariant.withOpacity(0.3),
+            child: Image.network(
+              media.url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.broken_image,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SelectableText(
+            media.url,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 3,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Checkbox(
+          value: isSelected,
+          onChanged: (value) => _toggleMediaUrl(media.url, value ?? false),
+        ),
+      ],
+    );
+  }
+
+  List<String> _mergeAttachmentPaths(
+    List<String> base,
+    Iterable<String> additional,
+  ) {
+    final merged = <String>[];
+    final seen = <String>{};
+
+    void addPath(String path) {
+      if (path.isEmpty) return;
+      final normalized = _normalizeAttachmentPath(path);
+      final key = _attachmentKey(normalized);
+      if (seen.add(key)) {
+        merged.add(normalized);
+      }
+    }
+
+    for (final path in base) {
+      addPath(path);
+    }
+    for (final path in additional) {
+      addPath(path);
+    }
+
+    return merged;
+  }
+
+  String _attachmentKey(String path) {
+    return path.toLowerCase();
+  }
+
+  String _normalizeAttachmentPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    const marker = 'attachments/';
+    final index = normalized.lastIndexOf(marker);
+    if (index != -1) {
+      return normalized.substring(index);
+    }
+    return path;
+  }
+
+  void _showMediaDownloadFailures(
+    RemoteImageDownloadReport? report,
+    AppLocalizations l10n,
+  ) {
+    if (!mounted || report == null || report.failedUrls.isEmpty) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.mediaDownloadFailed(report.failedUrls.length)),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
   Future<void> _handleAction() async {
     final l10n = AppLocalizations.of(context)!;
 
@@ -1310,7 +1529,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
       if (_action == 'create') {
         // Create note with edited title and tags
-        final finalNote = _preparedNote!.copyWith(
+        var finalNote = _preparedNote!.copyWith(
           title: _titleController.text.isNotEmpty
               ? _titleController.text
               : _preparedNote!.title,
@@ -1318,9 +1537,25 @@ class _ShareScreenState extends State<ShareScreen> {
               ? _selectedTags.toList()
               : _preparedNote!.tags,
         );
+
+        RemoteImageDownloadReport? downloadReport;
+        if (_selectedImageUrls.isNotEmpty) {
+          downloadReport = await MediaAttachmentService.downloadRemoteImages(
+            noteId: finalNote.id,
+            imageUrls: _selectedImageUrls,
+          );
+          finalNote = finalNote.copyWith(
+            attachmentPaths: _mergeAttachmentPaths(
+              finalNote.attachmentPaths,
+              downloadReport.urlToRelativePath.values,
+            ),
+          );
+        }
+
         await appProvider.addNote(finalNote);
         // Clear downloaded file path after successful note creation
         _downloadedFilePath = null;
+        _showMediaDownloadFailures(downloadReport, l10n);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1334,15 +1569,23 @@ class _ShareScreenState extends State<ShareScreen> {
           ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
+        RemoteImageDownloadReport? downloadReport;
+        if (_selectedImageUrls.isNotEmpty) {
+          downloadReport = await MediaAttachmentService.downloadRemoteImages(
+            noteId: _selectedNote!.id,
+            imageUrls: _selectedImageUrls,
+          );
+        }
+
         // Append to existing note
         final updatedNote = _selectedNote!.copyWith(
           content:
               '${_selectedNote!.content}\n\n--- Shared Content ---\n${_preparedNote!.content}',
           updatedAt: DateTime.now(),
-          attachmentPaths: [
+          attachmentPaths: _mergeAttachmentPaths([
             ..._selectedNote!.attachmentPaths,
             ..._preparedNote!.attachmentPaths,
-          ],
+          ], downloadReport?.urlToRelativePath.values ?? const []),
           tags: [
             ..._selectedNote!.tags,
             ..._preparedNote!.tags.where(
@@ -1354,6 +1597,7 @@ class _ShareScreenState extends State<ShareScreen> {
         await appProvider.updateNote(updatedNote);
         // Clear downloaded file path after successful note update
         _downloadedFilePath = null;
+        _showMediaDownloadFailures(downloadReport, l10n);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1383,12 +1627,10 @@ class _ShareScreenState extends State<ShareScreen> {
 
 class _WebExtractionDialog extends StatefulWidget {
   final String url;
-  final bool useAI;
   final Function(Map<String, dynamic>) onComplete;
 
   const _WebExtractionDialog({
     required this.url,
-    required this.useAI,
     required this.onComplete,
   });
 
@@ -1398,34 +1640,36 @@ class _WebExtractionDialog extends StatefulWidget {
 
 class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   bool _isLoading = true;
-  late String _status;
-  String? _downloadedFilePath;
+  bool _isProcessing = false;
+  bool _isApplyingReadability = false;
+  bool _readabilityEnabled = true;
   bool _isDownloading = false;
-  bool _fileDownloaded = false; // Track if file was successfully downloaded
-  bool _downloadFailed = false; // Track if download failed
-
-  @override
-  void initState() {
-    super.initState();
-    _status = 'Loading...';
-  }
+  bool _fileDownloaded = false;
+  bool _downloadFailed = false;
+  bool _fileCheckCompleted = false;
+  bool _hasStartedFileCheck = false;
+  String _status = '';
+  String? _errorMessage;
+  String? _downloadedFilePath;
+  String? _activeAction;
+  InAppWebViewController? _controller;
+  WebUri? _currentUrl;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_isLoading) {
-      final l10n = AppLocalizations.of(context)!;
-      _status = l10n.loadingWebPage;
-      _checkAndDownloadFile();
+    if (_hasStartedFileCheck) {
+      return;
     }
+    _hasStartedFileCheck = true;
+    _status = AppLocalizations.of(context)!.loadingWebPage;
+    _checkAndDownloadFile();
   }
 
-  /// Checks if the URL is a PDF or static file and downloads it if needed
   Future<void> _checkAndDownloadFile() async {
     try {
       final l10n = AppLocalizations.of(context)!;
 
-      // First, check the URL extension for quick detection
       final uri = Uri.parse(widget.url);
       final path = uri.path.toLowerCase();
       final hasFileExtension =
@@ -1441,23 +1685,20 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           path.endsWith('.tar') ||
           path.endsWith('.gz');
 
-      // Check content-type header to detect files even if URL has no extension
       String? detectedContentType;
       if (!hasFileExtension) {
-        // Make a HEAD request to check content-type without downloading
         setState(() {
-          _status = 'Checking file type...';
+          _status = l10n.webExtractionStatusCheckingFileType;
         });
         try {
           final headResponse = await http.head(Uri.parse(widget.url));
           detectedContentType = headResponse.headers['content-type']
               ?.toLowerCase();
-        } catch (e) {
-          // If HEAD fails, proceed with webview
+        } catch (_) {
+          // Ignore HEAD failures and fall back to WebView.
         }
       }
 
-      // Check if it's a binary/static file based on extension or content-type
       final contentType = detectedContentType ?? '';
       final isPdfOrStaticFile =
           hasFileExtension ||
@@ -1477,54 +1718,48 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               !contentType.startsWith('application/javascript'));
 
       if (isPdfOrStaticFile) {
-        // Download the file
         setState(() {
           _isDownloading = true;
-          _status = 'Downloading file...';
+          _status = l10n.webExtractionStatusDownloadingFile;
         });
 
         try {
           final response = await http.get(Uri.parse(widget.url));
 
           if (response.statusCode == 200) {
-            // Get content type from actual response headers
             final responseContentType =
                 response.headers['content-type']?.toLowerCase() ?? contentType;
             final isBinaryContent =
                 responseContentType.startsWith('application/pdf') ||
-                responseContentType.startsWith('application/msword') ||
-                responseContentType.startsWith('application/vnd.ms-word') ||
-                responseContentType.startsWith('application/vnd.ms-excel') ||
-                responseContentType.startsWith(
-                  'application/vnd.ms-powerpoint',
-                ) ||
-                responseContentType.startsWith(
-                  'application/vnd.openxmlformats',
-                ) ||
-                responseContentType.startsWith('application/zip') ||
-                responseContentType.startsWith('application/x-rar') ||
-                responseContentType.startsWith('application/x-tar') ||
-                responseContentType.startsWith('application/gzip') ||
-                (responseContentType.startsWith('application/') &&
-                    !responseContentType.startsWith('application/json') &&
-                    !responseContentType.startsWith('application/xml') &&
-                    !responseContentType.startsWith(
-                      'application/javascript',
-                    )) ||
-                !responseContentType.startsWith('text/') &&
-                    !responseContentType.startsWith('image/') &&
-                    !responseContentType.startsWith('video/');
+                    responseContentType.startsWith('application/msword') ||
+                    responseContentType.startsWith('application/vnd.ms-word') ||
+                    responseContentType.startsWith('application/vnd.ms-excel') ||
+                    responseContentType.startsWith(
+                      'application/vnd.ms-powerpoint',
+                    ) ||
+                    responseContentType.startsWith(
+                      'application/vnd.openxmlformats',
+                    ) ||
+                    responseContentType.startsWith('application/zip') ||
+                    responseContentType.startsWith('application/x-rar') ||
+                    responseContentType.startsWith('application/x-tar') ||
+                    responseContentType.startsWith('application/gzip') ||
+                    (responseContentType.startsWith('application/') &&
+                        !responseContentType.startsWith('application/json') &&
+                        !responseContentType.startsWith('application/xml') &&
+                        !responseContentType.startsWith(
+                          'application/javascript',
+                        )) ||
+                    !responseContentType.startsWith('text/') &&
+                        !responseContentType.startsWith('image/') &&
+                        !responseContentType.startsWith('video/');
 
             if (isBinaryContent || isPdfOrStaticFile) {
-              // Extract filename from URL or Content-Disposition header
               String fileName = path.split('/').last;
               if (fileName.isEmpty || !fileName.contains('.')) {
-                // Try to get filename from Content-Disposition header
                 final contentDisposition =
                     response.headers['content-disposition'];
                 if (contentDisposition != null) {
-                  // Try to extract filename from Content-Disposition header
-                  // Pattern: filename="..." or filename=...
                   final filenameRegex = RegExp(
                     r'filename\s*=\s*(?:"([^"]+)"|([^;]+))',
                   );
@@ -1541,7 +1776,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   }
                 }
 
-                // Fallback filename based on content type
                 if (fileName.isEmpty || !fileName.contains('.')) {
                   if (responseContentType.contains('pdf')) {
                     fileName = 'document.pdf';
@@ -1558,18 +1792,15 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 }
               }
 
-              // Determine the most reliable MIME type from response header or bytes
               final currentExt = FileTypeUtils.getFileExtension(fileName);
               String effectiveMime = responseContentType;
               if (effectiveMime.isEmpty ||
                   effectiveMime.startsWith('application/octet-stream')) {
-                // Try to detect from content if header is missing/generic
                 effectiveMime = FileTypeUtils.getMimeTypeForBytes(
                   response.bodyBytes,
                   extension: currentExt.isEmpty ? null : currentExt,
                 );
               }
-              // Correct or add extension if needed
               final expectedExt = FileTypeUtils.getExtensionForMime(
                 effectiveMime,
               );
@@ -1579,18 +1810,15 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   expectedExt.isNotEmpty &&
                   expectedExt != 'bin' &&
                   currentExt != expectedExt) {
-                // Replace the existing extension with the expected one
                 final base = fileName.substring(0, fileName.lastIndexOf('.'));
                 fileName = '$base.$expectedExt';
               }
 
-              // Save file to attachment directory
               final relativePath = await FileUtils.saveFileToPrivateStorage(
                 response.bodyBytes,
                 fileName,
               );
 
-              // Create a note with the downloaded file as attachment
               final note = Note(
                 id: const Uuid().v4(),
                 title: fileName,
@@ -1602,16 +1830,18 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 tags: ['shared', 'download', 'file'],
               );
 
-              // Mark file as downloaded and close dialog immediately
+              if (!mounted) {
+                return;
+              }
+
               setState(() {
                 _downloadedFilePath = relativePath;
                 _fileDownloaded = true;
                 _isDownloading = false;
                 _isLoading = false;
-                _status = 'File downloaded successfully';
+                _status = l10n.webExtractionStatusFileDownloaded;
               });
 
-              // Return the result after a short delay to show success message
               await Future.delayed(const Duration(milliseconds: 500));
 
               widget.onComplete({
@@ -1622,28 +1852,38 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               });
               return;
             }
-            // If detected as file but content is not binary, fall through to webview
           } else {
-            // HTTP status code is not 200, treat as download failure
+            if (!mounted) {
+              return;
+            }
             setState(() {
               _downloadFailed = true;
               _isDownloading = false;
               _isLoading = false;
-              _status = 'Download failed: HTTP ${response.statusCode}';
+              _status = l10n.webExtractionStatusDownloadFailed(
+                'HTTP ${response.statusCode}',
+              );
             });
             widget.onComplete({
               'success': false,
-              'error': l10n.errorDownloading('HTTP ${response.statusCode}', widget.url),
+              'error': l10n.errorDownloading(
+                'HTTP ${response.statusCode}',
+                widget.url,
+              ),
             });
             return;
           }
         } catch (e) {
-          // If download fails, signal error and don't show webview
+          if (!mounted) {
+            return;
+          }
           setState(() {
             _downloadFailed = true;
             _isDownloading = false;
             _isLoading = false;
-            _status = 'Download failed: ${e.toString()}';
+            _status = l10n.webExtractionStatusDownloadFailed(
+              e.toString(),
+            );
           });
           widget.onComplete({
             'success': false,
@@ -1652,24 +1892,515 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           return;
         }
       }
-
-      // If not a static file or download failed, proceed with webview
-      // The webview will be shown in the build method
-    } catch (e) {
-      // Error checking URL, proceed with webview
-      final l10n = AppLocalizations.of(context)!;
+    } catch (_) {
       setState(() {
         _isDownloading = false;
-        _status = l10n.loadingWebPage;
       });
     }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _fileCheckCompleted = true;
+      _isLoading = true;
+      _status = AppLocalizations.of(context)!.loadingWebPage;
+    });
+  }
+
+  Future<void> _handleCancel() async {
+    await _deleteDownloadedFileIfNeeded();
+    if (!mounted) {
+      return;
+    }
+    widget.onComplete({
+      'success': false,
+      'error': AppLocalizations.of(context)!.extractionCancelledByUser,
+    });
+  }
+
+  Future<void> _deleteDownloadedFileIfNeeded() async {
+    if (_downloadedFilePath == null) {
+      return;
+    }
+    try {
+      final absolutePath = await FileUtils.getFullFilePath(
+        _downloadedFilePath!,
+        true,
+      );
+      final file = File(absolutePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Ignore cleanup errors.
+    }
+  }
+
+  Future<void> _handleReadabilityToggle(bool enabled) async {
+    if (_controller == null) {
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!enabled) {
+      setState(() {
+        _readabilityEnabled = false;
+        _isApplyingReadability = true;
+        _status = l10n.webExtractionStatusReloadingOriginal;
+      });
+      await _reloadCurrentPage();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isApplyingReadability = false;
+        _status = l10n.loadingWebPage;
+      });
+      return;
+    }
+
+    setState(() {
+      _readabilityEnabled = true;
+      _errorMessage = null;
+    });
+
+    await _applyReadabilityMode();
+  }
+
+  Future<void> _reloadCurrentPage() async {
+    if (_controller == null) {
+      return;
+    }
+    final target = _currentUrl ?? WebUri(widget.url);
+    await _controller!.loadUrl(urlRequest: URLRequest(url: target));
+  }
+
+  Future<bool> _applyReadabilityMode() async {
+    if (_controller == null) {
+      return false;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+
+    setState(() {
+      _isApplyingReadability = true;
+      _status = l10n.webExtractionStatusApplyingReadability;
+      _errorMessage = null;
+    });
+
+    try {
+      await WebContentExtractionService.applyReadabilityView(_controller!);
+      if (!mounted) {
+        return true;
+      }
+      setState(() {
+        _isApplyingReadability = false;
+        _status = l10n.webExtractionStatusReadabilityEnabled;
+      });
+      return true;
+    } on ReadabilityExtractionException catch (e) {
+      if (!mounted) {
+        return false;
+      }
+      // Save error message before reload
+      final errorMsg = l10n.readabilityExtractionFailed(e.message);
+      // Reload the page to remove readability injections
+      setState(() {
+        _readabilityEnabled = false;
+        _isApplyingReadability = true;
+        _status = l10n.webExtractionStatusReloadingOriginal;
+        _errorMessage = errorMsg;
+      });
+      await _reloadCurrentPage();
+      if (!mounted) {
+        return false;
+      }
+      // Restore error message after reload (onLoadStop may have cleared it)
+      setState(() {
+        _isApplyingReadability = false;
+        _status = l10n.webExtractionStatusReady;
+        _errorMessage = errorMsg;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return false;
+      }
+      // Save error message before reload
+      final errorMsg = e.toString();
+      // Reload the page to remove readability injections
+      setState(() {
+        _readabilityEnabled = false;
+        _isApplyingReadability = true;
+        _status = l10n.webExtractionStatusReloadingOriginal;
+        _errorMessage = errorMsg;
+      });
+      await _reloadCurrentPage();
+      if (!mounted) {
+        return false;
+      }
+      // Restore error message after reload (onLoadStop may have cleared it)
+      setState(() {
+        _isApplyingReadability = false;
+        _status = l10n.webExtractionStatusReady;
+        _errorMessage = errorMsg;
+      });
+    }
+    return false;
+  }
+
+  Future<String> _getCurrentPageBodyHtml() async {
+    if (_controller == null) {
+      throw Exception('WebView controller not ready');
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final result = await _controller!.evaluateJavascript(
+      source: '''
+        (function() {
+          try {
+            if (document.body) {
+              return document.body.innerHTML;
+            }
+            return document.documentElement ? document.documentElement.innerHTML : '';
+          } catch (e) {
+            return '';
+          }
+        })();
+      ''',
+    );
+    final html = result?.toString() ?? '';
+    if (html.isEmpty) {
+      throw Exception(l10n.failedToExtractContentFromWebPage);
+    }
+    return html;
+  }
+
+  Future<String> _getCurrentPageTitle() async {
+    if (_controller == null) {
+      return '';
+    }
+    final result = await _controller!.evaluateJavascript(
+      source: 'document.title || ""',
+    );
+    return result?.toString().trim() ?? '';
+  }
+
+  Future<void> _performExtraction({required bool useAI}) async {
+    if (_controller == null) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+
+    setState(() {
+      _isProcessing = true;
+      _activeAction = useAI ? 'ai' : 'extract';
+      _status = useAI ? l10n.processingWithAi : l10n.extractingContent;
+      _errorMessage = null;
+    });
+
+    try {
+      final htmlContent = await _getCurrentPageBodyHtml();
+      final markdownContent = convert(htmlContent, ignore: ['script', 'style']);
+      String finalContent = markdownContent;
+      var title = await _getCurrentPageTitle();
+      if (title.isEmpty) {
+        title =
+            'Web Content - ${DateTime.now().toString().substring(0, 16)}';
+      }
+
+      final tags = <String>{'shared', 'web', 'extracted'};
+      if (_readabilityEnabled) {
+        tags.add('readability');
+      }
+
+      if (useAI) {
+        final aiResult = await AIService.extractContentFromText(
+          markdownContent,
+          'web_content',
+          title,
+        );
+        if (aiResult['success'] == true) {
+          finalContent = aiResult['content'] ?? markdownContent;
+          tags.add('ai_processed');
+        }
+      } else {
+        tags.add('markdown');
+      }
+
+      final note = Note(
+        id: const Uuid().v4(),
+        title: title,
+        content: finalContent,
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        tags: tags.toList(),
+      );
+
+      final preview = title.isNotEmpty
+          ? title
+          : 'Web content extracted from ${widget.url}';
+
+      widget.onComplete({
+        'success': true,
+        'note': note,
+        'contentType': 'web',
+        'preview': preview,
+        'url': widget.url,
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isProcessing = false;
+        _activeAction = null;
+        _errorMessage = e.toString();
+        _status = l10n.errorExtractingWebContent(e.toString());
+      });
+    }
+  }
+
+  Widget _buildHeader(AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(8),
+          topRight: Radius.circular(8),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.web, color: Colors.white),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.extractingWebContent,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: Colors.white),
+            ),
+          ),
+          IconButton(
+            onPressed: _isProcessing ? null : _handleCancel,
+            icon: const Icon(Icons.close, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (_isLoading || _isApplyingReadability || _isProcessing)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              if (_isLoading || _isApplyingReadability || _isProcessing)
+                const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _status,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadabilityToggle(AppLocalizations l10n) {
+    final toggleBackground =
+        Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: toggleBackground,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.webExtractionReadabilityLabel,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l10n.webExtractionReadabilityDescription,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.grey[700]),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _readabilityEnabled,
+            onChanged: (_isLoading ||
+                    _isApplyingReadability ||
+                    _isProcessing ||
+                    _controller == null)
+                ? null
+                : _handleReadabilityToggle,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (_controller == null || _isProcessing || _isLoading)
+                      ? null
+                      : () => _performExtraction(useAI: false),
+                  child: _isProcessing && _activeAction == 'extract'
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(l10n.webExtractionManualExtract),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Tooltip(
+                  message: l10n.extractContentUsingAiForBetterResults,
+                  child: ElevatedButton(
+                    onPressed:
+                        (_controller == null || _isProcessing || _isLoading)
+                            ? null
+                            : () => _performExtraction(useAI: true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Theme.of(context).colorScheme.secondary,
+                      foregroundColor:
+                          Theme.of(context).colorScheme.onSecondary,
+                    ),
+                    child: _isProcessing && _activeAction == 'ai'
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(l10n.webExtractionAiExtract),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: _isProcessing ? null : _handleCancel,
+              child: Text(l10n.cancel),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebView(AppLocalizations l10n) {
+    return InAppWebView(
+      initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+      onWebViewCreated: (controller) => _controller = controller,
+      shouldOverrideUrlLoading: (controller, navigationAction) async {
+        final url = navigationAction.request.url;
+        if (url == null) {
+          return NavigationActionPolicy.CANCEL;
+        }
+
+        final scheme = url.scheme.toLowerCase();
+        if ([
+          'http',
+          'https',
+          'data',
+          'about',
+          'file',
+          'javascript',
+        ].contains(scheme)) {
+          return NavigationActionPolicy.ALLOW;
+        }
+        return NavigationActionPolicy.CANCEL;
+      },
+      onLoadStart: (controller, url) {
+        setState(() {
+          _currentUrl = url;
+          _isLoading = true;
+          _status = l10n.loadingWebPage;
+          _errorMessage = null;
+          _isApplyingReadability = false;
+        });
+      },
+      onLoadStop: (controller, url) async {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _currentUrl = url;
+          _isLoading = false;
+          _status = l10n.webExtractionStatusReady;
+          _errorMessage = null;
+        });
+
+        if (_readabilityEnabled) {
+          await _applyReadabilityMode();
+        }
+      },
+      onLoadError: (controller, url, code, message) {
+        widget.onComplete({
+          'success': false,
+          'error': l10n.failedToLoadWebPage(message),
+        });
+      },
+      initialSettings: InAppWebViewSettings(
+        allowFileAccess: false,
+        allowContentAccess: false,
+        allowFileAccessFromFileURLs: false,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    // If file was successfully downloaded, don't show webview - dialog will close via onComplete
     if (_fileDownloaded) {
       return Dialog(
         child: Container(
@@ -1687,7 +2418,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       );
     }
 
-    // If download failed, don't show webview - dialog will close via onComplete with error
     if (_downloadFailed) {
       return Dialog(
         child: Container(
@@ -1700,7 +2430,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               const SizedBox(height: 16),
               Text(
                 _status,
-                style: TextStyle(color: Colors.red),
+                style: const TextStyle(color: Colors.red),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1709,8 +2439,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       );
     }
 
-    // Show downloading status if downloading
-    if (_isDownloading) {
+    if (_isDownloading || !_fileCheckCompleted) {
       return Dialog(
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
@@ -1730,204 +2459,14 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return Dialog(
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.8,
+        height: MediaQuery.of(context).size.height * 0.85,
         child: Column(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.web, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      l10n.extractingWebContent,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleMedium?.copyWith(color: Colors.white),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () async {
-                      // Clean up downloaded file if exists
-                      if (_downloadedFilePath != null) {
-                        try {
-                          final absolutePath = await FileUtils.getFullFilePath(
-                            _downloadedFilePath!,
-                            true,
-                          );
-                          final file = File(absolutePath);
-                          if (await file.exists()) {
-                            await file.delete();
-                          }
-                        } catch (e) {
-                          // Ignore errors
-                        }
-                      }
-                      widget.onComplete({
-                        'success': false,
-                        'error': l10n.extractionCancelledByUser,
-                      });
-                    },
-                    icon: const Icon(Icons.close, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-            // Status
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  if (_isLoading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_status)),
-                ],
-              ),
-            ),
-            // WebView
-            Expanded(
-              child: InAppWebView(
-                initialUrlRequest: URLRequest(url: WebUri(widget.url)),
-                shouldOverrideUrlLoading: (controller, navigationAction) async {
-                  final url = navigationAction.request.url;
-                  if (url == null) return NavigationActionPolicy.CANCEL;
-
-                  final scheme = url.scheme.toLowerCase();
-
-                  // Allow only safe URL schemes
-                  if ([
-                    'http',
-                    'https',
-                    'data',
-                    'about',
-                    'file',
-                    'javascript',
-                  ].contains(scheme)) {
-                    return NavigationActionPolicy.ALLOW;
-                  }
-
-                  // Reject all other schemes (like app://, intent://, etc.)
-                  return NavigationActionPolicy.CANCEL;
-                },
-                onLoadStart: (controller, url) {
-                  setState(() {
-                    _status = l10n.loadingWebPage;
-                    _isLoading = true;
-                  });
-                },
-                onLoadStop: (controller, url) async {
-                  setState(() {
-                    _status = l10n.extractingContent;
-                  });
-
-                  try {
-                    final article =
-                        await WebContentExtractionService.extractFromController(
-                          controller,
-                        );
-                    final extractedTitle = article.title.isNotEmpty
-                        ? article.title
-                        : null;
-                    final extractedContent = article.htmlContent;
-
-                    if (extractedContent.isEmpty) {
-                      widget.onComplete({
-                        'success': false,
-                        'error': l10n.failedToExtractContentFromWebPage,
-                      });
-                      return;
-                    }
-
-                    String finalContent;
-                    List<String> tags = ['shared', 'web', 'extracted'];
-
-                    if (widget.useAI) {
-                      setState(() {
-                        _status = l10n.checkingApiKey;
-                      });
-
-                      setState(() {
-                        _status = l10n.processingWithAi;
-                      });
-
-                      final markdownContent = convert(extractedContent);
-                      final aiResult = await AIService.extractContentFromText(
-                        markdownContent,
-                        'web_content',
-                        extractedTitle ?? 'Web Content',
-                      );
-
-                      if (aiResult['success'] == true) {
-                        finalContent = aiResult['content'] ?? markdownContent;
-                        tags.add('ai_processed');
-                      } else {
-                        finalContent = markdownContent;
-                      }
-                    } else {
-                      finalContent = convert(extractedContent);
-                      tags.add('markdown');
-                    }
-
-                    final note = Note(
-                      id: const Uuid().v4(),
-                      title: (extractedTitle?.isNotEmpty == true)
-                          ? extractedTitle!
-                          : 'Web Content - ${DateTime.now().toString().substring(0, 16)}',
-                      content: finalContent,
-                      type: NoteType.note,
-                      createdAt: DateTime.now(),
-                      updatedAt: DateTime.now(),
-                      tags: tags,
-                    );
-
-                    widget.onComplete({
-                      'success': true,
-                      'note': note,
-                      'contentType': 'web',
-                      'preview': (extractedTitle?.isNotEmpty == true)
-                          ? extractedTitle!
-                          : 'Web content extracted from ${widget.url}',
-                      'url': widget.url,
-                    });
-                  } on ReadabilityExtractionException catch (e) {
-                    widget.onComplete({
-                      'success': false,
-                      'error': l10n.readabilityExtractionFailed(e.message),
-                    });
-                  } catch (e) {
-                    widget.onComplete({
-                      'success': false,
-                      'error': l10n.errorExtractingWebContent(e.toString()),
-                    });
-                  }
-                },
-                onLoadError: (controller, url, code, message) {
-                  widget.onComplete({
-                    'success': false,
-                    'error': l10n.failedToLoadWebPage(message),
-                  });
-                },
-                initialSettings: InAppWebViewSettings(
-                  allowFileAccess: false,
-                  allowContentAccess: false,
-                  allowFileAccessFromFileURLs: false,
-                ),
-              ),
-            ),
+            _buildHeader(l10n),
+            _buildStatusSection(),
+            _buildReadabilityToggle(l10n),
+            Expanded(child: _buildWebView(l10n)),
+            _buildActionButtons(l10n),
           ],
         ),
       ),
