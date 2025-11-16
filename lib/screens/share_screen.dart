@@ -2004,21 +2004,47 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       if (!mounted) {
         return false;
       }
+      // Save error message before reload
+      final errorMsg = l10n.readabilityExtractionFailed(e.message);
+      // Reload the page to remove readability injections
+      setState(() {
+        _readabilityEnabled = false;
+        _isApplyingReadability = true;
+        _status = l10n.webExtractionStatusReloadingOriginal;
+        _errorMessage = errorMsg;
+      });
+      await _reloadCurrentPage();
+      if (!mounted) {
+        return false;
+      }
+      // Restore error message after reload (onLoadStop may have cleared it)
       setState(() {
         _isApplyingReadability = false;
-        _readabilityEnabled = false;
         _status = l10n.webExtractionStatusReady;
-        _errorMessage = l10n.readabilityExtractionFailed(e.message);
+        _errorMessage = errorMsg;
       });
     } catch (e) {
       if (!mounted) {
         return false;
       }
+      // Save error message before reload
+      final errorMsg = e.toString();
+      // Reload the page to remove readability injections
+      setState(() {
+        _readabilityEnabled = false;
+        _isApplyingReadability = true;
+        _status = l10n.webExtractionStatusReloadingOriginal;
+        _errorMessage = errorMsg;
+      });
+      await _reloadCurrentPage();
+      if (!mounted) {
+        return false;
+      }
+      // Restore error message after reload (onLoadStop may have cleared it)
       setState(() {
         _isApplyingReadability = false;
-        _readabilityEnabled = false;
         _status = l10n.webExtractionStatusReady;
-        _errorMessage = e.toString();
+        _errorMessage = errorMsg;
       });
     }
     return false;
