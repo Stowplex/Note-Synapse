@@ -1927,6 +1927,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get maxOutputTokensHint => '4000';
 
   @override
+  String get supportedAttachmentMimeTypesLabel => '支持的附件 MIME 类型';
+
+  @override
+  String get supportedAttachmentMimeTypesHint => '例如 image/png、application/pdf';
+
+  @override
+  String get supportedAttachmentMimeTypesHelper => '使用逗号或换行分隔。留空则使用模型预设值。';
+
+  @override
   String get required => '必填';
 
   @override

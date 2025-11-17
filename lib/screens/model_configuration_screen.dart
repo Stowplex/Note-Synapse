@@ -32,6 +32,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   final _displayNameController = TextEditingController();
   final _maxInputTokensController = TextEditingController();
   final _maxOutputTokensController = TextEditingController();
+  final _supportedAttachmentMimeTypesController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   bool _isLoading = false;
@@ -77,6 +78,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     _displayNameController.dispose();
     _maxInputTokensController.dispose();
     _maxOutputTokensController.dispose();
+    _supportedAttachmentMimeTypesController.dispose();
     super.dispose();
   }
 
@@ -118,6 +120,13 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             supportsVideo: doc['model_capabilities']?.contains('support_video') ?? false,
           );
 
+          final supportedAttachmentMimeTypes =
+              (doc['supported_attachment_mime_types'] as YamlList?)
+                  ?.cast<dynamic>()
+                  .whereType<String>()
+                  .map((value) => value.trim())
+                  .toList();
+
           final preset = ModelConfig(
             type: ModelType.fromId(modelTypeString) ?? widget.modelType,
             endpoint: doc['model_endpoint'],
@@ -126,6 +135,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             maxInputTokens: doc['max_input_token'],
             maxOutputTokens: doc['max_output_token'],
             customCapabilitiesObject: capabilities,
+            supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
           );
           presets.add(preset);
         }
@@ -190,6 +200,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _supportsDocuments = preset.customCapabilitiesObject?.supportsDocuments ?? false;
       _supportsAudio = preset.customCapabilitiesObject?.supportsAudio ?? false;
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
+      _supportedAttachmentMimeTypesController.text =
+          preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
       
       // Set API key URL from preset
       _apiKeyUrl = preset.displayName != null 
@@ -217,6 +229,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 config.customCapabilitiesObject?.supportsDocuments ?? false;
             _supportsAudio = config.customCapabilitiesObject?.supportsAudio ?? false;
             _supportsVideo = config.customCapabilitiesObject?.supportsVideo ?? false;
+          _supportedAttachmentMimeTypesController.text =
+              config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           }
         });
       }
@@ -244,6 +258,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           int.tryParse(_maxInputTokensController.text.trim());
       final maxOutputTokens =
           int.tryParse(_maxOutputTokensController.text.trim());
+      final supportedAttachmentMimeTypes =
+          _parseSupportedMimeTypes(_supportedAttachmentMimeTypesController.text);
 
       final capabilities = ModelCapabilities(
         maxInputTokens: maxInputTokens ?? 100000,
@@ -263,6 +279,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         maxInputTokens: maxInputTokens,
         maxOutputTokens: maxOutputTokens,
         customCapabilitiesObject: capabilities,
+        supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
         isConfigured: true,
       );
 
@@ -324,6 +341,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 _buildDisplayNameSection(),
                 const SizedBox(height: 24),
                 _buildTokenLimitsSection(),
+                const SizedBox(height: 24),
+                _buildSupportedMimeSection(),
                 const SizedBox(height: 24),
               ],
               if (widget.modelType == ModelType.openaiCompatible) ...[
@@ -747,6 +766,53 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildSupportedMimeSection() {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.supportedAttachmentMimeTypesLabel,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.supportedAttachmentMimeTypesHelper,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _supportedAttachmentMimeTypesController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: l10n.supportedAttachmentMimeTypesLabel,
+                hintText: l10n.supportedAttachmentMimeTypesHint,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<String>? _parseSupportedMimeTypes(String raw) {
+    final entries = raw
+        .split(RegExp(r'[,\n]'))
+        .map((entry) => entry.trim().toLowerCase())
+        .where((entry) => entry.isNotEmpty)
+        .toList();
+    return entries.isEmpty ? null : entries;
   }
 
   Widget _buildErrorCard() {

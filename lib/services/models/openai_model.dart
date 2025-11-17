@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
+import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
@@ -81,10 +82,19 @@ class OpenAIModel implements AIModel {
   }) async {
     return await _withErrorHandling('generation with attachments', () async {
       await initialize(config: _config);
-      
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
       // Build message content with attachments and limitation note
       // Note: todayContext should be in system message, not here
-      final messageContent = _buildMessageContentWithFiles(prompt, attachedFiles);
+      final messageContent = _buildMessageContentWithFiles(
+        prompt,
+        sanitizedAttachments,
+      );
 
       final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
@@ -95,7 +105,7 @@ class OpenAIModel implements AIModel {
         'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
-      return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
+      return await _makeOpenAiRequest(requestBody, actualRequestId);
     });
   }
 
@@ -129,9 +139,16 @@ class OpenAIModel implements AIModel {
   }) async {
     return await _withErrorHandling('generation with messages', () async {
       await initialize(config: _config);
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
 
       // Convert messages array to OpenAI format
-      final openaiMessages = await _convertMessagesToOpenAIFormat(messages);
+      final openaiMessages =
+          await _convertMessagesToOpenAIFormat(sanitizedMessages);
 
       final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
@@ -140,7 +157,7 @@ class OpenAIModel implements AIModel {
         'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
-      return await _makeOpenAiRequest(requestBody, requestId ?? DateTime.now().millisecondsSinceEpoch.toString());
+      return await _makeOpenAiRequest(requestBody, actualRequestId);
     });
   }
 
@@ -157,10 +174,19 @@ class OpenAIModel implements AIModel {
   }) async {
     return await _withErrorHandling('generation with tools', () async {
       await initialize(config: _config);
-      
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
       // Build message content with attachments and limitation note
       // Note: todayContext should be in system message, not here
-      final messageContent = _buildMessageContent(prompt, attachedFiles);
+      final messageContent = _buildMessageContent(
+        prompt,
+        sanitizedAttachments,
+      );
 
       final requestBody = {
         'model': _config!.modelName!,
@@ -184,7 +210,7 @@ class OpenAIModel implements AIModel {
 
       return await _makeOpenAiRequestWithTools(
         requestBody,
-        requestId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        actualRequestId,
       );
     });
   }
@@ -201,9 +227,16 @@ class OpenAIModel implements AIModel {
   }) async {
     return await _withErrorHandling('generation with tools and messages', () async {
       await initialize(config: _config);
+      final actualRequestId =
+          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
 
       // Convert messages array to OpenAI format
-      final openaiMessages = await _convertMessagesToOpenAIFormat(messages);
+      final openaiMessages =
+          await _convertMessagesToOpenAIFormat(sanitizedMessages);
 
       final requestBody = <String, dynamic>{
         'model': _config!.modelName!,
@@ -225,7 +258,7 @@ class OpenAIModel implements AIModel {
 
       return await _makeOpenAiRequestWithTools(
         requestBody,
-        requestId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        actualRequestId,
       );
     });
   }
@@ -473,6 +506,50 @@ class OpenAIModel implements AIModel {
   /// Build message content with attachments in OpenAI format (alias for backward compatibility)
   dynamic _buildMessageContent(String prompt, List<PlatformFile> attachedFiles) {
     return _buildMessageContentWithFiles(prompt, attachedFiles);
+  }
+
+  Future<List<PlatformFile>> _sanitizeAttachments(
+    List<PlatformFile> attachments,
+    String requestId,
+  ) async {
+    if (attachments.isEmpty) {
+      return attachments;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeAttachments(
+      attachments,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.attachments;
+  }
+
+  Future<List<PromptMessage>> _sanitizeMessages(
+    List<PromptMessage> messages,
+    String requestId,
+  ) async {
+    if (messages.isEmpty) {
+      return messages;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeMessages(
+      messages,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.messages;
   }
 
   Future<T> _withErrorHandling<T>(

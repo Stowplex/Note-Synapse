@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
+import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
@@ -71,10 +72,18 @@ class GeminiModel implements AIModel {
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
-      return await _makeGeminiRequest(apiKey, prompt,
-          attachedFiles: attachedFiles,
-          generationConfig: generationConfig,
-          requestId: actualRequestId);
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
+      return await _makeGeminiRequest(
+        apiKey,
+        prompt,
+        attachedFiles: sanitizedAttachments,
+        generationConfig: generationConfig,
+        requestId: actualRequestId,
+      );
     });
   }
 
@@ -118,9 +127,14 @@ class GeminiModel implements AIModel {
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
+
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
-        messages,
+        sanitizedMessages,
         generationConfig: generationConfig,
       );
 
@@ -151,11 +165,16 @@ class GeminiModel implements AIModel {
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
       return await _makeGeminiRequestWithTools(
         apiKey,
         prompt,
         tools,
-        attachedFiles: attachedFiles,
+        attachedFiles: sanitizedAttachments,
         generationConfig: generationConfig,
         requestId: actualRequestId,
       );
@@ -184,9 +203,14 @@ class GeminiModel implements AIModel {
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
+
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
-        messages,
+        sanitizedMessages,
         generationConfig: generationConfig,
       );
 
@@ -423,6 +447,50 @@ class GeminiModel implements AIModel {
       throw Exception('API key not found');
     }
     return apiKey;
+  }
+
+  Future<List<PlatformFile>> _sanitizeAttachments(
+    List<PlatformFile> attachments,
+    String requestId,
+  ) async {
+    if (attachments.isEmpty) {
+      return attachments;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeAttachments(
+      attachments,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.attachments;
+  }
+
+  Future<List<PromptMessage>> _sanitizeMessages(
+    List<PromptMessage> messages,
+    String requestId,
+  ) async {
+    if (messages.isEmpty) {
+      return messages;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeMessages(
+      messages,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.messages;
   }
 
   Map<String, dynamic> _buildRequestBody(

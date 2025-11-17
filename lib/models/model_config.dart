@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'model_type.dart';
 import 'model_capabilities.dart';
 
@@ -11,9 +12,10 @@ class ModelConfig {
   final int? maxInputTokens;
   final int? maxOutputTokens;
   final ModelCapabilities? customCapabilitiesObject;
+  final List<String>? supportedAttachmentMimeTypes;
   final bool isConfigured;
 
-  const ModelConfig({
+  ModelConfig({
     required this.type,
     this.apiKey,
     this.endpoint,
@@ -22,8 +24,9 @@ class ModelConfig {
     this.maxInputTokens,
     this.maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
+    List<String>? supportedAttachmentMimeTypes,
     this.isConfigured = false,
-  }) : customCapabilitiesObject = customCapabilitiesObject ??
+  })  : customCapabilitiesObject = customCapabilitiesObject ??
       const ModelCapabilities(
         maxInputTokens: 100000,
         maxOutputTokens: 4000,
@@ -31,7 +34,13 @@ class ModelConfig {
         supportsDocuments: false,
         supportsAudio: false,
         supportsVideo: false,
-      );
+      ),
+      supportedAttachmentMimeTypes =
+          supportedAttachmentMimeTypes == null
+              ? null
+              : List.unmodifiable(
+                  supportedAttachmentMimeTypes.map((m) => m.trim()).toList(),
+                );
 
   /// Create a copy with updated values
   ModelConfig copyWith({
@@ -43,6 +52,7 @@ class ModelConfig {
     int? maxInputTokens,
     int? maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
+    List<String>? supportedAttachmentMimeTypes,
     bool? isConfigured,
   }) {
     return ModelConfig(
@@ -55,6 +65,8 @@ class ModelConfig {
       maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
       customCapabilitiesObject:
           customCapabilitiesObject ?? this.customCapabilitiesObject,
+      supportedAttachmentMimeTypes:
+          supportedAttachmentMimeTypes ?? this.supportedAttachmentMimeTypes,
       isConfigured: isConfigured ?? this.isConfigured,
     );
   }
@@ -70,6 +82,7 @@ class ModelConfig {
       'maxInputTokens': maxInputTokens,
       'maxOutputTokens': maxOutputTokens,
       'customCapabilitiesObject': customCapabilitiesObject?.toJson(),
+      'supportedAttachmentMimeTypes': supportedAttachmentMimeTypes,
       'isConfigured': isConfigured,
     };
   }
@@ -87,6 +100,10 @@ class ModelConfig {
       customCapabilitiesObject: json['customCapabilitiesObject'] != null
           ? ModelCapabilities.fromJson(json['customCapabilitiesObject'])
           : null,
+      supportedAttachmentMimeTypes:
+          (json['supportedAttachmentMimeTypes'] as List?)
+              ?.whereType<String>()
+              .toList(),
       isConfigured: json['isConfigured'] as bool? ?? false,
     );
   }
@@ -109,6 +126,10 @@ class ModelConfig {
       other.maxInputTokens == maxInputTokens &&
       other.maxOutputTokens == maxOutputTokens &&
       other.customCapabilitiesObject == customCapabilitiesObject &&
+      listEquals(
+        other.supportedAttachmentMimeTypes,
+        supportedAttachmentMimeTypes,
+      ) &&
       other.isConfigured == isConfigured;
   }
 
@@ -122,6 +143,7 @@ class ModelConfig {
       maxInputTokens.hashCode ^
       maxOutputTokens.hashCode ^
       customCapabilitiesObject.hashCode ^
+      Object.hashAll(supportedAttachmentMimeTypes ?? const []) ^
       isConfigured.hashCode;
   }
 }

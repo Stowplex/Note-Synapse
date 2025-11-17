@@ -1977,6 +1977,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get maxOutputTokensHint => '4000';
 
   @override
+  String get supportedAttachmentMimeTypesLabel =>
+      'Supported attachment MIME types';
+
+  @override
+  String get supportedAttachmentMimeTypesHint => 'image/png, application/pdf';
+
+  @override
+  String get supportedAttachmentMimeTypesHelper =>
+      'Comma or newline separated. Leave empty to use the model preset.';
+
+  @override
   String get required => 'Required';
 
   @override

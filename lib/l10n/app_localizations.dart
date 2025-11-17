@@ -3590,6 +3590,24 @@ abstract class AppLocalizations {
   /// **'4000'**
   String get maxOutputTokensHint;
 
+  /// No description provided for @supportedAttachmentMimeTypesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Supported attachment MIME types'**
+  String get supportedAttachmentMimeTypesLabel;
+
+  /// No description provided for @supportedAttachmentMimeTypesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'image/png, application/pdf'**
+  String get supportedAttachmentMimeTypesHint;
+
+  /// No description provided for @supportedAttachmentMimeTypesHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma or newline separated. Leave empty to use the model preset.'**
+  String get supportedAttachmentMimeTypesHelper;
+
   /// No description provided for @required.
   ///
   /// In en, this message translates to:
