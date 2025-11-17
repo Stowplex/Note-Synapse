@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
 import 'package:html2md/html2md.dart' as html2md;
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
@@ -14,7 +16,6 @@ import 'prompts/note_prompt_builder.dart';
 import 'prompts/prompt_configuration_service.dart';
 import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
-import 'web_content_extraction_service.dart';
 
 class UserAppService {
   // Get all user apps
@@ -754,6 +755,18 @@ IMPORTANT - REQUIREMENTS:
        * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
        * Always handle the possibility of `status === 'error'`.
        * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
+   - Synapse.fetchWebPage(url: string) - Fetch a webpage and extract its content as markdown. This function loads the webpage, and converts it to markdown format, while stripping off scripts, and styles tag.
+     Param format: a string URL (must be HTTP or HTTPS)
+     Response format:
+       {
+         url: string,              // The URL that was fetched
+         title: string,            // Page title
+         markdown: string          // Content extracted and converted to markdown
+       }
+     Usage notes:
+       * This function fetches the webpage, and converts it to markdown.
+       * The markdown field contains the cleaned, readable content in markdown format, which is ideal for further processing or display.
+       * The function may throw an error if the URL is invalid, the page cannot be loaded, or WebView is not supported on the platform.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format: 
@@ -1142,6 +1155,18 @@ IMPORTANT - REQUIREMENTS:
        * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
        * Always handle the possibility of `status === 'error'`.
        * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
+   - Synapse.fetchWebPage(url: string) - Fetch a webpage and extract its content as markdown. This function loads the webpage, and converts it to markdown format, while stripping off scripts, and styles tag.
+     Param format: a string URL (must be HTTP or HTTPS)
+     Response format:
+       {
+         url: string,              // The URL that was fetched
+         title: string,            // Page title
+         markdown: string,         // Content extracted and converted to markdown
+       }
+     Usage notes:
+       * This function fetches the webpage, and converts it to markdown format, while stripping off scripts, and styles tag.
+       * The markdown field contains the cleaned, readable content in markdown format, which is ideal for further processing or display.
+       * The function may throw an error if the URL is invalid, the page cannot be loaded, or WebView is not supported on the platform.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format:
@@ -1836,23 +1861,126 @@ Here's the complete HTML application:
     final startTime = DateTime.now();
     LoggerService.debug('[Synapse.fetchWebPage] Loading $url');
 
+    final completer = Completer<Map<String, dynamic>>();
+    const timeout = Duration(seconds: 45);
+    const allowedSchemes = {'http', 'https', 'data', 'about', 'file', 'javascript'};
+
+    final headlessWebView = HeadlessInAppWebView(
+      initialUrlRequest: URLRequest(url: WebUri(url)),
+      initialSettings: InAppWebViewSettings(
+        allowFileAccess: false,
+        allowContentAccess: false,
+        allowFileAccessFromFileURLs: false,
+        javaScriptEnabled: true,
+        mediaPlaybackRequiresUserGesture: false,
+      ),
+      shouldOverrideUrlLoading: (controller, navigationAction) async {
+        final targetUrl = navigationAction.request.url;
+        if (targetUrl == null) {
+          return NavigationActionPolicy.CANCEL;
+        }
+
+        final targetScheme = targetUrl.scheme.toLowerCase();
+        if (allowedSchemes.contains(targetScheme)) {
+          return NavigationActionPolicy.ALLOW;
+        }
+
+        LoggerService.warning(
+          '[Synapse.fetchWebPage] Blocked navigation to unsupported scheme: $targetScheme',
+        );
+        return NavigationActionPolicy.CANCEL;
+      },
+      onLoadStop: (controller, _) async {
+        if (completer.isCompleted) {
+          return;
+        }
+
+        try {
+          // Get the body HTML (similar to share_screen.dart when Readability is off)
+          final htmlResult = await controller.evaluateJavascript(
+            source: '''
+              (function() {
+                try {
+                  if (document.body) {
+                    return document.body.innerHTML;
+                  }
+                  return document.documentElement ? document.documentElement.innerHTML : '';
+                } catch (e) {
+                  return '';
+                }
+              })();
+            ''',
+          );
+          final htmlContent = htmlResult?.toString() ?? '';
+          
+          if (htmlContent.isEmpty) {
+            throw Exception('Failed to extract HTML content from webpage');
+          }
+
+          // Get the title
+          final titleResult = await controller.evaluateJavascript(
+            source: 'document.title || ""',
+          );
+          final title = titleResult?.toString().trim() ?? '';
+
+          // Convert HTML to markdown, ignoring script and style tags (like share_screen.dart)
+          final markdown = html2md.convert(htmlContent, ignore: ['script', 'style']);
+
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.fetchWebPage] Success (${markdown.length} chars) in ${duration.inMilliseconds}ms',
+          );
+
+          completer.complete({
+            'url': url,
+            'title': title,
+            'markdown': markdown,
+          });
+        } catch (e, stackTrace) {
+          LoggerService.error(
+            '[Synapse.fetchWebPage] Extraction failed: $e',
+            error: e,
+            stackTrace: stackTrace,
+          );
+          if (!completer.isCompleted) {
+            completer.completeError(e);
+          }
+        }
+      },
+      onLoadError: (controller, url, code, message) {
+        if (completer.isCompleted) {
+          return;
+        }
+
+        final error = Exception('Failed to load page ($code): $message');
+        LoggerService.error(
+          '[Synapse.fetchWebPage] Load error for $url: $message ($code)',
+        );
+        completer.completeError(error);
+      },
+      onLoadHttpError: (controller, url, statusCode, description) {
+        if (completer.isCompleted) {
+          return;
+        }
+
+        final error = Exception('HTTP $statusCode: $description');
+        LoggerService.error(
+          '[Synapse.fetchWebPage] HTTP error $statusCode for $url: $description',
+        );
+        completer.completeError(error);
+      },
+    );
+
+    await headlessWebView.run();
+
     try {
-      final article = await WebContentExtractionService.extractFromUrl(url);
-      final markdown = html2md.convert(article.htmlContent);
-      final duration = DateTime.now().difference(startTime);
-
-      LoggerService.debug(
-        '[Synapse.fetchWebPage] Success (${markdown.length} chars) in ${duration.inMilliseconds}ms',
+      final result = await completer.future.timeout(
+        timeout,
+        onTimeout: () {
+          throw Exception('Timed out loading $url');
+        },
       );
-
-      return {
-        'url': url,
-        'title': article.title,
-        'markdown': markdown,
-        'html': article.htmlContent,
-        'textContent': article.textContent,
-        'excerpt': article.excerpt,
-      };
+      return result;
     } catch (e, stackTrace) {
       final duration = DateTime.now().difference(startTime);
       LoggerService.error(
@@ -1861,6 +1989,16 @@ Here's the complete HTML application:
         stackTrace: stackTrace,
       );
       rethrow;
+    } finally {
+      try {
+        if (headlessWebView.isRunning()) {
+          await headlessWebView.dispose();
+        }
+      } catch (e) {
+        LoggerService.warning(
+          '[Synapse.fetchWebPage] Error disposing headless webview: $e',
+        );
+      }
     }
   }
 
