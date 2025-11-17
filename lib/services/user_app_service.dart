@@ -1032,6 +1032,23 @@ Example SQL queries you can use:
        - noteId: a string of the note ID to open
        - replaceWindow: optional boolean (default: false). If true, replaces the current view with the note view. If false, pushes the note view on top.
      Response format: {success: boolean, error?: string}
+   - Synapse.openConversations(notes: array, immersiveMode: bool = false) - Open the conversation chat screen or immersive screen with the list of notes as context notes
+     Param format:
+       - notes: array of note objects or note IDs (strings). Can be empty if immersiveMode is false. MUST NOT be empty if immersiveMode is true.
+       - immersiveMode: optional boolean (default: false). If true, opens the immersive screen. If false, opens the conversation chat screen.
+     Response format: {success: boolean, error?: string}
+     Usage notes:
+       * If immersiveMode is false and notes is empty, opens a generic conversation (similar to tapping the conversation icon on the main screen)
+       * If immersiveMode is true, notes MUST NOT be empty
+       * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
+   - Synapse.openAIActions(notes: array) - Open the AI Actions screen with list of notes
+     Param format:
+       - notes: array of note objects or note IDs (strings). Can be empty.
+     Response format: {success: boolean, error?: string}
+     Usage notes:
+       * If notes is empty, opens the default AI actions screen (similar to tapping the AI action button on main_screen without selecting any notes)
+       * If notes is not empty, opens the AI actions screen with the list of notes (similar to AI action button on main_screen with notes selected)
+       * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
 
    CORRECT saveNotes Usage Examples:
    ```javascript
@@ -1192,6 +1209,50 @@ Example SQL queries you can use:
    } else {
      console.error('Error:', result2.error);
    }
+   ```
+
+   CORRECT openConversations Usage Examples:
+   ```javascript
+   // Open generic conversation (no notes)
+   const result1 = await Synapse.openConversations([], false);
+   if (result1.success) {
+     console.log('Conversation opened successfully');
+   }
+   
+   // Open conversation with notes as context
+   const result2 = await Synapse.openConversations(['note-id-1', 'note-id-2'], false);
+   if (result2.success) {
+     console.log('Conversation opened with notes');
+   }
+   
+   // Open immersive mode with notes (notes required)
+   const result3 = await Synapse.openConversations(['note-id-1', 'note-id-2'], true);
+   if (result3.success) {
+     console.log('Immersive mode opened with notes');
+   }
+   
+   // Using note objects from Synapse.Notes
+   const noteIds = Synapse.Notes.map(note => note.id);
+   await Synapse.openConversations(noteIds, false);
+   ```
+
+   CORRECT openAIActions Usage Examples:
+   ```javascript
+   // Open default AI actions screen (no notes)
+   const result1 = await Synapse.openAIActions([]);
+   if (result1.success) {
+     console.log('AI Actions opened successfully');
+   }
+   
+   // Open AI actions with specific notes
+   const result2 = await Synapse.openAIActions(['note-id-1', 'note-id-2']);
+   if (result2.success) {
+     console.log('AI Actions opened with notes');
+   }
+   
+   // Using note objects from Synapse.Notes
+   const noteIds = Synapse.Notes.map(note => note.id);
+   await Synapse.openAIActions(noteIds);
    ```
 ''';
   }

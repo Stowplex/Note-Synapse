@@ -16,6 +16,9 @@ import '../services/user_app_runtime_bridge.dart';
 import '../utils/file_utils.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
+import 'conversation_chat_screen.dart';
+import 'immersive_note_screen.dart';
+import 'ai_action_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
   final UserApp app;
@@ -460,6 +463,40 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             ),
           );
         }
+      },
+      onOpenConversations: (notes, immersiveMode) async {
+        if (!mounted) return;
+        if (immersiveMode) {
+          if (notes.isEmpty) {
+            LoggerService.warning(
+              '[UserAppViewScreen] Cannot open immersive mode without notes',
+            );
+            return;
+          }
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ImmersiveNoteScreen(
+                notes: notes,
+              ),
+            ),
+          );
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ConversationChatScreen(
+                initialNoteIds: notes.map((note) => note.id).toList(),
+              ),
+            ),
+          );
+        }
+      },
+      onOpenAIActions: (notes) async {
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => AIActionScreen(selectedNotes: notes),
+          ),
+        );
       },
     );
     
