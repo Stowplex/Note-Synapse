@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/filter.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/tag_selection_dialog.dart';
 
 class CustomFilterDialog extends StatefulWidget {
   final List<String> availableTags;
@@ -61,20 +62,27 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     _includeTagsController.text = _selectedTags.join(', ');
   }
 
-  void _showTagSelector() {
-    showDialog(
+  void _showTagSelector() async {
+    final l10n = AppLocalizations.of(context)!;
+    
+    final result = await showDialog<List<String>>(
       context: context,
-      builder: (context) => _TagSelectorDialog(
-        availableTags: widget.availableTags,
-        selectedTags: _selectedTags,
-        onSelectionChanged: (selectedTags) {
-          setState(() {
-            _selectedTags = selectedTags;
-            _updateTagsDisplay();
-          });
-        },
+      builder: (context) => TagSelectionDialog(
+        title: l10n.selectTags,
+        initialSelectedTags: _selectedTags.toList(),
+        allowCreateNew: false,
+        allowEmptySelection: true,
+        showManageTagsButton: false, // No manage tags in filter creator
+        returnAsSet: false,
       ),
     );
+
+    if (result != null) {
+      setState(() {
+        _selectedTags = result.toSet();
+        _updateTagsDisplay();
+      });
+    }
   }
 
   void _removeTag(String tag) {
@@ -182,76 +190,5 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     );
 
     Navigator.of(context).pop(filter);
-  }
-}
-
-class _TagSelectorDialog extends StatefulWidget {
-  final List<String> availableTags;
-  final Set<String> selectedTags;
-  final Function(Set<String>) onSelectionChanged;
-
-  const _TagSelectorDialog({
-    required this.availableTags,
-    required this.selectedTags,
-    required this.onSelectionChanged,
-  });
-
-  @override
-  State<_TagSelectorDialog> createState() => _TagSelectorDialogState();
-}
-
-class _TagSelectorDialogState extends State<_TagSelectorDialog> {
-  late Set<String> _tempSelectedTags;
-
-  @override
-  void initState() {
-    super.initState();
-    _tempSelectedTags = Set.from(widget.selectedTags);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.selectTags),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: widget.availableTags.length,
-          itemBuilder: (context, index) {
-            final tag = widget.availableTags[index];
-            final isSelected = _tempSelectedTags.contains(tag);
-            
-            return CheckboxListTile(
-              title: Text(tag),
-              value: isSelected,
-              onChanged: (value) {
-                setState(() {
-                  if (value == true) {
-                    _tempSelectedTags.add(tag);
-                  } else {
-                    _tempSelectedTags.remove(tag);
-                  }
-                });
-              },
-            );
-          },
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            widget.onSelectionChanged(_tempSelectedTags);
-            Navigator.of(context).pop();
-          },
-          child: Text(l10n.apply),
-        ),
-      ],
-    );
   }
 }

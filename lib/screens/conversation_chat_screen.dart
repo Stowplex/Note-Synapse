@@ -609,6 +609,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Future<void> _sendMessage() async {
     if (_messageController.text.isEmpty && _attachedFiles.isEmpty) return;
 
+    // Capture ScaffoldMessenger and Navigator before any async operations
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
@@ -687,7 +691,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         _cancelledRequestIds.remove(requestId);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('AI request cancelled.'),
             duration: Duration(seconds: 2),
@@ -696,9 +700,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error sending message: $e')),
+        );
       }
     } finally {
       if (mounted) {
@@ -747,6 +751,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Future<void> _abortRequest() async {
     if (!_isSending || _currentRequestId == null) return;
 
+    // Capture ScaffoldMessenger before any async operations
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
     setState(() {
       _isAborting = true;
     });
@@ -759,23 +767,23 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _cancelledRequestIds.add(_currentRequestId!);
 
     // Show feedback to user
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cancelling AI request...'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Cancelling AI request...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
 
     // Wait a moment for the request to be cancelled
     await Future.delayed(const Duration(milliseconds: 500));
 
-    setState(() {
-      _isSending = false;
-      _isAborting = false;
-      _currentRequestId = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isSending = false;
+        _isAborting = false;
+        _currentRequestId = null;
+      });
+    }
   }
 
   Future<ConversationAiResponse> _generateAIResponse(
@@ -1500,6 +1508,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     );
 
     if (result == true) {
+      // Capture ScaffoldMessenger and Navigator before any async operations
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+
       try {
         final forkedConversation = await _conversationService.forkConversation(
           originalConversationId: _conversation!.id,
@@ -1508,16 +1521,20 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         );
 
         // Navigate to the forked conversation
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) =>
-                ConversationChatScreen(conversationId: forkedConversation.id),
-          ),
-        );
+        if (mounted) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ConversationChatScreen(conversationId: forkedConversation.id),
+            ),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error forking conversation: $e')),
-        );
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('Error forking conversation: $e')),
+          );
+        }
       }
     }
   }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
+import '../screens/tag_management_screen.dart';
 
 class TagSelectionDialog extends StatefulWidget {
   final List<String> initialSelectedTags;
@@ -12,6 +13,8 @@ class TagSelectionDialog extends StatefulWidget {
   final String? title;
   final String? description;
   final String Function(int count)? confirmLabelBuilder;
+  final bool showManageTagsButton;
+  final bool returnAsSet;
 
   const TagSelectionDialog({
     super.key,
@@ -22,6 +25,8 @@ class TagSelectionDialog extends StatefulWidget {
     this.title,
     this.description,
     this.confirmLabelBuilder,
+    this.showManageTagsButton = false,
+    this.returnAsSet = false,
   });
 
   @override
@@ -50,7 +55,29 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
     super.dispose();
   }
 
-  bool get _canSubmit => widget.allowEmptySelection || _selectedTags.isNotEmpty;
+  bool get _canSubmit {
+    return widget.allowEmptySelection || _selectedTags.isNotEmpty;
+  }
+
+  void _handleTagSelection(String tag) {
+    setState(() {
+      if (_selectedTags.contains(tag)) {
+        _selectedTags.remove(tag);
+      } else {
+        _selectedTags.add(tag);
+      }
+    });
+  }
+
+  void _navigateToTagManagement(BuildContext context) {
+    Navigator.pop(context); // Close the tag selection dialog first
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TagManagementScreen(),
+      ),
+    );
+  }
 
   String _buildConfirmLabel(AppLocalizations l10n) {
     final builder = widget.confirmLabelBuilder;
@@ -58,8 +85,13 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
       return builder(_selectedTags.length);
     }
 
+    // For filter scenarios (allowEmptySelection), always use "Apply"
+    if (widget.allowEmptySelection) {
+      return l10n.apply;
+    }
+
     if (_selectedTags.isEmpty) {
-      return widget.allowEmptySelection ? l10n.apply : l10n.addTagsCapitalized;
+      return l10n.addTagsCapitalized;
     }
 
     final count = _selectedTags.length;
@@ -220,14 +252,27 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                               spacing: 8,
                               runSpacing: 4,
                               children: availableTags.map((tag) {
-                                return ActionChip(
-                                  label: Text(tag),
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedTags.add(tag);
-                                    });
-                                  },
-                                );
+                                final isSelected = _selectedTags.contains(tag);
+                                // Use FilterChip for filter scenarios (allowEmptySelection) to show selected state
+                                // Use ActionChip for regular tag selection (add-only mode)
+                                if (widget.allowEmptySelection) {
+                                  return FilterChip(
+                                    label: Text(tag),
+                                    selected: isSelected,
+                                    onSelected: (selected) {
+                                      _handleTagSelection(tag);
+                                    },
+                                  );
+                                } else {
+                                  return ActionChip(
+                                    label: Text(tag),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedTags.add(tag);
+                                      });
+                                    },
+                                  );
+                                }
                               }).toList(),
                             ),
                           ],
@@ -240,6 +285,13 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
             ),
           ),
           actions: [
+            if (widget.showManageTagsButton) ...[
+              TextButton(
+                onPressed: () => _navigateToTagManagement(context),
+                child: Text(l10n.manageTags),
+              ),
+              const SizedBox(width: 8),
+            ],
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(l10n.cancel),
@@ -247,7 +299,12 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
             ElevatedButton(
               onPressed: _canSubmit
                   ? () {
-                      Navigator.of(context).pop(_selectedTags.toList());
+                      if (widget.returnAsSet) {
+                        // Return Set<String> for filter scenarios
+                        Navigator.of(context).pop(_selectedTags);
+                      } else {
+                        Navigator.of(context).pop(_selectedTags.toList());
+                      }
                     }
                   : null,
               child: Text(_buildConfirmLabel(l10n)),

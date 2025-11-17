@@ -382,33 +382,39 @@ class _AIActionScreenState extends State<AIActionScreen> {
           break;
         case AIInteractionType.aiConversation:
           // Navigate to conversation screen with selected notes
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => ConversationChatScreen(
-                initialNoteIds: widget.selectedNotes.map((note) => note.id).toList(),
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => ConversationChatScreen(
+                  initialNoteIds: widget.selectedNotes.map((note) => note.id).toList(),
+                ),
               ),
-            ),
-          );
+            );
+          }
           return; // Don't process further
         default:
           throw Exception('Invalid action type');
       }
 
-      setState(() {
-        _response = response;
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _response = response;
+          _isProcessing = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isProcessing = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -609,6 +615,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
   void _saveResponse() async {
     if (_response == null || _response!.trim().isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No response to save')),
       );
@@ -625,10 +632,12 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
         await context.read<AppProvider>().updateNote(updatedNote);
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Note updated successfully')),
         );
 
+        if (!mounted) return;
         Navigator.of(context).pop(updatedNote);
       } else {
         // Create a new note from the AI response
@@ -645,11 +654,13 @@ class _AIActionScreenState extends State<AIActionScreen> {
         // Save the note to the database
         await context.read<AppProvider>().addNote(newNote);
 
+        if (!mounted) return;
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Response saved as new note')),
         );
 
+        if (!mounted) return;
         // Navigate to the newly created note
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -658,6 +669,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving note: $e'),
