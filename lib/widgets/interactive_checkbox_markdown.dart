@@ -20,6 +20,12 @@ import '../utils/synapse_temp_utils.dart';
 import '../utils/remote_image_storage.dart';
 import 'interactive_checkbox_component.dart';
 
+/// Enum to represent image source type
+enum _ImageSourceType {
+  local,
+  remote,
+}
+
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
 /// with a custom checkbox component that handles state updates.
 class InteractiveCheckboxMarkdown extends StatefulWidget {
@@ -236,12 +242,19 @@ class _InteractiveCheckboxMarkdownState
 
           final tempFile = snapshot.data!;
           final mime = tempFile.mimeType.toLowerCase();
+          final isSvg = mime == 'image/svg+xml';
 
-          if (mime == 'image/svg+xml') {
+          if (isSvg) {
             // Render SVG using InAppWebView for better compatibility and edge case handling
             try {
               final svgContent = utf8.decode(tempFile.bytes);
-              return _buildSvgWebView(svgContent, width, height);
+              return _SvgWebViewWithInfoBar(
+                svgContent: svgContent,
+                imageUrl: url,
+                width: width,
+                height: height,
+                noteId: widget.noteId,
+              );
             } catch (e) {
               if (kDebugMode) {
                 debugPrint('Error decoding SVG content: $e');
@@ -251,20 +264,24 @@ class _InteractiveCheckboxMarkdownState
           }
 
           if (mime.startsWith('image/')) {
-            return SizedBox(
-              width: width,
-              height: height,
-              child: Image.memory(
-                tempFile.bytes,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholder(
-                    width,
-                    height,
-                    'Failed to render image',
-                  );
-                },
+            return _wrapImageWithInfoBar(
+              image: SizedBox(
+                width: width,
+                height: height,
+                child: Image.memory(
+                  tempFile.bytes,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildPlaceholder(
+                      width,
+                      height,
+                      'Failed to render image',
+                    );
+                  },
+                ),
               ),
+              imageUrl: url,
+              isSvg: false,
             );
           }
 
@@ -301,13 +318,20 @@ class _InteractiveCheckboxMarkdownState
           isBase64 = parts.any((p) => p.toLowerCase() == 'base64');
         }
 
-        if (mimetype.toLowerCase() == 'image/svg+xml') {
+        final isSvg = mimetype.toLowerCase() == 'image/svg+xml';
+        if (isSvg) {
           // Render SVG using InAppWebView for better compatibility and edge case handling
           try {
             final svgContent = isBase64
                 ? utf8.decode(base64.decode(data))
                 : Uri.decodeComponent(data);
-            return _buildSvgWebView(svgContent, width, height);
+            return _SvgWebViewWithInfoBar(
+              svgContent: svgContent,
+              imageUrl: url,
+              width: width,
+              height: height,
+              noteId: widget.noteId,
+            );
           } catch (e) {
             if (kDebugMode) {
               debugPrint('Error decoding SVG from data URL: $e');
@@ -326,20 +350,24 @@ class _InteractiveCheckboxMarkdownState
           }
 
           final bytes = base64.decode(data);
-          return SizedBox(
-            width: width,
-            height: height,
-            child: Image.memory(
-              bytes,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return _buildPlaceholder(
-                  width,
-                  height,
-                  'Failed to render image',
-                );
-              },
+          return _wrapImageWithInfoBar(
+            image: SizedBox(
+              width: width,
+              height: height,
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholder(
+                    width,
+                    height,
+                    'Failed to render image',
+                  );
+                },
+              ),
             ),
+            imageUrl: url,
+            isSvg: false,
           );
         }
 
@@ -361,35 +389,57 @@ class _InteractiveCheckboxMarkdownState
             return _buildLoadingPlaceholder(width, height);
           }
           if (snapshot.hasError) {
-            return _buildNetworkImage(url, width, height);
+            return _wrapImageWithInfoBar(
+              image: _buildNetworkImage(url, width, height),
+              imageUrl: url,
+              isSvg: false,
+            );
           }
           final source = snapshot.data;
           if (source != null) {
             if (source.svgContent != null) {
-              return _buildSvgWebView(source.svgContent!, width, height);
+              return _SvgWebViewWithInfoBar(
+                svgContent: source.svgContent!,
+                imageUrl: url,
+                width: width,
+                height: height,
+                noteId: widget.noteId,
+              );
             }
-            return SizedBox(
-              width: width,
-              height: height,
-              child: Image.file(
-                File(source.path),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholder(
-                    width,
-                    height,
-                    'Failed to render local image',
-                  );
-                },
+            return _wrapImageWithInfoBar(
+              image: SizedBox(
+                width: width,
+                height: height,
+                child: Image.file(
+                  File(source.path),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildPlaceholder(
+                      width,
+                      height,
+                      'Failed to render local image',
+                    );
+                  },
+                ),
               ),
+              imageUrl: url,
+              isSvg: false,
             );
           }
-          return _buildNetworkImage(url, width, height);
+          return _wrapImageWithInfoBar(
+            image: _buildNetworkImage(url, width, height),
+            imageUrl: url,
+            isSvg: false,
+          );
         },
       );
     }
 
-    return _buildNetworkImage(url, width, height);
+    return _wrapImageWithInfoBar(
+      image: _buildNetworkImage(url, width, height),
+      imageUrl: url,
+      isSvg: false,
+    );
   }
 
   /// Builds a placeholder widget for unsupported or error cases.
@@ -459,9 +509,251 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
-  /// Creates an HTML wrapper for SVG content to render in WebView.
-  /// This ensures proper scaling and responsive behavior with pan and zoom support.
-  String _createSvgHtmlWrapper(String svgContent) {
+
+
+  /// Wraps an image widget with an info bar
+  Widget _wrapImageWithInfoBar({
+    required Widget image,
+    required String imageUrl,
+    required bool isSvg,
+    VoidCallback? onSvgBackgroundToggle,
+  }) {
+    return FutureBuilder<_ImageSourceType>(
+      future: _determineImageSourceType(imageUrl),
+      builder: (context, snapshot) {
+        final sourceType = snapshot.data ?? _ImageSourceType.remote;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+              child: image,
+            ),
+            _ImageInfoBar(
+              sourceType: sourceType,
+              isSvg: isSvg,
+              onSvgBackgroundToggle: onSvgBackgroundToggle,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
+    if (widget.noteId == null) {
+      return null;
+    }
+
+    try {
+      final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
+        noteId: widget.noteId!,
+        imageUrl: url,
+      );
+      if (absolutePath == null) {
+        return null;
+      }
+      final file = File(absolutePath);
+      if (!await file.exists()) {
+        return null;
+      }
+      final extension = p.extension(absolutePath).toLowerCase();
+      if (extension == '.svg') {
+        final content = await file.readAsString();
+        return _LocalImageSource(
+          path: absolutePath,
+          extension: extension,
+          svgContent: content,
+        );
+      }
+      return _LocalImageSource(path: absolutePath, extension: extension);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isHttpUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
+
+  /// Determines if an image URL represents a local or remote source
+  Future<_ImageSourceType> _determineImageSourceType(String url) async {
+    // SynapseTemp URIs are always local
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return _ImageSourceType.local;
+    }
+
+    // Data URIs are considered local (embedded)
+    if (url.startsWith('data:')) {
+      return _ImageSourceType.local;
+    }
+
+    // For HTTP URLs, check if they resolve to local files
+    if (widget.noteId != null && _isHttpUrl(url)) {
+      final source = await _resolveLocalImageSource(url);
+      if (source != null) {
+        return _ImageSourceType.local;
+      }
+      return _ImageSourceType.remote;
+    }
+
+    // Default to remote for HTTP URLs, local for others
+    return _isHttpUrl(url) ? _ImageSourceType.remote : _ImageSourceType.local;
+  }
+
+
+  Widget _buildCodeBlock(
+    BuildContext context,
+    String name,
+    String code,
+    bool closed,
+  ) {
+    return _HighlightedCodeBlock(
+      code: code,
+      languageHint: name,
+      textStyle: widget.style,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Create custom components list with our safe HTag and optional interactive checkbox component
+    final components = [
+      CodeBlockMd(),
+      LatexMathMultiLine(),
+      NewLines(),
+      BlockQuote(),
+      TableMd(),
+      SafeHTag(), // Use our safe version instead of HTag
+      UnOrderedList(),
+      OrderedList(),
+      RadioButtonMd(),
+      if (widget.onContentChanged != null)
+        InteractiveCheckboxMd(
+          onToggle: (line, text, value) =>
+              _handleCheckboxToggle(line, text, value),
+        )
+      else
+        CheckBoxMd(), // Use regular checkbox if not interactive
+      HrLine(),
+      IndentMd(),
+    ];
+
+    return GptMarkdown(
+      _currentContent,
+      style: widget.style,
+      textDirection: widget.textDirection,
+      onLinkTap: widget.onLinkTap,
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
+      latexBuilder: _customLatexBuilder,
+      imageBuilder: _customImageBuilder,
+      codeBuilder: _buildCodeBlock,
+      components: components,
+    );
+  }
+}
+
+/// Stateful widget for SVG WebView with dark/light background toggle
+class _SvgWebViewWidget extends StatefulWidget {
+  const _SvgWebViewWidget({
+    super.key,
+    required this.svgContent,
+    this.width,
+    this.height,
+  });
+
+  final String svgContent;
+  final double? width;
+  final double? height;
+
+  @override
+  State<_SvgWebViewWidget> createState() => _SvgWebViewWidgetState();
+}
+
+class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
+  bool _isDarkBackground = false;
+  InAppWebViewController? _webViewController;
+
+  void toggleBackground() {
+    setState(() {
+      _isDarkBackground = !_isDarkBackground;
+    });
+    _updateBackgroundColor();
+  }
+
+  void _updateBackgroundColor() {
+    if (_webViewController == null) return;
+    final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
+    _webViewController!.evaluateJavascript(source: '''
+      document.body.style.backgroundColor = '$backgroundColor';
+      document.documentElement.style.backgroundColor = '$backgroundColor';
+    ''');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final htmlContent = _createSvgHtmlWrapper(widget.svgContent, isDarkBackground: _isDarkBackground);
+    final webViewHeight = widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) {},
+      onHorizontalDragStart: (_) {},
+      child: SizedBox(
+        width: widget.width,
+        height: webViewHeight,
+        child: InAppWebView(
+          initialData: InAppWebViewInitialData(
+            data: htmlContent,
+            mimeType: 'text/html',
+            encoding: 'utf8',
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            supportZoom: true,
+            transparentBackground: true,
+            disableContextMenu: false,
+            horizontalScrollBarEnabled: false,
+            verticalScrollBarEnabled: false,
+            resourceCustomSchemes: ['synapse'],
+            useHybridComposition: true,
+            disableVerticalScroll: false,
+            disableHorizontalScroll: false,
+          ),
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+          },
+          onWebViewCreated: (controller) {
+            _webViewController = controller;
+          },
+          onLoadStop: (controller, url) {
+            _webViewController = controller;
+          },
+          onLoadResourceWithCustomScheme: (controller, request) async {
+            if (request.url.scheme.toLowerCase() == 'synapse') {
+              final data = await rootBundle.loadString(
+                "assets/scripts/${request.url.host}",
+              );
+              return CustomSchemeResponse(
+                contentType: 'application/javascript',
+                data: Uint8List.fromList(utf8.encode(data)),
+              );
+            }
+            return null;
+          },
+        ),
+      ),
+    );
+  }
+
+  String _createSvgHtmlWrapper(String svgContent, {bool isDarkBackground = false}) {
+    final backgroundColor = isDarkBackground ? '#1e1e1e' : '#ffffff';
     return '''
 <!DOCTYPE html>
 <html>
@@ -477,6 +769,7 @@ class _InteractiveCheckboxMarkdownState
       width: 100%;
       height: 100%;
       overflow: hidden;
+      background-color: $backgroundColor;
     }
     body {
       display: flex;
@@ -528,59 +821,58 @@ class _InteractiveCheckboxMarkdownState
 </html>
 ''';
   }
+}
 
-  /// Builds an InAppWebView widget to render SVG content with pan and zoom support.
-  Widget _buildSvgWebView(String svgContent, double? width, double? height) {
-    final htmlContent = _createSvgHtmlWrapper(svgContent);
+/// Widget that wraps SVG WebView with info bar
+class _SvgWebViewWithInfoBar extends StatefulWidget {
+  const _SvgWebViewWithInfoBar({
+    required this.svgContent,
+    required this.imageUrl,
+    this.width,
+    this.height,
+    this.noteId,
+  });
 
-    // Determine the height for the WebView
-    // If height is not provided, calculate based on width with a reasonable aspect ratio
-    final webViewHeight = height ?? (width != null ? width * 0.75 : 300.0);
+  final String svgContent;
+  final String imageUrl;
+  final double? width;
+  final double? height;
+  final String? noteId;
 
-    // Wrap in GestureDetector to capture touches and prevent parent scroll
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) {},
-      onHorizontalDragStart: (_) {},
-      child: SizedBox(
-        width: width,
-        height: webViewHeight,
-        child: InAppWebView(
-          initialData: InAppWebViewInitialData(
-            data: htmlContent,
-            mimeType: 'text/html',
-            encoding: 'utf8',
-          ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            supportZoom: true,
-            transparentBackground: true,
-            disableContextMenu: false,
-            horizontalScrollBarEnabled: false,
-            verticalScrollBarEnabled: false,
-            resourceCustomSchemes: ['synapse'],
-            useHybridComposition: true,
-            disableVerticalScroll: false,
-            disableHorizontalScroll: false,
-          ),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'application/javascript',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
-            }
-            return null;
-          },
-        ),
-      ),
-    );
+  @override
+  State<_SvgWebViewWithInfoBar> createState() => _SvgWebViewWithInfoBarState();
+}
+
+class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
+  final GlobalKey<_SvgWebViewWidgetState> _svgWebViewKey = GlobalKey();
+
+  Future<_ImageSourceType> _determineImageSourceType(String url) async {
+    // SynapseTemp URIs are always local
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return _ImageSourceType.local;
+    }
+
+    // Data URIs are considered local (embedded)
+    if (url.startsWith('data:')) {
+      return _ImageSourceType.local;
+    }
+
+    // For HTTP URLs, check if they resolve to local files
+    if (widget.noteId != null && _isHttpUrl(url)) {
+      final source = await _resolveLocalImageSource(url);
+      if (source != null) {
+        return _ImageSourceType.local;
+      }
+      return _ImageSourceType.remote;
+    }
+
+    // Default to remote for HTTP URLs, local for others
+    return _isHttpUrl(url) ? _ImageSourceType.remote : _ImageSourceType.local;
+  }
+
+  bool _isHttpUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
   }
 
   Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
@@ -615,59 +907,94 @@ class _InteractiveCheckboxMarkdownState
     }
   }
 
-  bool _isHttpUrl(String url) {
-    final lower = url.toLowerCase();
-    return lower.startsWith('http://') || lower.startsWith('https://');
-  }
-
-  Widget _buildCodeBlock(
-    BuildContext context,
-    String name,
-    String code,
-    bool closed,
-  ) {
-    return _HighlightedCodeBlock(
-      code: code,
-      languageHint: name,
-      textStyle: widget.style,
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_ImageSourceType>(
+      future: _determineImageSourceType(widget.imageUrl),
+      builder: (context, snapshot) {
+        final sourceType = snapshot.data ?? _ImageSourceType.remote;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+              child: _SvgWebViewWidget(
+                key: _svgWebViewKey,
+                svgContent: widget.svgContent,
+                width: widget.width,
+                height: widget.height,
+              ),
+            ),
+            _ImageInfoBar(
+              sourceType: sourceType,
+              isSvg: true,
+              onSvgBackgroundToggle: () {
+                _svgWebViewKey.currentState?.toggleBackground();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
+}
+
+/// Thin info bar widget showing image source type and SVG controls
+class _ImageInfoBar extends StatelessWidget {
+  const _ImageInfoBar({
+    required this.sourceType,
+    required this.isSvg,
+    this.onSvgBackgroundToggle,
+  });
+
+  final _ImageSourceType sourceType;
+  final bool isSvg;
+  final VoidCallback? onSvgBackgroundToggle;
 
   @override
   Widget build(BuildContext context) {
-    // Create custom components list with our safe HTag and optional interactive checkbox component
-    final components = [
-      CodeBlockMd(),
-      LatexMathMultiLine(),
-      NewLines(),
-      BlockQuote(),
-      TableMd(),
-      SafeHTag(), // Use our safe version instead of HTag
-      UnOrderedList(),
-      OrderedList(),
-      RadioButtonMd(),
-      if (widget.onContentChanged != null)
-        InteractiveCheckboxMd(
-          onToggle: (line, text, value) =>
-              _handleCheckboxToggle(line, text, value),
-        )
-      else
-        CheckBoxMd(), // Use regular checkbox if not interactive
-      HrLine(),
-      IndentMd(),
-    ];
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
-    return GptMarkdown(
-      _currentContent,
-      style: widget.style,
-      textDirection: widget.textDirection,
-      onLinkTap: widget.onLinkTap,
-      maxLines: widget.maxLines,
-      overflow: widget.overflow,
-      latexBuilder: _customLatexBuilder,
-      imageBuilder: _customImageBuilder,
-      codeBuilder: _buildCodeBlock,
-      components: components,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark
+            ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
+            : colorScheme.surfaceContainerHighest.withOpacity(0.15),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(4),
+          bottomRight: Radius.circular(4),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            sourceType == _ImageSourceType.local
+                ? Icons.storage
+                : Icons.cloud,
+            size: 11,
+            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+          ),
+          if (isSvg && onSvgBackgroundToggle != null) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onSvgBackgroundToggle,
+              child: Icon(
+                Icons.contrast,
+                size: 11,
+                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
