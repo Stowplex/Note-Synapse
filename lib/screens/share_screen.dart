@@ -46,6 +46,8 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
   final TextEditingController _newTagController = TextEditingController();
+  final ScrollController _contentPreviewScrollController = ScrollController();
+  final ScrollController _mediaSelectionScrollController = ScrollController();
 
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
@@ -67,6 +69,8 @@ class _ShareScreenState extends State<ShareScreen> {
     _titleController.dispose();
     _tagsController.dispose();
     _newTagController.dispose();
+    _contentPreviewScrollController.dispose();
+    _mediaSelectionScrollController.dispose();
     super.dispose();
   }
 
@@ -1272,8 +1276,10 @@ class _ShareScreenState extends State<ShareScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 600),
             child: Scrollbar(
+              controller: _contentPreviewScrollController,
               thumbVisibility: true,
               child: SingleChildScrollView(
+                controller: _contentPreviewScrollController,
                 child: Text(
                   note.content,
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -1400,8 +1406,10 @@ class _ShareScreenState extends State<ShareScreen> {
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 320),
           child: Scrollbar(
+            controller: _mediaSelectionScrollController,
             thumbVisibility: true,
             child: ListView.separated(
+              controller: _mediaSelectionScrollController,
               shrinkWrap: true,
               itemCount: _remoteImages.length,
               itemBuilder: (context, index) =>
