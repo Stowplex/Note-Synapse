@@ -2588,6 +2588,24 @@ abstract class AppLocalizations {
   /// **'Create your first custom app'**
   String get createFirstApp;
 
+  /// No description provided for @searchApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Search apps...'**
+  String get searchApps;
+
+  /// No description provided for @noAppsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps found'**
+  String get noAppsFound;
+
+  /// No description provided for @tryAdjustingSearchTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Try adjusting your search terms'**
+  String get tryAdjustingSearchTerms;
+
   /// No description provided for @createNewApp.
   ///
   /// In en, this message translates to:

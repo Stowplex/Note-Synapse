@@ -1373,6 +1373,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createFirstApp => '创建您的第一个自定义应用';
 
   @override
+  String get searchApps => '搜索应用...';
+
+  @override
+  String get noAppsFound => '未找到应用';
+
+  @override
+  String get tryAdjustingSearchTerms => '请尝试调整搜索词';
+
+  @override
   String get createNewApp => '创建新应用';
 
   @override

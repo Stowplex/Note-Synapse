@@ -1415,6 +1415,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createFirstApp => 'Create your first custom app';
 
   @override
+  String get searchApps => 'Search apps...';
+
+  @override
+  String get noAppsFound => 'No apps found';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Try adjusting your search terms';
+
+  @override
   String get createNewApp => 'Create New App';
 
   @override

@@ -25,13 +25,16 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   String? _editingAppId;
   final TextEditingController _editingController = TextEditingController();
   final FocusNode _editingFocusNode = FocusNode();
+  final TextEditingController _searchController = TextEditingController();
   String? _selectedYamlFile;
   String? _errorMessage;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _editingFocusNode.addListener(_onFocusChange);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
@@ -39,7 +42,15 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     _editingController.dispose();
     _editingFocusNode.removeListener(_onFocusChange);
     _editingFocusNode.dispose();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+    });
   }
 
   void _onFocusChange() {
@@ -109,6 +120,8 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
         // Check if WebView is supported
@@ -116,13 +129,47 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           return _buildWebViewNotSupportedScreen(context);
         }
 
+        final filteredApps = _getFilteredApps(appProvider.userApps);
+
         return Scaffold(
           appBar: AppBar(
-            title: Text(AppLocalizations.of(context)!.myApps),
+            title: Text(l10n.myApps),
+            actions: [
+              SizedBox(
+                width: 200,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: l10n.searchApps,
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: () {
+                                _searchController.clear();
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                      isDense: true,
+                    ),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
           ),
-          body: appProvider.userApps.isEmpty
-              ? _buildEmptyState(context)
-              : _buildAppsList(context, appProvider),
+          body: filteredApps.isEmpty
+              ? _buildEmptyState(context, appProvider.userApps.isEmpty, _searchQuery.isNotEmpty)
+              : _buildAppsList(context, appProvider, filteredApps),
           floatingActionButton: FloatingActionButton(
             onPressed: () => _showAddAppMenu(context),
             child: const Icon(Icons.add),
@@ -190,7 +237,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, bool isNoApps, bool isSearchResult) {
     final l10n = AppLocalizations.of(context)!;
     
     return Center(
@@ -200,40 +247,55 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.apps,
+              isSearchResult ? Icons.search_off : Icons.apps,
               size: 64,
               color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
             Text(
-              l10n.noUserApps,
+              isSearchResult ? l10n.noAppsFound : l10n.noUserApps,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              l10n.createFirstApp,
+              isSearchResult 
+                  ? l10n.tryAdjustingSearchTerms
+                  : l10n.createFirstApp,
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _showAddAppMenu(context),
-              icon: const Icon(Icons.add),
-              label: Text(l10n.createNewApp),
-            ),
+            if (!isSearchResult) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _showAddAppMenu(context),
+                icon: const Icon(Icons.add),
+                label: Text(l10n.createNewApp),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAppsList(BuildContext context, AppProvider appProvider) {
+  List<UserApp> _getFilteredApps(List<UserApp> apps) {
+    if (_searchQuery.isEmpty) {
+      return apps;
+    }
+    return apps.where((app) {
+      final nameMatch = app.name.toLowerCase().contains(_searchQuery);
+      final descriptionMatch = app.description.toLowerCase().contains(_searchQuery);
+      return nameMatch || descriptionMatch;
+    }).toList();
+  }
+
+  Widget _buildAppsList(BuildContext context, AppProvider appProvider, List<UserApp> apps) {
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
-      itemCount: appProvider.userApps.length,
+      itemCount: apps.length,
       itemBuilder: (context, index) {
-        final app = appProvider.userApps[index];
+        final app = apps[index];
         return _buildAppCard(context, app, appProvider);
       },
     );
