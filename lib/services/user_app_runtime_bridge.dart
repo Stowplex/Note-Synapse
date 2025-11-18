@@ -173,6 +173,10 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('saveNotes', notes ?? []);
             return result;
           },
+          deleteNotes: async (noteIds) => {
+            const result = await window.flutter_inappwebview.callHandler('deleteNotes', noteIds ?? []);
+            return result;
+          },
           openNote: async (noteId, replaceWindow = false) => {
             const result = await window.flutter_inappwebview.callHandler('openNote', noteId, replaceWindow === true);
             return result;
@@ -660,6 +664,33 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
             '[Synapse.saveNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'deleteNotes',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final noteIdsData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.deleteNotes] Called with ${noteIdsData.length} note IDs',
+          );
+          final deletedCount = await _deleteNotesFromJavaScript(noteIdsData);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.deleteNotes] Success - Deleted $deletedCount notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'deletedCount': deletedCount};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.deleteNotes] Error after ${duration.inMilliseconds}ms: $e',
             error: e,
           );
           return {'success': false, 'error': e.toString()};
@@ -1174,6 +1205,32 @@ class UserAppRuntimeBridge {
       }
     }
     return savedCount;
+  }
+
+  Future<int> _deleteNotesFromJavaScript(List<dynamic> noteIdsData) async {
+    var deletedCount = 0;
+    for (final noteIdData in noteIdsData) {
+      if (noteIdData is! String || noteIdData.trim().isEmpty) {
+        LoggerService.warning(
+          '[Synapse.deleteNotes] Invalid note ID: $noteIdData',
+        );
+        continue;
+      }
+      try {
+        final noteId = noteIdData.trim();
+        await appProvider.deleteNote(noteId);
+        deletedCount++;
+        LoggerService.debug(
+          '[Synapse.deleteNotes] Deleted note: $noteId',
+        );
+      } catch (e) {
+        LoggerService.error(
+          '[Synapse.deleteNotes] Error deleting note $noteIdData: $e',
+          error: e,
+        );
+      }
+    }
+    return deletedCount;
   }
 
   Future<Note> _createNoteFromJavaScriptData(Map<String, dynamic> data) async {

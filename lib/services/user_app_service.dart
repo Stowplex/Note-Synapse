@@ -1027,6 +1027,12 @@ Example SQL queries you can use:
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
      Response format: {success: boolean, savedCount?: number, error?: string}
+   - Synapse.deleteNotes(noteIds: array) - Delete notes from the database by their IDs
+     Param format: array of note IDs (strings) - List of UUID strings identifying notes to delete
+     Response format: {success: boolean, deletedCount?: number, error?: string}
+     Usage notes:
+       * Each element in the array should be a valid note ID (UUID string)
+       * Invalid or non-existent note IDs are skipped (not counted in deletedCount)
    - Synapse.openNote(noteId: string, replaceWindow: bool = false) - Open a note natively on the platform
      Param format: 
        - noteId: a string of the note ID to open
@@ -1189,6 +1195,39 @@ Example SQL queries you can use:
          data: attachmentResult.data
        }]
      });
+   }
+   ```
+
+   CORRECT deleteNotes Usage Examples:
+   ```javascript
+   // Delete a single note
+   const result1 = await Synapse.deleteNotes(['note-id-123']);
+   if (result1.success) {
+     console.log(`Deleted \${result1.deletedCount} note(s)`);
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Delete multiple notes
+   const result2 = await Synapse.deleteNotes(['note-id-1', 'note-id-2', 'note-id-3']);
+   if (result2.success) {
+     console.log(`Deleted \${result2.deletedCount} note(s)`);
+   }
+   
+   // Delete notes from Synapse.Notes array
+   const noteIds = Synapse.Notes.map(note => note.id);
+   const result3 = await Synapse.deleteNotes(noteIds);
+   if (result3.success) {
+     console.log(`Deleted \${result3.deletedCount} of \${noteIds.length} note(s)`);
+   }
+   
+   // Delete notes based on a filter
+   const notesToDelete = Synapse.Notes
+     .filter(note => note.tags.includes('archived'))
+     .map(note => note.id);
+   if (notesToDelete.length > 0) {
+     const result4 = await Synapse.deleteNotes(notesToDelete);
+     console.log(`Deleted \${result4.deletedCount} archived note(s)`);
    }
    ```
 
