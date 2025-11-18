@@ -36,7 +36,7 @@ class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal({String? databaseNameOverride})
-      : _databaseNameOverride = databaseNameOverride {
+    : _databaseNameOverride = databaseNameOverride {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
@@ -304,7 +304,7 @@ class DatabaseService {
 
   // For testing, allow creating new instances
   DatabaseService.createNew({String? databaseName})
-      : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
+    : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
@@ -2049,17 +2049,36 @@ class DatabaseService {
 
   Future<Map<String, dynamic>?> getUserAppState(String id) async {
     final db = await database;
-    final maps = await db.query(
-      'user_apps',
-      columns: ['appState'],
-      where: 'id = ?',
-      whereArgs: [id],
+
+    // Use raw query with chunked TEXT reading to avoid cursor window issues
+    final results = await db.rawQuery(
+      '''
+      SELECT id,
+             CASE 
+               WHEN length(appState) > 0 THEN 'TEXT_DATA'
+               ELSE NULL 
+             END as has_text
+      FROM user_apps 
+      WHERE id = ?
+    ''',
+      [id],
     );
-    if (maps.isNotEmpty && maps.first['appState'] != null) {
-      return jsonDecode(maps.first['appState'] as String)
-          as Map<String, dynamic>;
+
+    if (results.isEmpty || results.first['has_text'] == null) {
+      return null;
     }
-    return null;
+
+    // Read TEXT data in chunks to avoid cursor window issues
+    try {
+      final textData = await _readTextInChunks(db, id);
+      if (textData.isEmpty) {
+        return null;
+      }
+      return jsonDecode(textData) as Map<String, dynamic>;
+    } catch (e) {
+      LoggerService.error('Failed to read appState for app $id: $e', error: e);
+      return null;
+    }
   }
 
   UserApp _userAppFromMap(Map<String, dynamic> map) {
@@ -2512,6 +2531,59 @@ class DatabaseService {
     } catch (e) {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);
       return <int>[];
+    }
+  }
+
+  // Helper method to read TEXT data in chunks to avoid cursor window issues
+  Future<String> _readTextInChunks(Database db, String appId) async {
+    const int chunkSize = 1024 * 1024; // 1MB chunks
+    final StringBuffer allText = StringBuffer();
+
+    try {
+      // Get the total size of the TEXT
+      final sizeResult = await db.rawQuery(
+        '''
+        SELECT length(appState) as text_size 
+        FROM user_apps 
+        WHERE id = ?
+      ''',
+        [appId],
+      );
+
+      if (sizeResult.isEmpty) {
+        return '';
+      }
+
+      final int totalSize = sizeResult.first['text_size'] as int;
+      if (totalSize == 0) {
+        return '';
+      }
+
+      // Read TEXT in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize)
+            ? totalSize - offset
+            : chunkSize;
+
+        final chunkResult = await db.rawQuery(
+          '''
+          SELECT substr(appState, ?, ?) as chunk
+          FROM user_apps 
+          WHERE id = ?
+        ''',
+          [offset + 1, currentChunkSize, appId],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as String;
+          allText.write(chunk);
+        }
+      }
+
+      return allText.toString();
+    } catch (e) {
+      LoggerService.error('Error reading TEXT in chunks: $e', error: e);
+      return '';
     }
   }
 
