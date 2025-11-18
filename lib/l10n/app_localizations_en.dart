@@ -3394,4 +3394,146 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fetchRemoteImages => 'Fetch remote images';
+
+  @override
+  String get gettingStarted => 'Getting Started';
+
+  @override
+  String get gettingStartedSubtitle => 'Install user manual and starter apps';
+
+  @override
+  String get installUserManual => 'Install User Manual';
+
+  @override
+  String get installUserManualSubtitle =>
+      'Install or update the user manual note';
+
+  @override
+  String get installStarterApps => 'Install Starter Apps';
+
+  @override
+  String get installStarterAppsSubtitle =>
+      'Browse and install pre-configured apps';
+
+  @override
+  String get userManualInfo => 'User Manual Information';
+
+  @override
+  String get installed => 'Installed';
+
+  @override
+  String get notInstalled => 'Not Installed';
+
+  @override
+  String get currentVersion => 'Current Version';
+
+  @override
+  String get latestVersion => 'Latest Version';
+
+  @override
+  String get lastUpdated => 'Last Updated';
+
+  @override
+  String get newVersionAvailable => 'New version available!';
+
+  @override
+  String get updateUserManual => 'Update User Manual';
+
+  @override
+  String get reinstallUserManual => 'Reinstall User Manual';
+
+  @override
+  String get installing => 'Installing...';
+
+  @override
+  String updateUserManualConfirm(String oldVersion, String newVersion) {
+    return 'A newer version ($newVersion) of the User Manual is available. Your current version is $oldVersion. Do you want to update?';
+  }
+
+  @override
+  String get userManualInstalledSuccessfully =>
+      'User Manual installed successfully!';
+
+  @override
+  String get userManualUpdatedSuccessfully =>
+      'User Manual updated successfully!';
+
+  @override
+  String errorInstallingUserManual(String error) {
+    return 'Error installing User Manual: $error';
+  }
+
+  @override
+  String get whatIsUserManual => 'What is User Manual?';
+
+  @override
+  String get userManualDescription =>
+      'The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.';
+
+  @override
+  String get noStarterAppsAvailable => 'No starter apps available';
+
+  @override
+  String get noAppsSelected => 'No apps selected';
+
+  @override
+  String appsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get proceedWithInstallation => 'Install Selected Apps';
+
+  @override
+  String starterAppsInstalledSuccessfully(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return '$count $_temp0 installed successfully!';
+  }
+
+  @override
+  String starterAppsInstallFailed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return 'Failed to install $count $_temp0';
+  }
+
+  @override
+  String starterAppsPartialInstall(int successCount, int failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return 'Installed $successCount $_temp0, failed $failureCount $_temp1';
+  }
+
+  @override
+  String errorInstallingStarterApps(String error) {
+    return 'Error installing starter apps: $error';
+  }
 }

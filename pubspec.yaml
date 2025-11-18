@@ -183,6 +183,8 @@ flutter:
     - assets/scripts/mermaid.min.js
     - assets/scripts/svg.pan-zoom.min.js
     - assets/model_presets/
+    - assets/starter/
+    - assets/starter/apps/
 
   # Internationalization
   generate: true

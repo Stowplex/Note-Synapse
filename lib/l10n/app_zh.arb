@@ -1276,5 +1276,92 @@
           "error": {}
         }
       },
-      "fetchRemoteImages": "抓取网络图片"
+      "fetchRemoteImages": "抓取网络图片",
+      "gettingStarted": "入门指南",
+      "gettingStartedSubtitle": "安装用户手册和入门应用",
+      "installUserManual": "安装用户手册",
+      "installUserManualSubtitle": "安装或更新用户手册笔记",
+      "installStarterApps": "安装入门应用",
+      "installStarterAppsSubtitle": "浏览并安装预配置的应用",
+      "userManualInfo": "用户手册信息",
+      "status": "状态",
+      "installed": "已安装",
+      "notInstalled": "未安装",
+      "currentVersion": "当前版本",
+      "latestVersion": "最新版本",
+      "lastUpdated": "最后更新",
+      "newVersionAvailable": "新版本可用！",
+      "updateUserManual": "更新用户手册",
+      "reinstallUserManual": "重新安装用户手册",
+      "installing": "安装中...",
+      "updateUserManualConfirm": "用户手册有新版本（{newVersion}）可用。您当前的版本是{oldVersion}。您想要更新吗？",
+      "@updateUserManualConfirm": {
+        "placeholders": {
+          "oldVersion": {
+            "type": "String"
+          },
+          "newVersion": {
+            "type": "String"
+          }
+        }
+      },
+      "userManualInstalledSuccessfully": "用户手册安装成功！",
+      "userManualUpdatedSuccessfully": "用户手册更新成功！",
+      "errorInstallingUserManual": "安装用户手册时出错：{error}",
+      "@errorInstallingUserManual": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "whatIsUserManual": "什么是用户手册？",
+      "userManualDescription": "用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。",
+      "noStarterAppsAvailable": "没有可用的入门应用",
+      "noAppsSelected": "未选择任何应用",
+      "appsSelected": "已选择{count}个应用",
+      "@appsSelected": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "deselectAll": "取消全选",
+      "proceedWithInstallation": "安装选中的应用",
+      "starterAppsInstalledSuccessfully": "{count}个应用安装成功！",
+      "@starterAppsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsInstallFailed": "{count}个应用安装失败",
+      "@starterAppsInstallFailed": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsPartialInstall": "成功安装{successCount}个应用，失败{failureCount}个应用",
+      "@starterAppsPartialInstall": {
+        "placeholders": {
+          "successCount": {
+            "type": "int"
+          },
+          "failureCount": {
+            "type": "int"
+          }
+        }
+      },
+      "errorInstallingStarterApps": "安装入门应用时出错：{error}",
+      "@errorInstallingStarterApps": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      }
 }

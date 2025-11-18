@@ -13,6 +13,7 @@ import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
 import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
+import 'getting_started_screen.dart';
 import '../services/conversation_settings_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -32,6 +33,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: Text(l10n.gettingStarted),
+              subtitle: Text(l10n.gettingStartedSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const GettingStartedScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               leading: const Icon(Icons.palette),

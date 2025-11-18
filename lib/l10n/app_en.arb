@@ -1276,5 +1276,92 @@
           "error": {}
         }
       },
-      "fetchRemoteImages": "Fetch remote images"
+      "fetchRemoteImages": "Fetch remote images",
+      "gettingStarted": "Getting Started",
+      "gettingStartedSubtitle": "Install user manual and starter apps",
+      "installUserManual": "Install User Manual",
+      "installUserManualSubtitle": "Install or update the user manual note",
+      "installStarterApps": "Install Starter Apps",
+      "installStarterAppsSubtitle": "Browse and install pre-configured apps",
+      "userManualInfo": "User Manual Information",
+      "status": "Status",
+      "installed": "Installed",
+      "notInstalled": "Not Installed",
+      "currentVersion": "Current Version",
+      "latestVersion": "Latest Version",
+      "lastUpdated": "Last Updated",
+      "newVersionAvailable": "New version available!",
+      "updateUserManual": "Update User Manual",
+      "reinstallUserManual": "Reinstall User Manual",
+      "installing": "Installing...",
+      "updateUserManualConfirm": "A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?",
+      "@updateUserManualConfirm": {
+        "placeholders": {
+          "oldVersion": {
+            "type": "String"
+          },
+          "newVersion": {
+            "type": "String"
+          }
+        }
+      },
+      "userManualInstalledSuccessfully": "User Manual installed successfully!",
+      "userManualUpdatedSuccessfully": "User Manual updated successfully!",
+      "errorInstallingUserManual": "Error installing User Manual: {error}",
+      "@errorInstallingUserManual": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "whatIsUserManual": "What is User Manual?",
+      "userManualDescription": "The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.",
+      "noStarterAppsAvailable": "No starter apps available",
+      "noAppsSelected": "No apps selected",
+      "appsSelected": "{count} {count, plural, one {app} other {apps}} selected",
+      "@appsSelected": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "deselectAll": "Deselect All",
+      "proceedWithInstallation": "Install Selected Apps",
+      "starterAppsInstalledSuccessfully": "{count} {count, plural, one {app} other {apps}} installed successfully!",
+      "@starterAppsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsInstallFailed": "Failed to install {count} {count, plural, one {app} other {apps}}",
+      "@starterAppsInstallFailed": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsPartialInstall": "Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}",
+      "@starterAppsPartialInstall": {
+        "placeholders": {
+          "successCount": {
+            "type": "int"
+          },
+          "failureCount": {
+            "type": "int"
+          }
+        }
+      },
+      "errorInstallingStarterApps": "Error installing starter apps: {error}",
+      "@errorInstallingStarterApps": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      }
 }

@@ -5917,6 +5917,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fetch remote images'**
   String get fetchRemoteImages;
+
+  /// No description provided for @gettingStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting Started'**
+  String get gettingStarted;
+
+  /// No description provided for @gettingStartedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install user manual and starter apps'**
+  String get gettingStartedSubtitle;
+
+  /// No description provided for @installUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Install User Manual'**
+  String get installUserManual;
+
+  /// No description provided for @installUserManualSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install or update the user manual note'**
+  String get installUserManualSubtitle;
+
+  /// No description provided for @installStarterApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Starter Apps'**
+  String get installStarterApps;
+
+  /// No description provided for @installStarterAppsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse and install pre-configured apps'**
+  String get installStarterAppsSubtitle;
+
+  /// No description provided for @userManualInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual Information'**
+  String get userManualInfo;
+
+  /// No description provided for @installed.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get installed;
+
+  /// No description provided for @notInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Installed'**
+  String get notInstalled;
+
+  /// No description provided for @currentVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Version'**
+  String get currentVersion;
+
+  /// No description provided for @latestVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest Version'**
+  String get latestVersion;
+
+  /// No description provided for @lastUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Updated'**
+  String get lastUpdated;
+
+  /// No description provided for @newVersionAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'New version available!'**
+  String get newVersionAvailable;
+
+  /// No description provided for @updateUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Update User Manual'**
+  String get updateUserManual;
+
+  /// No description provided for @reinstallUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Reinstall User Manual'**
+  String get reinstallUserManual;
+
+  /// No description provided for @installing.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing...'**
+  String get installing;
+
+  /// No description provided for @updateUserManualConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?'**
+  String updateUserManualConfirm(String oldVersion, String newVersion);
+
+  /// No description provided for @userManualInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual installed successfully!'**
+  String get userManualInstalledSuccessfully;
+
+  /// No description provided for @userManualUpdatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual updated successfully!'**
+  String get userManualUpdatedSuccessfully;
+
+  /// No description provided for @errorInstallingUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing User Manual: {error}'**
+  String errorInstallingUserManual(String error);
+
+  /// No description provided for @whatIsUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'What is User Manual?'**
+  String get whatIsUserManual;
+
+  /// No description provided for @userManualDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.'**
+  String get userManualDescription;
+
+  /// No description provided for @noStarterAppsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter apps available'**
+  String get noStarterAppsAvailable;
+
+  /// No description provided for @noAppsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps selected'**
+  String get noAppsSelected;
+
+  /// No description provided for @appsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {app} other {apps}} selected'**
+  String appsSelected(int count);
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
+  /// No description provided for @proceedWithInstallation.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Selected Apps'**
+  String get proceedWithInstallation;
+
+  /// No description provided for @starterAppsInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {app} other {apps}} installed successfully!'**
+  String starterAppsInstalledSuccessfully(int count);
+
+  /// No description provided for @starterAppsInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to install {count} {count, plural, one {app} other {apps}}'**
+  String starterAppsInstallFailed(int count);
+
+  /// No description provided for @starterAppsPartialInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}'**
+  String starterAppsPartialInstall(int successCount, int failureCount);
+
+  /// No description provided for @errorInstallingStarterApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing starter apps: {error}'**
+  String errorInstallingStarterApps(String error);
 }
 
 class _AppLocalizationsDelegate

@@ -3249,4 +3249,112 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fetchRemoteImages => '抓取网络图片';
+
+  @override
+  String get gettingStarted => '入门指南';
+
+  @override
+  String get gettingStartedSubtitle => '安装用户手册和入门应用';
+
+  @override
+  String get installUserManual => '安装用户手册';
+
+  @override
+  String get installUserManualSubtitle => '安装或更新用户手册笔记';
+
+  @override
+  String get installStarterApps => '安装入门应用';
+
+  @override
+  String get installStarterAppsSubtitle => '浏览并安装预配置的应用';
+
+  @override
+  String get userManualInfo => '用户手册信息';
+
+  @override
+  String get installed => '已安装';
+
+  @override
+  String get notInstalled => '未安装';
+
+  @override
+  String get currentVersion => '当前版本';
+
+  @override
+  String get latestVersion => '最新版本';
+
+  @override
+  String get lastUpdated => '最后更新';
+
+  @override
+  String get newVersionAvailable => '新版本可用！';
+
+  @override
+  String get updateUserManual => '更新用户手册';
+
+  @override
+  String get reinstallUserManual => '重新安装用户手册';
+
+  @override
+  String get installing => '安装中...';
+
+  @override
+  String updateUserManualConfirm(String oldVersion, String newVersion) {
+    return '用户手册有新版本（$newVersion）可用。您当前的版本是$oldVersion。您想要更新吗？';
+  }
+
+  @override
+  String get userManualInstalledSuccessfully => '用户手册安装成功！';
+
+  @override
+  String get userManualUpdatedSuccessfully => '用户手册更新成功！';
+
+  @override
+  String errorInstallingUserManual(String error) {
+    return '安装用户手册时出错：$error';
+  }
+
+  @override
+  String get whatIsUserManual => '什么是用户手册？';
+
+  @override
+  String get userManualDescription =>
+      '用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。';
+
+  @override
+  String get noStarterAppsAvailable => '没有可用的入门应用';
+
+  @override
+  String get noAppsSelected => '未选择任何应用';
+
+  @override
+  String appsSelected(int count) {
+    return '已选择$count个应用';
+  }
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get proceedWithInstallation => '安装选中的应用';
+
+  @override
+  String starterAppsInstalledSuccessfully(int count) {
+    return '$count个应用安装成功！';
+  }
+
+  @override
+  String starterAppsInstallFailed(int count) {
+    return '$count个应用安装失败';
+  }
+
+  @override
+  String starterAppsPartialInstall(int successCount, int failureCount) {
+    return '成功安装$successCount个应用，失败$failureCount个应用';
+  }
+
+  @override
+  String errorInstallingStarterApps(String error) {
+    return '安装入门应用时出错：$error';
+  }
 }
