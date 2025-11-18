@@ -160,6 +160,27 @@ void main() {
     });
 
     test('should insert and retrieve relationship', () async {
+      // Create the notes first (required for foreign key constraints)
+      final note1 = Note(
+        id: 'note-1',
+        title: 'First Note',
+        content: 'First content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      final note2 = Note(
+        id: 'note-2',
+        title: 'Second Note',
+        content: 'Second content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await databaseService.insertNote(note1);
+      await databaseService.insertNote(note2);
+
       final relationship = Relationship(
         id: 'rel-1',
         fromNoteId: 'note-1',

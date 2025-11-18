@@ -42,7 +42,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 22;
+  static const int DATABASE_VERSION = 23;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -144,7 +144,7 @@ class DatabaseService {
   static const String _createUserAppsTable = '''
       CREATE TABLE user_apps(
         id TEXT PRIMARY KEY,
-        uuid TEXT NOT NULL,
+        uuid TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         steps TEXT NOT NULL,
@@ -393,6 +393,10 @@ class DatabaseService {
       description: 'Create conversation_tags table for shared tag support',
       execute: _migrateToVersion22,
     ),
+    23: MigrationStep(
+      description: 'Add UNIQUE constraint to user_apps.uuid column for foreign key integrity',
+      execute: _migrateToVersion23,
+    ),
   };
 
   // Main migration execution method
@@ -513,6 +517,14 @@ class DatabaseService {
         );
         break;
 
+      case 23:
+        // User apps table UNIQUE constraint addition failed - recreate user_apps table
+        LoggerService.error(
+          'Recreating user_apps table due to UNIQUE constraint addition failure',
+        );
+        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
+        break;
+
       default:
         // Unknown migration - fall back to full database recreation
         LoggerService.error(
@@ -592,8 +604,35 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
+    // Drop dependent tables first (reverse dependency order)
+    // user_app_library_dependencies depends on user_app_libraries
+    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    // user_app_libraries depends on user_apps
+    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
+    // app_revisions depends on user_apps
+    await db.execute('DROP TABLE IF EXISTS app_revisions');
+    // Now we can drop user_apps
     await db.execute('DROP TABLE IF EXISTS user_apps');
+    
+    // Recreate tables in dependency order
     await db.execute(_createUserAppsTable);
+    await db.execute(_createAppRevisionsTable);
+    await db.execute(_createUserAppLibrariesTable);
+    await db.execute(_createUserAppLibraryDependenciesTable);
+    
+    // Recreate indexes for library tables
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
+    );
   }
 
   Future<void> _recreateAppRevisionsTable(
@@ -878,6 +917,69 @@ class DatabaseService {
       LoggerService.info('Migration to version 22 completed successfully');
     } catch (e) {
       LoggerService.error('Error in migration to version 22: $e', error: e);
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion23(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 23: Adding UNIQUE constraint to user_apps.uuid column',
+    );
+
+    try {
+      // Check if user_apps table exists
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'",
+      );
+
+      if (tables.isEmpty) {
+        LoggerService.info('user_apps table does not exist, skipping migration');
+        return;
+      }
+
+      // Temporarily disable foreign key constraints
+      await db.execute('PRAGMA foreign_keys = OFF');
+
+      // Begin transaction
+      await db.execute('BEGIN TRANSACTION');
+
+      try {
+        // Rename the old table
+        await db.execute('ALTER TABLE user_apps RENAME TO user_apps_old');
+
+        // Create the new table with UNIQUE constraint on uuid
+        await db.execute(_createUserAppsTable);
+
+        // Copy data from old table to new table
+        await db.execute('''
+          INSERT INTO user_apps (id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt)
+          SELECT id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt
+          FROM user_apps_old
+        ''');
+
+        // Drop the old table
+        await db.execute('DROP TABLE user_apps_old');
+
+        // Commit transaction
+        await db.execute('COMMIT');
+
+        LoggerService.info('Successfully migrated user_apps table with UNIQUE uuid constraint');
+      } catch (e) {
+        // Rollback on error
+        await db.execute('ROLLBACK');
+        LoggerService.error('Error during user_apps table migration, rolled back: $e');
+        rethrow;
+      } finally {
+        // Re-enable foreign key constraints
+        await db.execute('PRAGMA foreign_keys = ON');
+      }
+
+      LoggerService.info('Migration to version 23 completed successfully');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 23: $e', error: e);
       rethrow;
     }
   }
