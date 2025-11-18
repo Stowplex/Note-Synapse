@@ -325,11 +325,15 @@ class DatabaseService {
       version: DATABASE_VERSION,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _onOpen,
       singleInstance: _databaseNameOverride == null,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    // Enable foreign key constraints for new databases
+    await db.execute('PRAGMA foreign_keys = ON');
+
     // Create all tables using schema constants
     await db.execute(_createNotesTable);
     await db.execute(_createSubNotesTable);
@@ -355,6 +359,12 @@ class DatabaseService {
     for (final indexSql in _createIndexes) {
       await db.execute(indexSql);
     }
+  }
+
+  Future<void> _onOpen(Database db) async {
+    // Enable foreign key constraints every time the database is opened
+    // This is required because SQLite disables foreign keys by default
+    await db.execute('PRAGMA foreign_keys = ON');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
