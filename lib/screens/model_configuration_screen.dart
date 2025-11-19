@@ -345,10 +345,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 _buildSupportedMimeSection(),
                 const SizedBox(height: 24),
               ],
-              if (widget.modelType == ModelType.openaiCompatible) ...[
-                _buildCapabilitiesSection(),
-                const SizedBox(height: 24),
-              ],
+	      _buildCapabilitiesSection(),
+              const SizedBox(height: 24),
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 _buildErrorCard(),
