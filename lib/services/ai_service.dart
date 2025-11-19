@@ -13,6 +13,7 @@ import 'database_service.dart';
 import 'prompts/prompt_models.dart';
 import 'prompts/system_prompt_builder.dart';
 import 'prompts/note_prompt_builder.dart';
+import '../models/generation_context.dart';
 
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
@@ -44,26 +45,29 @@ class AIService {
     return PromptRequest.singleTurn(systemMessage: system, userMessage: user);
   }
 
+  static GenerationContext _contextFromRequestId(String requestId) =>
+      GenerationContext(values: {'requestId': requestId});
+
   static Future<String> executePrompt(
     PromptRequest request, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
     return await _withErrorHandling('prompt execution', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       return await ModelSelector.instance.generateFromPrompt(
         request,
         temperature: temperature,
         topK: topK,
         topP: topP,
         maxOutputTokens: maxOutputTokens,
-        requestId: actualRequestId,
+        generationContext: context,
       );
-    }, requestId: requestId);
+    }, requestId: actualRequestId);
   }
 
   /// Note transformation
@@ -102,7 +106,7 @@ class AIService {
 
       return await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
     });
   }
@@ -142,7 +146,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
       return _parseNewNotesResponse(response);
     });
@@ -180,7 +184,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -233,7 +237,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -276,7 +280,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -321,7 +325,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -366,7 +370,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -405,7 +409,7 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
 
       LoggerService.debug(
@@ -434,7 +438,7 @@ class AIService {
 
       return await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
     });
   }
@@ -464,7 +468,7 @@ class AIService {
 
       return await ModelSelector.instance.generateFromPrompt(
         request,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
     });
   }
@@ -509,7 +513,7 @@ class AIService {
         temperature: temperature,
         topK: topK,
         topP: topP,
-        requestId: requestId,
+        generationContext: _contextFromRequestId(requestId),
       );
     });
   }

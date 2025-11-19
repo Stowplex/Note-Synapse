@@ -8,6 +8,7 @@ import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
+import '../models/generation_context.dart';
 
 /// Service for selecting and managing AI models
 class ModelSelector {
@@ -98,12 +99,13 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
       throw Exception('No model is currently selected. Please select a model first.');
     }
 
+    final context = generationContext ?? GenerationContext();
     // Model will handle capability limitations gracefully through limitation notes
     return await _currentModel!.generateWithAttachments(
       prompt,
@@ -112,7 +114,7 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -123,19 +125,20 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
       throw Exception('No model is currently selected. Please select a model first.');
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithMessages(
       messages,
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -145,19 +148,20 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
       throw Exception('No model is currently selected. Please select a model first.');
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateFromPrompt(
       request,
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -169,12 +173,13 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
       throw Exception('No model is currently selected. Please select a model first.');
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithTools(
       prompt,
       attachedFiles,
@@ -183,7 +188,7 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -194,12 +199,13 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
       throw Exception('No model is currently selected. Please select a model first.');
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithToolsAndMessages(
       messages,
       tools,
@@ -207,7 +213,7 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 

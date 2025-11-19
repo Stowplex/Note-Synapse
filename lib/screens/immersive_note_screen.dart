@@ -18,6 +18,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
+import '../models/generation_context.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
 import '../services/conversation_service.dart';
@@ -2365,7 +2366,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final content = trimmed;
     final attachments = List<PlatformFile>.from(_pendingAttachments);
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final generationContext = GenerationContext();
+    final requestId = generationContext.ensureRequestId();
     _currentRequestId = requestId;
 
     _messageController.clear();
@@ -2402,7 +2404,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final response = await _generateAiResponse(
         content,
         attachments,
-        requestId,
+        generationContext,
       );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -2484,8 +2486,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
-    String requestId,
+    GenerationContext generationContext,
   ) async {
+    final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
     final contextMessage = await noteBuilder.buildContextMessage(
@@ -2582,11 +2585,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       request: request,
       activeTools: activeTools,
       enableTools: activeTools.isNotEmpty,
-      executeTool: (serviceName, toolName, params) async {
+      executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
           if (_aiToolBundles.containsKey(serviceName)) {
             final runtime = await _getAiToolRuntime(serviceName);
-            return runtime.invoke(toolName, params);
+            return runtime.invoke(toolName, params, context);
           }
 
           return McpToolIntegrationService.executeToolCall(
@@ -2594,11 +2597,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             toolName: toolName,
             parameters: params,
             enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            generationContext: context,
           );
         });
       },
       isCancelled: () => _cancelledRequestIds.contains(requestId),
-      requestId: requestId,
+      generationContext: generationContext,
       maxToolIterations: _maxToolIterations,
       onIterationsExhausted: _handleIterationsExhausted,
     );

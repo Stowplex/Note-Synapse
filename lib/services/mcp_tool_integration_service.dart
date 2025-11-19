@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../models/mcp_endpoint.dart';
+import '../models/generation_context.dart';
 import 'mcp_service.dart';
 import 'logger_service.dart';
 
@@ -49,7 +50,7 @@ class McpToolIntegrationService {
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        toolsDescription.writeln('Tool: ${tool.name}');
+        toolsDescription.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
@@ -154,7 +155,7 @@ class McpToolIntegrationService {
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        toolsDescription.writeln('Tool: ${tool.name}');
+        toolsDescription.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
@@ -258,7 +259,7 @@ class McpToolIntegrationService {
       buffer.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        buffer.writeln('Tool: ${tool.name}');
+        buffer.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           buffer.writeln('Description: ${tool.description}');
@@ -413,6 +414,7 @@ class McpToolIntegrationService {
     required String toolName,
     required Map<String, dynamic> parameters,
     required List<String> enabledEndpointIds,
+    required GenerationContext generationContext,
   }) async {
     try {
       // Find the endpoint by service name
@@ -422,7 +424,11 @@ class McpToolIntegrationService {
         orElse: () => throw Exception('Service not found or not enabled: $serviceName'),
       );
 
-      LoggerService.info('Executing MCP tool call: $serviceName.$toolName');
+      final requestId = generationContext.ensureRequestId();
+      LoggerService.info(
+        'Executing MCP tool call: $serviceName.$toolName',
+        error: {'requestId': requestId},
+      );
       LoggerService.debug('Tool parameters: ${jsonEncode(parameters)}');
 
       // Call the tool
@@ -502,4 +508,3 @@ class McpToolIntegrationService {
     }
   }
 }
-

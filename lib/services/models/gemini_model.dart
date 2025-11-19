@@ -11,6 +11,7 @@ import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
+import '../../models/generation_context.dart';
 
 /// Gemini model implementation
 class GeminiModel implements AIModel {
@@ -58,33 +59,37 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with attachments', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final apiKey = await _validateApiKey(requestId: actualRequestId);
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with attachments',
+      () async {
+        final apiKey = await _validateApiKey(requestId: actualRequestId);
 
-      final generationConfig = {
-        'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
-      };
+        final generationConfig = {
+          'temperature': temperature ?? 0.1,
+          'topK': topK ?? 32,
+          'topP': topP ?? 1,
+          'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+        };
 
-      final sanitizedAttachments = await _sanitizeAttachments(
-        attachedFiles,
-        actualRequestId,
-      );
+        final sanitizedAttachments = await _sanitizeAttachments(
+          attachedFiles,
+          actualRequestId,
+        );
 
-      return await _makeGeminiRequest(
-        apiKey,
-        prompt,
-        attachedFiles: sanitizedAttachments,
-        generationConfig: generationConfig,
-        requestId: actualRequestId,
-      );
-    });
+        return await _makeGeminiRequest(
+          apiKey,
+          prompt,
+          attachedFiles: sanitizedAttachments,
+          generationConfig: generationConfig,
+          requestId: actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -94,7 +99,7 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
     return generateWithMessages(
       request.buildFullMessageList(),
@@ -102,7 +107,7 @@ class GeminiModel implements AIModel {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: generationContext,
     );
   }
 
@@ -113,33 +118,41 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with messages', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final apiKey = await _validateApiKey(requestId: actualRequestId);
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with messages',
+      () async {
+        final apiKey = await _validateApiKey(requestId: actualRequestId);
 
-      final generationConfig = {
-        'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
-      };
+        final generationConfig = {
+          'temperature': temperature ?? 0.1,
+          'topK': topK ?? 32,
+          'topP': topP ?? 1,
+          'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+        };
 
-      final sanitizedMessages = await _sanitizeMessages(
-        messages,
-        actualRequestId,
-      );
+        final sanitizedMessages = await _sanitizeMessages(
+          messages,
+          actualRequestId,
+        );
 
-      // Convert messages array to Gemini format
-      final requestBody = _buildRequestBodyFromMessages(
-        sanitizedMessages,
-        generationConfig: generationConfig,
-      );
+        // Convert messages array to Gemini format
+        final requestBody = _buildRequestBodyFromMessages(
+          sanitizedMessages,
+          generationConfig: generationConfig,
+        );
 
-      return await _makeRequest(apiKey, requestBody, requestId: actualRequestId);
-    });
+        return await _makeRequest(
+          apiKey,
+          requestBody,
+          requestId: actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -151,34 +164,38 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with tools', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final apiKey = await _validateApiKey(requestId: actualRequestId);
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with tools',
+      () async {
+        final apiKey = await _validateApiKey(requestId: actualRequestId);
 
-      final generationConfig = {
-        'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
-      };
+        final generationConfig = {
+          'temperature': temperature ?? 0.1,
+          'topK': topK ?? 32,
+          'topP': topP ?? 1,
+          'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+        };
 
-      final sanitizedAttachments = await _sanitizeAttachments(
-        attachedFiles,
-        actualRequestId,
-      );
+        final sanitizedAttachments = await _sanitizeAttachments(
+          attachedFiles,
+          actualRequestId,
+        );
 
-      return await _makeGeminiRequestWithTools(
-        apiKey,
-        prompt,
-        tools,
-        attachedFiles: sanitizedAttachments,
-        generationConfig: generationConfig,
-        requestId: actualRequestId,
-      );
-    });
+        return await _makeGeminiRequestWithTools(
+          apiKey,
+          prompt,
+          tools,
+          attachedFiles: sanitizedAttachments,
+          generationConfig: generationConfig,
+          requestId: actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -189,45 +206,49 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with tools and messages', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final apiKey = await _validateApiKey(requestId: actualRequestId);
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with tools and messages',
+      () async {
+        final apiKey = await _validateApiKey(requestId: actualRequestId);
 
-      final generationConfig = {
-        'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
-      };
+        final generationConfig = {
+          'temperature': temperature ?? 0.1,
+          'topK': topK ?? 32,
+          'topP': topP ?? 1,
+          'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+        };
 
-      final sanitizedMessages = await _sanitizeMessages(
-        messages,
-        actualRequestId,
-      );
+        final sanitizedMessages = await _sanitizeMessages(
+          messages,
+          actualRequestId,
+        );
 
-      // Convert messages array to Gemini format
-      final requestBody = _buildRequestBodyFromMessages(
-        sanitizedMessages,
-        generationConfig: generationConfig,
-      );
+        // Convert messages array to Gemini format
+        final requestBody = _buildRequestBodyFromMessages(
+          sanitizedMessages,
+          generationConfig: generationConfig,
+        );
 
-      // Add tools to request body
-      if (tools.isNotEmpty) {
-        requestBody['tools'] = [
-          {'function_declarations': tools}
-        ];
-      }
+        // Add tools to request body
+        if (tools.isNotEmpty) {
+          requestBody['tools'] = [
+            {'function_declarations': tools}
+          ];
+        }
 
-      // Make request and get raw response
-      return await _makeRequestWithRawResponse(
-        apiKey,
-        requestBody,
-        requestId: actualRequestId,
-      );
-    });
+        // Make request and get raw response
+        return await _makeRequestWithRawResponse(
+          apiKey,
+          requestBody,
+          requestId: actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   /// Build request body from prompt messages.
@@ -265,14 +286,16 @@ class GeminiModel implements AIModel {
               responseData['result'] = content;
             }
             
+            final functionResponse = <String, dynamic>{
+              'name': functionName,
+              'response': responseData,
+            };
+
             contents.add({
               'role': 'user',
               'parts': [
                 {
-                  'functionResponse': {
-                    'name': functionName,
-                    'response': responseData,
-                  }
+                  'functionResponse': functionResponse,
                 }
               ],
             });
@@ -320,9 +343,18 @@ class GeminiModel implements AIModel {
           if (message.metadata != null && message.metadata!['function_calls'] != null) {
             final functionCalls = message.metadata!['function_calls'] as List;
             for (final functionCall in functionCalls) {
-              parts.add({
-                'functionCall': functionCall,
-              });
+              if (functionCall is Map<String, dynamic>) {
+                final callData = Map<String, dynamic>.from(functionCall);
+                final thoughtSignature =
+                    callData.remove('thoughtSignature') ?? callData.remove('thought_signature');
+                final part = <String, dynamic>{'functionCall': callData};
+                if (thoughtSignature != null) {
+                  part['thoughtSignature'] = thoughtSignature;
+                }
+                parts.add(part);
+              } else {
+                parts.add({'functionCall': functionCall});
+              }
             }
           }
           
@@ -728,15 +760,21 @@ class GeminiModel implements AIModel {
             final functionCalls = <Map<String, dynamic>>[];
             final textBuffer = StringBuffer();
 
-            for (final part in parts) {
-              if (part is Map<String, dynamic>) {
-                if (part.containsKey('functionCall')) {
-                  final fnCall = part['functionCall'];
-                  if (fnCall is Map<String, dynamic>) {
-                    functionCalls.add(fnCall);
+          for (final part in parts) {
+                if (part is Map<String, dynamic>) {
+                  if (part.containsKey('functionCall')) {
+                    final fnCallRaw = part['functionCall'];
+                    if (fnCallRaw is Map<String, dynamic>) {
+                      final fnCall = Map<String, dynamic>.from(fnCallRaw);
+                      final thoughtSignature =
+                          part['thoughtSignature'] ?? part['thought_signature'];
+                      if (thoughtSignature != null) {
+                        fnCall['thoughtSignature'] = thoughtSignature;
+                      }
+                      functionCalls.add(fnCall);
+                    }
+                    continue;
                   }
-                  continue;
-                }
 
                 final text = part['text'];
                 if (text is String && text.isNotEmpty) {

@@ -9,6 +9,7 @@ import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
+import '../models/generation_context.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -616,6 +617,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
+    GenerationContext? generationContext;
     _messageController.clear();
     setState(() {
       _attachedFiles.clear();
@@ -666,13 +668,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       _scrollToBottom();
 
       // Generate AI response
-      requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      generationContext = GenerationContext();
+      requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
 
       final aiResponse = await _generateAIResponse(
         content,
         attachments,
-        requestId,
+        generationContext,
       );
 
       final aiMessage = await _conversationService.addAIResponse(
@@ -789,8 +792,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
-    String requestId,
+    GenerationContext generationContext,
   ) async {
+    final requestId = generationContext.ensureRequestId();
     try {
       if (_cancelledRequestIds.contains(requestId)) {
         throw const ConversationCancelledException();
@@ -807,11 +811,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         request: request,
         activeTools: activeTools,
         enableTools: activeTools.isNotEmpty,
-        executeTool: (serviceName, toolName, params) async {
+        executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params);
+              return runtime.invoke(toolName, params, context);
             }
 
             return McpToolIntegrationService.executeToolCall(
@@ -819,11 +823,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
               toolName: toolName,
               parameters: params,
               enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              generationContext: context,
             );
           });
         },
         isCancelled: () => _cancelledRequestIds.contains(requestId),
-        requestId: requestId,
+        generationContext: generationContext,
         maxToolIterations: _maxToolIterations,
         onIterationsExhausted: _handleIterationsExhausted,
       );

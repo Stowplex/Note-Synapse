@@ -10,6 +10,7 @@ import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
+import '../../models/generation_context.dart';
 
 /// OpenAI compatible model implementation
 class OpenAIModel implements AIModel {
@@ -78,35 +79,37 @@ class OpenAIModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with attachments', () async {
-      await initialize(config: _config);
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final sanitizedAttachments = await _sanitizeAttachments(
-        attachedFiles,
-        actualRequestId,
-      );
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with attachments',
+      () async {
+        await initialize(config: _config);
+        final sanitizedAttachments = await _sanitizeAttachments(
+          attachedFiles,
+          actualRequestId,
+        );
 
-      // Build message content with attachments and limitation note
-      // Note: todayContext should be in system message, not here
-      final messageContent = _buildMessageContentWithFiles(
-        prompt,
-        sanitizedAttachments,
-      );
+        final messageContent = _buildMessageContentWithFiles(
+          prompt,
+          sanitizedAttachments,
+        );
 
-      final requestBody = <String, dynamic>{
-        'model': _config!.modelName!,
-        'messages': [
-          {'role': 'user', 'content': messageContent}
-        ],
-        'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
-        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-      };
+        final requestBody = <String, dynamic>{
+          'model': _config!.modelName!,
+          'messages': [
+            {'role': 'user', 'content': messageContent}
+          ],
+          'temperature': 1.0,
+          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        };
 
-      return await _makeOpenAiRequest(requestBody, actualRequestId);
-    });
+        return await _makeOpenAiRequest(requestBody, actualRequestId);
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -116,7 +119,7 @@ class OpenAIModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
     return generateWithMessages(
       request.buildFullMessageList(),
@@ -124,7 +127,7 @@ class OpenAIModel implements AIModel {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: generationContext,
     );
   }
 
@@ -135,30 +138,33 @@ class OpenAIModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with messages', () async {
-      await initialize(config: _config);
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final sanitizedMessages = await _sanitizeMessages(
-        messages,
-        actualRequestId,
-      );
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with messages',
+      () async {
+        await initialize(config: _config);
+        final sanitizedMessages = await _sanitizeMessages(
+          messages,
+          actualRequestId,
+        );
 
-      // Convert messages array to OpenAI format
-      final openaiMessages =
-          await _convertMessagesToOpenAIFormat(sanitizedMessages);
+        final openaiMessages =
+            await _convertMessagesToOpenAIFormat(sanitizedMessages);
 
-      final requestBody = <String, dynamic>{
-        'model': _config!.modelName!,
-        'messages': openaiMessages,
-        'temperature': 1.0, // temperature is not supported by OpenAI, except 1.0
-        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-      };
+        final requestBody = <String, dynamic>{
+          'model': _config!.modelName!,
+          'messages': openaiMessages,
+          'temperature': 1.0,
+          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        };
 
-      return await _makeOpenAiRequest(requestBody, actualRequestId);
-    });
+        return await _makeOpenAiRequest(requestBody, actualRequestId);
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -170,49 +176,50 @@ class OpenAIModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with tools', () async {
-      await initialize(config: _config);
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final sanitizedAttachments = await _sanitizeAttachments(
-        attachedFiles,
-        actualRequestId,
-      );
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with tools',
+      () async {
+        await initialize(config: _config);
+        final sanitizedAttachments = await _sanitizeAttachments(
+          attachedFiles,
+          actualRequestId,
+        );
 
-      // Build message content with attachments and limitation note
-      // Note: todayContext should be in system message, not here
-      final messageContent = _buildMessageContent(
-        prompt,
-        sanitizedAttachments,
-      );
+        final messageContent = _buildMessageContent(
+          prompt,
+          sanitizedAttachments,
+        );
 
-      final requestBody = {
-        'model': _config!.modelName!,
-        'messages': [
-          {'role': 'user', 'content': messageContent}
-        ],
-        'temperature': 1.0, // temperature is not supported by OpenAI, only 1.0 is used.
-        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-      };
+        final requestBody = {
+          'model': _config!.modelName!,
+          'messages': [
+            {'role': 'user', 'content': messageContent}
+          ],
+          'temperature': 1.0,
+          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        };
 
-      // Add tools/functions to request body
-      if (tools.isNotEmpty) {
-        requestBody['tools'] = tools
-            .map((tool) => {
-                  'type': 'function',
-                  'function': tool,
-                })
-            .toList();
-        requestBody['tool_choice'] = 'auto';
-      }
+        if (tools.isNotEmpty) {
+          requestBody['tools'] = tools
+              .map((tool) => {
+                    'type': 'function',
+                    'function': tool,
+                  })
+              .toList();
+          requestBody['tool_choice'] = 'auto';
+        }
 
-      return await _makeOpenAiRequestWithTools(
-        requestBody,
-        actualRequestId,
-      );
-    });
+        return await _makeOpenAiRequestWithTools(
+          requestBody,
+          actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   @override
@@ -223,44 +230,46 @@ class OpenAIModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with tools and messages', () async {
-      await initialize(config: _config);
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final sanitizedMessages = await _sanitizeMessages(
-        messages,
-        actualRequestId,
-      );
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with tools and messages',
+      () async {
+        await initialize(config: _config);
+        final sanitizedMessages = await _sanitizeMessages(
+          messages,
+          actualRequestId,
+        );
 
-      // Convert messages array to OpenAI format
-      final openaiMessages =
-          await _convertMessagesToOpenAIFormat(sanitizedMessages);
+        final openaiMessages =
+            await _convertMessagesToOpenAIFormat(sanitizedMessages);
 
-      final requestBody = <String, dynamic>{
-        'model': _config!.modelName!,
-        'messages': openaiMessages,
-        'temperature': 1.0, // temperature is not supported by OpenAI, only 1.0 is used.
-        'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-      };
+        final requestBody = <String, dynamic>{
+          'model': _config!.modelName!,
+          'messages': openaiMessages,
+          'temperature': 1.0,
+          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+        };
 
-      // Add tools/functions to request body
-      if (tools.isNotEmpty) {
-        requestBody['tools'] = tools
-            .map((tool) => {
-                  'type': 'function',
-                  'function': tool,
-                })
-            .toList();
-        requestBody['tool_choice'] = 'auto';
-      }
+        if (tools.isNotEmpty) {
+          requestBody['tools'] = tools
+              .map((tool) => {
+                    'type': 'function',
+                    'function': tool,
+                  })
+              .toList();
+          requestBody['tool_choice'] = 'auto';
+        }
 
-      return await _makeOpenAiRequestWithTools(
-        requestBody,
-        actualRequestId,
-      );
-    });
+        return await _makeOpenAiRequestWithTools(
+          requestBody,
+          actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   /// Convert messages array to OpenAI format
@@ -813,4 +822,3 @@ String? _extractTextContent(dynamic content) {
 
   return content.toString();
 }
-
