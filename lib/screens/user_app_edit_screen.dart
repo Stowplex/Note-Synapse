@@ -295,13 +295,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       );
 
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate successful edit
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('App updated successfully with new revision'),
             backgroundColor: Colors.green,
           ),
         );
+        Navigator.pop(context, true); // Return true to indicate successful edit
       }
     } catch (e) {
       if (mounted) {
@@ -386,15 +386,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
           _isCodeEditable = false;
         });
 
-        // Return true to indicate successful save
-        Navigator.pop(context, true);
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.codeSavedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
+
+        // Return true to indicate successful save
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -716,8 +716,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     if (startIndex == endIndex) {
       // Selection is within a single line
       final line = linesList[startIndex];
-      final newText = line.text.substring(0, startOffset) +
-          line.text.substring(endOffset);
+      final newText =
+          line.text.substring(0, startOffset) + line.text.substring(endOffset);
       newCodeLines.addAll(linesList.sublist(0, startIndex));
       newCodeLines.add(CodeLine(newText));
       newCodeLines.addAll(linesList.sublist(startIndex + 1));
@@ -734,7 +734,8 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       // Selection spans multiple lines
       final firstLine = linesList[startIndex];
       final lastLine = linesList[endIndex];
-      final mergedText = firstLine.text.substring(0, startOffset) +
+      final mergedText =
+          firstLine.text.substring(0, startOffset) +
           lastLine.text.substring(endOffset);
 
       newCodeLines.addAll(linesList.sublist(0, startIndex));
@@ -882,7 +883,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: hasSelection ? 140 : 100, // Wider when Cut/Copy buttons are visible
+          width: hasSelection
+              ? 140
+              : 100, // Wider when Cut/Copy buttons are visible
           height: 40,
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
