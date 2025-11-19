@@ -22,10 +22,7 @@ import '../utils/remote_image_storage.dart';
 import 'interactive_checkbox_component.dart';
 
 /// Enum to represent image source type
-enum _ImageSourceType {
-  local,
-  remote,
-}
+enum _ImageSourceType { local, remote }
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
 /// with a custom checkbox component that handles state updates.
@@ -267,24 +264,31 @@ class _InteractiveCheckboxMarkdownState
           }
 
           if (mime.startsWith('image/')) {
+            final imageWidget = Image.memory(
+              tempFile.bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildPlaceholder(
+                  width,
+                  height,
+                  'Failed to render image',
+                );
+              },
+            );
             return _wrapImageWithInfoBar(
-              image: SizedBox(
-                width: width,
-                height: height,
-                child: Image.memory(
-                  tempFile.bytes,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildPlaceholder(
-                      width,
-                      height,
-                      'Failed to render image',
-                    );
-                  },
-                ),
-              ),
+              image: SizedBox(width: width, height: height, child: imageWidget),
               imageUrl: url,
               isSvg: false,
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  imageWidget: Image.memory(
+                    tempFile.bytes,
+                    fit: BoxFit.contain,
+                  ),
+                  title: 'Image',
+                );
+              },
             );
           }
 
@@ -353,24 +357,24 @@ class _InteractiveCheckboxMarkdownState
           }
 
           final bytes = base64.decode(data);
+          final imageWidget = Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder(width, height, 'Failed to render image');
+            },
+          );
           return _wrapImageWithInfoBar(
-            image: SizedBox(
-              width: width,
-              height: height,
-              child: Image.memory(
-                bytes,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholder(
-                    width,
-                    height,
-                    'Failed to render image',
-                  );
-                },
-              ),
-            ),
+            image: SizedBox(width: width, height: height, child: imageWidget),
             imageUrl: url,
             isSvg: false,
+            onFullscreen: () {
+              _FullscreenViewer.show(
+                context,
+                imageWidget: Image.memory(bytes, fit: BoxFit.contain),
+                title: 'Image',
+              );
+            },
           );
         }
 
@@ -396,6 +400,13 @@ class _InteractiveCheckboxMarkdownState
               image: _buildNetworkImage(url, width, height),
               imageUrl: url,
               isSvg: false,
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  imageWidget: Image.network(url, fit: BoxFit.contain),
+                  title: 'Image',
+                );
+              },
             );
           }
           final source = snapshot.data;
@@ -409,12 +420,13 @@ class _InteractiveCheckboxMarkdownState
                 noteId: widget.noteId,
               );
             }
+            final imageFile = File(source.path);
             return _wrapImageWithInfoBar(
               image: SizedBox(
                 width: width,
                 height: height,
                 child: Image.file(
-                  File(source.path),
+                  imageFile,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
                     return _buildPlaceholder(
@@ -427,12 +439,26 @@ class _InteractiveCheckboxMarkdownState
               ),
               imageUrl: url,
               isSvg: false,
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  imageWidget: Image.file(imageFile, fit: BoxFit.contain),
+                  title: 'Image',
+                );
+              },
             );
           }
           return _wrapImageWithInfoBar(
             image: _buildNetworkImage(url, width, height),
             imageUrl: url,
             isSvg: false,
+            onFullscreen: () {
+              _FullscreenViewer.show(
+                context,
+                imageWidget: Image.network(url, fit: BoxFit.contain),
+                title: 'Image',
+              );
+            },
           );
         },
       );
@@ -442,6 +468,13 @@ class _InteractiveCheckboxMarkdownState
       image: _buildNetworkImage(url, width, height),
       imageUrl: url,
       isSvg: false,
+      onFullscreen: () {
+        _FullscreenViewer.show(
+          context,
+          imageWidget: Image.network(url, fit: BoxFit.contain),
+          title: 'Image',
+        );
+      },
     );
   }
 
@@ -512,14 +545,13 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
-
-
   /// Wraps an image widget with an info bar
   Widget _wrapImageWithInfoBar({
     required Widget image,
     required String imageUrl,
     required bool isSvg,
     VoidCallback? onSvgBackgroundToggle,
+    VoidCallback? onFullscreen,
   }) {
     return FutureBuilder<_ImageSourceType>(
       future: _determineImageSourceType(imageUrl),
@@ -540,6 +572,7 @@ class _InteractiveCheckboxMarkdownState
               sourceType: sourceType,
               isSvg: isSvg,
               onSvgBackgroundToggle: onSvgBackgroundToggle,
+              onFullscreen: onFullscreen,
             ),
           ],
         );
@@ -609,7 +642,6 @@ class _InteractiveCheckboxMarkdownState
     return _isHttpUrl(url) ? _ImageSourceType.remote : _ImageSourceType.local;
   }
 
-
   Widget _buildCodeBlock(
     BuildContext context,
     String name,
@@ -649,9 +681,7 @@ class _InteractiveCheckboxMarkdownState
 
     final inlineComponents = [
       ...MarkdownComponent.inlineComponents,
-      _EmbeddedWebViewMd(
-        defaultSize: widget.defaultWebViewSize,
-      ),
+      _EmbeddedWebViewMd(defaultSize: widget.defaultWebViewSize),
     ];
 
     return GptMarkdown(
@@ -680,11 +710,7 @@ class _EmbeddedWebViewMd extends InlineMd {
   RegExp get exp => RegExp(r"@\[[^\[\]]*\]\([^\s]*\)");
 
   @override
-  InlineSpan span(
-    BuildContext context,
-    String text,
-    GptMarkdownConfig config,
-  ) {
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
     final trimmed = text.trim();
     final basicMatch = RegExp(r'@\[(.*?)\]\(').firstMatch(trimmed);
     if (basicMatch == null) {
@@ -791,14 +817,35 @@ class _MarkdownEmbeddedWebViewState extends State<_MarkdownEmbeddedWebView> {
         final mime = file.mimeType.toLowerCase();
         final decoded = utf8.decode(file.bytes, allowMalformed: true);
         if (mime.contains('html') || mime.contains('xml')) {
+          // Wrap HTML/XML in sandboxed iframe
+          final contentDataUrl =
+              'data:$mime;charset=utf-8,' + Uri.encodeComponent(decoded);
+          final wrappedHtml =
+              '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: ${_colorToCss(widget.backgroundColor)}; }
+    iframe { border: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <iframe src="$contentDataUrl" sandbox="allow-scripts allow-same-origin"></iframe>
+</body>
+</html>
+''';
           return _WebViewContent(
-            data: decoded,
-            mimeType: mime,
+            data: wrappedHtml,
+            mimeType: 'text/html',
             encoding: 'utf8',
           );
         }
         final escaped = const HtmlEscape().convert(decoded);
-        final html = '''
+        final html =
+            '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -826,9 +873,7 @@ class _MarkdownEmbeddedWebViewState extends State<_MarkdownEmbeddedWebView> {
         if (kDebugMode) {
           debugPrint('Embedded markdown webview failed to load: $e');
         }
-        return const _WebViewContent.error(
-          'Unable to load embedded content',
-        );
+        return const _WebViewContent.error('Unable to load embedded content');
       }
     }
 
@@ -891,49 +936,84 @@ class _MarkdownEmbeddedWebViewState extends State<_MarkdownEmbeddedWebView> {
   }
 
   Widget _buildWebView(_WebViewContent content) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) {},
-      onHorizontalDragStart: (_) {},
-      child: InAppWebView(
-        initialData: InAppWebViewInitialData(
-          data: content.data,
-          mimeType: content.mimeType,
-          encoding: content.encoding,
-        ),
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          supportZoom: true,
-          transparentBackground: true,
-          disableHorizontalScroll: false,
-          disableVerticalScroll: false,
-          allowsInlineMediaPlayback: true,
-          resourceCustomSchemes: const [SynapseTempUtils.scheme],
-          useHybridComposition: true,
-        ),
-        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-          Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-        },
-        onLoadResourceWithCustomScheme: (controller, request) async {
-          final scheme = request.url.scheme.toLowerCase();
-          if (scheme == SynapseTempUtils.scheme) {
-            try {
-              final file = await SynapseTempUtils.loadFile(
-                request.url.toString(),
-              );
-              return CustomSchemeResponse(
-                data: file.bytes,
-                contentType: file.mimeType,
-              );
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('Embedded webview resource error: $e');
+    return Stack(
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragStart: (_) {},
+          onHorizontalDragStart: (_) {},
+          child: InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: content.data,
+              mimeType: content.mimeType,
+              encoding: content.encoding,
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              supportZoom: true,
+              transparentBackground: true,
+              disableHorizontalScroll: false,
+              disableVerticalScroll: false,
+              allowsInlineMediaPlayback: true,
+              resourceCustomSchemes: const [SynapseTempUtils.scheme],
+              useHybridComposition: true,
+            ),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+            },
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              final scheme = request.url.scheme.toLowerCase();
+              if (scheme == SynapseTempUtils.scheme) {
+                try {
+                  final file = await SynapseTempUtils.loadFile(
+                    request.url.toString(),
+                  );
+                  return CustomSchemeResponse(
+                    data: file.bytes,
+                    contentType: file.mimeType,
+                  );
+                } catch (e) {
+                  if (kDebugMode) {
+                    debugPrint('Embedded webview resource error: $e');
+                  }
+                }
               }
-            }
-          }
-          return null;
-        },
-      ),
+              return null;
+            },
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                _FullscreenViewer.show(
+                  context,
+                  htmlContent: content.data,
+                  htmlMimeType: content.mimeType,
+                  htmlEncoding: content.encoding,
+                  title: 'Web View',
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.fullscreen,
+                  size: 16,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1111,16 +1191,29 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
   void _updateBackgroundColor() {
     if (_webViewController == null) return;
     final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
-    _webViewController!.evaluateJavascript(source: '''
-      document.body.style.backgroundColor = '$backgroundColor';
-      document.documentElement.style.backgroundColor = '$backgroundColor';
-    ''');
+    _webViewController!.evaluateJavascript(
+      source:
+          '''
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+        } catch (e) {
+          console.log('Cannot set background:', e);
+        }
+      }
+    ''',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final htmlContent = _createSvgHtmlWrapper(widget.svgContent, isDarkBackground: _isDarkBackground);
-    final webViewHeight = widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
+    final htmlContent = _createSvgHtmlWrapper(
+      widget.svgContent,
+      isDarkBackground: _isDarkBackground,
+    );
+    final webViewHeight =
+        widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1173,53 +1266,37 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     );
   }
 
-  String _createSvgHtmlWrapper(String svgContent, {bool isDarkBackground = false}) {
+  String _createSvgHtmlWrapper(
+    String svgContent, {
+    bool isDarkBackground = false,
+  }) {
     final backgroundColor = isDarkBackground ? '#1e1e1e' : '#ffffff';
-    return '''
+    // Create sandboxed iframe with SVG content
+    final svgDataUrl =
+        'data:text/html;charset=utf-8,' +
+        Uri.encodeComponent('''
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: $backgroundColor;
-    }
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #svg-container {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    svg {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
-      display: block;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background-color: $backgroundColor; }
+    body { display: flex; align-items: center; justify-content: center; }
+    #svg-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    svg { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
   </style>
   <script src="synapse://svg.pan-zoom.min.js"></script>
 </head>
 <body>
-  <div id="svg-container">
-    $svgContent
-  </div>
+  <div id="svg-container">$svgContent</div>
   <script>
-    // Initialize svg-pan-zoom after the DOM is loaded
+    window.addEventListener('message', function(e) {
+      if (e.data.type === 'setBackground') {
+        document.body.style.backgroundColor = e.data.color;
+        document.documentElement.style.backgroundColor = e.data.color;
+      }
+    });
     document.addEventListener('DOMContentLoaded', function() {
       const svgElement = document.querySelector('svg');
       if (svgElement && typeof svgPanZoom !== 'undefined') {
@@ -1238,6 +1315,23 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
       }
     });
   </script>
+</body>
+</html>
+''');
+
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: $backgroundColor; }
+    iframe { border: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <iframe src="$svgDataUrl" sandbox="allow-scripts allow-same-origin"></iframe>
 </body>
 </html>
 ''';
@@ -1356,6 +1450,13 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
               onSvgBackgroundToggle: () {
                 _svgWebViewKey.currentState?.toggleBackground();
               },
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  svgContent: widget.svgContent,
+                  title: 'SVG',
+                );
+              },
             ),
           ],
         );
@@ -1370,11 +1471,13 @@ class _ImageInfoBar extends StatelessWidget {
     required this.sourceType,
     required this.isSvg,
     this.onSvgBackgroundToggle,
+    this.onFullscreen,
   });
 
   final _ImageSourceType sourceType;
   final bool isSvg;
   final VoidCallback? onSvgBackgroundToggle;
+  final VoidCallback? onFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -1397,9 +1500,7 @@ class _ImageInfoBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            sourceType == _ImageSourceType.local
-                ? Icons.storage
-                : Icons.cloud,
+            sourceType == _ImageSourceType.local ? Icons.storage : Icons.cloud,
             size: 11,
             color: colorScheme.onSurfaceVariant.withOpacity(0.5),
           ),
@@ -1409,6 +1510,17 @@ class _ImageInfoBar extends StatelessWidget {
               onTap: onSvgBackgroundToggle,
               child: Icon(
                 Icons.contrast,
+                size: 11,
+                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              ),
+            ),
+          ],
+          if (onFullscreen != null) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onFullscreen,
+              child: Icon(
+                Icons.fullscreen,
                 size: 11,
                 color: colorScheme.onSurfaceVariant.withOpacity(0.5),
               ),
@@ -1808,4 +1920,316 @@ class _HighlightCacheKey {
   @override
   int get hashCode =>
       Object.hash(code, languageHint, isDarkTheme, styleSignature);
+}
+
+/// Fullscreen viewer for images, SVG, and HTML content
+/// Supports pinch-zoom and pan for images using InteractiveViewer
+class _FullscreenViewer extends StatelessWidget {
+  const _FullscreenViewer({
+    this.imageWidget,
+    this.svgContent,
+    this.htmlContent,
+    this.htmlMimeType,
+    this.htmlEncoding,
+    this.title,
+  }) : assert(
+         (imageWidget != null) ^ (svgContent != null) ^ (htmlContent != null),
+         'Exactly one of imageWidget, svgContent, or htmlContent must be provided',
+       );
+
+  final Widget? imageWidget;
+  final String? svgContent;
+  final String? htmlContent;
+  final String? htmlMimeType;
+  final String? htmlEncoding;
+  final String? title;
+
+  static void show(
+    BuildContext context, {
+    Widget? imageWidget,
+    String? svgContent,
+    String? htmlContent,
+    String? htmlMimeType,
+    String? htmlEncoding,
+    String? title,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => _FullscreenViewer(
+          imageWidget: imageWidget,
+          svgContent: svgContent,
+          htmlContent: htmlContent,
+          htmlMimeType: htmlMimeType,
+          htmlEncoding: htmlEncoding,
+          title: title,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.7),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: title != null ? Text(title!) : null,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(child: Center(child: _buildContent(context))),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (imageWidget != null) {
+      // For images, use InteractiveViewer for pinch-zoom and pan
+      return InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 4.0,
+        child: imageWidget!,
+      );
+    } else if (svgContent != null) {
+      // For SVG, render in webview with pan-zoom support
+      return _FullscreenSvgWebView(svgContent: svgContent!);
+    } else if (htmlContent != null) {
+      // For HTML, render in webview
+      return _FullscreenHtmlWebView(
+        htmlContent: htmlContent!,
+        mimeType: htmlMimeType ?? 'text/html',
+        encoding: htmlEncoding ?? 'utf8',
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+/// Fullscreen SVG WebView with sandboxed iframe
+class _FullscreenSvgWebView extends StatefulWidget {
+  const _FullscreenSvgWebView({required this.svgContent});
+
+  final String svgContent;
+
+  @override
+  State<_FullscreenSvgWebView> createState() => _FullscreenSvgWebViewState();
+}
+
+class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
+  bool _isDarkBackground = false;
+  InAppWebViewController? _webViewController;
+
+  void _toggleBackground() {
+    setState(() {
+      _isDarkBackground = !_isDarkBackground;
+    });
+    _updateBackgroundColor();
+  }
+
+  void _updateBackgroundColor() {
+    if (_webViewController == null) return;
+    final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
+    _webViewController!.evaluateJavascript(
+      source:
+          '''
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+        } catch (e) {
+          console.log('Cannot set background:', e);
+        }
+      }
+    ''',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final htmlContent = _createFullscreenSvgHtml(
+      widget.svgContent,
+      isDarkBackground: _isDarkBackground,
+    );
+
+    return Stack(
+      children: [
+        InAppWebView(
+          initialData: InAppWebViewInitialData(
+            data: htmlContent,
+            mimeType: 'text/html',
+            encoding: 'utf8',
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            supportZoom: true,
+            transparentBackground: true,
+            disableContextMenu: false,
+            resourceCustomSchemes: ['synapse'],
+            useHybridComposition: true,
+          ),
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+          },
+          onWebViewCreated: (controller) {
+            _webViewController = controller;
+          },
+          onLoadStop: (controller, url) {
+            _webViewController = controller;
+          },
+          onLoadResourceWithCustomScheme: (controller, request) async {
+            if (request.url.scheme.toLowerCase() == 'synapse') {
+              final data = await rootBundle.loadString(
+                "assets/scripts/${request.url.host}",
+              );
+              return CustomSchemeResponse(
+                contentType: 'application/javascript',
+                data: Uint8List.fromList(utf8.encode(data)),
+              );
+            }
+            return null;
+          },
+        ),
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: FloatingActionButton(
+            mini: true,
+            backgroundColor: Colors.white.withOpacity(0.9),
+            foregroundColor: Colors.black87,
+            onPressed: _toggleBackground,
+            child: const Icon(Icons.contrast, size: 20),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _createFullscreenSvgHtml(
+    String svgContent, {
+    bool isDarkBackground = false,
+  }) {
+    final backgroundColor = isDarkBackground ? '#1e1e1e' : '#ffffff';
+    // Create sandboxed iframe with SVG content
+    final svgDataUrl =
+        'data:text/html;charset=utf-8,' +
+        Uri.encodeComponent('''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background-color: $backgroundColor; }
+    body { display: flex; align-items: center; justify-content: center; }
+    #svg-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    svg { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+  </style>
+  <script src="synapse://svg.pan-zoom.min.js"></script>
+</head>
+<body>
+  <div id="svg-container">$svgContent</div>
+  <script>
+    window.addEventListener('message', function(e) {
+      if (e.data.type === 'setBackground') {
+        document.body.style.backgroundColor = e.data.color;
+        document.documentElement.style.backgroundColor = e.data.color;
+      }
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+      const svgElement = document.querySelector('svg');
+      if (svgElement && typeof svgPanZoom !== 'undefined') {
+        svgPanZoom(svgElement, {
+          zoomEnabled: true,
+          controlIconsEnabled: false,
+          fit: true,
+          center: true,
+          minZoom: 0.1,
+          maxZoom: 15,
+          zoomScaleSensitivity: 0.3,
+          dblClickZoomEnabled: true,
+          mouseWheelZoomEnabled: true,
+          preventMouseEventsDefault: true,
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+''');
+
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: $backgroundColor; }
+    iframe { border: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <iframe src="$svgDataUrl" sandbox="allow-scripts allow-same-origin"></iframe>
+</body>
+</html>
+''';
+  }
+}
+
+/// Fullscreen HTML WebView with sandboxed iframe
+class _FullscreenHtmlWebView extends StatelessWidget {
+  const _FullscreenHtmlWebView({
+    required this.htmlContent,
+    required this.mimeType,
+    required this.encoding,
+  });
+
+  final String htmlContent;
+  final String mimeType;
+  final String encoding;
+
+  @override
+  Widget build(BuildContext context) {
+    return InAppWebView(
+      initialData: InAppWebViewInitialData(
+        data: htmlContent,
+        mimeType: mimeType,
+        encoding: encoding,
+      ),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        supportZoom: true,
+        transparentBackground: true,
+        disableContextMenu: false,
+        resourceCustomSchemes: const [SynapseTempUtils.scheme],
+        useHybridComposition: true,
+      ),
+      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+        Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+      },
+      onLoadResourceWithCustomScheme: (controller, request) async {
+        final scheme = request.url.scheme.toLowerCase();
+        if (scheme == SynapseTempUtils.scheme) {
+          try {
+            final file = await SynapseTempUtils.loadFile(
+              request.url.toString(),
+            );
+            return CustomSchemeResponse(
+              data: file.bytes,
+              contentType: file.mimeType,
+            );
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('Fullscreen webview resource error: $e');
+            }
+          }
+        }
+        return null;
+      },
+    );
+  }
 }
