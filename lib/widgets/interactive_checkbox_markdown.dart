@@ -1486,7 +1486,7 @@ class _ImageInfoBar extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isDark
             ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
@@ -1501,27 +1501,27 @@ class _ImageInfoBar extends StatelessWidget {
         children: [
           Icon(
             sourceType == _ImageSourceType.local ? Icons.storage : Icons.cloud,
-            size: 11,
+            size: 22,
             color: colorScheme.onSurfaceVariant.withOpacity(0.5),
           ),
           if (isSvg && onSvgBackgroundToggle != null) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 12),
             GestureDetector(
               onTap: onSvgBackgroundToggle,
               child: Icon(
                 Icons.contrast,
-                size: 11,
+                size: 22,
                 color: colorScheme.onSurfaceVariant.withOpacity(0.5),
               ),
             ),
           ],
           if (onFullscreen != null) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 12),
             GestureDetector(
               onTap: onFullscreen,
               child: Icon(
                 Icons.fullscreen,
-                size: 11,
+                size: 22,
                 color: colorScheme.onSurfaceVariant.withOpacity(0.5),
               ),
             ),
