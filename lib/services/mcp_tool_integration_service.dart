@@ -253,6 +253,18 @@ class McpToolIntegrationService {
     buffer.writeln('When you call call_tool, always include a params object and populate every required field exactly as defined by the schema.');
     buffer.writeln('If a required value is missing, ask the user for it instead of guessing or omitting it.');
     buffer.writeln('Validate that types match the schema before calling the tool.\n');
+    buffer.writeln('IMPORTANT: All tools MUST be called through call_tool via endpoint and tool name instead of calling tool\'s name directly.\n');
+    buffer.writeln('''<example>
+Endpoint: example
+Tool Argument Name: tool_fn
+Parameters: a: string
+
+Good:
+call_tool({service: "example", name: "tool_fn", param: {a: "hello"}})
+
+Bad:
+tool_fn({a: "hello"})
+</example>\n''');
 
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
