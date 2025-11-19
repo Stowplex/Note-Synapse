@@ -69,7 +69,7 @@ class GeminiModel implements AIModel {
         final apiKey = await _validateApiKey(requestId: actualRequestId);
 
         final generationConfig = {
-          'temperature': temperature ?? 0.1,
+          'temperature': 1.0, // Gemini 3 recommends temperature to be at 1.0
           'topK': topK ?? 32,
           'topP': topP ?? 1,
           'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
@@ -128,7 +128,7 @@ class GeminiModel implements AIModel {
         final apiKey = await _validateApiKey(requestId: actualRequestId);
 
         final generationConfig = {
-          'temperature': temperature ?? 0.1,
+          'temperature': 1.0, // temperature ?? 0.1,
           'topK': topK ?? 32,
           'topP': topP ?? 1,
           'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
@@ -174,7 +174,7 @@ class GeminiModel implements AIModel {
         final apiKey = await _validateApiKey(requestId: actualRequestId);
 
         final generationConfig = {
-          'temperature': temperature ?? 0.1,
+          'temperature': 1.0, // temperature ?? 0.1, Tools must be at temperature 1.0 or it may fail.
           'topK': topK ?? 32,
           'topP': topP ?? 1,
           'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
@@ -216,7 +216,7 @@ class GeminiModel implements AIModel {
         final apiKey = await _validateApiKey(requestId: actualRequestId);
 
         final generationConfig = {
-          'temperature': temperature ?? 0.1,
+          'temperature': 1.0, // tools require temperature at 1.0
           'topK': topK ?? 32,
           'topP': topP ?? 1,
           'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
@@ -414,7 +414,7 @@ class GeminiModel implements AIModel {
       'contents': contents,
       'generationConfig': generationConfig ??
           {
-            'temperature': 0.1,
+            'temperature': 1.0, // 0.1,
             'topK': 32,
             'topP': 1,
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
@@ -562,7 +562,7 @@ class GeminiModel implements AIModel {
       ],
       'generationConfig': generationConfig ??
           {
-            'temperature': 0.1,
+            'temperature': 1.0, // 0.1,
             'topK': 32,
             'topP': 1,
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,

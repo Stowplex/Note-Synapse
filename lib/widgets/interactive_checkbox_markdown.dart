@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
+import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:path/path.dart' as p;
 import 'package:re_highlight/languages/all.dart';
@@ -37,6 +38,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
   final int? maxLines;
   final TextOverflow? overflow;
   final String? noteId;
+  final Size defaultWebViewSize;
 
   const InteractiveCheckboxMarkdown({
     super.key,
@@ -48,6 +50,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.maxLines,
     this.overflow,
     this.noteId,
+    this.defaultWebViewSize = const Size(640, 400),
   });
 
   @override
@@ -644,6 +647,13 @@ class _InteractiveCheckboxMarkdownState
       IndentMd(),
     ];
 
+    final inlineComponents = [
+      ...MarkdownComponent.inlineComponents,
+      _EmbeddedWebViewMd(
+        defaultSize: widget.defaultWebViewSize,
+      ),
+    ];
+
     return GptMarkdown(
       _currentContent,
       style: widget.style,
@@ -655,8 +665,419 @@ class _InteractiveCheckboxMarkdownState
       imageBuilder: _customImageBuilder,
       codeBuilder: _buildCodeBlock,
       components: components,
+      inlineComponents: inlineComponents,
     );
   }
+}
+
+/// Markdown inline component that renders custom WebView embed syntax.
+class _EmbeddedWebViewMd extends InlineMd {
+  _EmbeddedWebViewMd({required this.defaultSize});
+
+  final Size defaultSize;
+
+  @override
+  RegExp get exp => RegExp(r"@\[[^\[\]]*\]\([^\s]*\)");
+
+  @override
+  InlineSpan span(
+    BuildContext context,
+    String text,
+    GptMarkdownConfig config,
+  ) {
+    final trimmed = text.trim();
+    final basicMatch = RegExp(r'@\[(.*?)\]\(').firstMatch(trimmed);
+    if (basicMatch == null) {
+      return const TextSpan();
+    }
+
+    final sizeSpec = basicMatch.group(1) ?? '';
+    final urlStart = basicMatch.end;
+    final urlEnd = _findUrlEnd(trimmed, urlStart);
+    if (urlEnd <= urlStart) {
+      return const TextSpan();
+    }
+
+    final url = trimmed.substring(urlStart, urlEnd).trim();
+    if (url.isEmpty) {
+      return const TextSpan();
+    }
+
+    final parsedSize = _WebViewSizeSpec.parse(sizeSpec);
+    final resolvedWidth = _sanitizeDimension(
+      parsedSize.width ?? defaultSize.width,
+      defaultSize.width,
+    );
+    final resolvedHeight = _sanitizeDimension(
+      parsedSize.height ?? defaultSize.height,
+      defaultSize.height,
+    );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: _MarkdownEmbeddedWebView(
+          url: url,
+          width: resolvedWidth,
+          height: resolvedHeight,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+        ),
+      ),
+    );
+  }
+
+  int _findUrlEnd(String text, int startIndex) {
+    var depth = 0;
+    for (var i = startIndex; i < text.length; i++) {
+      final char = text[i];
+      if (char == '(') {
+        depth++;
+      } else if (char == ')') {
+        if (depth == 0) {
+          return i;
+        }
+        depth--;
+      }
+    }
+    return startIndex;
+  }
+}
+
+class _MarkdownEmbeddedWebView extends StatefulWidget {
+  const _MarkdownEmbeddedWebView({
+    required this.url,
+    required this.width,
+    required this.height,
+    required this.backgroundColor,
+  });
+
+  final String url;
+  final double width;
+  final double height;
+  final Color backgroundColor;
+
+  @override
+  State<_MarkdownEmbeddedWebView> createState() =>
+      _MarkdownEmbeddedWebViewState();
+}
+
+class _MarkdownEmbeddedWebViewState extends State<_MarkdownEmbeddedWebView> {
+  late Future<_WebViewContent> _contentFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _contentFuture = _resolveContent();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarkdownEmbeddedWebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url ||
+        oldWidget.backgroundColor != widget.backgroundColor) {
+      setState(() {
+        _contentFuture = _resolveContent();
+      });
+    }
+  }
+
+  Future<_WebViewContent> _resolveContent() async {
+    final targetUrl = widget.url.trim();
+    if (SynapseTempUtils.isSynapseTempUri(targetUrl)) {
+      try {
+        final file = await SynapseTempUtils.loadFile(targetUrl);
+        final mime = file.mimeType.toLowerCase();
+        final decoded = utf8.decode(file.bytes, allowMalformed: true);
+        if (mime.contains('html') || mime.contains('xml')) {
+          return _WebViewContent(
+            data: decoded,
+            mimeType: mime,
+            encoding: 'utf8',
+          );
+        }
+        final escaped = const HtmlEscape().convert(decoded);
+        final html = '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    padding: 16px;
+    font-family: monospace;
+    background: ${_colorToCss(widget.backgroundColor)};
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>$escaped</body>
+</html>
+''';
+        return _WebViewContent(
+          data: html,
+          mimeType: 'text/html',
+          encoding: 'utf8',
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Embedded markdown webview failed to load: $e');
+        }
+        return const _WebViewContent.error(
+          'Unable to load embedded content',
+        );
+      }
+    }
+
+    if (!_looksLikeHttpUrl(targetUrl)) {
+      return const _WebViewContent.error('Unsupported URL');
+    }
+
+    final html = _buildIframeHtml(targetUrl, widget.backgroundColor);
+    return _WebViewContent(data: html, mimeType: 'text/html', encoding: 'utf8');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = Theme.of(context).colorScheme.outlineVariant;
+    final fadedBorderColor = borderColor.withValues(
+      alpha: (borderColor.a * 0.6).clamp(0.0, 1.0),
+    );
+
+    return SizedBox(
+      width: widget.width,
+      height: widget.height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: fadedBorderColor),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: FutureBuilder<_WebViewContent>(
+            future: _contentFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return _EmbeddedWebViewError(message: 'Failed to load view');
+              }
+
+              final content = snapshot.data;
+              if (content == null || content.hasError) {
+                return _EmbeddedWebViewError(
+                  message: content?.errorMessage ?? 'Unable to load content',
+                );
+              }
+
+              return _buildWebView(content);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebView(_WebViewContent content) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) {},
+      onHorizontalDragStart: (_) {},
+      child: InAppWebView(
+        initialData: InAppWebViewInitialData(
+          data: content.data,
+          mimeType: content.mimeType,
+          encoding: content.encoding,
+        ),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          supportZoom: true,
+          transparentBackground: true,
+          disableHorizontalScroll: false,
+          disableVerticalScroll: false,
+          allowsInlineMediaPlayback: true,
+          resourceCustomSchemes: const [SynapseTempUtils.scheme],
+          useHybridComposition: true,
+        ),
+        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+          Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+        },
+        onLoadResourceWithCustomScheme: (controller, request) async {
+          final scheme = request.url.scheme.toLowerCase();
+          if (scheme == SynapseTempUtils.scheme) {
+            try {
+              final file = await SynapseTempUtils.loadFile(
+                request.url.toString(),
+              );
+              return CustomSchemeResponse(
+                data: file.bytes,
+                contentType: file.mimeType,
+              );
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('Embedded webview resource error: $e');
+              }
+            }
+          }
+          return null;
+        },
+      ),
+    );
+  }
+}
+
+class _EmbeddedWebViewError extends StatelessWidget {
+  const _EmbeddedWebViewError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      color: theme.colorScheme.surfaceVariant,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(8),
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+class _WebViewContent {
+  const _WebViewContent({
+    required this.data,
+    this.mimeType = 'text/html',
+    this.encoding = 'utf8',
+  }) : errorMessage = null;
+
+  const _WebViewContent.error(this.errorMessage)
+    : data = '',
+      mimeType = 'text/html',
+      encoding = 'utf8';
+
+  final String data;
+  final String mimeType;
+  final String encoding;
+  final String? errorMessage;
+
+  bool get hasError => errorMessage != null;
+}
+
+class _WebViewSizeSpec {
+  const _WebViewSizeSpec({this.width, this.height});
+
+  final double? width;
+  final double? height;
+
+  static _WebViewSizeSpec parse(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return const _WebViewSizeSpec();
+    }
+
+    final sizeMatch = RegExp(
+      r'^(\d+)?\s*x\s*(\d+)?$',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (sizeMatch != null) {
+      final widthValue = sizeMatch.group(1);
+      final heightValue = sizeMatch.group(2);
+      return _WebViewSizeSpec(
+        width: widthValue != null ? double.tryParse(widthValue) : null,
+        height: heightValue != null ? double.tryParse(heightValue) : null,
+      );
+    }
+
+    final numeric = double.tryParse(trimmed);
+    if (numeric != null) {
+      return _WebViewSizeSpec(width: numeric);
+    }
+
+    return const _WebViewSizeSpec();
+  }
+}
+
+double _sanitizeDimension(double? value, double fallback) {
+  if (value == null) {
+    return fallback;
+  }
+  if (!value.isFinite || value <= 0) {
+    return fallback;
+  }
+  return value;
+}
+
+String _buildIframeHtml(String url, Color backgroundColor) {
+  final escapedUrl = const HtmlEscape().convert(url);
+  final bgColor = _colorToCss(backgroundColor);
+  return '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    background: $bgColor;
+  }
+  iframe {
+    border: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+  <iframe
+    src="$escapedUrl"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+    loading="lazy"
+    allow="encrypted-media;web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen>
+  </iframe>
+</body>
+</html>
+''';
+}
+
+String _colorToCss(Color color) {
+  final double alpha = color.a.clamp(0.0, 1.0).toDouble();
+  final red = (color.r.clamp(0.0, 1.0).toDouble() * 255).round();
+  final green = (color.g.clamp(0.0, 1.0).toDouble() * 255).round();
+  final blue = (color.b.clamp(0.0, 1.0).toDouble() * 255).round();
+  return 'rgba($red, $green, $blue, ${alpha.toStringAsFixed(3)})';
+}
+
+bool _looksLikeHttpUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme.isEmpty) {
+    return false;
+  }
+  final scheme = uri.scheme.toLowerCase();
+  return (scheme == 'http' || scheme == 'https') && uri.host.isNotEmpty;
 }
 
 /// Stateful widget for SVG WebView with dark/light background toggle
