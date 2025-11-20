@@ -1769,6 +1769,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 _showConversationTagsDialog();
               } else if (value == 'open_immersive') {
                 _openInImmersiveMode();
+              } else if (value == 'note_action_apps') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        NoteActionAppSelectionScreen(selectedNotes: _notes),
+                  ),
+                );
               }
             },
             itemBuilder: (context) => [
@@ -1776,6 +1783,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 PopupMenuItem<String>(
                   value: 'open_immersive',
                   child: Text(l10n.immersiveMode),
+                ),
+              if (_notes.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'note_action_apps',
+                  child: const Text('Note Action Apps'),
                 ),
               if (_conversation != null)
                 PopupMenuItem<String>(

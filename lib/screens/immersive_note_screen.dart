@@ -46,6 +46,7 @@ import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'note_selection_dialog.dart';
+import 'note_action_app_selection_screen.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -699,6 +700,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   onSelected: (value) {
                     if (value == 'open_chat') {
                       _openConversationInChatMode();
+                    } else if (value == 'note_action_apps') {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => NoteActionAppSelectionScreen(
+                            selectedNotes: _conversationNotes,
+                          ),
+                        ),
+                      );
                     }
                   },
                   itemBuilder: (_) => [
@@ -706,6 +715,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       value: 'open_chat',
                       child: Text(l10n.openInChatMode),
                     ),
+                    if (_conversationNotes.isNotEmpty)
+                      PopupMenuItem<String>(
+                        value: 'note_action_apps',
+                        child: const Text('Note Action Apps'),
+                      ),
                   ],
                 ),
             ],
