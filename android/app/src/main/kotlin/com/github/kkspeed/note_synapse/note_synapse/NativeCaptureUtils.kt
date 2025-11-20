@@ -41,17 +41,13 @@ class NativeCaptureUtils(private val activity: Activity, private val channel: Me
         val height = call.argument<Double>("height")!!
         val devicePixelRatio = call.argument<Double>("devicePixelRatio")!!
 
-                val srcRect = Rect(
-
-                    (x).roundToInt(),
-
-                    (y).roundToInt(),
-
-                    (x + width).roundToInt(),
-
-                    (y + height).roundToInt()
-
-                )
+        // Scale coordinates from logical pixels to physical pixels
+        val srcRect = Rect(
+            (x * devicePixelRatio).roundToInt(),
+            (y * devicePixelRatio).roundToInt(),
+            ((x + width) * devicePixelRatio).roundToInt(),
+            ((y + height) * devicePixelRatio).roundToInt()
+        )
 
         try {
             val window: Window = activity.window
