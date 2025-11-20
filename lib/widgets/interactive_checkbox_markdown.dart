@@ -1194,14 +1194,16 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     _webViewController!.evaluateJavascript(
       source:
           '''
-      const iframe = document.querySelector('iframe');
-      if (iframe && iframe.contentWindow) {
-        try {
-          iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
-        } catch (e) {
-          console.log('Cannot set background:', e);
+      (function() {
+        const iframe = document.querySelector('iframe');
+        if (iframe && iframe.contentWindow) {
+          try {
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+          } catch (e) {
+            console.log('Cannot set background:', e);
+          }
         }
-      }
+      })();
     ''',
     );
   }
@@ -2036,14 +2038,16 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
     _webViewController!.evaluateJavascript(
       source:
           '''
-      const iframe = document.querySelector('iframe');
-      if (iframe && iframe.contentWindow) {
-        try {
-          iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
-        } catch (e) {
-          console.log('Cannot set background:', e);
+      (function() {
+        const iframe = document.querySelector('iframe');
+        if (iframe && iframe.contentWindow) {
+          try {
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+          } catch (e) {
+            console.log('Cannot set background:', e);
+          }
         }
-      }
+      })();
     ''',
     );
   }
