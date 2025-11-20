@@ -10,6 +10,7 @@ class Attachment {
   final String fileType;
   final DateTime createdAt;
   final bool isRelativePath; // Always true for new attachments
+  final bool includeInAIContext;
 
   const Attachment({
     required this.id,
@@ -19,6 +20,7 @@ class Attachment {
     required this.fileType,
     required this.createdAt,
     this.isRelativePath = true,
+    this.includeInAIContext = true,
   });
 
   /// Creates an Attachment from database data
@@ -31,6 +33,9 @@ class Attachment {
       fileType: data['fileType'] as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(data['createdAt'] as int),
       isRelativePath: (data['isRelativePath'] as int) == 1,
+      includeInAIContext:
+          (data['includeInAIContext'] as int?) !=
+          0, // Default to true if null (for backward compatibility during migration)
     );
   }
 
@@ -44,6 +49,7 @@ class Attachment {
       'fileType': fileType,
       'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': createdAt.millisecondsSinceEpoch,
+      'includeInAIContext': includeInAIContext ? 1 : 0,
     };
   }
 
@@ -89,6 +95,7 @@ class Attachment {
     String? fileType,
     DateTime? createdAt,
     bool? isRelativePath,
+    bool? includeInAIContext,
   }) {
     return Attachment(
       id: id ?? this.id,
@@ -98,12 +105,13 @@ class Attachment {
       fileType: fileType ?? this.fileType,
       createdAt: createdAt ?? this.createdAt,
       isRelativePath: isRelativePath ?? this.isRelativePath,
+      includeInAIContext: includeInAIContext ?? this.includeInAIContext,
     );
   }
 
   @override
   String toString() {
-    return 'Attachment(id: $id, fileName: $fileName, filePath: $filePath, isRelative: $isRelativePath)';
+    return 'Attachment(id: $id, fileName: $fileName, filePath: $filePath, isRelative: $isRelativePath, includeInAIContext: $includeInAIContext)';
   }
 
   @override
@@ -120,4 +128,3 @@ class Attachment {
     return id.hashCode ^ noteId.hashCode ^ filePath.hashCode;
   }
 }
-

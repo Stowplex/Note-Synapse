@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/attachment.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
@@ -69,6 +70,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Duration _playingPosition = Duration.zero;
   Duration _playingDuration = Duration.zero;
 
+  // Attachment metadata state
+  Map<String, Attachment> _attachmentsMap = {};
+
+  Future<void> _loadAttachments() async {
+    if (widget.isNewNote) return;
+    final attachments = await _databaseService.getAttachmentsForNote(
+      widget.note.id,
+    );
+
+    final Map<String, Attachment> tempMap = {};
+    for (var a in attachments) {
+      final fullPath = await FileUtils.getFullFilePath(
+        a.filePath,
+        a.isRelativePath,
+      );
+      tempMap[fullPath] = a;
+    }
+
+    if (mounted) {
+      setState(() {
+        _attachmentsMap = tempMap;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +126,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     // Load relationships
     _loadRelationships();
 
+    // Load attachment metadata
+    _loadAttachments();
+
     // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
   }
@@ -114,6 +143,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _currentPlayingPath = null;
     _playingPosition = Duration.zero;
     _playingDuration = Duration.zero;
+  }
+
+  @override
+  void didUpdateWidget(NoteDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.note.id != oldWidget.note.id ||
+        widget.note.updatedAt != oldWidget.note.updatedAt) {
+      _loadAttachments();
+    }
   }
 
   @override
@@ -1863,6 +1901,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             minHeight: 40,
                           ),
                         ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.psychology,
+                          color:
+                              (_attachmentsMap[attachmentPath]
+                                      ?.includeInAIContext ??
+                                  true)
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.grey,
+                        ),
+                        onPressed: () async {
+                          final currentAttachment =
+                              _attachmentsMap[attachmentPath];
+                          final currentStatus =
+                              currentAttachment?.includeInAIContext ?? true;
+                          final newStatus = !currentStatus;
+
+                          LoggerService.debug(
+                            'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
+                          );
+
+                          // Optimistic update
+                          setState(() {
+                            if (currentAttachment != null) {
+                              _attachmentsMap[attachmentPath] =
+                                  currentAttachment.copyWith(
+                                    includeInAIContext: newStatus,
+                                  );
+                            }
+                          });
+
+                          try {
+                            if (currentAttachment != null) {
+                              await _databaseService.updateAttachmentAIContext(
+                                widget.note.id,
+                                currentAttachment
+                                    .filePath, // Use the DB stored path
+                                newStatus,
+                              );
+                            }
+                          } catch (e) {
+                            LoggerService.error(
+                              'Failed to update database: $e',
+                            );
+                            // Revert optimistic update on error
+                            setState(() {
+                              if (currentAttachment != null) {
+                                _attachmentsMap[attachmentPath] =
+                                    currentAttachment;
+                              }
+                            });
+                          }
+
+                          // Reload to ensure consistency
+                          await _loadAttachments();
+                        },
+                        tooltip: 'Include in AI Context',
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () =>

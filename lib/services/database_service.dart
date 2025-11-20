@@ -17,6 +17,7 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
+import '../models/attachment.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
@@ -42,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 23;
+  static const int DATABASE_VERSION = 24;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -113,6 +114,7 @@ class DatabaseService {
         fileType TEXT NOT NULL,
         isRelativePath INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
+        includeInAIContext INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
@@ -394,8 +396,13 @@ class DatabaseService {
       execute: _migrateToVersion22,
     ),
     23: MigrationStep(
-      description: 'Add UNIQUE constraint to user_apps.uuid column for foreign key integrity',
+      description:
+          'Add UNIQUE constraint to user_apps.uuid column for foreign key integrity',
       execute: _migrateToVersion23,
+    ),
+    24: MigrationStep(
+      description: 'Add includeInAIContext column to attachments table',
+      execute: _migrateToVersion24,
     ),
   };
 
@@ -525,6 +532,14 @@ class DatabaseService {
         await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
         break;
 
+      case 24:
+        // Attachments table modification failed - recreate notes tables (which includes attachments)
+        LoggerService.error(
+          'Recreating notes tables due to attachments table modification failure',
+        );
+        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
+        break;
+
       default:
         // Unknown migration - fall back to full database recreation
         LoggerService.error(
@@ -613,13 +628,13 @@ class DatabaseService {
     await db.execute('DROP TABLE IF EXISTS app_revisions');
     // Now we can drop user_apps
     await db.execute('DROP TABLE IF EXISTS user_apps');
-    
+
     // Recreate tables in dependency order
     await db.execute(_createUserAppsTable);
     await db.execute(_createAppRevisionsTable);
     await db.execute(_createUserAppLibrariesTable);
     await db.execute(_createUserAppLibraryDependenciesTable);
-    
+
     // Recreate indexes for library tables
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
@@ -936,7 +951,9 @@ class DatabaseService {
       );
 
       if (tables.isEmpty) {
-        LoggerService.info('user_apps table does not exist, skipping migration');
+        LoggerService.info(
+          'user_apps table does not exist, skipping migration',
+        );
         return;
       }
 
@@ -966,11 +983,15 @@ class DatabaseService {
         // Commit transaction
         await db.execute('COMMIT');
 
-        LoggerService.info('Successfully migrated user_apps table with UNIQUE uuid constraint');
+        LoggerService.info(
+          'Successfully migrated user_apps table with UNIQUE uuid constraint',
+        );
       } catch (e) {
         // Rollback on error
         await db.execute('ROLLBACK');
-        LoggerService.error('Error during user_apps table migration, rolled back: $e');
+        LoggerService.error(
+          'Error during user_apps table migration, rolled back: $e',
+        );
         rethrow;
       } finally {
         // Re-enable foreign key constraints
@@ -980,6 +1001,39 @@ class DatabaseService {
       LoggerService.info('Migration to version 23 completed successfully');
     } catch (e) {
       LoggerService.error('Error in migration to version 23: $e', error: e);
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion24(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 24: Adding includeInAIContext column to attachments table',
+    );
+
+    try {
+      // Check if column already exists
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any(
+        (column) => column['name'] == 'includeInAIContext',
+      );
+
+      if (!hasColumn) {
+        await db.execute(
+          'ALTER TABLE attachments ADD COLUMN includeInAIContext INTEGER NOT NULL DEFAULT 1',
+        );
+        LoggerService.info(
+          'Successfully added includeInAIContext column to attachments table',
+        );
+      } else {
+        LoggerService.info(
+          'includeInAIContext column already exists in attachments table',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error in migration to version 24: $e', error: e);
       rethrow;
     }
   }
@@ -1276,16 +1330,65 @@ class DatabaseService {
     }
 
     // Update attachments
+    // Update attachments
+    // First, get existing attachments to preserve metadata (like includeInAIContext)
+    final existingAttachments = await db.query(
+      'attachments',
+      columns: ['filePath', 'includeInAIContext'],
+      where: 'noteId = ?',
+      whereArgs: [note.id],
+    );
+
+    final Map<String, bool> existingContextMap = {};
+    for (final row in existingAttachments) {
+      existingContextMap[row['filePath'] as String] =
+          (row['includeInAIContext'] as int?) != 0;
+    }
+
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
       final isRelativePath = attachmentPath.startsWith('attachments/');
+
+      // Preserve includeInAIContext if it existed, otherwise default to true
+      final includeInAIContext = existingContextMap[attachmentPath] ?? true;
+
       await _insertAttachment(
         note.id,
         attachmentPath,
         isRelativePath: isRelativePath,
+        includeInAIContext: includeInAIContext,
       );
     }
+  }
+
+  /// Updates the includeInAIContext flag for a specific attachment
+  Future<void> updateAttachmentAIContext(
+    String noteId,
+    String filePath,
+    bool include,
+  ) async {
+    final db = await database;
+    await db.update(
+      'attachments',
+      {'includeInAIContext': include ? 1 : 0},
+      where: 'noteId = ? AND filePath = ?',
+      whereArgs: [noteId, filePath],
+    );
+  }
+
+  /// Gets all attachments for a specific note
+  Future<List<Attachment>> getAttachmentsForNote(String noteId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+
+    return List.generate(maps.length, (i) {
+      return Attachment.fromDatabase(maps[i]);
+    });
   }
 
   Future<void> deleteNote(String id) async {
@@ -1809,6 +1912,7 @@ class DatabaseService {
     String noteId,
     String filePath, {
     bool isRelativePath = false,
+    bool includeInAIContext = true,
   }) async {
     final db = await database;
     final fileName = filePath.split('/').last;
@@ -1823,6 +1927,7 @@ class DatabaseService {
       'fileType': fileType,
       'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'includeInAIContext': includeInAIContext ? 1 : 0,
     });
   }
 
