@@ -4352,6 +4352,12 @@ abstract class AppLocalizations {
   /// **'Note Action App'**
   String get noteActionApp;
 
+  /// No description provided for @noteActionApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Action Apps'**
+  String get noteActionApps;
+
   /// No description provided for @noteActionAppSubtitle.
   ///
   /// In en, this message translates to:

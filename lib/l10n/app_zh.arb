@@ -765,6 +765,7 @@
   "clickAddMcpEndpointToGetStarted": "点击\"添加MCP端点\"开始",
   "updated": "更新",
   "noteActionApp": "笔记操作应用",
+  "noteActionApps": "笔记操作应用",
   "noteActionAppSubtitle": "此类应用将专门对预选笔记进行操作",
   "appType": "类型",
   "appTypeHint": "选择此应用的行为方式",

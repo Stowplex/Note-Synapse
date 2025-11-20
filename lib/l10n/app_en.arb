@@ -803,6 +803,7 @@
   "clickAddMcpEndpointToGetStarted": "Click \"Add MCP Endpoint\" to get started",
   "updated": "Updated",
   "noteActionApp": "Note Action App",
+  "noteActionApps": "Note Action Apps",
   "noteActionAppSubtitle": "This type of app will operate specifically on pre-selected notes",
   "appType": "Type",
   "appTypeHint": "Select how this app should behave",

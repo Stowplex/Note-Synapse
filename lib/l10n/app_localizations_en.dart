@@ -2441,6 +2441,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteActionApp => 'Note Action App';
 
   @override
+  String get noteActionApps => 'Note Action Apps';
+
+  @override
   String get noteActionAppSubtitle =>
       'This type of app will operate specifically on pre-selected notes';
 

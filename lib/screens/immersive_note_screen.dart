@@ -694,34 +694,34 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   tooltip: l10n.viewTree,
                   onPressed: () => _openConversationTree(),
                 ),
-              if (_conversation != null)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (value) {
-                    if (value == 'open_chat') {
-                      _openConversationInChatMode();
-                    } else if (value == 'note_action_apps') {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => NoteActionAppSelectionScreen(
-                            selectedNotes: _conversationNotes,
-                          ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) {
+                  if (value == 'open_chat') {
+                    _openConversationInChatMode();
+                  } else if (value == 'note_action_apps') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => NoteActionAppSelectionScreen(
+                          selectedNotes: _conversationNotes,
                         ),
-                      );
-                    }
-                  },
-                  itemBuilder: (_) => [
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (_conversation != null)
                     PopupMenuItem<String>(
                       value: 'open_chat',
                       child: Text(l10n.openInChatMode),
                     ),
-                    if (_conversationNotes.isNotEmpty)
-                      PopupMenuItem<String>(
-                        value: 'note_action_apps',
-                        child: const Text('Note Action Apps'),
-                      ),
-                  ],
-                ),
+                  if (_conversationNotes.isNotEmpty)
+                    PopupMenuItem<String>(
+                      value: 'note_action_apps',
+                      child: Text(l10n.noteActionApps),
+                    ),
+                ],
+              ),
             ],
           ),
           body: SafeArea(

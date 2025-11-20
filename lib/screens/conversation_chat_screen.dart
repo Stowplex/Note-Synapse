@@ -1787,7 +1787,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
               if (_notes.isNotEmpty)
                 PopupMenuItem<String>(
                   value: 'note_action_apps',
-                  child: const Text('Note Action Apps'),
+                  child: Text(l10n.noteActionApps),
                 ),
               if (_conversation != null)
                 PopupMenuItem<String>(

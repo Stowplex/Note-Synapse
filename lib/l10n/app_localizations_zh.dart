@@ -2368,6 +2368,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteActionApp => '笔记操作应用';
 
   @override
+  String get noteActionApps => '笔记操作应用';
+
+  @override
   String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
 
   @override
