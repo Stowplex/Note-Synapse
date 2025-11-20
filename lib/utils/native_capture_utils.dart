@@ -16,7 +16,7 @@ class NativeCaptureUtils {
     required double height,
     required double devicePixelRatio,
   }) async {
-    if (!Platform.isIOS) {
+    if (!Platform.isIOS && !Platform.isAndroid) {
       return null;
     }
 

@@ -209,7 +209,8 @@ import AVFoundation
           let x = arguments["x"] as? Double,
           let y = arguments["y"] as? Double,
           let width = arguments["width"] as? Double,
-          let height = arguments["height"] as? Double else {
+          let height = arguments["height"] as? Double,
+          let devicePixelRatio = arguments["devicePixelRatio"] as? Double else {
       result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for captureRegion", details: nil))
       return
     }
@@ -222,31 +223,23 @@ import AVFoundation
       
       flutterView.layoutIfNeeded()
       
-      let screenScale = UIScreen.main.scale
-      let origin = CGPoint(
-        x: CGFloat(x) / screenScale,
-        y: CGFloat(y) / screenScale
-      )
-      let size = CGSize(
-        width: CGFloat(width) / screenScale,
-        height: CGFloat(height) / screenScale
-      )
+      let screenScale = CGFloat(devicePixelRatio)
+      let captureRect = CGRect(x: x, y: y, width: width, height: height)
       
-      guard size.width > 0, size.height > 0 else {
+      guard captureRect.width > 0, captureRect.height > 0 else {
         result(FlutterError(code: "INVALID_SIZE", message: "Capture region size must be positive", details: nil))
         return
       }
       
-      let captureRectInFlutterView = CGRect(origin: origin, size: size)
       let targetView: UIView
       let captureRectInTarget: CGRect
       
       if let window = flutterView.window {
         targetView = window
-        captureRectInTarget = flutterView.convert(captureRectInFlutterView, to: window)
+        captureRectInTarget = flutterView.convert(captureRect, to: window)
       } else {
         targetView = flutterView
-        captureRectInTarget = captureRectInFlutterView
+        captureRectInTarget = captureRect
       }
       
       let boundedCaptureRect = captureRectInTarget.intersection(targetView.bounds)

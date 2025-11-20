@@ -2956,15 +2956,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     Uint8List? regionBytes;
-    if (Platform.isIOS) {
+    if (Platform.isIOS || Platform.isAndroid) {
       final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
       final Offset captureOrigin =
           boundaryOrigin + Offset(cappedRect.left, cappedRect.top);
       regionBytes = await NativeCaptureUtils.captureRegion(
-        x: captureOrigin.dx * devicePixelRatio,
-        y: captureOrigin.dy * devicePixelRatio,
-        width: cappedRect.width * devicePixelRatio,
-        height: cappedRect.height * devicePixelRatio,
+        x: captureOrigin.dx,
+        y: captureOrigin.dy,
+        width: cappedRect.width,
+        height: cappedRect.height,
         devicePixelRatio: devicePixelRatio,
       );
       if (regionBytes != null && regionBytes.isEmpty) {
