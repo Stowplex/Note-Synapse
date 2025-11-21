@@ -1919,6 +1919,11 @@ class DatabaseService {
     final fileType = FileTypeUtils.getFileExtension(fileName);
     final uuid = Uuid();
 
+    // Default HTML files to be excluded from AI context to save tokens
+    final isHtml =
+        fileType.toLowerCase() == 'html' || fileType.toLowerCase() == 'htm';
+    final finalIncludeInAIContext = isHtml ? false : includeInAIContext;
+
     await db.insert('attachments', {
       'id': uuid.v4(),
       'noteId': noteId,
@@ -1927,7 +1932,7 @@ class DatabaseService {
       'fileType': fileType,
       'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
-      'includeInAIContext': includeInAIContext ? 1 : 0,
+      'includeInAIContext': finalIncludeInAIContext ? 1 : 0,
     });
   }
 

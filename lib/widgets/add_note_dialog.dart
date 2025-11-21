@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../screens/note_selection_dialog.dart';
+import '../services/conversation_attachment_service.dart';
 import 'ai_note_creator_dialog.dart';
 
 /// Dialog for choosing how to add or append a note from conversation messages
@@ -27,10 +28,8 @@ class AddNoteDialog extends StatefulWidget {
   }) async {
     return await showDialog<AddNoteResult?>(
       context: context,
-      builder: (dialogContext) => AddNoteDialog(
-        content: content,
-        contextNotes: contextNotes,
-      ),
+      builder: (dialogContext) =>
+          AddNoteDialog(content: content, contextNotes: contextNotes),
     );
   }
 
@@ -179,10 +178,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
                   color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: Icon(
-                  icon,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                child: Icon(icon, color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -199,11 +195,10 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
-                          ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                   ],
                 ),
@@ -275,17 +270,25 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
     try {
       final appProvider = context.read<AppProvider>();
+      final noteId = const Uuid().v4();
+
+      // Process temporary attachments
+      final processed =
+          await ConversationAttachmentService.processContentForAttachments(
+            content: widget.content,
+            noteId: noteId,
+          );
 
       final newNote = Note(
-        id: const Uuid().v4(),
+        id: noteId,
         title: title,
-        content: widget.content,
+        content: processed.content,
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         subNotes: const [],
         tags: const [],
-        attachmentPaths: const [],
+        attachmentPaths: processed.attachmentPaths,
         scheduledAt: null,
         completeBy: null,
         status: null,
@@ -329,10 +332,25 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => target,
       );
 
-      final combinedContent = _combineContent(existingNote.content, widget.content);
+      // Process temporary attachments
+      final processed =
+          await ConversationAttachmentService.processContentForAttachments(
+            content: widget.content,
+            noteId: existingNote.id,
+          );
+
+      final combinedContent = _combineContent(
+        existingNote.content,
+        processed.content,
+      );
+
+      // Combine existing attachments with new ones
+      final updatedAttachments = List<String>.from(existingNote.attachmentPaths)
+        ..addAll(processed.attachmentPaths);
 
       final updatedNote = existingNote.copyWith(
         content: combinedContent,
+        attachmentPaths: updatedAttachments,
         updatedAt: DateTime.now(),
       );
 
@@ -425,4 +443,3 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     return '$existingTrimmed\n\n$additionTrimmed';
   }
 }
-

@@ -17,8 +17,11 @@ import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
+import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/remote_image_storage.dart';
+import '../utils/file_utils.dart';
+import '../utils/file_type_utils.dart';
 import 'interactive_checkbox_component.dart';
 
 /// Enum to represent image source type
@@ -586,6 +589,42 @@ class _InteractiveCheckboxMarkdownState
     }
 
     try {
+      // Check if it's a synapsetemp URI and try to resolve via hash
+      if (SynapseTempUtils.isSynapseTempUri(url)) {
+        final hash = sha256.convert(utf8.encode(url)).toString();
+        // We don't know the extension, so we might need to search or try common ones.
+        // However, RemoteImageStorage.resolveAbsolutePath might handle this if we pass the "virtual" path?
+        // No, RemoteImageStorage expects a relative path or uses its own hashing for remote URLs.
+
+        // Let's manually check for the file in attachments dir
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final prefix = '${widget.noteId}_$hash';
+
+        // List files to find the one with matching prefix
+        if (await dir.exists()) {
+          await for (final entity in dir.list()) {
+            if (entity is File) {
+              final name = p.basename(entity.path);
+              if (name.startsWith(prefix)) {
+                final extension = p.extension(name).toLowerCase();
+                if (extension == '.svg') {
+                  final content = await entity.readAsString();
+                  return _LocalImageSource(
+                    path: entity.path,
+                    extension: extension,
+                    svgContent: content,
+                  );
+                }
+                return _LocalImageSource(
+                  path: entity.path,
+                  extension: extension,
+                );
+              }
+            }
+          }
+        }
+      }
+
       final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
         noteId: widget.noteId!,
         imageUrl: url,
@@ -681,7 +720,11 @@ class _InteractiveCheckboxMarkdownState
 
     final inlineComponents = [
       ...MarkdownComponent.inlineComponents,
-      _EmbeddedWebViewMd(defaultSize: widget.defaultWebViewSize),
+      ...MarkdownComponent.inlineComponents,
+      _EmbeddedWebViewMd(
+        defaultSize: widget.defaultWebViewSize,
+        noteId: widget.noteId,
+      ),
     ];
 
     return GptMarkdown(
@@ -702,9 +745,10 @@ class _InteractiveCheckboxMarkdownState
 
 /// Markdown inline component that renders custom WebView embed syntax.
 class _EmbeddedWebViewMd extends InlineMd {
-  _EmbeddedWebViewMd({required this.defaultSize});
+  _EmbeddedWebViewMd({required this.defaultSize, this.noteId});
 
   final Size defaultSize;
+  final String? noteId;
 
   @override
   RegExp get exp => RegExp(r"@\[[^\[\]]*\]\([^\s]*\)");
@@ -749,6 +793,7 @@ class _EmbeddedWebViewMd extends InlineMd {
           width: resolvedWidth,
           height: resolvedHeight,
           backgroundColor: Theme.of(context).colorScheme.surface,
+          noteId: noteId,
         ),
       ),
     );
@@ -777,12 +822,14 @@ class _MarkdownEmbeddedWebView extends StatefulWidget {
     required this.width,
     required this.height,
     required this.backgroundColor,
+    this.noteId,
   });
 
   final String url;
   final double width;
   final double height;
   final Color backgroundColor;
+  final String? noteId;
 
   @override
   State<_MarkdownEmbeddedWebView> createState() =>
@@ -813,9 +860,41 @@ class _MarkdownEmbeddedWebViewState extends State<_MarkdownEmbeddedWebView> {
     final targetUrl = widget.url.trim();
     if (SynapseTempUtils.isSynapseTempUri(targetUrl)) {
       try {
-        final file = await SynapseTempUtils.loadFile(targetUrl);
-        final mime = file.mimeType.toLowerCase();
-        final decoded = utf8.decode(file.bytes, allowMalformed: true);
+        Uint8List bytes;
+        String mime;
+
+        try {
+          final tempFile = await SynapseTempUtils.loadFile(targetUrl);
+          bytes = tempFile.bytes;
+          mime = tempFile.mimeType.toLowerCase();
+        } catch (e) {
+          // If temp file load fails, try to find it in attachments using SHA256 hash
+          File? fallbackFile;
+          if (widget.noteId != null) {
+            final hash = sha256.convert(utf8.encode(targetUrl)).toString();
+            final dir = await FileUtils.getPrivateStorageDirectory();
+            final prefix = '${widget.noteId}_$hash';
+
+            if (await dir.exists()) {
+              await for (final entity in dir.list()) {
+                if (entity is File &&
+                    p.basename(entity.path).startsWith(prefix)) {
+                  fallbackFile = entity;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (fallbackFile == null) rethrow;
+
+          bytes = await fallbackFile.readAsBytes();
+          mime = (await FileTypeUtils.getMimeTypeForFile(
+            fallbackFile.path,
+          )).toLowerCase();
+        }
+
+        final decoded = utf8.decode(bytes, allowMalformed: true);
         if (mime.contains('html') || mime.contains('xml')) {
           // Wrap HTML/XML in sandboxed iframe
           final contentDataUrl =
