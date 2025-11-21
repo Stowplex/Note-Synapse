@@ -91,10 +91,78 @@ class ConversationAttachmentService {
         newAttachmentPaths.add(relativePath);
 
         // 4. Do NOT update content. The renderer will handle the lookup using the SHA256 hash.
+        // We keep the synapsetemp URI in the content.
       } catch (e) {
         LoggerService.error(
           'Failed to process temp attachment: $uriString',
           error: e,
+        );
+      }
+    }
+
+    // New logic: Process markdown image links with local file paths
+    // Matches ![alt](path)
+    final mdImageRegex = RegExp(r'!\[(.*?)\]\((.*?)\)');
+    final mdMatches = mdImageRegex.allMatches(content).toList();
+
+    for (final match in mdMatches.reversed) {
+      final fullMatch = match.group(0);
+      final altText = match.group(1) ?? '';
+      final path = match.group(2);
+
+      if (fullMatch == null || path == null) continue;
+
+      // Skip if it's a web URL, synapsetemp (handled above), or already relative attachment
+      if (path.startsWith('http') ||
+          path.startsWith('synapsetemp') ||
+          path.startsWith('attachments/')) {
+        continue;
+      }
+
+      try {
+        final file = File(path);
+        if (!await file.exists()) continue;
+
+        // Generate hash for filename
+        final hash = sha256.convert(utf8.encode(path)).toString();
+        String extension = p.extension(path);
+        if (extension.isEmpty) extension = '.bin'; // Fallback
+
+        // Sanitize extension
+        final sanitizedExtension = extension
+            .replaceAll(RegExp(r'[^a-zA-Z0-9.]'), '')
+            .toLowerCase();
+        final ext = sanitizedExtension.startsWith('.')
+            ? sanitizedExtension
+            : '.$sanitizedExtension';
+
+        final fileName = '${noteId}_$hash$ext';
+
+        // Copy to attachments directory
+        final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+        final newFilePath = p.join(attachmentsDir.path, fileName);
+
+        if (!await File(newFilePath).exists()) {
+          await file.copy(newFilePath);
+        }
+
+        final relativePath = 'attachments/$fileName';
+        newAttachmentPaths.add(relativePath);
+
+        // Replace in content
+        // We need to be careful with string replacement if there are multiple identical links
+        // But we are iterating matches in reverse and using range replacement?
+        // Actually, string replacement by value is risky if duplicates exist.
+        // Better to use the match indices.
+
+        content = content.replaceRange(
+          match.start,
+          match.end,
+          '![$altText]($relativePath)',
+        );
+      } catch (e) {
+        LoggerService.warning(
+          'Failed to process local file markdown link: $path, $e',
         );
       }
     }

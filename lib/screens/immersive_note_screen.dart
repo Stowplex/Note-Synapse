@@ -1863,17 +1863,37 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<void> _addScratchpadToNote() async {
     if (_scratchpadItems.isEmpty) return;
 
-    final content = _scratchpadItems.map((e) => e.content).join('\n\n');
+    // Construct content with inline attachments
+    final content = _scratchpadItems
+        .map((item) {
+          final text = item.content;
+          if (item.attachmentPaths.isEmpty) {
+            return text;
+          }
+          // Add attachments as inline markdown images
+          final attachmentsMarkdown = item.attachmentPaths
+              .map((path) {
+                final fileName = path.split(Platform.pathSeparator).last;
+                if (fileName.startsWith('syn_')) {
+                  return '![](${SynapseTempUtils.buildUriFromFileName(fileName)})';
+                }
+                return '![]($path)';
+              })
+              .join('\n');
 
-    // Collect all attachments from scratchpad items
-    final attachmentPaths = _scratchpadItems
-        .expand((item) => item.attachmentPaths)
-        .toList();
+          if (text.trim().isEmpty) {
+            return attachmentsMarkdown;
+          }
+          return '$text\n$attachmentsMarkdown';
+        })
+        .join('\n\n');
 
+    // We pass empty attachmentPaths because we've embedded them in the content
+    // and ConversationAttachmentService will process them from there.
     await handleAddContentToNote(
       content: content,
       contextNotes: _conversationNotes,
-      attachmentPaths: attachmentPaths,
+      attachmentPaths: [],
     );
 
     // After adding, we update the "last saved" count to mark as clean?
