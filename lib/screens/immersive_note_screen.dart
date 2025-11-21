@@ -11,6 +11,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
@@ -100,11 +101,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Set<String> _cancelledRequestIds = {};
   final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
 
+  // Scratchpad State
+  bool _isScratchpadMode = false;
+  final List<ConversationMessage> _scratchpadItems = [];
+  bool _includeScratchpadInChat = false;
+  int _lastSavedScratchpadCount = 0;
+
+  bool get _isScratchpadDirty =>
+      _scratchpadItems.length != _lastSavedScratchpadCount;
+
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
+
+  // Scratchpad editing state
+  int? _editingScratchpadIndex;
+  final TextEditingController _scratchpadEditController =
+      TextEditingController();
 
   // AI tool support
   Map<String, AiToolAppBundle> _aiToolBundles = {};
@@ -1249,6 +1264,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         });
                       },
                     ),
+                    IconButton(
+                      icon: Badge(
+                        isLabelVisible: _isScratchpadDirty,
+                        smallSize: 8,
+                        child: Icon(
+                          _isScratchpadMode
+                              ? Icons.description
+                              : Icons.description_outlined,
+                          color: _isScratchpadMode
+                              ? theme.colorScheme.primary
+                              : null,
+                        ),
+                      ),
+                      tooltip: 'Scratchpad', // TODO: l10n
+                      onPressed: () {
+                        setState(() {
+                          _isScratchpadMode = !_isScratchpadMode;
+                          // Do not auto-expand panel
+                        });
+                      },
+                    ),
                     Expanded(
                       child: TextField(
                         controller: _messageController,
@@ -1256,7 +1292,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         maxLines: 6,
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
-                          hintText: l10n.askAiHint,
+                          hintText: _isScratchpadMode
+                              ? 'Send to scratchpad' // TODO: l10n
+                              : l10n.askAiHint,
                         ),
                         onSubmitted: (_) {
                           if (!_isSending && !_isAborting) {
@@ -1347,12 +1385,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
+          // MCP Selection (Only show if not in scratchpad mode)
+          if (!_isScratchpadMode &&
+              (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty))
             _buildMcpSelectionSection(l10n),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: _buildConversationList(l10n),
+              child: _isScratchpadMode
+                  ? _buildScratchpadList(l10n)
+                  : _buildConversationList(l10n),
             ),
           ),
         ],
@@ -1594,6 +1636,250 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   void _collapseAiPanel() {
     setState(() {
       _isAiPanelExpanded = false;
+    });
+  }
+
+  Widget _buildScratchpadList(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+
+    if (_scratchpadItems.isEmpty) {
+      return Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                'Scratchpad is empty', // TODO: l10n
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          _buildScratchpadActions(l10n),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            controller: _chatScrollController,
+            padding: const EdgeInsets.only(bottom: 12),
+            itemCount: _scratchpadItems.length,
+            itemBuilder: (context, index) {
+              final item = _scratchpadItems[index];
+              final isEditing = _editingScratchpadIndex == index;
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isEditing)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _scratchpadEditController,
+                              maxLines: null,
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.all(8),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            onPressed: () => _saveScratchpadEdit(index),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _cancelScratchpadEdit,
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: SelectionArea(
+                              child: InteractiveCheckboxMarkdown(
+                                originalContent: item.content,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                onLinkTap: (url, _) =>
+                                    _handleMarkdownLinkTap(url, l10n),
+                              ),
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit,
+                                  size: 18,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _startScratchpadEdit(index),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _deleteScratchpadItem(index),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    if (item.attachmentPaths.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _buildMessageAttachmentChips(item, l10n),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildScratchpadActions(l10n),
+      ],
+    );
+  }
+
+  Widget _buildScratchpadActions(AppLocalizations l10n) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _scratchpadItems.isEmpty ? null : _addScratchpadToNote,
+            icon: const Icon(Icons.note_add, size: 18),
+            label: const Text('Add to Note'), // TODO: l10n
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _scratchpadItems.isEmpty ? null : _clearScratchpad,
+            icon: const Icon(Icons.clear_all, size: 18),
+            label: const Text('Clear'), // TODO: l10n
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Include in chat toggle
+        Tooltip(
+          message: 'Include scratchpad in chat context', // TODO: l10n
+          child: Switch(
+            value: _includeScratchpadInChat,
+            onChanged: (value) {
+              setState(() {
+                _includeScratchpadInChat = value;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _startScratchpadEdit(int index) {
+    setState(() {
+      _editingScratchpadIndex = index;
+      _scratchpadEditController.text = _scratchpadItems[index].content;
+    });
+  }
+
+  void _cancelScratchpadEdit() {
+    setState(() {
+      _editingScratchpadIndex = null;
+      _scratchpadEditController.clear();
+    });
+  }
+
+  void _saveScratchpadEdit(int index) {
+    if (index < 0 || index >= _scratchpadItems.length) return;
+    setState(() {
+      final oldItem = _scratchpadItems[index];
+      _scratchpadItems[index] = ConversationMessage(
+        id: oldItem.id,
+        conversationId: oldItem.conversationId,
+        content: _scratchpadEditController.text,
+        type: oldItem.type,
+        timestamp: oldItem.timestamp,
+        attachmentPaths: oldItem.attachmentPaths,
+      );
+      _editingScratchpadIndex = null;
+      _scratchpadEditController.clear();
+    });
+  }
+
+  void _deleteScratchpadItem(int index) {
+    setState(() {
+      _scratchpadItems.removeAt(index);
+      if (_editingScratchpadIndex == index) {
+        _cancelScratchpadEdit();
+      } else if (_editingScratchpadIndex != null &&
+          _editingScratchpadIndex! > index) {
+        _editingScratchpadIndex = _editingScratchpadIndex! - 1;
+      }
+    });
+  }
+
+  void _clearScratchpad() {
+    setState(() {
+      _scratchpadItems.clear();
+      _lastSavedScratchpadCount = 0; // Reset dirty state baseline
+      _cancelScratchpadEdit();
+    });
+  }
+
+  Future<void> _addScratchpadToNote() async {
+    if (_scratchpadItems.isEmpty) return;
+
+    final content = _scratchpadItems.map((e) => e.content).join('\n\n');
+
+    // Collect all attachments from scratchpad items
+    final attachmentPaths = _scratchpadItems
+        .expand((item) => item.attachmentPaths)
+        .toList();
+
+    await handleAddContentToNote(
+      content: content,
+      contextNotes: _conversationNotes,
+      attachmentPaths: attachmentPaths,
+    );
+
+    // After adding, we update the "last saved" count to mark as clean?
+    // Or maybe we don't clear it, just mark as clean.
+    setState(() {
+      _lastSavedScratchpadCount = _scratchpadItems.length;
     });
   }
 
@@ -2393,6 +2679,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
 
     try {
+      if (_isScratchpadMode) {
+        // Add to scratchpad
+        final message = ConversationMessage(
+          id: const Uuid().v4(), // Need uuid package or generate random string
+          conversationId: _conversation?.id ?? 'scratchpad',
+          content: content,
+          type: MessageType.user,
+          timestamp: DateTime.now(),
+          attachmentPaths: attachments.map((f) => f.path!).toList(),
+        );
+
+        setState(() {
+          _scratchpadItems.add(message);
+          _isSending = false;
+        });
+
+        // Scroll to bottom of scratchpad?
+        // We might need a separate scroll controller for scratchpad or reuse _chatScrollController if it's swapped.
+        // Since we swap the view, we can reuse _chatScrollController or just let it be.
+        // But _chatScrollController is attached to the ListView in _buildConversationList AND _buildScratchpadList?
+        // Yes, if we reuse it, we should be careful.
+        // Let's check _buildScratchpadList. I didn't assign a controller there.
+        // I should assign _chatScrollController to _buildScratchpadList's ListView as well.
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_chatScrollController.hasClients) {
+            _chatScrollController.animateTo(
+              _chatScrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+
+        return;
+      }
+
       // Create conversation on first message if it doesn't exist
       if (_conversation == null) {
         await _initializeConversation();
@@ -2572,6 +2895,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           }
         }
       }
+    }
+
+    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
+      final buffer = StringBuffer();
+      buffer.writeln('Context from Scratchpad:');
+      for (final item in _scratchpadItems) {
+        buffer.writeln('- ${item.content}');
+      }
+      messages.add(
+        PromptMessage(
+          role: PromptRole.user,
+          content: buffer.toString(),
+          // We could also attach scratchpad attachments here if needed,
+          // but for now let's just include text context.
+        ),
+      );
     }
 
     messages.add(

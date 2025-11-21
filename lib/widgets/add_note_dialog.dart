@@ -13,11 +13,13 @@ import 'ai_note_creator_dialog.dart';
 class AddNoteDialog extends StatefulWidget {
   final String content;
   final List<Note> contextNotes;
+  final List<String> attachmentPaths;
 
   const AddNoteDialog({
     super.key,
     required this.content,
     this.contextNotes = const [],
+    this.attachmentPaths = const [],
   });
 
   /// Show the dialog and return the resulting action if any
@@ -25,11 +27,15 @@ class AddNoteDialog extends StatefulWidget {
     required BuildContext context,
     required String content,
     List<Note> contextNotes = const [],
+    List<String> attachmentPaths = const [],
   }) async {
     return await showDialog<AddNoteResult?>(
       context: context,
-      builder: (dialogContext) =>
-          AddNoteDialog(content: content, contextNotes: contextNotes),
+      builder: (dialogContext) => AddNoteDialog(
+        content: content,
+        contextNotes: contextNotes,
+        attachmentPaths: attachmentPaths,
+      ),
     );
   }
 
@@ -272,23 +278,35 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
       final appProvider = context.read<AppProvider>();
       final noteId = const Uuid().v4();
 
-      // Process temporary attachments
-      final processed =
+      // Process temporary attachments from content
+      final processedContent =
           await ConversationAttachmentService.processContentForAttachments(
             content: widget.content,
             noteId: noteId,
           );
 
+      // Process explicit attachments
+      final processedFiles =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: widget.attachmentPaths,
+            noteId: noteId,
+          );
+
+      final allAttachments = [
+        ...processedContent.attachmentPaths,
+        ...processedFiles,
+      ];
+
       final newNote = Note(
         id: noteId,
         title: title,
-        content: processed.content,
+        content: processedContent.content,
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         subNotes: const [],
         tags: const [],
-        attachmentPaths: processed.attachmentPaths,
+        attachmentPaths: allAttachments,
         scheduledAt: null,
         completeBy: null,
         status: null,
@@ -332,21 +350,29 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => target,
       );
 
-      // Process temporary attachments
-      final processed =
+      // Process temporary attachments from content
+      final processedContent =
           await ConversationAttachmentService.processContentForAttachments(
             content: widget.content,
             noteId: existingNote.id,
           );
 
+      // Process explicit attachments
+      final processedFiles =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: widget.attachmentPaths,
+            noteId: existingNote.id,
+          );
+
       final combinedContent = _combineContent(
         existingNote.content,
-        processed.content,
+        processedContent.content,
       );
 
       // Combine existing attachments with new ones
       final updatedAttachments = List<String>.from(existingNote.attachmentPaths)
-        ..addAll(processed.attachmentPaths);
+        ..addAll(processedContent.attachmentPaths)
+        ..addAll(processedFiles);
 
       final updatedNote = existingNote.copyWith(
         content: combinedContent,

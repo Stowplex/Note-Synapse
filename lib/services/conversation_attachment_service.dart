@@ -101,4 +101,42 @@ class ConversationAttachmentService {
 
     return (content: content, attachmentPaths: newAttachmentPaths);
   }
+
+  /// Process a list of file paths for attachments.
+  ///
+  /// Copies the files to the permanent attachments directory and returns the new relative paths.
+  static Future<List<String>> processFilesForAttachments({
+    required List<String> filePaths,
+    required String noteId,
+  }) async {
+    final List<String> newAttachmentPaths = [];
+    final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+
+    for (final path in filePaths) {
+      try {
+        final file = File(path);
+        if (!await file.exists()) {
+          LoggerService.warning('Attachment file not found: $path');
+          continue;
+        }
+
+        final fileName = p.basename(path);
+        // Generate a unique name to avoid collisions
+        final uniqueName =
+            '${noteId}_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+        final newFilePath = p.join(attachmentsDir.path, uniqueName);
+
+        await file.copy(newFilePath);
+
+        newAttachmentPaths.add('attachments/$uniqueName');
+      } catch (e) {
+        LoggerService.error(
+          'Failed to process attachment file: $path',
+          error: e,
+        );
+      }
+    }
+
+    return newAttachmentPaths;
+  }
 }

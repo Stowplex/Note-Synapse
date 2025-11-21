@@ -11,12 +11,14 @@ mixin NoteActionMixin<T extends StatefulWidget> on State<T> {
   Future<void> handleAddContentToNote({
     required String content,
     List<Note> contextNotes = const [],
+    List<String> attachmentPaths = const [],
   }) async {
     try {
       final result = await AddNoteDialog.show(
         context: context,
         content: content,
         contextNotes: contextNotes,
+        attachmentPaths: attachmentPaths,
       );
 
       if (!mounted || result == null) return;
