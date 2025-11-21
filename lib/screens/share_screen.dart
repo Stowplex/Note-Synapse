@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -751,10 +752,9 @@ class _ShareScreenState extends State<ShareScreen> {
             const SizedBox(height: 8),
             Text(
               l10n.shareUrlChoiceDescription,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.grey[700]),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -763,8 +763,9 @@ class _ShareScreenState extends State<ShareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed:
-                        _isLinux || _isExtracting ? null : _extractWebContent,
+                    onPressed: _isLinux || _isExtracting
+                        ? null
+                        : _extractWebContent,
                     child: _isExtracting
                         ? const SizedBox(
                             width: 16,
@@ -889,9 +890,7 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-  Future<Map<String, dynamic>> _showWebExtractionDialog(
-    String url,
-  ) async {
+  Future<Map<String, dynamic>> _showWebExtractionDialog(String url) async {
     final completer = Completer<Map<String, dynamic>>();
 
     showDialog(
@@ -1642,10 +1641,7 @@ class _WebExtractionDialog extends StatefulWidget {
   final String url;
   final Function(Map<String, dynamic>) onComplete;
 
-  const _WebExtractionDialog({
-    required this.url,
-    required this.onComplete,
-  });
+  const _WebExtractionDialog({required this.url, required this.onComplete});
 
   @override
   State<_WebExtractionDialog> createState() => _WebExtractionDialogState();
@@ -1713,6 +1709,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
 
       final contentType = detectedContentType ?? '';
+
       final isPdfOrStaticFile =
           hasFileExtension ||
           contentType.startsWith('application/pdf') ||
@@ -1730,6 +1727,135 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               !contentType.startsWith('application/xml') &&
               !contentType.startsWith('application/javascript'));
 
+      // Check for raw text or code files that might be sandboxed (e.g. raw.githubusercontent.com)
+      final isRawTextOrCode =
+          contentType.startsWith('text/') ||
+          contentType == 'application/json' ||
+          contentType == 'application/xml' ||
+          contentType == 'application/javascript' ||
+          contentType == 'text/x-java-source' ||
+          path.endsWith('.java') ||
+          path.endsWith('.kt') ||
+          path.endsWith('.dart') ||
+          path.endsWith('.py') ||
+          path.endsWith('.js') ||
+          path.endsWith('.ts') ||
+          path.endsWith('.c') ||
+          path.endsWith('.cpp') ||
+          path.endsWith('.h') ||
+          path.endsWith('.cs') ||
+          path.endsWith('.go') ||
+          path.endsWith('.rs') ||
+          path.endsWith('.rb') ||
+          path.endsWith('.php') ||
+          path.endsWith('.sh') ||
+          path.endsWith('.md') ||
+          path.endsWith('.txt') ||
+          path.endsWith('.xml') ||
+          path.endsWith('.gradle') ||
+          path.endsWith('.properties') ||
+          path.endsWith('.sql') ||
+          path.endsWith('.json') ||
+          path.endsWith('.yaml') ||
+          path.endsWith('.yml');
+
+      if (isRawTextOrCode && !isPdfOrStaticFile) {
+        setState(() {
+          _isDownloading = true;
+          _status = l10n.webExtractionStatusDownloadingFile;
+        });
+
+        try {
+          final response = await http.get(Uri.parse(widget.url));
+          if (response.statusCode == 200) {
+            final content = response.body;
+
+            String language = '';
+            if (path.endsWith('.java'))
+              language = 'java';
+            else if (path.endsWith('.kt'))
+              language = 'kotlin';
+            else if (path.endsWith('.dart'))
+              language = 'dart';
+            else if (path.endsWith('.py'))
+              language = 'python';
+            else if (path.endsWith('.js'))
+              language = 'javascript';
+            else if (path.endsWith('.ts'))
+              language = 'typescript';
+            else if (path.endsWith('.c'))
+              language = 'c';
+            else if (path.endsWith('.cpp'))
+              language = 'cpp';
+            else if (path.endsWith('.h'))
+              language = 'cpp';
+            else if (path.endsWith('.cs'))
+              language = 'csharp';
+            else if (path.endsWith('.go'))
+              language = 'go';
+            else if (path.endsWith('.rs'))
+              language = 'rust';
+            else if (path.endsWith('.rb'))
+              language = 'ruby';
+            else if (path.endsWith('.php'))
+              language = 'php';
+            else if (path.endsWith('.sh'))
+              language = 'bash';
+            else if (path.endsWith('.md'))
+              language = 'markdown';
+            else if (path.endsWith('.xml'))
+              language = 'xml';
+            else if (path.endsWith('.gradle'))
+              language = 'gradle';
+            else if (path.endsWith('.properties'))
+              language = 'properties';
+            else if (path.endsWith('.sql'))
+              language = 'sql';
+            else if (path.endsWith('.json'))
+              language = 'json';
+            else if (path.endsWith('.yaml'))
+              language = 'yaml';
+            else if (path.endsWith('.yml'))
+              language = 'yaml';
+            else if (path.endsWith('.html'))
+              language = 'html';
+            else if (path.endsWith('.css'))
+              language = 'css';
+
+            final note = Note(
+              id: const Uuid().v4(),
+              title: path.split('/').last,
+              content: '```$language\n$content\n```',
+              type: NoteType.note,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              tags: ['shared', 'code', 'web-clip'],
+            );
+
+            if (!mounted) return;
+
+            setState(() {
+              _fileDownloaded = true;
+              _isDownloading = false;
+              _isLoading = false;
+              _status = l10n.webExtractionStatusFileDownloaded;
+            });
+
+            await Future.delayed(const Duration(milliseconds: 500));
+
+            widget.onComplete({
+              'success': true,
+              'note': note,
+              'contentType': 'text',
+            });
+            return;
+          }
+        } catch (e) {
+          // Fallback to WebView if direct download fails
+          print('Direct download failed: $e');
+        }
+      }
+
       if (isPdfOrStaticFile) {
         setState(() {
           _isDownloading = true;
@@ -1744,28 +1870,28 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 response.headers['content-type']?.toLowerCase() ?? contentType;
             final isBinaryContent =
                 responseContentType.startsWith('application/pdf') ||
-                    responseContentType.startsWith('application/msword') ||
-                    responseContentType.startsWith('application/vnd.ms-word') ||
-                    responseContentType.startsWith('application/vnd.ms-excel') ||
-                    responseContentType.startsWith(
-                      'application/vnd.ms-powerpoint',
-                    ) ||
-                    responseContentType.startsWith(
-                      'application/vnd.openxmlformats',
-                    ) ||
-                    responseContentType.startsWith('application/zip') ||
-                    responseContentType.startsWith('application/x-rar') ||
-                    responseContentType.startsWith('application/x-tar') ||
-                    responseContentType.startsWith('application/gzip') ||
-                    (responseContentType.startsWith('application/') &&
-                        !responseContentType.startsWith('application/json') &&
-                        !responseContentType.startsWith('application/xml') &&
-                        !responseContentType.startsWith(
-                          'application/javascript',
-                        )) ||
-                    !responseContentType.startsWith('text/') &&
-                        !responseContentType.startsWith('image/') &&
-                        !responseContentType.startsWith('video/');
+                responseContentType.startsWith('application/msword') ||
+                responseContentType.startsWith('application/vnd.ms-word') ||
+                responseContentType.startsWith('application/vnd.ms-excel') ||
+                responseContentType.startsWith(
+                  'application/vnd.ms-powerpoint',
+                ) ||
+                responseContentType.startsWith(
+                  'application/vnd.openxmlformats',
+                ) ||
+                responseContentType.startsWith('application/zip') ||
+                responseContentType.startsWith('application/x-rar') ||
+                responseContentType.startsWith('application/x-tar') ||
+                responseContentType.startsWith('application/gzip') ||
+                (responseContentType.startsWith('application/') &&
+                    !responseContentType.startsWith('application/json') &&
+                    !responseContentType.startsWith('application/xml') &&
+                    !responseContentType.startsWith(
+                      'application/javascript',
+                    )) ||
+                !responseContentType.startsWith('text/') &&
+                    !responseContentType.startsWith('image/') &&
+                    !responseContentType.startsWith('video/');
 
             if (isBinaryContent || isPdfOrStaticFile) {
               String fileName = path.split('/').last;
@@ -1894,9 +2020,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             _downloadFailed = true;
             _isDownloading = false;
             _isLoading = false;
-            _status = l10n.webExtractionStatusDownloadFailed(
-              e.toString(),
-            );
+            _status = l10n.webExtractionStatusDownloadFailed(e.toString());
           });
           widget.onComplete({
             'success': false,
@@ -2068,25 +2192,114 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       throw Exception('WebView controller not ready');
     }
     final l10n = AppLocalizations.of(context)!;
+
+    // Execute JavaScript to extract content and return a JSON string with status and debug info
     final result = await _controller!.evaluateJavascript(
       source: '''
         (function() {
+          var debug = {
+            contentType: document.contentType,
+            url: window.location.href,
+            hasBody: !!document.body,
+            hasDocEl: !!document.documentElement,
+            bodyTextLength: document.body ? document.body.innerText.length : -1,
+            docTextLength: document.documentElement ? document.documentElement.innerText.length : -1
+          };
+
+          function escapeHtml(text) {
+            if (!text) return "";
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+          }
+
           try {
-            if (document.body) {
-              return document.body.innerHTML;
+            // Handle plain text or code files directly
+            var isText = document.contentType === 'text/plain' || 
+                document.contentType === 'text/x-java-source' ||
+                document.contentType === 'application/json' ||
+                window.location.pathname.match(/\\.(java|kt|dart|py|js|ts|c|cpp|h|cs|go|rs|rb|php|sh|md|txt|xml|gradle|properties|sql|json|yaml|yml)\$/i);
+
+            debug.isText = !!isText;
+
+            if (isText) {
+              var content = document.body ? document.body.innerText : (document.documentElement ? document.documentElement.innerText : '');
+              // If content is found, wrap it in pre tags to preserve formatting
+              if (content && content.trim().length > 0) {
+                return JSON.stringify({
+                  status: 'success',
+                  content: '<pre>' + escapeHtml(content) + '</pre>',
+                  debug: debug
+                });
+              } else {
+                 debug.error = "Empty content for text document";
+              }
             }
-            return document.documentElement ? document.documentElement.innerHTML : '';
+
+            if (document.body) {
+              return JSON.stringify({
+                  status: 'success',
+                  content: document.body.innerHTML,
+                  debug: debug
+              });
+            }
+            
+            var docContent = document.documentElement ? document.documentElement.innerHTML : '';
+            if (docContent) {
+               return JSON.stringify({
+                  status: 'success',
+                  content: docContent,
+                  debug: debug
+               });
+            }
+
+            return JSON.stringify({
+              status: 'error',
+              message: 'No content found',
+              debug: debug
+            });
           } catch (e) {
-            return '';
+            return JSON.stringify({
+              status: 'error',
+              message: e.toString(),
+              debug: debug
+            });
           }
         })();
       ''',
     );
-    final html = result?.toString() ?? '';
-    if (html.isEmpty) {
-      throw Exception(l10n.failedToExtractContentFromWebPage);
+
+    if (result == null) {
+      throw Exception("JavaScript execution returned null");
     }
-    return html;
+
+    try {
+      final Map<String, dynamic> response = jsonDecode(result.toString());
+
+      if (response['status'] == 'success') {
+        final content = response['content'] as String?;
+        if (content == null || content.isEmpty) {
+          throw Exception(
+            "Extracted content is empty. Debug: ${jsonEncode(response['debug'])}",
+          );
+        }
+        return content;
+      } else {
+        final message = response['message'] ?? 'Unknown error';
+        final debug = response['debug'];
+        throw Exception("$message. Debug: ${jsonEncode(debug)}");
+      }
+    } catch (e) {
+      if (e.toString().contains('Debug:')) {
+        rethrow;
+      }
+      throw Exception(
+        "${l10n.failedToExtractContentFromWebPage}. Error parsing result: $e. Raw result: $result",
+      );
+    }
   }
 
   Future<String> _getCurrentPageTitle() async {
@@ -2118,8 +2331,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       String finalContent = markdownContent;
       var title = await _getCurrentPageTitle();
       if (title.isEmpty) {
-        title =
-            'Web Content - ${DateTime.now().toString().substring(0, 16)}';
+        title = 'Web Content - ${DateTime.now().toString().substring(0, 16)}';
       }
 
       final tags = <String>{'shared', 'web', 'extracted'};
@@ -2192,10 +2404,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           Expanded(
             child: Text(
               l10n.extractingWebContent,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: Colors.white),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: Colors.white),
             ),
           ),
           IconButton(
@@ -2234,10 +2445,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           ),
           if (_errorMessage != null) ...[
             const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              style: const TextStyle(color: Colors.red),
-            ),
+            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
           ],
         ],
       ),
@@ -2245,14 +2453,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   }
 
   Widget _buildReadabilityToggle(AppLocalizations l10n) {
-    final toggleBackground =
-        Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3);
+    final toggleBackground = Theme.of(
+      context,
+    ).colorScheme.primaryContainer.withValues(alpha: 0.3);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: toggleBackground,
-      ),
+      decoration: BoxDecoration(color: toggleBackground),
       child: Row(
         children: [
           Expanded(
@@ -2266,17 +2473,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 const SizedBox(height: 2),
                 Text(
                   l10n.webExtractionReadabilityDescription,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.grey[700]),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[700]),
                 ),
               ],
             ),
           ),
           Switch.adaptive(
             value: _readabilityEnabled,
-            onChanged: (_isLoading ||
+            onChanged:
+                (_isLoading ||
                     _isApplyingReadability ||
                     _isProcessing ||
                     _controller == null)
@@ -2297,7 +2504,8 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: (_controller == null || _isProcessing || _isLoading)
+                  onPressed:
+                      (_controller == null || _isProcessing || _isLoading)
                       ? null
                       : () => _performExtraction(useAI: false),
                   child: _isProcessing && _activeAction == 'extract'
@@ -2316,13 +2524,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   child: ElevatedButton(
                     onPressed:
                         (_controller == null || _isProcessing || _isLoading)
-                            ? null
-                            : () => _performExtraction(useAI: true),
+                        ? null
+                        : () => _performExtraction(useAI: true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.secondary,
-                      foregroundColor:
-                          Theme.of(context).colorScheme.onSecondary,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(
+                        context,
+                      ).colorScheme.onSecondary,
                     ),
                     child: _isProcessing && _activeAction == 'ai'
                         ? const SizedBox(
