@@ -1466,132 +1466,151 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             ),
           ),
           // Expandable content
-          if (_isMcpPanelExpanded) ...[
-            const SizedBox(height: 8),
-            if (_availableMcpEndpoints.isNotEmpty) ...[
-              Row(
-                children: [
-                  Icon(
-                    Icons.cloud,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.mcpTools,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeMcpCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeMcpCount,
-                      label: l10n.active,
-                    ),
-                ],
+          if (_isMcpPanelExpanded)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.35,
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _availableMcpEndpoints.map((endpoint) {
-                  final isSelected = _selectedMcpEndpointIds.contains(
-                    endpoint.id,
-                  );
-                  return FilterChip(
-                    label: Text(endpoint.name),
-                    selected: isSelected,
-                    onSelected: (selected) async {
-                      setState(() {
-                        if (selected) {
-                          _selectedMcpEndpointIds.add(endpoint.id);
-                        } else {
-                          _selectedMcpEndpointIds.remove(endpoint.id);
-                        }
-                      });
-                      await _updateMcpTools();
-                    },
-                    avatar: Icon(
-                      Icons.cloud,
-                      size: 16,
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (_aiToolBundles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.aiTools,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeLocalCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeLocalCount,
-                      label: l10n.active,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _aiToolBundles.entries.map((entry) {
-                  final serviceName = entry.key;
-                  final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(
-                    serviceName,
-                  );
-                  return FilterChip(
-                    label: Text(bundle.displayName),
-                    selected: selected,
-                    onSelected: (value) {
-                      _toggleAiToolService(serviceName, value);
-                    },
-                    avatar: Icon(
-                      Icons.smart_toy,
-                      size: 16,
-                      color: selected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (combinedTools.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                l10n.toolsAvailable(
-                  combinedTools.values.fold<int>(
-                    0,
-                    (sum, tools) => sum + tools.length,
-                  ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    if (_availableMcpEndpoints.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.cloud,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.mcpTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeMcpCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeMcpCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _availableMcpEndpoints.map((endpoint) {
+                          final isSelected = _selectedMcpEndpointIds.contains(
+                            endpoint.id,
+                          );
+                          return FilterChip(
+                            label: Text(endpoint.name),
+                            selected: isSelected,
+                            onSelected: (selected) async {
+                              setState(() {
+                                if (selected) {
+                                  _selectedMcpEndpointIds.add(endpoint.id);
+                                } else {
+                                  _selectedMcpEndpointIds.remove(endpoint.id);
+                                }
+                              });
+                              await _updateMcpTools();
+                            },
+                            avatar: Icon(
+                              Icons.cloud,
+                              size: 16,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (_aiToolBundles.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.aiTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeLocalCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeLocalCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _aiToolBundles.entries.map((entry) {
+                          final serviceName = entry.key;
+                          final bundle = entry.value;
+                          final selected = _selectedAiToolServices.contains(
+                            serviceName,
+                          );
+                          return FilterChip(
+                            label: Text(bundle.displayName),
+                            selected: selected,
+                            onSelected: (value) {
+                              _toggleAiToolService(serviceName, value);
+                            },
+                            avatar: Icon(
+                              Icons.smart_toy,
+                              size: 16,
+                              color: selected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (combinedTools.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        l10n.toolsAvailable(
+                          combinedTools.values.fold<int>(
+                            0,
+                            (sum, tools) => sum + tools.length,
+                          ),
+                        ),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontStyle: FontStyle.italic,
-                ),
               ),
-            ],
-          ],
+            ),
         ],
       ),
     );
