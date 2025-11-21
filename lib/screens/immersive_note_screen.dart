@@ -98,6 +98,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
+  final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
 
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
@@ -1837,6 +1838,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 ),
                 noteId: note.id,
                 originalContent: note.content,
+                hasWebViewNotifier: _hasWebViewNotifier,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
                     note.id,
@@ -1897,6 +1899,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 ),
                                 noteId: note.id,
                                 originalContent: subNote.content,
+                                hasWebViewNotifier: _hasWebViewNotifier,
                                 onContentChanged: (_) {},
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
@@ -2970,7 +2973,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     Uint8List? regionBytes;
-    if (Platform.isIOS || Platform.isAndroid) {
+    if (Platform.isIOS || (Platform.isAndroid && _hasWebViewNotifier.value)) {
       final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
       final Offset captureOrigin =
           boundaryOrigin + Offset(cappedRect.left, cappedRect.top);

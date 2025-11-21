@@ -51,7 +51,10 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.overflow,
     this.noteId,
     this.defaultWebViewSize = const Size(640, 400),
+    this.hasWebViewNotifier,
   });
+
+  final ValueNotifier<bool>? hasWebViewNotifier;
 
   @override
   State<InteractiveCheckboxMarkdown> createState() =>
@@ -251,6 +254,7 @@ class _InteractiveCheckboxMarkdownState
             // Render SVG using InAppWebView for better compatibility and edge case handling
             try {
               final svgContent = utf8.decode(tempFile.bytes);
+              widget.hasWebViewNotifier?.value = true;
               return _SvgWebViewWithInfoBar(
                 svgContent: svgContent,
                 imageUrl: url,
@@ -335,6 +339,7 @@ class _InteractiveCheckboxMarkdownState
             final svgContent = isBase64
                 ? utf8.decode(base64.decode(data))
                 : Uri.decodeComponent(data);
+            widget.hasWebViewNotifier?.value = true;
             return _SvgWebViewWithInfoBar(
               svgContent: svgContent,
               imageUrl: url,
@@ -415,6 +420,7 @@ class _InteractiveCheckboxMarkdownState
           final source = snapshot.data;
           if (source != null) {
             if (source.svgContent != null) {
+              widget.hasWebViewNotifier?.value = true;
               return _SvgWebViewWithInfoBar(
                 svgContent: source.svgContent!,
                 imageUrl: url,
@@ -724,6 +730,7 @@ class _InteractiveCheckboxMarkdownState
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
         noteId: widget.noteId,
+        hasWebViewNotifier: widget.hasWebViewNotifier,
       ),
     ];
 
@@ -745,10 +752,15 @@ class _InteractiveCheckboxMarkdownState
 
 /// Markdown inline component that renders custom WebView embed syntax.
 class _EmbeddedWebViewMd extends InlineMd {
-  _EmbeddedWebViewMd({required this.defaultSize, this.noteId});
+  _EmbeddedWebViewMd({
+    required this.defaultSize,
+    this.noteId,
+    this.hasWebViewNotifier,
+  });
 
   final Size defaultSize;
   final String? noteId;
+  final ValueNotifier<bool>? hasWebViewNotifier;
 
   @override
   RegExp get exp => RegExp(r"@\[[^\[\]]*\]\([^\s]*\)");
@@ -782,6 +794,8 @@ class _EmbeddedWebViewMd extends InlineMd {
       parsedSize.height ?? defaultSize.height,
       defaultSize.height,
     );
+
+    hasWebViewNotifier?.value = true;
 
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
