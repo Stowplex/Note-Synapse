@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 24;
+  static const int DATABASE_VERSION = 25;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -400,7 +400,7 @@ class DatabaseService {
           'Add UNIQUE constraint to user_apps.uuid column for foreign key integrity',
       execute: _migrateToVersion23,
     ),
-    24: MigrationStep(
+    25: MigrationStep(
       description: 'Add includeInAIContext column to attachments table',
       execute: _migrateToVersion24,
     ),
@@ -532,7 +532,7 @@ class DatabaseService {
         await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
         break;
 
-      case 24:
+      case 25:
         // Attachments table modification failed - recreate notes tables (which includes attachments)
         LoggerService.error(
           'Recreating notes tables due to attachments table modification failure',
