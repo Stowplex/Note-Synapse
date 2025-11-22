@@ -20,6 +20,7 @@ import '../models/note.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
 import '../models/generation_context.dart';
+import '../models/model_config.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
 import '../services/conversation_service.dart';
@@ -195,10 +196,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  ModelConfig? _previousModelConfig;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh model features when app resumes (e.g., after model configuration change)
+      // Note: didChangeDependencies will also handle this if the provider updates,
+      // but this ensures we catch resume events specifically if needed.
+      _loadModelFeatures();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final appProvider = context.watch<AppProvider>();
+    if (_previousModelConfig != appProvider.modelConfig) {
+      _previousModelConfig = appProvider.modelConfig;
+      // Refresh model features when model config changes
       _loadModelFeatures();
     }
   }

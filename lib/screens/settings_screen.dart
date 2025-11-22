@@ -269,12 +269,22 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     try {
       await ModelSelector.instance.switchToModel(modelType);
-      setState(() {
-        _currentModel = modelType;
-        _isLoading = false;
-      });
 
       if (mounted) {
+        // Force refresh of model config in provider to update UI
+        final config = await ModelStorageService.getModelConfig(modelType);
+        if (config != null) {
+          Provider.of<AppProvider>(
+            context,
+            listen: false,
+          ).updateModelConfig(config);
+        }
+
+        setState(() {
+          _currentModel = modelType;
+          _isLoading = false;
+        });
+
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

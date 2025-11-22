@@ -10,6 +10,7 @@ import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
+import '../models/model_config.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -110,12 +111,21 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
   }
 
+  ModelConfig? _previousModelConfig;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_hasInitialized) {
       _hasInitialized = true;
       _initializeConversation();
+    }
+
+    final appProvider = context.watch<AppProvider>();
+    if (_previousModelConfig != appProvider.modelConfig) {
+      _previousModelConfig = appProvider.modelConfig;
+      // Refresh model features when model config changes
+      _loadModelFeatures();
     }
   }
 

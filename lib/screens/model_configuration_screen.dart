@@ -1,14 +1,13 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:yaml/yaml.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
 import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
 import '../services/model_selector.dart';
+import '../services/model_preset_service.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 
@@ -82,101 +81,53 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   Future<void> _loadPresets() async {
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
+      final presets = await ModelPresetService.instance.loadPresets();
 
-      final presetFiles = manifestMap.keys
-          .where((String key) => key.startsWith('assets/model_presets/'))
+      // Filter presets for current model type
+      final modelPresets = presets
+          .where((p) => p.type == widget.modelType)
           .toList();
 
-      List<ModelConfig> presets = [];
-      Map<String, bool> premiumWarnings = {};
-      Map<String, String> presetApiKeyUrls = {};
-      for (final file in presetFiles) {
-        final yamlString = await rootBundle.loadString(file);
-        final doc = loadYaml(yamlString);
-
-        final modelTypeString = doc['model_type'] as String?;
-        if (modelTypeString != null && modelTypeString == widget.modelType.id) {
-          final displayName = doc['model_display_name'] as String?;
-          if (displayName != null) {
-            premiumWarnings[displayName] =
-                doc['warn_premium'] as bool? ?? false;
-
-            // Store API key URL for this preset
-            final apiKeyUrl = doc['api_key_url'] as String?;
-            if (apiKeyUrl != null) {
-              presetApiKeyUrls[displayName] = apiKeyUrl;
-            }
-          }
-
-          final capabilities = ModelCapabilities(
-            maxInputTokens: doc['max_input_token'] ?? 100000,
-            maxOutputTokens: doc['max_output_token'] ?? 4000,
-            supportsImages:
-                doc['model_capabilities']?.contains('support_image') ?? false,
-            supportsDocuments:
-                doc['model_capabilities']?.contains(
-                  'support_document_understanding',
-                ) ??
-                false,
-            supportsAudio:
-                doc['model_capabilities']?.contains('support_audio') ?? false,
-            supportsVideo:
-                doc['model_capabilities']?.contains('support_video') ?? false,
-          );
-
-          final supportedAttachmentMimeTypes =
-              (doc['supported_attachment_mime_types'] as YamlList?)
-                  ?.cast<dynamic>()
-                  .whereType<String>()
-                  .map((value) => value.trim())
-                  .toList();
-
-          final modelFeatures = (doc['model_features'] as YamlList?)
-              ?.cast<dynamic>()
-              .whereType<String>()
-              .map((value) => value.trim())
-              .toList();
-
-          final preset = ModelConfig(
-            type: ModelType.fromId(modelTypeString) ?? widget.modelType,
-            endpoint: doc['model_endpoint'],
-            modelName: doc['model_name'],
-            displayName: displayName,
-            maxInputTokens: doc['max_input_token'],
-            maxOutputTokens: doc['max_output_token'],
-            customCapabilitiesObject: capabilities,
-            supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
-            modelFeatures: modelFeatures,
-          );
-          presets.add(preset);
-        }
-      }
-
+      // Add "Custom" preset option
       if (widget.modelType == ModelType.gemini) {
-        presets.add(
+        modelPresets.add(
           ModelConfig(
             type: ModelType.gemini,
             displayName: 'Custom',
             endpoint: 'https://generativelanguage.googleapis.com/v1beta',
           ),
         );
-      }
-
-      if (widget.modelType == ModelType.openaiCompatible) {
-        presets.add(
+      } else if (widget.modelType == ModelType.openaiCompatible) {
+        modelPresets.add(
           ModelConfig(type: ModelType.openaiCompatible, displayName: 'Custom'),
         );
       }
 
-      setState(() {
-        _presets = presets;
-        _premiumWarnings = premiumWarnings;
-        _presetApiKeyUrls = presetApiKeyUrls;
-      });
+      if (mounted) {
+        setState(() {
+          _presets = modelPresets;
+
+          // Update auxiliary maps from service
+          for (final preset in modelPresets) {
+            if (preset.displayName != null) {
+              final displayName = preset.displayName!;
+              if (ModelPresetService.instance.hasPremiumWarning(displayName)) {
+                _premiumWarnings[displayName] = true;
+              }
+
+              final apiKeyUrl = ModelPresetService.instance.getApiKeyUrl(
+                displayName,
+              );
+              if (apiKeyUrl != null) {
+                _presetApiKeyUrls[displayName] = apiKeyUrl;
+              }
+            }
+          }
+        });
+      }
     } catch (e) {
       // Handle error loading presets
+      debugPrint('Error loading presets: $e');
     }
   }
 
