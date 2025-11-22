@@ -1334,8 +1334,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 const SizedBox(width: 8),
                 Icon(
                   _isMcpPanelExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_up,
                   size: 20,
                   color: Theme.of(
                     context,
