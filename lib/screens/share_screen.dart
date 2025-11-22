@@ -1727,37 +1727,38 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               !contentType.startsWith('application/xml') &&
               !contentType.startsWith('application/javascript'));
 
-      // Check for raw text or code files that might be sandboxed (e.g. raw.githubusercontent.com)
       final isRawTextOrCode =
-          contentType.startsWith('text/') ||
-          contentType == 'application/json' ||
-          contentType == 'application/xml' ||
-          contentType == 'application/javascript' ||
-          contentType == 'text/x-java-source' ||
-          path.endsWith('.java') ||
-          path.endsWith('.kt') ||
-          path.endsWith('.dart') ||
-          path.endsWith('.py') ||
-          path.endsWith('.js') ||
-          path.endsWith('.ts') ||
-          path.endsWith('.c') ||
-          path.endsWith('.cpp') ||
-          path.endsWith('.h') ||
-          path.endsWith('.cs') ||
-          path.endsWith('.go') ||
-          path.endsWith('.rs') ||
-          path.endsWith('.rb') ||
-          path.endsWith('.php') ||
-          path.endsWith('.sh') ||
-          path.endsWith('.md') ||
-          path.endsWith('.txt') ||
-          path.endsWith('.xml') ||
-          path.endsWith('.gradle') ||
-          path.endsWith('.properties') ||
-          path.endsWith('.sql') ||
-          path.endsWith('.json') ||
-          path.endsWith('.yaml') ||
-          path.endsWith('.yml');
+          (contentType != 'text/html' &&
+              !contentType.startsWith('text/html;')) &&
+          (contentType.startsWith('text/') ||
+              contentType == 'application/json' ||
+              contentType.startsWith('application/xml') ||
+              contentType == 'application/javascript' ||
+              contentType == 'text/x-java-source' ||
+              path.endsWith('.java') ||
+              path.endsWith('.kt') ||
+              path.endsWith('.dart') ||
+              path.endsWith('.py') ||
+              path.endsWith('.js') ||
+              path.endsWith('.ts') ||
+              path.endsWith('.c') ||
+              path.endsWith('.cpp') ||
+              path.endsWith('.h') ||
+              path.endsWith('.cs') ||
+              path.endsWith('.go') ||
+              path.endsWith('.rs') ||
+              path.endsWith('.rb') ||
+              path.endsWith('.php') ||
+              path.endsWith('.sh') ||
+              path.endsWith('.md') ||
+              path.endsWith('.txt') ||
+              path.endsWith('.xml') ||
+              path.endsWith('.gradle') ||
+              path.endsWith('.properties') ||
+              path.endsWith('.sql') ||
+              path.endsWith('.json') ||
+              path.endsWith('.yaml') ||
+              path.endsWith('.yml'));
 
       if (isRawTextOrCode && !isPdfOrStaticFile) {
         setState(() {

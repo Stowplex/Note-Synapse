@@ -12,6 +12,7 @@ import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
 import '../../models/generation_context.dart';
+import '../../utils/synapse_temp_utils.dart';
 
 /// Gemini model implementation
 class GeminiModel implements AIModel {
@@ -668,9 +669,60 @@ class GeminiModel implements AIModel {
 
             for (final part in parts) {
               if (part is Map<String, dynamic>) {
+                // Skip thought parts
+                if (part['thought'] == true) {
+                  continue;
+                }
+
+                // Handle text
                 final text = part['text'];
                 if (text is String && text.isNotEmpty) {
                   buffer.write(text);
+                }
+
+                // Handle executableCode
+                final executableCode = part['executableCode'];
+                if (executableCode is Map<String, dynamic>) {
+                  final language = executableCode['language'] ?? 'python';
+                  final code = executableCode['code'] ?? '';
+                  buffer.writeln('\n```${language.toString().toLowerCase()}');
+                  buffer.writeln(code);
+                  buffer.writeln('```\n');
+                }
+
+                // Handle codeExecutionResult
+                final codeExecutionResult = part['codeExecutionResult'];
+                if (codeExecutionResult is Map<String, dynamic>) {
+                  final outcome = codeExecutionResult['outcome'];
+                  final output = codeExecutionResult['output'] ?? '';
+                  buffer.writeln('\n> **Execution Result ($outcome):**');
+                  buffer.writeln('> ```text');
+                  buffer.writeln('> $output');
+                  buffer.writeln('> ```\n');
+                }
+
+                // Handle inline_data
+                final inlineData = part['inlineData'];
+                if (inlineData is Map<String, dynamic>) {
+                  final mimeType = inlineData['mimeType'] as String?;
+                  final data = inlineData['data'] as String?;
+
+                  if (mimeType != null && data != null) {
+                    // Check if it's an image
+                    if (mimeType.startsWith('image/')) {
+                      try {
+                        // Save to temp file and get URI
+                        final result = await SynapseTempUtils.saveTempData(
+                          mimeType: mimeType,
+                          base64Data: data,
+                        );
+                        buffer.writeln('\n![Generated Image](${result.uri})\n');
+                      } catch (e) {
+                        LoggerService.error('Failed to save inline image: $e');
+                        buffer.writeln('\n[Image generation failed]\n');
+                      }
+                    }
+                  }
                 }
               } else if (part is String && part.isNotEmpty) {
                 buffer.write(part);
