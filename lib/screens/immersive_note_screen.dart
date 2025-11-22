@@ -1251,40 +1251,61 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 _buildToolExecutionIndicator(),
                 Row(
                   children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.brush,
-                        color: _isPenMode ? theme.colorScheme.primary : null,
-                      ),
-                      tooltip: l10n.annotate,
-                      onPressed: () {
-                        setState(() {
-                          _isPenMode = !_isPenMode;
-                          _penStrokePoints.clear();
-                        });
-                      },
-                    ),
-                    IconButton(
-                      icon: Badge(
-                        isLabelVisible: _isScratchpadDirty,
-                        smallSize: 8,
-                        child: Icon(
-                          _isScratchpadMode
-                              ? Icons.description
-                              : Icons.description_outlined,
-                          color: _isScratchpadMode
-                              ? theme.colorScheme.primary
-                              : null,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.brush,
+                            color: _isPenMode
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: l10n.annotate,
+                          iconSize: 20,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPenMode = !_isPenMode;
+                              _penStrokePoints.clear();
+                            });
+                          },
                         ),
-                      ),
-                      tooltip: 'Scratchpad', // TODO: l10n
-                      onPressed: () {
-                        setState(() {
-                          _isScratchpadMode = !_isScratchpadMode;
-                          // Do not auto-expand panel
-                        });
-                      },
+                        const SizedBox(height: 4),
+                        IconButton(
+                          icon: Badge(
+                            isLabelVisible: _isScratchpadDirty,
+                            smallSize: 6,
+                            child: Icon(
+                              _isScratchpadMode
+                                  ? Icons.description
+                                  : Icons.description_outlined,
+                              color: _isScratchpadMode
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                          tooltip: 'Scratchpad', // TODO: l10n
+                          iconSize: 20,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isScratchpadMode = !_isScratchpadMode;
+                              // Do not auto-expand panel
+                            });
+                          },
+                        ),
+                      ],
                     ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: _messageController,
