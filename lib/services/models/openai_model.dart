@@ -187,7 +187,6 @@ class OpenAIModel implements AIModel {
       final modelFeatures =
           context.getValue<List<String>>('modelFeatures') ?? [];
       if (modelFeatures.isNotEmpty) {
-        final toolsList = <Map<String, dynamic>>[];
         for (final feature in modelFeatures) {
           if (feature == 'web_search') {
             requestBody['web_search_options'] = {};
