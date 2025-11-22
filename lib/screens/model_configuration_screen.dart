@@ -166,9 +166,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _endpointController.text = preset.endpoint ?? '';
       _modelNameController.text = preset.modelName ?? '';
       // Don't overwrite display name if user has already typed something, unless it was empty
-      if (_displayNameController.text.isEmpty) {
-        _displayNameController.text = preset.displayName ?? '';
-      }
+      _displayNameController.text = preset.displayName ?? '';
       _maxInputTokensController.text = preset.maxInputTokens?.toString() ?? '';
       _maxOutputTokensController.text =
           preset.maxOutputTokens?.toString() ?? '';
