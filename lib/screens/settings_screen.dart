@@ -499,13 +499,15 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                                 decoration: BoxDecoration(
                                   color: Theme.of(
                                     context,
-                                  ).primaryColor.withOpacity(0.1),
+                                  ).colorScheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   'Active',
                                   style: TextStyle(
-                                    color: Theme.of(context).primaryColor,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
