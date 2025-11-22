@@ -1728,8 +1728,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               !contentType.startsWith('application/javascript'));
 
       final isRawTextOrCode =
-          (contentType != 'text/html' &&
-              !contentType.startsWith('text/html;')) &&
+          !contentType.startsWith('text/html') &&
           (contentType.startsWith('text/') ||
               contentType == 'application/json' ||
               contentType.startsWith('application/xml') ||

@@ -55,7 +55,7 @@ class ConversationChatScreen extends StatefulWidget {
 }
 
 class _ConversationChatScreenState extends State<ConversationChatScreen>
-    with NoteActionMixin<ConversationChatScreen> {
+    with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -97,8 +97,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMcpEndpoints();
     _loadIterationPreference();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh model features when app resumes (e.g., after model configuration change)
+      _loadModelFeatures();
+    }
   }
 
   @override
@@ -153,10 +162,17 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       await _loadAiTools();
       if (mounted) {
         // Initialize model features from config
-
+        _loadModelFeatures();
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _loadModelFeatures() {
+    // Clear selected features when model changes - user must explicitly toggle them on
+    setState(() {
+      _selectedModelFeatures.clear();
+    });
   }
 
   Future<void> _loadMcpEndpoints() async {
@@ -2456,6 +2472,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resolveIterationPrompt(null);
     _messageController.dispose();
     _scrollController.dispose();

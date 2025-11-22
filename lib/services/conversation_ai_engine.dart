@@ -28,12 +28,13 @@ class ConversationAiResponse {
   final Map<String, dynamic>? metadata;
 }
 
-typedef ToolExecutionCallback = Future<String> Function(
-  String serviceName,
-  String toolName,
-  Map<String, dynamic> params,
-  GenerationContext generationContext,
-);
+typedef ToolExecutionCallback =
+    Future<String> Function(
+      String serviceName,
+      String toolName,
+      Map<String, dynamic> params,
+      GenerationContext generationContext,
+    );
 
 typedef CancellationCheck = bool Function();
 typedef IterationsExhaustedHandler = Future<int?> Function(int exhaustedLimit);
@@ -55,12 +56,9 @@ class ConversationAiEngine {
       throw const ConversationCancelledException();
     }
 
+    // Use withoutTools path only if we have no tools AND no model features
     if (!enableTools || activeTools.isEmpty) {
-      return _generateWithoutTools(
-        request,
-        isCancelled,
-        generationContext,
-      );
+      return _generateWithoutTools(request, isCancelled, generationContext);
     }
 
     return _generateWithTools(
@@ -194,11 +192,9 @@ class ConversationAiEngine {
         LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
         final response = await ModelSelector.instance
-            .generateWithToolsAndMessages(
-          currentMessages,
-          [callToolFunction],
-          generationContext: generationContext,
-        );
+            .generateWithToolsAndMessages(currentMessages, [
+              callToolFunction,
+            ], generationContext: generationContext);
 
         if (isCancelled()) {
           throw const ConversationCancelledException();
@@ -252,8 +248,12 @@ class ConversationAiEngine {
             LoggerService.debug('Tool parameters', error: params);
 
             try {
-            final result =
-                await executeTool(serviceName, toolName, params, generationContext);
+              final result = await executeTool(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
               final toolSummary =
                   'Tool: $serviceName.$toolName\nResult: $result';
               toolResults.add(toolSummary);

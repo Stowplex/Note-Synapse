@@ -172,6 +172,18 @@ class OpenAIModel implements AIModel {
             maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
       };
 
+      // Add model features if present
+      final modelFeatures =
+          context.getValue<List<String>>('modelFeatures') ?? [];
+      if (modelFeatures.isNotEmpty) {
+        final toolsList = <Map<String, dynamic>>[];
+        for (final feature in modelFeatures) {
+          if (feature == 'web_search') {
+	    requestBody['web_search_options'] = {};
+          }
+        }
+      }
+
       return await _makeOpenAiRequest(requestBody, actualRequestId);
     }, requestId: actualRequestId);
   }
@@ -213,6 +225,17 @@ class OpenAIModel implements AIModel {
             .map((tool) => {'type': 'function', 'function': tool})
             .toList();
         requestBody['tool_choice'] = 'auto';
+      }
+
+      // Add model features if present
+      final modelFeatures =
+          context.getValue<List<String>>('modelFeatures') ?? [];
+      if (modelFeatures.isNotEmpty) {
+        for (final feature in modelFeatures) {
+          if (feature == 'web_search') {
+	    requestBody['web_search_options'] = {};
+          }
+        }
       }
 
       return await _makeOpenAiRequestWithTools(requestBody, actualRequestId);

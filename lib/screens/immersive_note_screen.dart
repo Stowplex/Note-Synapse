@@ -68,7 +68,10 @@ class ImmersiveNoteScreen extends StatefulWidget {
 }
 
 class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
-    with TickerProviderStateMixin, NoteActionMixin<ImmersiveNoteScreen> {
+    with
+        TickerProviderStateMixin,
+        NoteActionMixin<ImmersiveNoteScreen>,
+        WidgetsBindingObserver {
   final ConversationService _conversationService = ConversationService();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
@@ -150,6 +153,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initialNotesById = {for (final note in widget.notes) note.id: note};
     _noteOrder = widget.notes.map((note) => note.id).toList();
     _conversationNotes = List<Note>.from(widget.notes);
@@ -187,7 +191,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
       _loadMcpEndpoints();
       _loadAiTools();
+      _loadModelFeatures();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh model features when app resumes (e.g., after model configuration change)
+      _loadModelFeatures();
+    }
   }
 
   Future<void> _loadIterationPreference() async {
@@ -200,6 +213,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resolveIterationPrompt(null);
     _messageController.dispose();
     _chatScrollController.dispose();
@@ -296,17 +310,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  void _loadModelFeatures() {
+    // Clear selected features when model changes - user must explicitly toggle them on
+    if (mounted) {
+      setState(() {
+        _selectedModelFeatures.clear();
+      });
+    }
+  }
+
   /// Create conversation when first message is sent
   Future<void> _initializeConversation() async {
     if (_conversation != null) return;
-
-    // Initialize model features from config
-    final modelConfig = context.read<AppProvider>().modelConfig;
-    if (modelConfig?.modelFeatures != null) {
-      setState(() {
-        _selectedModelFeatures.addAll(modelConfig!.modelFeatures!);
-      });
-    }
 
     try {
       final noteIds = List<String>.from(_noteOrder);
@@ -3092,10 +3107,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final activeTools = _buildActiveToolsMap();
 
+    // Add model features to generation context
+    if (_selectedModelFeatures.isNotEmpty) {
+      generationContext.setValue(
+        'modelFeatures',
+        _selectedModelFeatures.toList(),
+      );
+    }
+
     final response = await _aiEngine.generate(
       request: request,
       activeTools: activeTools,
-      enableTools: activeTools.isNotEmpty,
+      enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
           if (_aiToolBundles.containsKey(serviceName)) {
