@@ -695,10 +695,11 @@ class GeminiModel implements AIModel {
                 if (codeExecutionResult is Map<String, dynamic>) {
                   final outcome = codeExecutionResult['outcome'];
                   final output = codeExecutionResult['output'] ?? '';
-                  buffer.writeln('\n> **Execution Result ($outcome):**');
-                  buffer.writeln('> ```text');
-                  buffer.writeln('> $output');
-                  buffer.writeln('> ```\n');
+                  buffer.writeln('```text');
+                  buffer.writeln('Execution Result ($outcome)');
+		  buffer.writeln('---------- OUTPUT -----------');
+                  buffer.writeln('$output');
+                  buffer.writeln('```\n');
                 }
 
                 // Handle inline_data

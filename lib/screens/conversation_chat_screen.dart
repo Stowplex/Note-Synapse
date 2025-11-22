@@ -1345,214 +1345,228 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
             ),
           ),
           // Expandable content
-          if (_isMcpPanelExpanded) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.cloud,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.7),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  l10n.mcpTools,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.8),
-                  ),
-                ),
-                const Spacer(),
-                if (activeMcpCount > 0)
-                  ActiveToolCountBadge(
-                    count: activeMcpCount,
-                    label: l10n.active,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: _availableMcpEndpoints.map((endpoint) {
-                final isSelected = _selectedMcpEndpointIds.contains(
-                  endpoint.id,
-                );
-                return FilterChip(
-                  label: Text(endpoint.name),
-                  selected: isSelected,
-                  onSelected: (selected) async {
-                    setState(() {
-                      if (selected) {
-                        _selectedMcpEndpointIds.add(endpoint.id);
-                      } else {
-                        _selectedMcpEndpointIds.remove(endpoint.id);
-                      }
-                    });
-                    await _updateMcpTools();
-                  },
-                  avatar: Icon(
-                    Icons.cloud,
-                    size: 16,
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(
+          if (_isMcpPanelExpanded)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cloud,
+                          size: 16,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          l10n.mcpTools,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.8),
+                              ),
+                        ),
+                        const Spacer(),
+                        if (activeMcpCount > 0)
+                          ActiveToolCountBadge(
+                            count: activeMcpCount,
+                            label: l10n.active,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: _availableMcpEndpoints.map((endpoint) {
+                        final isSelected = _selectedMcpEndpointIds.contains(
+                          endpoint.id,
+                        );
+                        return FilterChip(
+                          label: Text(endpoint.name),
+                          selected: isSelected,
+                          onSelected: (selected) async {
+                            setState(() {
+                              if (selected) {
+                                _selectedMcpEndpointIds.add(endpoint.id);
+                              } else {
+                                _selectedMcpEndpointIds.remove(endpoint.id);
+                              }
+                            });
+                            await _updateMcpTools();
+                          },
+                          avatar: Icon(
+                            Icons.cloud,
+                            size: 16,
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    if (_aiToolBundles.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.aiTools,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeLocalCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeLocalCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _aiToolBundles.entries.map((entry) {
+                          final serviceName = entry.key;
+                          final bundle = entry.value;
+                          final selected = _selectedAiToolServices.contains(
+                            serviceName,
+                          );
+                          return FilterChip(
+                            label: Text(bundle.displayName),
+                            selected: selected,
+                            onSelected: (value) {
+                              _toggleAiToolService(serviceName, value);
+                            },
+                            avatar: Icon(
+                              Icons.smart_toy,
+                              size: 16,
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (modelConfig?.modelFeatures != null &&
+                        modelConfig!.modelFeatures!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.stars,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.modelFeatures,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeModelFeaturesCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeModelFeaturesCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: modelConfig.modelFeatures!.map((feature) {
+                          final isSelected = _selectedModelFeatures.contains(
+                            feature,
+                          );
+                          String label = feature;
+                          if (feature == 'google_search') {
+                            label = l10n.featureGoogleSearch;
+                          } else if (feature == 'code_execution') {
+                            label = l10n.featureCodeExecution;
+                          } else if (feature == 'web_search') {
+                            label = l10n.featureWebSearch;
+                          }
+
+                          return FilterChip(
+                            label: Text(label),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedModelFeatures.add(feature);
+                                } else {
+                                  _selectedModelFeatures.remove(feature);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              Icons.stars,
+                              size: 16,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (combinedTools.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        l10n.toolsAvailable(
+                          combinedTools.values.fold<int>(
+                            0,
+                            (sum, tools) => sum + tools.length,
+                          ),
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
                             context,
                           ).colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                );
-              }).toList(),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            if (_aiToolBundles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy,
-                    size: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.aiTools,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeLocalCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeLocalCount,
-                      label: l10n.active,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _aiToolBundles.entries.map((entry) {
-                  final serviceName = entry.key;
-                  final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(
-                    serviceName,
-                  );
-                  return FilterChip(
-                    label: Text(bundle.displayName),
-                    selected: selected,
-                    onSelected: (value) {
-                      _toggleAiToolService(serviceName, value);
-                    },
-                    avatar: Icon(
-                      Icons.smart_toy,
-                      size: 16,
-                      color: selected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (modelConfig?.modelFeatures != null &&
-                modelConfig!.modelFeatures!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.stars,
-                    size: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.modelFeatures,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeModelFeaturesCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeModelFeaturesCount,
-                      label: l10n.active,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: modelConfig.modelFeatures!.map((feature) {
-                  final isSelected = _selectedModelFeatures.contains(feature);
-                  String label = feature;
-                  if (feature == 'google_search') {
-                    label = l10n.featureGoogleSearch;
-                  } else if (feature == 'code_execution') {
-                    label = l10n.featureCodeExecution;
-                  } else if (feature == 'web_search') {
-                    label = l10n.featureWebSearch;
-                  }
-
-                  return FilterChip(
-                    label: Text(label),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedModelFeatures.add(feature);
-                        } else {
-                          _selectedModelFeatures.remove(feature);
-                        }
-                      });
-                    },
-                    avatar: Icon(
-                      Icons.stars,
-                      size: 16,
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (combinedTools.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                l10n.toolsAvailable(
-                  combinedTools.values.fold<int>(
-                    0,
-                    (sum, tools) => sum + tools.length,
-                  ),
-                ),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.6),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ],
         ],
       ),
     );

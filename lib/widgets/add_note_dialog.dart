@@ -228,6 +228,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     }
 
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
     final titleController = TextEditingController();
 
     final title = await showDialog<String>(
@@ -318,7 +319,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(l10n.noteCreatedSuccessfully(title)),
           backgroundColor: Colors.green,
@@ -329,7 +330,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(l10n.errorCreatingNote(e.toString())),
           backgroundColor: Colors.red,
@@ -341,6 +342,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
   Future<void> _appendContentToExistingNote(Note target) async {
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
       final appProvider = context.read<AppProvider>();
@@ -389,7 +391,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => updatedNote,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
@@ -402,7 +404,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(l10n.errorUpdatingNote(e.toString())),
           backgroundColor: Colors.red,
