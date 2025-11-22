@@ -228,7 +228,6 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     }
 
     final l10n = AppLocalizations.of(context)!;
-    final messenger = ScaffoldMessenger.of(context);
     final titleController = TextEditingController();
 
     final title = await showDialog<String>(
@@ -319,38 +318,22 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
       if (!mounted) return;
 
-      try {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(l10n.noteCreatedSuccessfully(title)),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (_) {
-        // ScaffoldMessenger may be deactivated, ignore
-      }
-
-      Navigator.of(context).pop(AddNoteResult.created([newNote]));
+      Navigator.of(context).pop(
+        AddNoteResult.created([
+          newNote,
+        ], successMessage: l10n.noteCreatedSuccessfully(title)),
+      );
     } catch (e) {
       if (!mounted) return;
 
-      try {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(l10n.errorCreatingNote(e.toString())),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } catch (_) {
-        // ScaffoldMessenger may be deactivated, ignore
-      }
-      Navigator.of(context).pop();
+      Navigator.of(
+        context,
+      ).pop(AddNoteResult.error(l10n.errorCreatingNote(e.toString())));
     }
   }
 
   Future<void> _appendContentToExistingNote(Note target) async {
     final l10n = AppLocalizations.of(context)!;
-    final messenger = ScaffoldMessenger.of(context);
 
     try {
       final appProvider = context.read<AppProvider>();
@@ -399,34 +382,19 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => updatedNote,
       );
 
-      try {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
+      Navigator.of(context).pop(
+        AddNoteResult.appended(
+          refreshedNote,
+          successMessage:
               '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (_) {
-        // ScaffoldMessenger may be deactivated, ignore
-      }
-
-      Navigator.of(context).pop(AddNoteResult.appended(refreshedNote));
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
 
-      try {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(l10n.errorUpdatingNote(e.toString())),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } catch (_) {
-        // ScaffoldMessenger may be deactivated, ignore
-      }
-      Navigator.of(context).pop();
+      Navigator.of(
+        context,
+      ).pop(AddNoteResult.error(l10n.errorUpdatingNote(e.toString())));
     }
   }
 

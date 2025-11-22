@@ -25,12 +25,24 @@ mixin NoteActionMixin<T extends StatefulWidget> on State<T> {
 
       final l10n = AppLocalizations.of(context)!;
 
+      // Handle error result
+      if (result.isError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       if (result.isAppend) {
         final appendedNote = result.appendedNote!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
+              result.successMessage ??
+                  '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
             ),
             backgroundColor: Colors.green,
             action: SnackBarAction(
@@ -51,9 +63,11 @@ mixin NoteActionMixin<T extends StatefulWidget> on State<T> {
       if (result.hasCreatedNotes) {
         final createdNotes = result.createdNotes;
         final firstNote = createdNotes.first;
-        final message = createdNotes.length == 1
-            ? l10n.noteCreatedSuccessfully(firstNote.title)
-            : l10n.multipleNotesCreatedSuccessfully(createdNotes.length);
+        final message =
+            result.successMessage ??
+            (createdNotes.length == 1
+                ? l10n.noteCreatedSuccessfully(firstNote.title)
+                : l10n.multipleNotesCreatedSuccessfully(createdNotes.length));
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

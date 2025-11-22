@@ -584,12 +584,24 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
       if (!mounted || result == null) return;
 
+      // Handle error result
+      if (result.isError) {
+        ScaffoldMessenger.of(currentContext).showSnackBar(
+          SnackBar(
+            content: Text(result.errorMessage!),
+            backgroundColor: Theme.of(currentContext).colorScheme.error,
+          ),
+        );
+        return;
+      }
+
       if (result.isAppend) {
         final appendedNote = result.appendedNote!;
         ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
             content: Text(
-              '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
+              result.successMessage ??
+                  '${l10n.contentAppendedSuccessfully} "${appendedNote.title}"',
             ),
             backgroundColor: Colors.green,
             action: SnackBarAction(
@@ -609,15 +621,13 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
 
       if (result.hasCreatedNotes) {
         final createdNotes = result.createdNotes;
+        final message =
+            result.successMessage ??
+            (createdNotes.length == 1
+                ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
+                : l10n.multipleNotesCreatedSuccessfully(createdNotes.length));
         ScaffoldMessenger.of(currentContext).showSnackBar(
-          SnackBar(
-            content: Text(
-              createdNotes.length == 1
-                  ? l10n.noteCreatedSuccessfully(createdNotes.first.title)
-                  : l10n.multipleNotesCreatedSuccessfully(createdNotes.length),
-            ),
-            backgroundColor: Colors.green,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
