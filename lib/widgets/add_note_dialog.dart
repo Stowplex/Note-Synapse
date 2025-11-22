@@ -319,23 +319,31 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
       if (!mounted) return;
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(l10n.noteCreatedSuccessfully(title)),
-          backgroundColor: Colors.green,
-        ),
-      );
+      try {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(l10n.noteCreatedSuccessfully(title)),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (_) {
+        // ScaffoldMessenger may be deactivated, ignore
+      }
 
       Navigator.of(context).pop(AddNoteResult.created([newNote]));
     } catch (e) {
       if (!mounted) return;
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(l10n.errorCreatingNote(e.toString())),
-          backgroundColor: Colors.red,
-        ),
-      );
+      try {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorCreatingNote(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } catch (_) {
+        // ScaffoldMessenger may be deactivated, ignore
+      }
       Navigator.of(context).pop();
     }
   }
@@ -391,25 +399,33 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => updatedNote,
       );
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
+      try {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
+        );
+      } catch (_) {
+        // ScaffoldMessenger may be deactivated, ignore
+      }
 
       Navigator.of(context).pop(AddNoteResult.appended(refreshedNote));
     } catch (e) {
       if (!mounted) return;
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(l10n.errorUpdatingNote(e.toString())),
-          backgroundColor: Colors.red,
-        ),
-      );
+      try {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorUpdatingNote(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } catch (_) {
+        // ScaffoldMessenger may be deactivated, ignore
+      }
       Navigator.of(context).pop();
     }
   }
