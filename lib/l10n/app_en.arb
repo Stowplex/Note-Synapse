@@ -812,6 +812,10 @@
   "appTypeAiTool": "AI Tool",
   "aiToolAppSubtitle": "Expose custom JavaScript functions that the AI can call or you can test in a playground",
   "aiTools": "AI Tools",
+  "modelFeatures": "Model Features",
+  "featureGoogleSearch": "Google Search",
+  "featureCodeExecution": "Code Execution",
+  "featureWebSearch": "Web Search",
   "aiToolStartError": "Failed to start AI tool \"{appName}\": {error}",
   "@aiToolStartError": {
     "placeholders": {

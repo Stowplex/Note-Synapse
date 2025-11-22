@@ -89,6 +89,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
   ToolIterationPrompt? _iterationPrompt;
 
+  // Model Features support
+  final Set<String> _selectedModelFeatures = {};
+
   bool _hasInitialized = false;
 
   @override
@@ -149,6 +152,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     } finally {
       await _loadAiTools();
       if (mounted) {
+        // Initialize model features from config
+
         setState(() => _isLoading = false);
       }
     }
@@ -806,11 +811,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         throw const ConversationCancelledException();
       }
 
-      final activeTools = _buildActiveToolsMap();
-      final response = await _aiEngine.generate(
+      // Add model features to generation context
+      if (_selectedModelFeatures.isNotEmpty) {
+        generationContext.setValue(
+          'modelFeatures',
+          _selectedModelFeatures.toList(),
+        );
+      }
+
+      final aiResponse = await _aiEngine.generate(
         request: request,
-        activeTools: activeTools,
-        enableTools: activeTools.isNotEmpty,
+        activeTools: _buildActiveToolsMap(),
+        enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
             if (_aiToolBundles.containsKey(serviceName)) {
@@ -837,7 +849,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         throw const ConversationCancelledException();
       }
 
-      return response;
+      return aiResponse;
     } on ConversationCancelledException {
       rethrow;
     } catch (e, stackTrace) {
@@ -1271,8 +1283,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final combinedTools = _buildActiveToolsMap();
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
-    final totalActiveCount = activeMcpCount + activeLocalCount;
+    final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final totalActiveCount =
+        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
     final headerTitle = l10n.mcpAndLocalTools;
+
+    // Get current model config to check for features
+    final appProvider = context.read<AppProvider>();
+    final modelConfig = appProvider.modelConfig;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1287,52 +1305,41 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header - clickable to toggle expansion
           InkWell(
             onTap: () {
               setState(() {
                 _isMcpPanelExpanded = !_isMcpPanelExpanded;
               });
             },
-            borderRadius: BorderRadius.circular(8),
             child: Row(
               children: [
                 Icon(
-                  Icons.cloud_sync,
+                  Icons.extension,
                   size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.7),
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   headerTitle,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.8),
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                if (totalActiveCount > 0) ...[
-                  const SizedBox(width: 8),
+                const Spacer(),
+                if (totalActiveCount > 0)
                   ActiveToolCountBadge(
                     count: totalActiveCount,
                     label: l10n.active,
                   ),
-                ],
-                const Spacer(),
-                // Chevron icon that rotates based on expansion state
-                AnimatedRotation(
-                  turns: _isMcpPanelExpanded ? 0 : 0.5,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
+                const SizedBox(width: 8),
+                Icon(
+                  _isMcpPanelExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  size: 20,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
                 ),
               ],
             ),
@@ -1449,6 +1456,76 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                       Icons.smart_toy,
                       size: 16,
                       color: selected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            if (modelConfig?.modelFeatures != null &&
+                modelConfig!.modelFeatures!.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    Icons.stars,
+                    size: 16,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    l10n.modelFeatures,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (activeModelFeaturesCount > 0)
+                    ActiveToolCountBadge(
+                      count: activeModelFeaturesCount,
+                      label: l10n.active,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: modelConfig.modelFeatures!.map((feature) {
+                  final isSelected = _selectedModelFeatures.contains(feature);
+                  String label = feature;
+                  if (feature == 'google_search') {
+                    label = l10n.featureGoogleSearch;
+                  } else if (feature == 'code_execution') {
+                    label = l10n.featureCodeExecution;
+                  } else if (feature == 'web_search') {
+                    label = l10n.featureWebSearch;
+                  }
+
+                  return FilterChip(
+                    label: Text(label),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedModelFeatures.add(feature);
+                        } else {
+                          _selectedModelFeatures.remove(feature);
+                        }
+                      });
+                    },
+                    avatar: Icon(
+                      Icons.stars,
+                      size: 16,
+                      color: isSelected
                           ? Theme.of(context).colorScheme.primary
                           : Theme.of(
                               context,

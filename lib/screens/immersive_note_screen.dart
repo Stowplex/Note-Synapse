@@ -113,6 +113,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
+  final Set<String> _selectedModelFeatures = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
 
@@ -298,6 +299,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   /// Create conversation when first message is sent
   Future<void> _initializeConversation() async {
     if (_conversation != null) return;
+
+    // Initialize model features from config
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    if (modelConfig?.modelFeatures != null) {
+      setState(() {
+        _selectedModelFeatures.addAll(modelConfig!.modelFeatures!);
+      });
+    }
 
     try {
       final noteIds = List<String>.from(_noteOrder);
@@ -1428,7 +1437,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final combinedTools = _buildActiveToolsMap();
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
-    final totalActiveCount = activeMcpCount + activeLocalCount;
+    final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final totalActiveCount =
+        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
@@ -1557,6 +1568,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         }).toList(),
                       ),
                     ],
+
                     if (_aiToolBundles.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Row(
@@ -1611,6 +1623,89 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                           );
                         }).toList(),
+                      ),
+                    ],
+                    // Model Features Section
+                    if (context
+                                .read<AppProvider>()
+                                .modelConfig
+                                ?.modelFeatures !=
+                            null &&
+                        context
+                            .read<AppProvider>()
+                            .modelConfig!
+                            .modelFeatures!
+                            .isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.extension,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.modelFeatures,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_selectedModelFeatures.isNotEmpty)
+                            ActiveToolCountBadge(
+                              count: _selectedModelFeatures.length,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: context
+                            .read<AppProvider>()
+                            .modelConfig!
+                            .modelFeatures!
+                            .map((feature) {
+                              final isSelected = _selectedModelFeatures
+                                  .contains(feature);
+                              return FilterChip(
+                                label: Text(
+                                  feature
+                                      .split('_')
+                                      .map(
+                                        (word) =>
+                                            word[0].toUpperCase() +
+                                            word.substring(1),
+                                      )
+                                      .join(' '),
+                                ),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedModelFeatures.add(feature);
+                                    } else {
+                                      _selectedModelFeatures.remove(feature);
+                                    }
+                                  });
+                                },
+                                avatar: Icon(
+                                  Icons.extension,
+                                  size: 16,
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withOpacity(
+                                          0.6,
+                                        ),
+                                ),
+                              );
+                            })
+                            .toList(),
                       ),
                     ],
                     if (combinedTools.isNotEmpty) ...[

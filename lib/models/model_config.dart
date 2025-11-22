@@ -13,6 +13,7 @@ class ModelConfig {
   final int? maxOutputTokens;
   final ModelCapabilities? customCapabilitiesObject;
   final List<String>? supportedAttachmentMimeTypes;
+  final List<String>? modelFeatures;
   final bool isConfigured;
 
   ModelConfig({
@@ -25,22 +26,26 @@ class ModelConfig {
     this.maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
     List<String>? supportedAttachmentMimeTypes,
+    List<String>? modelFeatures,
     this.isConfigured = false,
-  })  : customCapabilitiesObject = customCapabilitiesObject ??
-      const ModelCapabilities(
-        maxInputTokens: 100000,
-        maxOutputTokens: 4000,
-        supportsImages: false,
-        supportsDocuments: false,
-        supportsAudio: false,
-        supportsVideo: false,
-      ),
-      supportedAttachmentMimeTypes =
-          supportedAttachmentMimeTypes == null
-              ? null
-              : List.unmodifiable(
-                  supportedAttachmentMimeTypes.map((m) => m.trim()).toList(),
-                );
+  }) : customCapabilitiesObject =
+           customCapabilitiesObject ??
+           const ModelCapabilities(
+             maxInputTokens: 100000,
+             maxOutputTokens: 4000,
+             supportsImages: false,
+             supportsDocuments: false,
+             supportsAudio: false,
+             supportsVideo: false,
+           ),
+       supportedAttachmentMimeTypes = supportedAttachmentMimeTypes == null
+           ? null
+           : List.unmodifiable(
+               supportedAttachmentMimeTypes.map((m) => m.trim()).toList(),
+             ),
+       modelFeatures = modelFeatures == null
+           ? null
+           : List.unmodifiable(modelFeatures.map((f) => f.trim()).toList());
 
   /// Create a copy with updated values
   ModelConfig copyWith({
@@ -53,6 +58,7 @@ class ModelConfig {
     int? maxOutputTokens,
     ModelCapabilities? customCapabilitiesObject,
     List<String>? supportedAttachmentMimeTypes,
+    List<String>? modelFeatures,
     bool? isConfigured,
   }) {
     return ModelConfig(
@@ -67,6 +73,7 @@ class ModelConfig {
           customCapabilitiesObject ?? this.customCapabilitiesObject,
       supportedAttachmentMimeTypes:
           supportedAttachmentMimeTypes ?? this.supportedAttachmentMimeTypes,
+      modelFeatures: modelFeatures ?? this.modelFeatures,
       isConfigured: isConfigured ?? this.isConfigured,
     );
   }
@@ -83,6 +90,7 @@ class ModelConfig {
       'maxOutputTokens': maxOutputTokens,
       'customCapabilitiesObject': customCapabilitiesObject?.toJson(),
       'supportedAttachmentMimeTypes': supportedAttachmentMimeTypes,
+      'modelFeatures': modelFeatures,
       'isConfigured': isConfigured,
     };
   }
@@ -104,6 +112,9 @@ class ModelConfig {
           (json['supportedAttachmentMimeTypes'] as List?)
               ?.whereType<String>()
               .toList(),
+      modelFeatures: (json['modelFeatures'] as List?)
+          ?.whereType<String>()
+          .toList(),
       isConfigured: json['isConfigured'] as bool? ?? false,
     );
   }
@@ -116,34 +127,36 @@ class ModelConfig {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-  
+
     return other is ModelConfig &&
-      other.type == type &&
-      other.apiKey == apiKey &&
-      other.endpoint == endpoint &&
-      other.modelName == modelName &&
-      other.displayName == displayName &&
-      other.maxInputTokens == maxInputTokens &&
-      other.maxOutputTokens == maxOutputTokens &&
-      other.customCapabilitiesObject == customCapabilitiesObject &&
-      listEquals(
-        other.supportedAttachmentMimeTypes,
-        supportedAttachmentMimeTypes,
-      ) &&
-      other.isConfigured == isConfigured;
+        other.type == type &&
+        other.apiKey == apiKey &&
+        other.endpoint == endpoint &&
+        other.modelName == modelName &&
+        other.displayName == displayName &&
+        other.maxInputTokens == maxInputTokens &&
+        other.maxOutputTokens == maxOutputTokens &&
+        other.customCapabilitiesObject == customCapabilitiesObject &&
+        listEquals(
+          other.supportedAttachmentMimeTypes,
+          supportedAttachmentMimeTypes,
+        ) &&
+        listEquals(other.modelFeatures, modelFeatures) &&
+        other.isConfigured == isConfigured;
   }
 
   @override
   int get hashCode {
     return type.hashCode ^
-      apiKey.hashCode ^
-      endpoint.hashCode ^
-      modelName.hashCode ^
-      displayName.hashCode ^
-      maxInputTokens.hashCode ^
-      maxOutputTokens.hashCode ^
-      customCapabilitiesObject.hashCode ^
-      Object.hashAll(supportedAttachmentMimeTypes ?? const []) ^
-      isConfigured.hashCode;
+        apiKey.hashCode ^
+        endpoint.hashCode ^
+        modelName.hashCode ^
+        displayName.hashCode ^
+        maxInputTokens.hashCode ^
+        maxOutputTokens.hashCode ^
+        customCapabilitiesObject.hashCode ^
+        Object.hashAll(supportedAttachmentMimeTypes ?? const []) ^
+        Object.hashAll(modelFeatures ?? const []) ^
+        isConfigured.hashCode;
   }
 }

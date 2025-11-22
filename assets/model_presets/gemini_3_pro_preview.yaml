@@ -26,3 +26,6 @@ supported_attachment_mime_types:
   - video/mp4
   - video/webm
 warn_premium: true
+model_features:
+  - google_search
+  - code_execution

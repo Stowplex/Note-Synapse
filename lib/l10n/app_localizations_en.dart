@@ -2470,6 +2470,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiTools => 'AI Tools';
 
   @override
+  String get modelFeatures => 'Model Features';
+
+  @override
+  String get featureGoogleSearch => 'Google Search';
+
+  @override
+  String get featureCodeExecution => 'Code Execution';
+
+  @override
+  String get featureWebSearch => 'Web Search';
+
+  @override
   String aiToolStartError(String appName, String error) {
     return 'Failed to start AI tool \"$appName\": $error';
   }

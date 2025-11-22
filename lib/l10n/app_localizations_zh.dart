@@ -2395,6 +2395,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiTools => 'AI 工具';
 
   @override
+  String get modelFeatures => 'Model Features';
+
+  @override
+  String get featureGoogleSearch => 'Google Search';
+
+  @override
+  String get featureCodeExecution => 'Code Execution';
+
+  @override
+  String get featureWebSearch => 'Web Search';
+
+  @override
   String aiToolStartError(String appName, String error) {
     return '无法启动 AI 工具“$appName”：$error';
   }

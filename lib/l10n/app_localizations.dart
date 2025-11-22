@@ -4406,6 +4406,30 @@ abstract class AppLocalizations {
   /// **'AI Tools'**
   String get aiTools;
 
+  /// No description provided for @modelFeatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Features'**
+  String get modelFeatures;
+
+  /// No description provided for @featureGoogleSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Search'**
+  String get featureGoogleSearch;
+
+  /// No description provided for @featureCodeExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Execution'**
+  String get featureCodeExecution;
+
+  /// No description provided for @featureWebSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Search'**
+  String get featureWebSearch;
+
   /// No description provided for @aiToolStartError.
   ///
   /// In en, this message translates to:

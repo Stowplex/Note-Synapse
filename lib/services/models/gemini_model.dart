@@ -141,6 +141,23 @@ class GeminiModel implements AIModel {
         generationConfig: generationConfig,
       );
 
+      // Add model features if present
+      final modelFeatures =
+          context.getValue<List<String>>('modelFeatures') ?? [];
+      if (modelFeatures.isNotEmpty) {
+        final toolsList = <Map<String, dynamic>>[];
+        for (final feature in modelFeatures) {
+          if (feature == 'google_search') {
+            toolsList.add({'googleSearch': {}});
+          } else if (feature == 'code_execution') {
+            toolsList.add({'codeExecution': {}});
+          }
+        }
+        if (toolsList.isNotEmpty) {
+          requestBody['tools'] = toolsList;
+        }
+      }
+
       return await _makeRequest(
         apiKey,
         requestBody,
@@ -226,14 +243,37 @@ class GeminiModel implements AIModel {
         );
 
         // Add tools to request body
-        if (tools.isNotEmpty) {
-          requestBody['tools'] = [
-            {'functionDeclarations': tools},
-          ];
-          // Add toolConfig to enable function calling
-          requestBody['toolConfig'] = {
-            'functionCallingConfig': {'mode': 'VALIDATED'},
-          };
+        final modelFeatures =
+            context.getValue<List<String>>('modelFeatures') ?? [];
+        final hasTools = tools.isNotEmpty;
+        final hasModelFeatures = modelFeatures.isNotEmpty;
+
+        if (hasTools || hasModelFeatures) {
+          final toolsList = <Map<String, dynamic>>[];
+
+          if (hasTools) {
+            toolsList.add({'functionDeclarations': tools});
+          }
+
+          if (hasModelFeatures) {
+            for (final feature in modelFeatures) {
+              if (feature == 'google_search') {
+                toolsList.add({'googleSearch': {}});
+              } else if (feature == 'code_execution') {
+                toolsList.add({'codeExecution': {}});
+              }
+              // Add other features as needed
+            }
+          }
+
+          requestBody['tools'] = toolsList;
+
+          // Add toolConfig to enable function calling if we have function declarations
+          if (hasTools) {
+            requestBody['toolConfig'] = {
+              'functionCallingConfig': {'mode': 'VALIDATED'},
+            };
+          }
         }
 
         // Make request and get raw response

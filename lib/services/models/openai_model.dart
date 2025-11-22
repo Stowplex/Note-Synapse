@@ -20,15 +20,19 @@ class OpenAIModel implements AIModel {
   String get id => _config?.type.id ?? ModelType.openaiCompatible.id;
 
   @override
-  String get name => _config?.displayName ?? ModelType.openaiCompatible.displayName;
+  String get name =>
+      _config?.displayName ?? ModelType.openaiCompatible.displayName;
 
   @override
-  String get description => 'OpenAI compatible API endpoint with configurable capabilities';
+  String get description =>
+      'OpenAI compatible API endpoint with configurable capabilities';
 
   @override
   Future<bool> isReady() async {
     try {
-      final apiKey = _config?.apiKey ?? await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
+      final apiKey =
+          _config?.apiKey ??
+          await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('OpenAIModel: Error checking readiness: $e');
@@ -40,24 +44,34 @@ class OpenAIModel implements AIModel {
   Future<void> initialize({ModelConfig? config}) async {
     if (config != null) {
       _config = config;
-      LoggerService.debug('OpenAI model initialized with provided config', error: {
-        'modelName': config.modelName,
-        'displayName': config.displayName,
-        'supportsImages': config.customCapabilitiesObject?.supportsImages,
-        'supportsDocuments': config.customCapabilitiesObject?.supportsDocuments,
-        'supportsAudio': config.customCapabilitiesObject?.supportsAudio,
-        'supportsVideo': config.customCapabilitiesObject?.supportsVideo,
-      });
+      LoggerService.debug(
+        'OpenAI model initialized with provided config',
+        error: {
+          'modelName': config.modelName,
+          'displayName': config.displayName,
+          'supportsImages': config.customCapabilitiesObject?.supportsImages,
+          'supportsDocuments':
+              config.customCapabilitiesObject?.supportsDocuments,
+          'supportsAudio': config.customCapabilitiesObject?.supportsAudio,
+          'supportsVideo': config.customCapabilitiesObject?.supportsVideo,
+        },
+      );
     } else {
-      _config = await ModelStorageService.getModelConfig(ModelType.openaiCompatible);
-      LoggerService.debug('OpenAI model initialized with stored config', error: {
-        'modelName': _config?.modelName,
-        'displayName': _config?.displayName,
-        'supportsImages': _config?.customCapabilitiesObject?.supportsImages,
-        'supportsDocuments': _config?.customCapabilitiesObject?.supportsDocuments,
-        'supportsAudio': _config?.customCapabilitiesObject?.supportsAudio,
-        'supportsVideo': _config?.customCapabilitiesObject?.supportsVideo,
-      });
+      _config = await ModelStorageService.getModelConfig(
+        ModelType.openaiCompatible,
+      );
+      LoggerService.debug(
+        'OpenAI model initialized with stored config',
+        error: {
+          'modelName': _config?.modelName,
+          'displayName': _config?.displayName,
+          'supportsImages': _config?.customCapabilitiesObject?.supportsImages,
+          'supportsDocuments':
+              _config?.customCapabilitiesObject?.supportsDocuments,
+          'supportsAudio': _config?.customCapabilitiesObject?.supportsAudio,
+          'supportsVideo': _config?.customCapabilitiesObject?.supportsVideo,
+        },
+      );
     }
 
     if (_config?.endpoint == null || _config!.endpoint!.isEmpty) {
@@ -83,33 +97,30 @@ class OpenAIModel implements AIModel {
   }) async {
     final context = generationContext ?? GenerationContext();
     final actualRequestId = context.ensureRequestId();
-    return await _withErrorHandling(
-      'generation with attachments',
-      () async {
-        await initialize(config: _config);
-        final sanitizedAttachments = await _sanitizeAttachments(
-          attachedFiles,
-          actualRequestId,
-        );
+    return await _withErrorHandling('generation with attachments', () async {
+      await initialize(config: _config);
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
 
-        final messageContent = _buildMessageContentWithFiles(
-          prompt,
-          sanitizedAttachments,
-        );
+      final messageContent = _buildMessageContentWithFiles(
+        prompt,
+        sanitizedAttachments,
+      );
 
-        final requestBody = <String, dynamic>{
-          'model': _config!.modelName!,
-          'messages': [
-            {'role': 'user', 'content': messageContent}
-          ],
-          'temperature': 1.0,
-          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-        };
+      final requestBody = <String, dynamic>{
+        'model': _config!.modelName!,
+        'messages': [
+          {'role': 'user', 'content': messageContent},
+        ],
+        'temperature': 1.0,
+        'max_completion_tokens':
+            maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
 
-        return await _makeOpenAiRequest(requestBody, actualRequestId);
-      },
-      requestId: actualRequestId,
-    );
+      return await _makeOpenAiRequest(requestBody, actualRequestId);
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -142,29 +153,27 @@ class OpenAIModel implements AIModel {
   }) async {
     final context = generationContext ?? GenerationContext();
     final actualRequestId = context.ensureRequestId();
-    return await _withErrorHandling(
-      'generation with messages',
-      () async {
-        await initialize(config: _config);
-        final sanitizedMessages = await _sanitizeMessages(
-          messages,
-          actualRequestId,
-        );
+    return await _withErrorHandling('generation with messages', () async {
+      await initialize(config: _config);
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
 
-        final openaiMessages =
-            await _convertMessagesToOpenAIFormat(sanitizedMessages);
+      final openaiMessages = await _convertMessagesToOpenAIFormat(
+        sanitizedMessages,
+      );
 
-        final requestBody = <String, dynamic>{
-          'model': _config!.modelName!,
-          'messages': openaiMessages,
-          'temperature': 1.0,
-          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-        };
+      final requestBody = <String, dynamic>{
+        'model': _config!.modelName!,
+        'messages': openaiMessages,
+        'temperature': 1.0,
+        'max_completion_tokens':
+            maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
 
-        return await _makeOpenAiRequest(requestBody, actualRequestId);
-      },
-      requestId: actualRequestId,
-    );
+      return await _makeOpenAiRequest(requestBody, actualRequestId);
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -180,46 +189,34 @@ class OpenAIModel implements AIModel {
   }) async {
     final context = generationContext ?? GenerationContext();
     final actualRequestId = context.ensureRequestId();
-    return await _withErrorHandling(
-      'generation with tools',
-      () async {
-        await initialize(config: _config);
-        final sanitizedAttachments = await _sanitizeAttachments(
-          attachedFiles,
-          actualRequestId,
-        );
+    return await _withErrorHandling('generation with tools', () async {
+      await initialize(config: _config);
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
 
-        final messageContent = _buildMessageContent(
-          prompt,
-          sanitizedAttachments,
-        );
+      final messageContent = _buildMessageContent(prompt, sanitizedAttachments);
 
-        final requestBody = {
-          'model': _config!.modelName!,
-          'messages': [
-            {'role': 'user', 'content': messageContent}
-          ],
-          'temperature': 1.0,
-          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
-        };
+      final requestBody = {
+        'model': _config!.modelName!,
+        'messages': [
+          {'role': 'user', 'content': messageContent},
+        ],
+        'temperature': 1.0,
+        'max_completion_tokens':
+            maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+      };
 
-        if (tools.isNotEmpty) {
-          requestBody['tools'] = tools
-              .map((tool) => {
-                    'type': 'function',
-                    'function': tool,
-                  })
-              .toList();
-          requestBody['tool_choice'] = 'auto';
-        }
+      if (tools.isNotEmpty) {
+        requestBody['tools'] = tools
+            .map((tool) => {'type': 'function', 'function': tool})
+            .toList();
+        requestBody['tool_choice'] = 'auto';
+      }
 
-        return await _makeOpenAiRequestWithTools(
-          requestBody,
-          actualRequestId,
-        );
-      },
-      requestId: actualRequestId,
-    );
+      return await _makeOpenAiRequestWithTools(requestBody, actualRequestId);
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -243,30 +240,42 @@ class OpenAIModel implements AIModel {
           actualRequestId,
         );
 
-        final openaiMessages =
-            await _convertMessagesToOpenAIFormat(sanitizedMessages);
+        final openaiMessages = await _convertMessagesToOpenAIFormat(
+          sanitizedMessages,
+        );
 
         final requestBody = <String, dynamic>{
           'model': _config!.modelName!,
           'messages': openaiMessages,
           'temperature': 1.0,
-          'max_completion_tokens': maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
+          'max_completion_tokens':
+              maxOutputTokens ?? _config!.maxOutputTokens ?? 8192,
         };
 
         if (tools.isNotEmpty) {
           requestBody['tools'] = tools
-              .map((tool) => {
-                    'type': 'function',
-                    'function': tool,
-                  })
+              .map((tool) => {'type': 'function', 'function': tool})
               .toList();
           requestBody['tool_choice'] = 'auto';
         }
 
-        return await _makeOpenAiRequestWithTools(
-          requestBody,
-          actualRequestId,
-        );
+        // Add model features if present
+        final modelFeatures =
+            context.getValue<List<String>>('modelFeatures') ?? [];
+        if (modelFeatures.isNotEmpty) {
+          final toolsList = requestBody['tools'] as List<dynamic>? ?? [];
+          for (final feature in modelFeatures) {
+            if (feature == 'web_search') {
+              toolsList.add({'type': 'web_search'});
+            }
+          }
+          if (toolsList.isNotEmpty) {
+            requestBody['tools'] = toolsList;
+            // If we only have web_search, we might not need tool_choice auto, but it doesn't hurt
+          }
+        }
+
+        return await _makeOpenAiRequestWithTools(requestBody, actualRequestId);
       },
       requestId: actualRequestId,
     );
@@ -284,20 +293,17 @@ class OpenAIModel implements AIModel {
     for (final message in messages) {
       switch (message.role) {
         case PromptRole.system:
-          openaiMessages.add({
-            'role': 'system',
-            'content': message.content,
-          });
+          openaiMessages.add({'role': 'system', 'content': message.content});
           break;
         case PromptRole.user:
           final content = message.attachments.isEmpty
               ? message.content
-              : _buildMessageContentWithFiles(message.content, message.attachments);
+              : _buildMessageContentWithFiles(
+                  message.content,
+                  message.attachments,
+                );
 
-          openaiMessages.add({
-            'role': 'user',
-            'content': content,
-          });
+          openaiMessages.add({'role': 'user', 'content': content});
           break;
         case PromptRole.assistant:
           final entry = <String, dynamic>{
@@ -316,7 +322,7 @@ class OpenAIModel implements AIModel {
                 'function': {
                   'name': fc['name'] as String,
                   'arguments': jsonEncode(fc['args'] ?? {}),
-                }
+                },
               };
             }).toList();
           }
@@ -324,7 +330,8 @@ class OpenAIModel implements AIModel {
           openaiMessages.add(entry);
           break;
         case PromptRole.tool:
-          final toolCallId = message.metadata?['tool_call_id'] as String? ??
+          final toolCallId =
+              message.metadata?['tool_call_id'] as String? ??
               message.metadata?['id'] as String?;
           if (toolCallId != null) {
             openaiMessages.add({
@@ -333,7 +340,9 @@ class OpenAIModel implements AIModel {
               'content': message.content,
             });
           } else {
-            LoggerService.warning('Tool message missing tool_call_id, skipping');
+            LoggerService.warning(
+              'Tool message missing tool_call_id, skipping',
+            );
           }
           break;
       }
@@ -342,20 +351,23 @@ class OpenAIModel implements AIModel {
     return openaiMessages;
   }
 
-
   // Private helper methods
-
 
   /// Build message content with attachments in OpenAI format
   /// Returns content (string or array of content parts)
-  dynamic _buildMessageContentWithFiles(String prompt, List<PlatformFile> attachedFiles) {
+  dynamic _buildMessageContentWithFiles(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+  ) {
     if (attachedFiles.isEmpty) {
       return prompt;
     }
 
     final capabilities = _config?.customCapabilitiesObject;
     if (capabilities == null) {
-      LoggerService.debug('OpenAI model: No capabilities configured, sending text only');
+      LoggerService.debug(
+        'OpenAI model: No capabilities configured, sending text only',
+      );
       return prompt;
     }
 
@@ -369,27 +381,33 @@ class OpenAIModel implements AIModel {
       final fileName = file.name;
       final extension = FileTypeUtils.getFileExtension(fileName);
       final category = FileTypeUtils.getFileCategory(extension);
-      
-      LoggerService.debug('Processing file for attachment', error: {
-        'fileName': fileName,
-        'extension': extension,
-        'category': category,
-      });
-      
+
+      LoggerService.debug(
+        'Processing file for attachment',
+        error: {
+          'fileName': fileName,
+          'extension': extension,
+          'category': category,
+        },
+      );
+
       // Check if the model supports this type of content AND the specific file format
       bool isSupported = false;
       String? attachmentType;
-      
-      if (category == 'image' && capabilities.supportsImages && 
+
+      if (category == 'image' &&
+          capabilities.supportsImages &&
           capabilities.supportedImageFormats.contains(extension)) {
         isSupported = true;
         attachmentType = 'image';
-      } else if (category == 'audio' && capabilities.supportsAudio && 
-                 capabilities.supportedAudioFormats.contains(extension)) {
+      } else if (category == 'audio' &&
+          capabilities.supportsAudio &&
+          capabilities.supportedAudioFormats.contains(extension)) {
         isSupported = true;
         attachmentType = 'audio';
-      } else if (category == 'document' && capabilities.supportsDocuments && 
-                 capabilities.supportedDocumentFormats.contains(extension)) {
+      } else if (category == 'document' &&
+          capabilities.supportsDocuments &&
+          capabilities.supportedDocumentFormats.contains(extension)) {
         // OpenAI supports document understanding via file_input parameter
         isSupported = true;
         attachmentType = 'document';
@@ -397,10 +415,10 @@ class OpenAIModel implements AIModel {
         // OpenAI doesn't support video in the same way as images yet
         isSupported = false;
       }
-      
+
       if (isSupported && file.bytes != null) {
         supportedFiles.add(fileName);
-        
+
         // Attach file in OpenAI format
         if (attachmentType == 'image') {
           final base64Data = base64Encode(file.bytes!);
@@ -409,37 +427,38 @@ class OpenAIModel implements AIModel {
             Uint8List.fromList(file.bytes!),
             extension: extension.isEmpty ? null : extension,
           );
-          
+
           contentParts.add({
             'type': 'image_url',
-            'image_url': {
-              'url': 'data:$mimeType;base64,$base64Data',
-            }
+            'image_url': {'url': 'data:$mimeType;base64,$base64Data'},
           });
-          
-          LoggerService.debug('Image attached', error: {
-            'fileName': fileName,
-            'mimeType': mimeType,
-            'sizeBytes': file.bytes!.length,
-          });
+
+          LoggerService.debug(
+            'Image attached',
+            error: {
+              'fileName': fileName,
+              'mimeType': mimeType,
+              'sizeBytes': file.bytes!.length,
+            },
+          );
         } else if (attachmentType == 'audio') {
           // OpenAI audio format (for models that support it)
           final base64Data = base64Encode(file.bytes!);
           final audioFormat = extension.replaceAll('.', '');
-          
+
           contentParts.add({
             'type': 'input_audio',
-            'input_audio': {
-              'data': base64Data,
+            'input_audio': {'data': base64Data, 'format': audioFormat},
+          });
+
+          LoggerService.debug(
+            'Audio attached',
+            error: {
+              'fileName': fileName,
               'format': audioFormat,
-            }
-          });
-          
-          LoggerService.debug('Audio attached', error: {
-            'fileName': fileName,
-            'format': audioFormat,
-            'sizeBytes': file.bytes!.length,
-          });
+              'sizeBytes': file.bytes!.length,
+            },
+          );
         } else if (attachmentType == 'document') {
           // OpenAI document format - goes in content array with type "file"
           final base64Data = base64Encode(file.bytes!);
@@ -447,32 +466,35 @@ class OpenAIModel implements AIModel {
             Uint8List.fromList(file.bytes!),
             extension: extension.isEmpty ? null : extension,
           );
-          
+
           // Format as data URI: data:mime/type;base64,{base64data}
           final fileDataUri = 'data:$mimeType;base64,$base64Data';
-          
+
           contentParts.add({
             'type': 'file',
-            'file': {
-              'filename': fileName,
-              'file_data': fileDataUri,
-            }
+            'file': {'filename': fileName, 'file_data': fileDataUri},
           });
-          
-          LoggerService.debug('Document attached', error: {
-            'fileName': fileName,
-            'mimeType': mimeType,
-            'sizeBytes': file.bytes!.length,
-          });
+
+          LoggerService.debug(
+            'Document attached',
+            error: {
+              'fileName': fileName,
+              'mimeType': mimeType,
+              'sizeBytes': file.bytes!.length,
+            },
+          );
         }
       } else {
         unsupportedFiles.add(fileName);
         unsupportedByType.putIfAbsent(category, () => []).add(fileName);
-        LoggerService.debug('File unsupported', error: {
-          'fileName': fileName,
-          'category': category,
-          'reason': file.bytes == null ? 'no bytes' : 'unsupported type',
-        });
+        LoggerService.debug(
+          'File unsupported',
+          error: {
+            'fileName': fileName,
+            'category': category,
+            'reason': file.bytes == null ? 'no bytes' : 'unsupported type',
+          },
+        );
       }
     }
 
@@ -481,20 +503,28 @@ class OpenAIModel implements AIModel {
     if (unsupportedFiles.isNotEmpty) {
       final buffer = StringBuffer();
       buffer.writeln('\n\n--- MODEL LIMITATION NOTICE ---');
-      buffer.writeln('Note: This model has limited file processing capabilities.');
+      buffer.writeln(
+        'Note: This model has limited file processing capabilities.',
+      );
 
       // List unsupported files by category
       unsupportedByType.forEach((category, files) {
-        buffer.writeln('The following $category files cannot be processed with respect to model limitation: ${files.join(', ')}');
+        buffer.writeln(
+          'The following $category files cannot be processed with respect to model limitation: ${files.join(', ')}',
+        );
       });
 
       if (supportedFiles.isNotEmpty) {
-        buffer.writeln('The following files are available for processing: ${supportedFiles.join(', ')}');
+        buffer.writeln(
+          'The following files are available for processing: ${supportedFiles.join(', ')}',
+        );
       }
 
-      buffer.writeln('Please provide your response based on the available information.');
+      buffer.writeln(
+        'Please provide your response based on the available information.',
+      );
       buffer.writeln('--- END NOTICE ---');
-      
+
       limitationNote = buffer.toString();
     }
 
@@ -513,7 +543,10 @@ class OpenAIModel implements AIModel {
   }
 
   /// Build message content with attachments in OpenAI format (alias for backward compatibility)
-  dynamic _buildMessageContent(String prompt, List<PlatformFile> attachedFiles) {
+  dynamic _buildMessageContent(
+    String prompt,
+    List<PlatformFile> attachedFiles,
+  ) {
     return _buildMessageContentWithFiles(prompt, attachedFiles);
   }
 
@@ -566,20 +599,24 @@ class OpenAIModel implements AIModel {
     Future<T> Function() operationFunction, {
     String? requestId,
   }) async {
-    final actualRequestId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
 
     try {
       return await operationFunction();
     } catch (e) {
-      LoggerService.error('Error in $operation', error: {
-        'error': e.toString(),
-        'requestId': actualRequestId,
-      });
+      LoggerService.error(
+        'Error in $operation',
+        error: {'error': e.toString(), 'requestId': actualRequestId},
+      );
       rethrow;
     }
   }
 
-  Future<String> _makeOpenAiRequest(Map<String, dynamic> requestBody, String requestId) async {
+  Future<String> _makeOpenAiRequest(
+    Map<String, dynamic> requestBody,
+    String requestId,
+  ) async {
     final startTime = DateTime.now();
 
     LoggerService.logAiRequest(
@@ -619,27 +656,33 @@ class OpenAIModel implements AIModel {
         final textContent = _extractTextContent(rawContent);
 
         if (textContent != null && textContent.isNotEmpty) {
-          LoggerService.debug('OpenAI API request completed successfully', error: {
-            'responseLength': textContent.length,
-            'requestId': requestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
+          LoggerService.debug(
+            'OpenAI API request completed successfully',
+            error: {
+              'responseLength': textContent.length,
+              'requestId': requestId,
+              'duration': '${duration.inMilliseconds}ms',
+            },
+          );
           return textContent;
         }
       }
-      LoggerService.error('No content in OpenAI API response', error: {
-        'responseData': data,
-        'requestId': requestId,
-      });
+      LoggerService.error(
+        'No content in OpenAI API response',
+        error: {'responseData': data, 'requestId': requestId},
+      );
       throw Exception('No content in OpenAI API response');
     } else {
       LoggerService.logAiError(
-        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        error:
+            'Failed to process request: ${response.statusCode} - ${response.body}',
         endpoint: _config!.endpoint!,
         requestId: requestId,
         duration: duration,
       );
-      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+      throw Exception(
+        'Failed to process request: ${response.statusCode} - ${response.body}',
+      );
     }
   }
 
@@ -691,11 +734,16 @@ class OpenAIModel implements AIModel {
         String? textContent = _extractTextContent(rawContent);
 
         if (toolCalls != null && toolCalls.isNotEmpty) {
-          LoggerService.debug('OpenAI API request completed with tool calls', error: {
-            'toolCalls': toolCalls.map((tc) => tc['function']?['name']).toList(),
-            'requestId': requestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
+          LoggerService.debug(
+            'OpenAI API request completed with tool calls',
+            error: {
+              'toolCalls': toolCalls
+                  .map((tc) => tc['function']?['name'])
+                  .toList(),
+              'requestId': requestId,
+              'duration': '${duration.inMilliseconds}ms',
+            },
+          );
 
           final parsedCalls = toolCalls.map((tc) {
             final fn = tc['function'] as Map<String, dynamic>? ?? const {};
@@ -706,10 +754,7 @@ class OpenAIModel implements AIModel {
             } catch (_) {
               parsedArgs = {};
             }
-            return {
-              'name': fn['name'],
-              'args': parsedArgs,
-            };
+            return {'name': fn['name'], 'args': parsedArgs};
           }).toList();
 
           return {
@@ -721,15 +766,19 @@ class OpenAIModel implements AIModel {
 
         if (functionCall != null) {
           // Legacy function_call fallback
-          LoggerService.debug('OpenAI API request completed with legacy function call', error: {
-            'functionName': functionCall['name'],
-            'requestId': requestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
+          LoggerService.debug(
+            'OpenAI API request completed with legacy function call',
+            error: {
+              'functionName': functionCall['name'],
+              'requestId': requestId,
+              'duration': '${duration.inMilliseconds}ms',
+            },
+          );
 
           Map<String, dynamic> parsedArgs;
           try {
-            parsedArgs = jsonDecode(functionCall['arguments']) as Map<String, dynamic>;
+            parsedArgs =
+                jsonDecode(functionCall['arguments']) as Map<String, dynamic>;
           } catch (_) {
             parsedArgs = {};
           }
@@ -737,21 +786,21 @@ class OpenAIModel implements AIModel {
           return {
             'text': textContent,
             'function_calls': [
-              {
-                'name': functionCall['name'],
-                'args': parsedArgs,
-              }
+              {'name': functionCall['name'], 'args': parsedArgs},
             ],
             'raw_data': data,
           };
         }
 
         if (textContent != null && textContent.isNotEmpty) {
-          LoggerService.debug('OpenAI API request completed with text response', error: {
-            'responseLength': textContent.length,
-            'requestId': requestId,
-            'duration': '${duration.inMilliseconds}ms',
-          });
+          LoggerService.debug(
+            'OpenAI API request completed with text response',
+            error: {
+              'responseLength': textContent.length,
+              'requestId': requestId,
+              'duration': '${duration.inMilliseconds}ms',
+            },
+          );
 
           return {
             'text': textContent,
@@ -761,19 +810,22 @@ class OpenAIModel implements AIModel {
         }
       }
 
-      LoggerService.error('No content in OpenAI API response', error: {
-        'responseData': data,
-        'requestId': requestId,
-      });
+      LoggerService.error(
+        'No content in OpenAI API response',
+        error: {'responseData': data, 'requestId': requestId},
+      );
       throw Exception('No content in OpenAI API response');
     } else {
       LoggerService.logAiError(
-        error: 'Failed to process request: ${response.statusCode} - ${response.body}',
+        error:
+            'Failed to process request: ${response.statusCode} - ${response.body}',
         endpoint: _config!.endpoint!,
         requestId: requestId,
         duration: duration,
       );
-      throw Exception('Failed to process request: ${response.statusCode} - ${response.body}');
+      throw Exception(
+        'Failed to process request: ${response.statusCode} - ${response.body}',
+      );
     }
   }
 }
