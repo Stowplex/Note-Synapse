@@ -23,9 +23,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   Future<void> _loadSelectedModel() async {
     try {
-      final selectedModel = await ModelStorageService.getSelectedModel();
+      final activeModel = await ModelStorageService.getActiveModel();
       setState(() {
-        _selectedModel = selectedModel;
+        _selectedModel = activeModel?.type ?? ModelType.gemini;
       });
     } catch (e) {
       // Use default if loading fails
@@ -49,11 +49,21 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     });
 
     try {
-      // Check if model is already configured
-      final isConfigured = await ModelStorageService.isModelConfigured(_selectedModel!);
-      
+      // Check if any model of this type is already configured
+      final models = await ModelStorageService.getConfiguredModels();
+      final isConfigured = models.any((m) => m.type == _selectedModel);
+
       if (isConfigured) {
         // Model is already configured, proceed to main app
+        // We might want to ensure it's active if it's not
+        final activeModel = await ModelStorageService.getActiveModel();
+        if (activeModel?.type != _selectedModel) {
+          final modelToActivate = models.firstWhere(
+            (m) => m.type == _selectedModel,
+          );
+          await ModelStorageService.activateModel(modelToActivate.id);
+        }
+
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/main');
         }
@@ -65,7 +75,8 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         if (mounted) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => ModelConfigurationScreen(modelType: _selectedModel!),
+              builder: (context) =>
+                  ModelConfigurationScreen(initialType: _selectedModel),
             ),
           );
         }
@@ -104,9 +115,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
               const SizedBox(height: 16),
               Text(
                 'Select the AI model that best fits your needs',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
@@ -163,7 +174,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   Widget _buildModelCard(ModelType modelType) {
     final isSelected = _selectedModel == modelType;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
@@ -179,7 +190,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
+              color: isSelected
+                  ? Theme.of(context).primaryColor
+                  : Colors.transparent,
               width: 2,
             ),
           ),
@@ -190,7 +203,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
                 children: [
                   Icon(
                     _getModelIcon(modelType),
-                    color: isSelected ? Theme.of(context).primaryColor : Colors.grey[600],
+                    color: isSelected
+                        ? Theme.of(context).primaryColor
+                        : Colors.grey[600],
                     size: 24,
                   ),
                   const SizedBox(width: 12),
@@ -199,7 +214,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
                       modelType.displayName,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? Theme.of(context).primaryColor : null,
+                        color: isSelected
+                            ? Theme.of(context).primaryColor
+                            : null,
                       ),
                     ),
                   ),
@@ -214,9 +231,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
               const SizedBox(height: 8),
               Text(
                 _getModelDescription(modelType),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
               ),
             ],
           ),

@@ -12,9 +12,10 @@ import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
-  final ModelType modelType;
+  final ModelConfig? config; // If provided, we are editing
+  final ModelType? initialType; // If adding, start with this type
 
-  const ModelConfigurationScreen({super.key, required this.modelType});
+  const ModelConfigurationScreen({super.key, this.config, this.initialType});
 
   @override
   State<ModelConfigurationScreen> createState() =>
@@ -34,6 +35,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _isLoading = false;
   String? _error;
 
+  late ModelType _selectedType;
+  bool _isEditing = false;
+
   bool _supportsImages = false;
   bool _supportsDocuments = false;
   bool _supportsAudio = false;
@@ -49,15 +53,20 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   @override
   void initState() {
     super.initState();
-    _loadExistingConfiguration();
-    _loadPresets();
+    _isEditing = widget.config != null;
+    _selectedType =
+        widget.config?.type ?? widget.initialType ?? ModelType.gemini;
 
-    // Set default API key URL based on model type
-    _setDefaultApiKeyUrl();
+    if (_isEditing) {
+      _loadExistingConfiguration();
+    } else {
+      _loadPresets();
+      _setDefaultApiKeyUrl();
+    }
   }
 
   void _setDefaultApiKeyUrl() {
-    switch (widget.modelType) {
+    switch (_selectedType) {
       case ModelType.gemini:
         _apiKeyUrl = 'https://aistudio.google.com/app/apikey';
         break;
@@ -85,11 +94,11 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
       // Filter presets for current model type
       final modelPresets = presets
-          .where((p) => p.type == widget.modelType)
+          .where((p) => p.type == _selectedType)
           .toList();
 
       // Add "Custom" preset option
-      if (widget.modelType == ModelType.gemini) {
+      if (_selectedType == ModelType.gemini) {
         modelPresets.add(
           ModelConfig(
             type: ModelType.gemini,
@@ -97,7 +106,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             endpoint: 'https://generativelanguage.googleapis.com/v1beta',
           ),
         );
-      } else if (widget.modelType == ModelType.openaiCompatible) {
+      } else if (_selectedType == ModelType.openaiCompatible) {
         modelPresets.add(
           ModelConfig(type: ModelType.openaiCompatible, displayName: 'Custom'),
         );
@@ -156,7 +165,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _selectedPreset = preset;
       _endpointController.text = preset.endpoint ?? '';
       _modelNameController.text = preset.modelName ?? '';
-      _displayNameController.text = preset.displayName ?? '';
+      // Don't overwrite display name if user has already typed something, unless it was empty
+      if (_displayNameController.text.isEmpty) {
+        _displayNameController.text = preset.displayName ?? '';
+      }
       _maxInputTokensController.text = preset.maxInputTokens?.toString() ?? '';
       _maxOutputTokensController.text =
           preset.maxOutputTokens?.toString() ?? '';
@@ -173,41 +185,49 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _apiKeyUrl = preset.displayName != null
           ? _presetApiKeyUrls[preset.displayName]
           : null;
+
+      // If no specific URL, fallback to default
+      if (_apiKeyUrl == null) {
+        _setDefaultApiKeyUrl();
+      }
     });
   }
 
   Future<void> _loadExistingConfiguration() async {
     try {
-      final config = await ModelStorageService.getModelConfig(widget.modelType);
-      final apiKey = await ModelStorageService.getModelApiKey(widget.modelType);
+      final config = widget.config!;
+      // Load API key using ID
+      final apiKey = await ModelStorageService.getModelApiKey(config.id);
 
       if (mounted) {
         setState(() {
           _apiKeyController.text = apiKey ?? '';
-          if (config != null) {
-            _endpointController.text = config.endpoint ?? '';
-            _modelNameController.text = config.modelName ?? '';
-            _displayNameController.text = config.displayName ?? '';
-            _maxInputTokensController.text =
-                config.maxInputTokens?.toString() ?? '100000';
-            _maxOutputTokensController.text =
-                config.maxOutputTokens?.toString() ?? '4000';
-            _supportsImages =
-                config.customCapabilitiesObject?.supportsImages ?? false;
-            _supportsDocuments =
-                config.customCapabilitiesObject?.supportsDocuments ?? false;
-            _supportsAudio =
-                config.customCapabilitiesObject?.supportsAudio ?? false;
-            _supportsVideo =
-                config.customCapabilitiesObject?.supportsVideo ?? false;
-            _supportedAttachmentMimeTypesController.text =
-                config.supportedAttachmentMimeTypes?.join(', ') ?? '';
-            _existingModelFeatures = config.modelFeatures;
-          }
+          _endpointController.text = config.endpoint ?? '';
+          _modelNameController.text = config.modelName ?? '';
+          _displayNameController.text = config.displayName ?? '';
+          _maxInputTokensController.text =
+              config.maxInputTokens?.toString() ?? '';
+          _maxOutputTokensController.text =
+              config.maxOutputTokens?.toString() ?? '';
+          _supportsImages =
+              config.customCapabilitiesObject?.supportsImages ?? false;
+          _supportsDocuments =
+              config.customCapabilitiesObject?.supportsDocuments ?? false;
+          _supportsAudio =
+              config.customCapabilitiesObject?.supportsAudio ?? false;
+          _supportsVideo =
+              config.customCapabilitiesObject?.supportsVideo ?? false;
+          _supportedAttachmentMimeTypesController.text =
+              config.supportedAttachmentMimeTypes?.join(', ') ?? '';
+          _existingModelFeatures = config.modelFeatures;
+
+          // Also load presets to allow switching preset even when editing
+          _loadPresets();
         });
       }
     } catch (e) {
       // Ignore errors when loading existing configuration
+      debugPrint('Error loading existing config: $e');
     }
   }
 
@@ -245,31 +265,57 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsVideo: _supportsVideo,
       );
 
-      final config = ModelConfig(
-        type: widget.modelType,
-        apiKey: apiKey.isNotEmpty ? apiKey : null,
-        endpoint: endpoint.isNotEmpty ? endpoint : null,
-        modelName: modelName.isNotEmpty ? modelName : null,
-        displayName: displayName.isNotEmpty ? displayName : null,
-        maxInputTokens: maxInputTokens,
-        maxOutputTokens: maxOutputTokens,
-        customCapabilitiesObject: capabilities,
-        supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
-        modelFeatures: _selectedPreset?.modelFeatures ?? _existingModelFeatures,
-        isConfigured: true,
-      );
+      // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
+      final config = _isEditing
+          ? widget.config!.copyWith(
+              apiKey: apiKey.isNotEmpty ? apiKey : null,
+              endpoint: endpoint.isNotEmpty ? endpoint : null,
+              modelName: modelName.isNotEmpty ? modelName : null,
+              displayName: displayName.isNotEmpty ? displayName : null,
+              maxInputTokens: maxInputTokens,
+              maxOutputTokens: maxOutputTokens,
+              customCapabilitiesObject: capabilities,
+              supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
+              modelFeatures:
+                  _selectedPreset?.modelFeatures ?? _existingModelFeatures,
+              isConfigured: true,
+            )
+          : ModelConfig(
+              type: _selectedType,
+              apiKey: apiKey.isNotEmpty ? apiKey : null,
+              endpoint: endpoint.isNotEmpty ? endpoint : null,
+              modelName: modelName.isNotEmpty ? modelName : null,
+              displayName: displayName.isNotEmpty ? displayName : null,
+              maxInputTokens: maxInputTokens,
+              maxOutputTokens: maxOutputTokens,
+              customCapabilitiesObject: capabilities,
+              supportedAttachmentMimeTypes: supportedAttachmentMimeTypes,
+              modelFeatures:
+                  _selectedPreset?.modelFeatures ?? _existingModelFeatures,
+              isConfigured: true,
+            );
 
-      await ModelStorageService.saveModelConfig(config);
+      // Save configuration
+      if (_isEditing) {
+        await ModelStorageService.updateModel(config);
+      } else {
+        await ModelStorageService.addModel(config);
+      }
 
-      final appProvider = Provider.of<AppProvider>(context, listen: false);
-      appProvider.updateModelConfig(config);
+      // Save API Key securely
+      if (apiKey.isNotEmpty) {
+        await ModelStorageService.saveModelApiKey(config.id, apiKey);
+      }
 
-      // Always reload the model when configuration is saved to ensure
-      // the model uses the updated configuration, even if it's the same model type
-      await ModelSelector.instance.switchToModel(
-        widget.modelType,
-        config: config,
-      );
+      // If this is the first model or user wants to use it, we could activate it.
+      // For now, let's just save it. The user can activate it from the list.
+      // But if we are editing the active model, we should probably reload it.
+      final activeModel = await ModelStorageService.getActiveModel();
+      if (activeModel?.id == config.id) {
+        final appProvider = Provider.of<AppProvider>(context, listen: false);
+        appProvider.updateModelConfig(config);
+        await ModelSelector.instance.switchToModel(config);
+      }
 
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -293,12 +339,12 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final title = _isEditing
+        ? 'Edit ${widget.config?.displayName ?? "Model"}'
+        : 'Add New Model';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.configureModelTitle(widget.modelType.displayName)),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -306,25 +352,27 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (!_isEditing) ...[
+                _buildModelTypeSelector(),
+                const SizedBox(height: 24),
+              ],
               _buildModelInfoCard(),
               const SizedBox(height: 24),
               _buildPresetSelector(),
               const SizedBox(height: 24),
               _buildApiKeySection(),
               const SizedBox(height: 24),
-              if (widget.modelType == ModelType.openaiCompatible ||
-                  widget.modelType == ModelType.gemini) ...[
-                _buildEndpointSection(),
-                const SizedBox(height: 24),
-                _buildModelNameSection(),
-                const SizedBox(height: 24),
-                _buildDisplayNameSection(),
-                const SizedBox(height: 24),
-                _buildTokenLimitsSection(),
-                const SizedBox(height: 24),
-                _buildSupportedMimeSection(),
-                const SizedBox(height: 24),
-              ],
+              // Show these sections for all types now, as they are configurable
+              _buildEndpointSection(),
+              const SizedBox(height: 24),
+              _buildModelNameSection(),
+              const SizedBox(height: 24),
+              _buildDisplayNameSection(),
+              const SizedBox(height: 24),
+              _buildTokenLimitsSection(),
+              const SizedBox(height: 24),
+              _buildSupportedMimeSection(),
+              const SizedBox(height: 24),
               _buildCapabilitiesSection(),
               const SizedBox(height: 24),
               if (_error != null) ...[
@@ -335,6 +383,53 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               _buildActionButton(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModelTypeSelector() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Model Type',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<ModelType>(
+              value: _selectedType,
+              items: ModelType.values.map((type) {
+                return DropdownMenuItem<ModelType>(
+                  value: type,
+                  child: Row(
+                    children: [
+                      Icon(_getModelIconForType(type), size: 20),
+                      const SizedBox(width: 8),
+                      Text(type.displayName),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (type) {
+                if (type != null) {
+                  setState(() {
+                    _selectedType = type;
+                    _presets = []; // Clear presets to reload for new type
+                    _selectedPreset = null;
+                    _setDefaultApiKeyUrl();
+                    _loadPresets();
+                  });
+                }
+              },
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+          ],
         ),
       ),
     );
@@ -357,7 +452,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<ModelConfig>(
-              initialValue: _selectedPreset,
+              value: _selectedPreset,
               items: _presets.map((preset) {
                 return DropdownMenuItem<ModelConfig>(
                   value: preset,
@@ -365,6 +460,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                     preset.displayName ??
                         preset.modelName ??
                         l10n.unknownPreset,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList(),
@@ -373,6 +469,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 labelText: l10n.selectPreset,
                 border: const OutlineInputBorder(),
               ),
+              isExpanded: true,
             ),
           ],
         ),
@@ -394,7 +491,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 Icon(_getModelIcon(), color: Theme.of(context).primaryColor),
                 const SizedBox(width: 12),
                 Text(
-                  widget.modelType.displayName,
+                  _selectedType.displayName,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -426,7 +523,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _getApiKeyDescription(l10n),
+              _getApiKeyDescription(_selectedType, l10n),
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
@@ -805,47 +902,49 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   }
 
   Widget _buildActionButton() {
-    final l10n = AppLocalizations.of(context)!;
-
     return SizedBox(
       height: 50,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _configureModel,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
+        ),
         child: _isLoading
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(l10n.continueButton),
+            ? const CircularProgressIndicator(color: Colors.white)
+            : Text('Save Configuration'),
       ),
     );
   }
 
   IconData _getModelIcon() {
-    switch (widget.modelType) {
+    return _getModelIconForType(_selectedType);
+  }
+
+  IconData _getModelIconForType(ModelType type) {
+    switch (type) {
       case ModelType.gemini:
-        return Icons.psychology;
+        return Icons.auto_awesome;
       case ModelType.openaiCompatible:
-        return Icons.api;
+        return Icons.smart_toy;
     }
   }
 
   String _getModelDescription(AppLocalizations l10n) {
-    switch (widget.modelType) {
+    switch (_selectedType) {
       case ModelType.gemini:
-        return l10n.geminiModelDescriptionDetailed;
+        return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
-        return l10n.openaiCompatibleModelDescriptionDetailed;
+        return 'Compatible with OpenAI API endpoints with configurable capabilities';
     }
   }
 
-  String _getApiKeyDescription(AppLocalizations l10n) {
-    switch (widget.modelType) {
+  String _getApiKeyDescription(ModelType type, AppLocalizations l10n) {
+    switch (type) {
       case ModelType.gemini:
-        return l10n.geminiApiKeyDescription;
+        return l10n.geminiApiKey;
       case ModelType.openaiCompatible:
-        return l10n.openaiCompatibleApiKeyDescription;
+        return 'API Key for OpenAI compatible provider';
     }
   }
 }

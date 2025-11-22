@@ -31,9 +31,10 @@ class GeminiModel implements AIModel {
   @override
   Future<bool> isReady() async {
     try {
+      if (_config == null) return false;
       final apiKey =
           _config?.apiKey ??
-          await ModelStorageService.getModelApiKey(ModelType.gemini);
+          await ModelStorageService.getModelApiKey(_config!.id);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('GeminiModel: Error checking readiness: $e');
@@ -46,11 +47,27 @@ class GeminiModel implements AIModel {
     if (config != null) {
       _config = config;
     } else {
-      _config = await ModelStorageService.getModelConfig(ModelType.gemini);
+      // If no config provided, try to get the active model if it matches this type
+      final activeModel = await ModelStorageService.getActiveModel();
+      if (activeModel?.type == ModelType.gemini) {
+        _config = activeModel;
+      }
+    }
+
+    if (_config == null) {
+      throw Exception(
+        'GeminiModel: Configuration not provided and no active Gemini model found',
+      );
     }
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
-      throw Exception('Gemini API key not configured');
+      // Try to fetch from storage using ID
+      final storedKey = await ModelStorageService.getModelApiKey(_config!.id);
+      if (storedKey != null && storedKey.isNotEmpty) {
+        _config = _config!.copyWith(apiKey: storedKey);
+      } else {
+        throw Exception('Gemini API key not configured');
+      }
     }
   }
 
@@ -697,7 +714,7 @@ class GeminiModel implements AIModel {
                   final output = codeExecutionResult['output'] ?? '';
                   buffer.writeln('```text');
                   buffer.writeln('Execution Result ($outcome)');
-		  buffer.writeln('---------- OUTPUT -----------');
+                  buffer.writeln('---------- OUTPUT -----------');
                   buffer.writeln('$output');
                   buffer.writeln('```\n');
                 }

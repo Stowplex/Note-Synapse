@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import 'model_type.dart';
 import 'model_capabilities.dart';
 
 /// Configuration for a specific model
 class ModelConfig {
+  final String id;
   final ModelType type;
   final String? apiKey;
   final String? endpoint;
@@ -17,6 +19,7 @@ class ModelConfig {
   final bool isConfigured;
 
   ModelConfig({
+    String? id,
     required this.type,
     this.apiKey,
     this.endpoint,
@@ -28,7 +31,8 @@ class ModelConfig {
     List<String>? supportedAttachmentMimeTypes,
     List<String>? modelFeatures,
     this.isConfigured = false,
-  }) : customCapabilitiesObject =
+  }) : id = id ?? const Uuid().v4(),
+       customCapabilitiesObject =
            customCapabilitiesObject ??
            const ModelCapabilities(
              maxInputTokens: 100000,
@@ -49,6 +53,7 @@ class ModelConfig {
 
   /// Create a copy with updated values
   ModelConfig copyWith({
+    String? id,
     ModelType? type,
     String? apiKey,
     String? endpoint,
@@ -62,6 +67,7 @@ class ModelConfig {
     bool? isConfigured,
   }) {
     return ModelConfig(
+      id: id ?? this.id,
       type: type ?? this.type,
       apiKey: apiKey ?? this.apiKey,
       endpoint: endpoint ?? this.endpoint,
@@ -81,6 +87,7 @@ class ModelConfig {
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'type': type.id,
       'apiKey': apiKey,
       'endpoint': endpoint,
@@ -98,6 +105,7 @@ class ModelConfig {
   /// Create from JSON
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
     return ModelConfig(
+      id: json['id'] as String?,
       type: ModelType.fromId(json['type'] as String) ?? ModelType.gemini,
       apiKey: json['apiKey'] as String?,
       endpoint: json['endpoint'] as String?,
@@ -121,7 +129,7 @@ class ModelConfig {
 
   @override
   String toString() {
-    return 'ModelConfig(type: ${type.displayName}, configured: $isConfigured)';
+    return 'ModelConfig(id: $id, type: ${type.displayName}, configured: $isConfigured)';
   }
 
   @override
@@ -129,6 +137,7 @@ class ModelConfig {
     if (identical(this, other)) return true;
 
     return other is ModelConfig &&
+        other.id == id &&
         other.type == type &&
         other.apiKey == apiKey &&
         other.endpoint == endpoint &&
@@ -147,7 +156,8 @@ class ModelConfig {
 
   @override
   int get hashCode {
-    return type.hashCode ^
+    return id.hashCode ^
+        type.hashCode ^
         apiKey.hashCode ^
         endpoint.hashCode ^
         modelName.hashCode ^

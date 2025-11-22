@@ -128,8 +128,8 @@ class ConversationAiEngine {
         ...request.conversationMessages,
       ];
 
-      final currentModelType = ModelSelector.instance.currentModelType;
-      final callToolFunction = currentModelType == ModelType.openaiCompatible
+      final modelType = ModelSelector.instance.currentModelConfig?.type;
+      final callToolFunction = modelType == ModelType.openaiCompatible
           ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
           : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
 
@@ -259,7 +259,8 @@ class ConversationAiEngine {
               toolResults.add(toolSummary);
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
-              if (currentModelType == ModelType.openaiCompatible) {
+              if (ModelSelector.instance.currentModelConfig?.type ==
+                  ModelType.openaiCompatible) {
                 final timestamp = DateTime.now().millisecondsSinceEpoch
                     .toRadixString(36);
                 final shortName = toolName.length > 10
@@ -299,7 +300,8 @@ class ConversationAiEngine {
             );
             lastAssistantMetadata = assistantMetadata;
 
-            if (currentModelType == ModelType.openaiCompatible) {
+            if (ModelSelector.instance.currentModelConfig?.type ==
+                ModelType.openaiCompatible) {
               final toolMessages = toolCallsWithResults
                   .map(
                     (toolCall) => PromptMessage(

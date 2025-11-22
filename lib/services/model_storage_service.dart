@@ -3,13 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/model_config.dart';
 import '../models/model_type.dart';
+
 import 'logger_service.dart';
-import 'model_preset_service.dart';
 
 /// Service for managing model configuration storage
 class ModelStorageService {
-  static const String _selectedModelKey = 'selected_model';
-  static const String _modelConfigsKey = 'model_configs';
+  static const String _activeModelIdKey = 'active_model_id';
+  static const String _configuredModelsKey = 'configured_models';
 
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -22,219 +22,63 @@ class ModelStorageService {
     ),
   );
 
-  /// Get the currently selected model type
-  static Future<ModelType?> getSelectedModel() async {
+  /// Get the currently active model configuration
+  static Future<ModelConfig?> getActiveModel() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final modelId = prefs.getString(_selectedModelKey);
+      final activeModelId = prefs.getString(_activeModelIdKey);
 
-      if (modelId != null) {
-        final modelType = ModelType.fromId(modelId);
-        if (modelType != null) {
+      if (activeModelId != null) {
+        final models = await getConfiguredModels();
+        final activeModel = models.cast<ModelConfig?>().firstWhere(
+          (m) => m?.id == activeModelId,
+          orElse: () => null,
+        );
+
+        if (activeModel != null) {
           LoggerService.debug(
-            'ModelStorageService: Selected model: ${modelType.displayName}',
+            'ModelStorageService: Active model: ${activeModel.displayName} (${activeModel.id})',
           );
-          return modelType;
+          return activeModel;
         }
       }
 
       return null;
     } catch (e) {
       LoggerService.error(
-        'ModelStorageService: Error getting selected model: $e',
+        'ModelStorageService: Error getting active model: $e',
       );
       return null;
     }
   }
 
-  /// Set the currently selected model type
-  static Future<void> setSelectedModel(ModelType modelType) async {
+  /// Set the active model by ID
+  static Future<void> activateModel(String modelId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_selectedModelKey, modelType.id);
+      await prefs.setString(_activeModelIdKey, modelId);
       LoggerService.debug(
-        'ModelStorageService: Set selected model to: ${modelType.displayName}',
+        'ModelStorageService: Set active model ID to: $modelId',
       );
     } catch (e) {
       LoggerService.error(
-        'ModelStorageService: Error setting selected model: $e',
+        'ModelStorageService: Error setting active model: $e',
       );
-    }
-  }
-
-  /// Get configuration for a specific model
-  static Future<ModelConfig?> getModelConfig(ModelType modelType) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final configsJson = prefs.getString(_modelConfigsKey);
-
-      ModelConfig? storedConfig;
-      if (configsJson != null) {
-        final configsMap = jsonDecode(configsJson) as Map<String, dynamic>;
-        final modelConfigs = configsMap.map(
-          (key, value) => MapEntry(
-            key,
-            ModelConfig.fromJson(value as Map<String, dynamic>),
-          ),
-        );
-        storedConfig = modelConfigs[modelType.id];
-      }
-
-      // Load preset to get latest features and capabilities
-      final preset = await ModelPresetService.instance.getPresetForType(
-        modelType,
-      );
-
-      if (storedConfig != null) {
-        LoggerService.debug(
-          'ModelStorageService: Found stored config for ${modelType.displayName}',
-        );
-
-        // If we have a preset, merge it with stored config
-        // We prioritize preset for features, capabilities, and mime types
-        if (preset != null) {
-          return storedConfig.copyWith(
-            // Keep user settings
-            apiKey: storedConfig.apiKey,
-            endpoint:
-                storedConfig.endpoint, // User might have overridden endpoint
-            modelName:
-                storedConfig.modelName, // User might have overridden model name
-            maxInputTokens: storedConfig.maxInputTokens,
-            maxOutputTokens: storedConfig.maxOutputTokens,
-
-            // Force update from preset (source of truth for capabilities)
-            modelFeatures: preset.modelFeatures,
-            supportedAttachmentMimeTypes: preset.supportedAttachmentMimeTypes,
-            customCapabilitiesObject: preset.customCapabilitiesObject,
-          );
-        }
-
-        return storedConfig;
-      } else if (preset != null) {
-        // If no stored config but we have a preset, return preset
-        LoggerService.debug(
-          'ModelStorageService: Using preset for ${modelType.displayName}',
-        );
-        return preset;
-      }
-
-      return null;
-    } catch (e) {
-      LoggerService.error(
-        'ModelStorageService: Error getting model config: $e',
-      );
-      return null;
-    }
-  }
-
-  /// Save configuration for a specific model
-  static Future<void> saveModelConfig(ModelConfig config) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final configsJson = prefs.getString(_modelConfigsKey);
-
-      Map<String, dynamic> configsMap = {};
-      if (configsJson != null) {
-        configsMap = jsonDecode(configsJson) as Map<String, dynamic>;
-      }
-
-      configsMap[config.type.id] = config.toJson();
-      await prefs.setString(_modelConfigsKey, jsonEncode(configsMap));
-
-      LoggerService.debug(
-        'ModelStorageService: Saved config for ${config.type.displayName}',
-      );
-    } catch (e) {
-      LoggerService.error('ModelStorageService: Error saving model config: $e');
-    }
-  }
-
-  /// Save API key securely for a model
-  static Future<void> saveModelApiKey(
-    ModelType modelType,
-    String apiKey,
-  ) async {
-    try {
-      final key = '${modelType.id}_api_key';
-      LoggerService.debug(
-        'ModelStorageService: Saving API key for ${modelType.displayName}, length: ${apiKey.length}, key: $key',
-      );
-      await _storage.write(key: key, value: apiKey);
-      LoggerService.debug(
-        'ModelStorageService: Successfully saved API key for ${modelType.displayName}',
-      );
-    } catch (e) {
-      LoggerService.error('ModelStorageService: Error saving API key: $e');
-    }
-  }
-
-  /// Get API key for a model
-  static Future<String?> getModelApiKey(ModelType modelType) async {
-    try {
-      final key = '${modelType.id}_api_key';
-      LoggerService.debug(
-        'ModelStorageService: Reading API key for ${modelType.displayName}, key: $key',
-      );
-      final apiKey = await _storage.read(key: key);
-      LoggerService.debug(
-        'ModelStorageService: Retrieved API key for ${modelType.displayName}: ${apiKey != null ? 'present (length: ${apiKey.length})' : 'not found'}',
-      );
-      return apiKey;
-    } catch (e) {
-      LoggerService.error('ModelStorageService: Error getting API key: $e');
-      return null;
-    }
-  }
-
-  /// Delete API key for a model
-  static Future<void> deleteModelApiKey(ModelType modelType) async {
-    try {
-      final key = '${modelType.id}_api_key';
-      await _storage.delete(key: key);
-      LoggerService.debug(
-        'ModelStorageService: Deleted API key for ${modelType.displayName}',
-      );
-    } catch (e) {
-      LoggerService.error('ModelStorageService: Error deleting API key: $e');
-    }
-  }
-
-  /// Check if a model is configured
-  static Future<bool> isModelConfigured(ModelType modelType) async {
-    try {
-      final config = await getModelConfig(modelType);
-      return config?.isConfigured ?? false;
-    } catch (e) {
-      LoggerService.error(
-        'ModelStorageService: Error checking if model is configured: $e',
-      );
-      return false;
     }
   }
 
   /// Get all configured models
-  static Future<List<ModelType>> getConfiguredModels() async {
+  static Future<List<ModelConfig>> getConfiguredModels() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final configsJson = prefs.getString(_modelConfigsKey);
+      final configsJson = prefs.getString(_configuredModelsKey);
 
       if (configsJson == null) return [];
 
-      final configsMap = jsonDecode(configsJson) as Map<String, dynamic>;
-      final configuredModels = <ModelType>[];
-
-      for (final entry in configsMap.entries) {
-        final config = ModelConfig.fromJson(
-          entry.value as Map<String, dynamic>,
-        );
-        if (config.isConfigured) {
-          final modelType = ModelType.fromId(entry.key);
-          if (modelType != null) {
-            configuredModels.add(modelType);
-          }
-        }
-      }
+      final configsList = jsonDecode(configsJson) as List<dynamic>;
+      final configuredModels = configsList
+          .map((json) => ModelConfig.fromJson(json as Map<String, dynamic>))
+          .toList();
 
       LoggerService.debug(
         'ModelStorageService: Found ${configuredModels.length} configured models',
@@ -248,52 +92,127 @@ class ModelStorageService {
     }
   }
 
-  /// Reset configuration for a specific model (mark as not configured)
-  static Future<void> resetModelConfiguration(ModelType modelType) async {
+  /// Add a new model configuration
+  static Future<void> addModel(ModelConfig config) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final configsJson = prefs.getString(_modelConfigsKey);
+      final models = await getConfiguredModels();
+      models.add(config);
+      await _saveModels(models);
+      LoggerService.debug(
+        'ModelStorageService: Added model ${config.displayName} (${config.id})',
+      );
+    } catch (e) {
+      LoggerService.error('ModelStorageService: Error adding model: $e');
+    }
+  }
 
-      if (configsJson != null) {
-        final configsMap = jsonDecode(configsJson) as Map<String, dynamic>;
-        final modelConfigs = configsMap.map(
-          (key, value) => MapEntry(
-            key,
-            ModelConfig.fromJson(value as Map<String, dynamic>),
-          ),
-        );
+  /// Update an existing model configuration
+  static Future<void> updateModel(ModelConfig config) async {
+    try {
+      final models = await getConfiguredModels();
+      final index = models.indexWhere((m) => m.id == config.id);
 
-        // Reset the specific model configuration
-        modelConfigs[modelType.id] = ModelConfig(type: modelType);
-
-        // Save back to preferences
-        final updatedConfigsMap = modelConfigs.map(
-          (key, value) => MapEntry(key, value.toJson()),
-        );
-        await prefs.setString(_modelConfigsKey, jsonEncode(updatedConfigsMap));
-
+      if (index != -1) {
+        models[index] = config;
+        await _saveModels(models);
         LoggerService.debug(
-          'ModelStorageService: Reset configuration for ${modelType.displayName}',
+          'ModelStorageService: Updated model ${config.displayName} (${config.id})',
+        );
+      } else {
+        LoggerService.error(
+          'ModelStorageService: Could not find model to update: ${config.id}',
         );
       }
     } catch (e) {
-      LoggerService.error(
-        'ModelStorageService: Error resetting model configuration: $e',
+      LoggerService.error('ModelStorageService: Error updating model: $e');
+    }
+  }
+
+  /// Delete a model configuration
+  static Future<void> deleteModel(String modelId) async {
+    try {
+      final models = await getConfiguredModels();
+      final modelToRemove = models.cast<ModelConfig?>().firstWhere(
+        (m) => m?.id == modelId,
+        orElse: () => null,
       );
+
+      if (modelToRemove != null) {
+        models.removeWhere((m) => m.id == modelId);
+        await _saveModels(models);
+
+        // Delete API key
+        await deleteModelApiKey(modelId);
+
+        // If this was the active model, clear active model
+        final prefs = await SharedPreferences.getInstance();
+        final activeId = prefs.getString(_activeModelIdKey);
+        if (activeId == modelId) {
+          await prefs.remove(_activeModelIdKey);
+        }
+
+        LoggerService.debug(
+          'ModelStorageService: Deleted model ${modelToRemove.displayName} ($modelId)',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('ModelStorageService: Error deleting model: $e');
+    }
+  }
+
+  /// Save the list of models to SharedPreferences
+  static Future<void> _saveModels(List<ModelConfig> models) async {
+    final prefs = await SharedPreferences.getInstance();
+    final configsJson = jsonEncode(models.map((m) => m.toJson()).toList());
+    await prefs.setString(_configuredModelsKey, configsJson);
+  }
+
+  /// Save API key securely for a model ID
+  static Future<void> saveModelApiKey(String modelId, String apiKey) async {
+    try {
+      final key = '${modelId}_api_key';
+      LoggerService.debug(
+        'ModelStorageService: Saving API key for model $modelId, length: ${apiKey.length}',
+      );
+      await _storage.write(key: key, value: apiKey);
+    } catch (e) {
+      LoggerService.error('ModelStorageService: Error saving API key: $e');
+    }
+  }
+
+  /// Get API key for a model ID
+  static Future<String?> getModelApiKey(String modelId) async {
+    try {
+      final key = '${modelId}_api_key';
+      final apiKey = await _storage.read(key: key);
+      return apiKey;
+    } catch (e) {
+      LoggerService.error('ModelStorageService: Error getting API key: $e');
+      return null;
+    }
+  }
+
+  /// Delete API key for a model ID
+  static Future<void> deleteModelApiKey(String modelId) async {
+    try {
+      final key = '${modelId}_api_key';
+      await _storage.delete(key: key);
+    } catch (e) {
+      LoggerService.error('ModelStorageService: Error deleting API key: $e');
     }
   }
 
   /// Clear all model configurations
   static Future<void> clearAllConfigurations() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_selectedModelKey);
-      await prefs.remove(_modelConfigsKey);
-
-      // Clear all API keys
-      for (final modelType in ModelType.all) {
-        await deleteModelApiKey(modelType);
+      final models = await getConfiguredModels();
+      for (final model in models) {
+        await deleteModelApiKey(model.id);
       }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_activeModelIdKey);
+      await prefs.remove(_configuredModelsKey);
 
       LoggerService.debug(
         'ModelStorageService: Cleared all model configurations',
@@ -303,5 +222,14 @@ class ModelStorageService {
         'ModelStorageService: Error clearing configurations: $e',
       );
     }
+  }
+
+  // Deprecated methods kept for compatibility if needed, or removed.
+  // Removing them as we are doing a breaking change.
+
+  /// Get the currently selected model type (Deprecated, maps to active model type)
+  static Future<ModelType?> getSelectedModelType() async {
+    final activeModel = await getActiveModel();
+    return activeModel?.type;
   }
 }

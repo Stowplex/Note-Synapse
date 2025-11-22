@@ -15,6 +15,7 @@ import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
 import 'getting_started_screen.dart';
 import '../services/conversation_settings_service.dart';
+import '../models/model_config.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -242,53 +243,69 @@ class AIModelSettingsScreen extends StatefulWidget {
 }
 
 class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
-  ModelType? _currentModel;
+  List<ModelConfig> _configuredModels = [];
+  ModelConfig? _activeModel;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentModel();
+    _loadData();
   }
 
-  Future<void> _loadCurrentModel() async {
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
     try {
-      final currentModel = await ModelStorageService.getSelectedModel();
-      setState(() {
-        _currentModel = currentModel;
-      });
+      final models = await ModelStorageService.getConfiguredModels();
+      final activeModel = await ModelStorageService.getActiveModel();
+
+      if (mounted) {
+        setState(() {
+          _configuredModels = models;
+          _activeModel = activeModel;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      LoggerService.error('Error loading current model: $e');
+      LoggerService.error('Error loading model settings: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  Future<void> _switchModel(ModelType modelType) async {
+  Future<void> _switchModel(ModelConfig config) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await ModelSelector.instance.switchToModel(modelType);
+      await ModelSelector.instance.switchToModel(config);
 
       if (mounted) {
         // Force refresh of model config in provider to update UI
-        final config = await ModelStorageService.getModelConfig(modelType);
-        if (config != null) {
-          Provider.of<AppProvider>(
-            context,
-            listen: false,
-          ).updateModelConfig(config);
-        }
+        Provider.of<AppProvider>(
+          context,
+          listen: false,
+        ).updateModelConfig(config);
 
         setState(() {
-          _currentModel = modelType;
+          _activeModel = config;
           _isLoading = false;
         });
 
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.switchedToModel(modelType.displayName)),
+            content: Text(
+              l10n.switchedToModel(
+                config.displayName ?? config.modelName ?? 'Model',
+              ),
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -310,59 +327,14 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     }
   }
 
-  Future<void> _handleModelAction(String action, ModelType modelType) async {
-    switch (action) {
-      case 'use':
-        await _switchModel(modelType);
-        break;
-      case 'configure':
-        await _openModelConfiguration(modelType);
-        break;
-      case 'reset':
-        await _resetModelConfiguration(modelType);
-        break;
-    }
-  }
-
-  Future<void> _openModelConfiguration(ModelType modelType) async {
-    if (mounted) {
-      Navigator.of(context)
-          .push(
-            MaterialPageRoute(
-              builder: (context) =>
-                  ModelConfigurationScreen(modelType: modelType),
-            ),
-          )
-          .then((result) {
-            // Refresh the current model after configuration
-            _loadCurrentModel();
-            if (result == true) {
-              // Show success message if configuration was successful
-              final l10n = AppLocalizations.of(context)!;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    l10n.modelConfigurationUpdatedSuccessfully(
-                      modelType.displayName,
-                    ),
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-          });
-    }
-  }
-
-  Future<void> _resetModelConfiguration(ModelType modelType) async {
-    // Show confirmation dialog
+  Future<void> _deleteModel(ModelConfig config) async {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.resetModelConfiguration(modelType.displayName)),
-        content: Text(
-          l10n.resetModelConfigurationConfirmation(modelType.displayName),
+        title: Text('Delete ${config.displayName}?'),
+        content: const Text(
+          'Are you sure you want to delete this model configuration? This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -371,49 +343,47 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.reset),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(l10n.delete),
           ),
         ],
       ),
     );
 
     if (confirmed == true) {
-      setState(() {
-        _isLoading = true;
-      });
-
       try {
-        await ModelStorageService.resetModelConfiguration(modelType);
+        await ModelStorageService.deleteModel(config.id);
+        await _loadData();
 
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                l10n.modelConfigurationResetSuccessfully(modelType.displayName),
-              ),
+            const SnackBar(
+              content: Text('Model deleted successfully'),
               backgroundColor: Colors.green,
             ),
           );
-          // Refresh the current model
-          _loadCurrentModel();
         }
       } catch (e) {
-        setState(() {
-          _isLoading = false;
-        });
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(l10n.errorResettingConfiguration(e.toString())),
+              content: Text('Error deleting model: $e'),
               backgroundColor: Colors.red,
             ),
           );
         }
       }
+    }
+  }
+
+  Future<void> _openModelConfiguration({ModelConfig? config}) async {
+    if (mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ModelConfigurationScreen(config: config),
+        ),
+      );
+      _loadData();
     }
   }
 
@@ -423,6 +393,10 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aiModelSettings)),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openModelConfiguration(),
+        child: const Icon(Icons.add),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -444,161 +418,161 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n.currentModel,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        if (_currentModel != null) ...[
-                          Row(
-                            children: [
-                              Icon(
-                                _getModelIcon(_currentModel!),
-                                color: Theme.of(context).primaryColor,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _currentModel!.displayName,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _getModelDescription(_currentModel!, l10n),
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.grey[600]),
-                          ),
-                        ] else ...[
-                          Text(l10n.noModelSelected),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
+
                 Text(
-                  l10n.availableModels,
+                  'Configured Models',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...ModelType.all.map((modelType) {
-                  final isCurrentModel = _currentModel == modelType;
-                  return FutureBuilder<bool>(
-                    future: ModelStorageService.isModelConfigured(modelType),
-                    builder: (context, snapshot) {
-                      final isConfigured = snapshot.data ?? false;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Icon(_getModelIcon(modelType)),
-                          title: Text(modelType.displayName),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_getModelDescription(modelType, l10n)),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    isConfigured
-                                        ? Icons.check_circle
-                                        : Icons.error_outline,
-                                    size: 16,
-                                    color: isConfigured
-                                        ? Colors.green
-                                        : Colors.orange,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isConfigured
-                                        ? l10n.configured
-                                        : l10n.notConfigured,
-                                    style: TextStyle(
-                                      color: isConfigured
-                                          ? Colors.green
-                                          : Colors.orange,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  if (isCurrentModel) ...[
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.check_circle,
-                                      size: 16,
-                                      color: Theme.of(context).primaryColor,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      l10n.current,
-                                      style: TextStyle(
-                                        color: Theme.of(context).primaryColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
+
+                if (_configuredModels.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.model_training,
+                            size: 48,
+                            color: Colors.grey,
                           ),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) =>
-                                _handleModelAction(value, modelType),
-                            itemBuilder: (BuildContext context) => [
-                              if (!isCurrentModel)
+                          const SizedBox(height: 16),
+                          Text(
+                            'No models configured',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Add a model to get started with AI features.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () => _openModelConfiguration(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Model'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ..._configuredModels.map((model) {
+                    final isActive = _activeModel?.id == model.id;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      elevation: isActive ? 4 : 1,
+                      shape: isActive
+                          ? RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: Theme.of(context).primaryColor,
+                                width: 2,
+                              ),
+                            )
+                          : null,
+                      child: ListTile(
+                        leading: Icon(_getModelIcon(model.type)),
+                        title: Text(
+                          model.displayName ??
+                              model.modelName ??
+                              'Unknown Model',
+                          style: TextStyle(
+                            fontWeight: isActive
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Text(model.type.displayName),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isActive)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Active',
+                                  style: TextStyle(
+                                    color: Theme.of(context).primaryColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            PopupMenuButton<String>(
+                              onSelected: (value) {
+                                switch (value) {
+                                  case 'use':
+                                    _switchModel(model);
+                                    break;
+                                  case 'edit':
+                                    _openModelConfiguration(config: model);
+                                    break;
+                                  case 'delete':
+                                    _deleteModel(model);
+                                    break;
+                                }
+                              },
+                              itemBuilder: (BuildContext context) => [
+                                if (!isActive)
+                                  PopupMenuItem<String>(
+                                    value: 'use',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_outline),
+                                        const SizedBox(width: 8),
+                                        Text(l10n.useModel),
+                                      ],
+                                    ),
+                                  ),
                                 PopupMenuItem<String>(
-                                  value: 'use',
+                                  value: 'edit',
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.check_circle_outline),
+                                      const Icon(Icons.edit),
                                       const SizedBox(width: 8),
-                                      Text(l10n.useModel),
+                                      const Text('Edit'),
                                     ],
                                   ),
                                 ),
-                              PopupMenuItem<String>(
-                                value: 'configure',
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.settings),
-                                    const SizedBox(width: 8),
-                                    Text(l10n.configureModel),
-                                  ],
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        l10n.delete,
+                                        style: const TextStyle(
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'reset',
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.refresh),
-                                    const SizedBox(width: 8),
-                                    Text(l10n.resetModel),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            icon: const Icon(Icons.more_vert),
-                          ),
+                              ],
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  );
-                }),
+                        onTap: () => _openModelConfiguration(config: model),
+                      ),
+                    );
+                  }),
               ],
             ),
     );
@@ -607,18 +581,9 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
   IconData _getModelIcon(ModelType modelType) {
     switch (modelType) {
       case ModelType.gemini:
-        return Icons.psychology;
+        return Icons.auto_awesome;
       case ModelType.openaiCompatible:
-        return Icons.api;
-    }
-  }
-
-  String _getModelDescription(ModelType modelType, AppLocalizations l10n) {
-    switch (modelType) {
-      case ModelType.gemini:
-        return l10n.geminiModelDescription;
-      case ModelType.openaiCompatible:
-        return l10n.openaiCompatibleModelDescription;
+        return Icons.smart_toy;
     }
   }
 }

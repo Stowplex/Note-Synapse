@@ -30,9 +30,10 @@ class OpenAIModel implements AIModel {
   @override
   Future<bool> isReady() async {
     try {
+      if (_config == null) return false;
       final apiKey =
           _config?.apiKey ??
-          await ModelStorageService.getModelApiKey(ModelType.openaiCompatible);
+          await ModelStorageService.getModelApiKey(_config!.id);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('OpenAIModel: Error checking readiness: $e');
@@ -57,28 +58,38 @@ class OpenAIModel implements AIModel {
         },
       );
     } else {
-      _config = await ModelStorageService.getModelConfig(
-        ModelType.openaiCompatible,
+      // If no config provided, try to get the active model if it matches this type
+      final activeModel = await ModelStorageService.getActiveModel();
+      if (activeModel?.type == ModelType.openaiCompatible) {
+        _config = activeModel;
+        LoggerService.debug(
+          'OpenAI model initialized with active config',
+          error: {
+            'modelName': _config?.modelName,
+            'displayName': _config?.displayName,
+          },
+        );
+      }
+    }
+
+    if (_config == null) {
+      throw Exception(
+        'OpenAIModel: Configuration not provided and no active OpenAI model found',
       );
-      LoggerService.debug(
-        'OpenAI model initialized with stored config',
-        error: {
-          'modelName': _config?.modelName,
-          'displayName': _config?.displayName,
-          'supportsImages': _config?.customCapabilitiesObject?.supportsImages,
-          'supportsDocuments':
-              _config?.customCapabilitiesObject?.supportsDocuments,
-          'supportsAudio': _config?.customCapabilitiesObject?.supportsAudio,
-          'supportsVideo': _config?.customCapabilitiesObject?.supportsVideo,
-        },
-      );
+    }
+
+    if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
+      // Try to fetch from storage using ID
+      final storedKey = await ModelStorageService.getModelApiKey(_config!.id);
+      if (storedKey != null && storedKey.isNotEmpty) {
+        _config = _config!.copyWith(apiKey: storedKey);
+      } else {
+        throw Exception('OpenAI API key not configured');
+      }
     }
 
     if (_config?.endpoint == null || _config!.endpoint!.isEmpty) {
       throw Exception('OpenAI endpoint not configured');
-    }
-    if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
-      throw Exception('OpenAI API key not configured');
     }
     if (_config?.modelName == null || _config!.modelName!.isEmpty) {
       throw Exception('OpenAI model name not configured');
@@ -179,7 +190,7 @@ class OpenAIModel implements AIModel {
         final toolsList = <Map<String, dynamic>>[];
         for (final feature in modelFeatures) {
           if (feature == 'web_search') {
-	    requestBody['web_search_options'] = {};
+            requestBody['web_search_options'] = {};
           }
         }
       }
@@ -233,7 +244,7 @@ class OpenAIModel implements AIModel {
       if (modelFeatures.isNotEmpty) {
         for (final feature in modelFeatures) {
           if (feature == 'web_search') {
-	    requestBody['web_search_options'] = {};
+            requestBody['web_search_options'] = {};
           }
         }
       }
