@@ -1628,6 +1628,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDebugOverlayTitle => 'AI Debug Overlay';
 
   @override
+  String get aiLogs => 'AI Logs';
+
+  @override
   String get refreshLogs => 'Refresh logs';
 
   @override

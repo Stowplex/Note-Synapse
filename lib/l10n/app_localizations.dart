@@ -2984,6 +2984,12 @@ abstract class AppLocalizations {
   /// **'AI Debug Overlay'**
   String get aiDebugOverlayTitle;
 
+  /// No description provided for @aiLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Logs'**
+  String get aiLogs;
+
   /// No description provided for @refreshLogs.
   ///
   /// In en, this message translates to:

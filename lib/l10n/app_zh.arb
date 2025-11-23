@@ -543,6 +543,7 @@
   "aiDebugOverlay": "AI调试覆盖层",
   "aiDebugOverlaySubtitle": "查看AI请求/响应日志",
   "aiDebugOverlayTitle": "AI调试覆盖层",
+  "aiLogs": "AI 日志",
   "refreshLogs": "刷新日志",
   "clearLogs": "清除日志",
   "noAiLogsAvailable": "没有AI日志可用",

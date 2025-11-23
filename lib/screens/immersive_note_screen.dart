@@ -49,6 +49,7 @@ import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
+import 'settings_screen.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -763,6 +764,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         ),
                       ),
                     );
+                  } else if (value == 'ai_logs') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const AIDebugOverlayScreen(),
+                      ),
+                    );
                   }
                 },
                 itemBuilder: (_) => [
@@ -776,6 +783,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       value: 'note_action_apps',
                       child: Text(l10n.noteActionApps),
                     ),
+                  PopupMenuItem<String>(
+                    value: 'ai_logs',
+                    child: Text(l10n.aiLogs),
+                  ),
                 ],
               ),
             ],

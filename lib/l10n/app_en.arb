@@ -551,6 +551,7 @@
   "aiDebugOverlay": "AI Debug Overlay",
   "aiDebugOverlaySubtitle": "View AI request/response logs",
   "aiDebugOverlayTitle": "AI Debug Overlay",
+  "aiLogs": "AI Logs",
   "refreshLogs": "Refresh logs",
   "clearLogs": "Clear logs",
   "basic": "Basic",

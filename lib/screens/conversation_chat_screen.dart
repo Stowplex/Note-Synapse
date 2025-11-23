@@ -33,6 +33,7 @@ import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import 'settings_screen.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
 import '../services/user_app_service.dart';
@@ -1893,6 +1894,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                         NoteActionAppSelectionScreen(selectedNotes: _notes),
                   ),
                 );
+              } else if (value == 'ai_logs') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AIDebugOverlayScreen(),
+                  ),
+                );
               }
             },
             itemBuilder: (context) => [
@@ -1916,6 +1923,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   value: 'new_conversation',
                   child: Text(l10n.newConversation),
                 ),
+              PopupMenuItem<String>(value: 'ai_logs', child: Text(l10n.aiLogs)),
             ],
           ),
         ],

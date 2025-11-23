@@ -1585,6 +1585,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDebugOverlayTitle => 'AI调试覆盖层';
 
   @override
+  String get aiLogs => 'AI 日志';
+
+  @override
   String get refreshLogs => '刷新日志';
 
   @override
