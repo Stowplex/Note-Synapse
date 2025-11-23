@@ -87,53 +87,57 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
       children: [
         // Top Toolbar
         if (!widget.readOnly)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+          CodeEditorTapRegion(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+                ),
               ),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.undo, size: 20),
-                    onPressed: _undo,
-                    tooltip: 'Undo',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.redo, size: 20),
-                    onPressed: _redo,
-                    tooltip: 'Redo',
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      _isSearchVisible ? Icons.search_off : Icons.search,
-                      size: 20,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.undo, size: 20),
+                      onPressed: _undo,
+                      tooltip: 'Undo',
                     ),
-                    onPressed: _toggleSearch,
-                    tooltip: _isSearchVisible ? 'Hide Search' : 'Show Search',
-                  ),
-                  if (widget.actions != null && widget.actions!.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      height: 24,
-                      width: 1,
-                      color: theme.colorScheme.outlineVariant,
+                    IconButton(
+                      icon: const Icon(Icons.redo, size: 20),
+                      onPressed: _redo,
+                      tooltip: 'Redo',
                     ),
-                    const SizedBox(width: 8),
-                    ...widget.actions!,
+                    IconButton(
+                      icon: Icon(
+                        _isSearchVisible ? Icons.search_off : Icons.search,
+                        size: 20,
+                      ),
+                      onPressed: _toggleSearch,
+                      tooltip: _isSearchVisible ? 'Hide Search' : 'Show Search',
+                    ),
+                    if (widget.actions != null &&
+                        widget.actions!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        height: 24,
+                        width: 1,
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      ...widget.actions!,
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
 
         // Search Bar (conditionally visible)
-        if (_isSearchVisible) _buildSearchBar(context),
+        if (_isSearchVisible)
+          CodeEditorTapRegion(child: _buildSearchBar(context)),
 
         Expanded(
           child: CodeEditor(

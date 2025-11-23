@@ -483,8 +483,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       index: newCursorPos.index,
       offset: newCursorPos.offset,
     );
-    // Request focus to keep editor active
-    _codeFocusNode.requestFocus();
   }
 
   int _getOffsetForPosition(CodeLines codeLines, CodeLinePosition position) {
@@ -548,8 +546,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       extentIndex: newEndPos.index,
       extentOffset: newEndPos.offset,
     );
-    // Request focus to keep editor active
-    _codeFocusNode.requestFocus();
   }
 
   void _toggleBold() => _wrapSelection('**', '**');
