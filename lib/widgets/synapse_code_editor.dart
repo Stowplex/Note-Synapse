@@ -17,6 +17,8 @@ class SynapseCodeEditor extends StatefulWidget {
   final bool readOnly;
   final List<Widget>? actions;
   final bool wordWrap;
+  final double fontSize;
+  final String fontFamily;
 
   const SynapseCodeEditor({
     super.key,
@@ -25,6 +27,8 @@ class SynapseCodeEditor extends StatefulWidget {
     this.readOnly = false,
     this.actions,
     this.wordWrap = false,
+    this.fontSize = 12.0,
+    this.fontFamily = 'monospace',
   });
 
   @override
@@ -145,8 +149,8 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
             focusNode: widget.focusNode,
             toolbarController: _mobileToolbarController,
             style: CodeEditorStyle(
-              fontSize: 12,
-              fontFamily: 'monospace',
+              fontSize: widget.fontSize,
+              fontFamily: widget.fontFamily,
               codeTheme: CodeHighlightTheme(
                 languages: {
                   'markdown': CodeHighlightThemeMode(mode: langMarkdown),

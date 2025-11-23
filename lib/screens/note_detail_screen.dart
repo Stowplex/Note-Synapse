@@ -1373,6 +1373,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               controller: _codeController,
               focusNode: _codeFocusNode,
               wordWrap: true,
+              fontSize: 14.0,
+              fontFamily: 'Roboto Mono',
               actions: [
                 IconButton(
                   icon: const Icon(Icons.format_bold, size: 20),
@@ -4280,7 +4282,7 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
       // Update UI
       setState(() {
         _selectedAttachmentPath = relativePath;
-        _srcController.text = relativePath;
+        _srcController.text = relativePath.replaceFirst('attachments/', '');
         _isImporting = false;
       });
     } catch (e) {
@@ -4323,7 +4325,6 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
                   labelText: 'Source',
                   border: OutlineInputBorder(),
                 ),
-                readOnly: true,
               ),
               const SizedBox(height: 16),
               if (widget.existingAttachments.isNotEmpty) ...[
@@ -4343,7 +4344,8 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
                         onTap: () {
                           setState(() {
                             _selectedAttachmentPath = attachment.filePath;
-                            _srcController.text = attachment.filePath;
+                            _srcController.text = attachment.filePath
+                                .replaceFirst('attachments/', '');
                           });
                         },
                         child: Container(
