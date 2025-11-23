@@ -888,10 +888,9 @@ packages:
   markdown_toolbar:
     dependency: "direct main"
     description:
-      name: markdown_toolbar
-      sha256: "5f4e2548afe96cc2ccdad22da87d380e4726d2d3385ddbb7035aa94daf9a4d47"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/markdown_toolbar"
+      relative: true
+    source: path
     version: "0.5.0"
   matcher:
     dependency: transitive
@@ -1248,10 +1247,9 @@ packages:
   re_editor:
     dependency: "direct main"
     description:
-      name: re_editor
-      sha256: dd4e6ca7350a8fa0cda4e425b82a0c3c010f0f6b3f618c74223e05b8129ab629
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/re-editor"
+      relative: true
+    source: path
     version: "0.8.0"
   re_highlight:
     dependency: "direct main"

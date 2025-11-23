@@ -2428,6 +2428,39 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get addContextNotes => 'Add Context Notes';
+
+  @override
+  String get libraries => 'Libraries';
+
+  @override
+  String get noLibraries => 'No libraries';
+
+  @override
+  String get usageInstructions => 'Usage Instructions';
+
+  @override
+  String get libraryLinks => 'Library Links';
+
+  @override
+  String get editUserApp => 'Edit App';
+
+  @override
+  String get viewCode => 'View Code';
+
+  @override
+  String get editCode => 'Edit Code';
+
+  @override
+  String get code => 'Code';
+
+  @override
+  String get aiEdit => 'AI Edit';
+
+  @override
+  String get pleaseEnterSuggestion => 'Please enter a suggestion';
+
+  @override
   String get refreshTools => 'Refresh Tools';
 
   @override

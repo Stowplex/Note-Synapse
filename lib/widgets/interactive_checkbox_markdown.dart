@@ -396,7 +396,11 @@ class _InteractiveCheckboxMarkdownState
       }
     }
 
-    if (widget.noteId != null && _isHttpUrl(url)) {
+    if (widget.noteId != null &&
+        (_isHttpUrl(url) ||
+            (!url.contains(':') &&
+                !url.contains('/') &&
+                !url.contains('\\')))) {
       return FutureBuilder<_LocalImageSource?>(
         future: _resolveLocalImageSource(url),
         builder: (context, snapshot) {
@@ -628,6 +632,27 @@ class _InteractiveCheckboxMarkdownState
               }
             }
           }
+        }
+      }
+
+      // Check if it's a simple filename (local attachment)
+      // No scheme (contains ':'), no path separators
+      if (!url.contains(':') && !url.contains('/') && !url.contains('\\')) {
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final filePath = p.join(dir.path, url);
+        final file = File(filePath);
+
+        if (await file.exists()) {
+          final extension = p.extension(filePath).toLowerCase();
+          if (extension == '.svg') {
+            final content = await file.readAsString();
+            return _LocalImageSource(
+              path: filePath,
+              extension: extension,
+              svgContent: content,
+            );
+          }
+          return _LocalImageSource(path: filePath, extension: extension);
         }
       }
 

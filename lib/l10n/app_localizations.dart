@@ -4328,6 +4328,72 @@ abstract class AppLocalizations {
   /// **'No tools cached for {name}. Click refresh to fetch tools.'**
   String noToolsCachedFor(Object name);
 
+  /// No description provided for @addContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Context Notes'**
+  String get addContextNotes;
+
+  /// No description provided for @libraries.
+  ///
+  /// In en, this message translates to:
+  /// **'Libraries'**
+  String get libraries;
+
+  /// No description provided for @noLibraries.
+  ///
+  /// In en, this message translates to:
+  /// **'No libraries'**
+  String get noLibraries;
+
+  /// No description provided for @usageInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage Instructions'**
+  String get usageInstructions;
+
+  /// No description provided for @libraryLinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Library Links'**
+  String get libraryLinks;
+
+  /// No description provided for @editUserApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit App'**
+  String get editUserApp;
+
+  /// No description provided for @viewCode.
+  ///
+  /// In en, this message translates to:
+  /// **'View Code'**
+  String get viewCode;
+
+  /// No description provided for @editCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Code'**
+  String get editCode;
+
+  /// No description provided for @code.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get code;
+
+  /// No description provided for @aiEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Edit'**
+  String get aiEdit;
+
+  /// No description provided for @pleaseEnterSuggestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a suggestion'**
+  String get pleaseEnterSuggestion;
+
   /// No description provided for @refreshTools.
   ///
   /// In en, this message translates to:

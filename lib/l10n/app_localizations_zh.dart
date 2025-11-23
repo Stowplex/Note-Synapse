@@ -2356,6 +2356,39 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get addContextNotes => '添加上下文笔记';
+
+  @override
+  String get libraries => '库';
+
+  @override
+  String get noLibraries => '没有库';
+
+  @override
+  String get usageInstructions => '使用说明';
+
+  @override
+  String get libraryLinks => '库链接';
+
+  @override
+  String get editUserApp => '编辑应用';
+
+  @override
+  String get viewCode => '查看代码';
+
+  @override
+  String get editCode => '编辑代码';
+
+  @override
+  String get code => '代码';
+
+  @override
+  String get aiEdit => 'AI 编辑';
+
+  @override
+  String get pleaseEnterSuggestion => '请输入建议';
+
+  @override
   String get refreshTools => '刷新工具';
 
   @override
