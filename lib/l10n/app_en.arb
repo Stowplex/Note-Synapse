@@ -1368,5 +1368,126 @@
             "type": "String"
           }
         }
+      },
+  "rawDataManagerTitle": "Raw Data Manager",
+  "rawDataManagerSubtitle": "Advanced tools for file and database management",
+  "advancedToolTitle": "Advanced Tool",
+  "advancedToolWarning": "This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.",
+  "iUnderstand": "I Understand",
+  "fileManagerTab": "File Manager",
+  "databaseManagerTab": "Database Manager",
+  "warningDataInstability": "Warning: Direct data modification can cause app instability.",
+  "attachments": "Attachments",
+  "cache": "Cache",
+  "root": "Root",
+  "itemsCount": "{count} items",
+  "@itemsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
+    }
+  },
+  "deselectAll": "Deselect All",
+  "selectUnused": "Select Unused",
+  "noFilesFound": "No files found",
+  "used": "Used",
+  "unused": "Unused",
+  "renameFile": "Rename File",
+  "newName": "New Name",
+  "rename": "Rename",
+  "deleteFilesTitle": "Delete Files?",
+  "deleteFilesConfirmation": "Are you sure you want to delete {count} files? This cannot be undone.",
+  "@deleteFilesConfirmation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deletedFilesMessage": "Deleted {count} files",
+  "@deletedFilesMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRenamingFile": "Error renaming file: {error}",
+  "@errorRenamingFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "queryAndResults": "Query & Results",
+  "aiAssistant": "AI Assistant",
+  "notConnected": "Not connected",
+  "connectedTo": "Connected to: {name}",
+  "@connectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDefaultDb": "Error opening default DB: {error}",
+  "@errorOpeningDefaultDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDb": "Error opening DB: {error}",
+  "@errorOpeningDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "databaseExportedSuccess": "Database exported successfully",
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sqlQueryLabel": "SQL Query",
+  "sqlQueryHint": "SELECT * FROM notes LIMIT 5",
+  "runQueryTooltip": "Run Query",
+  "enterQueryMessage": "Enter a query to see results",
+  "noResultsReturned": "No results returned",
+  "queryExecutedMessage": "Query executed. {count} rows returned.",
+  "@queryExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "updateExecutedMessage": "Update executed. {count} rows affected.",
+  "@updateExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryError": "Query Error: {error}",
+  "@queryError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "askAiHint": "Ask AI about DB schema or errors...",
+  "openDbFileTooltip": "Open DB File",
+  "resetToDefaultDbTooltip": "Reset to Default DB",
+  "exportDbTooltip": "Export DB"
 }

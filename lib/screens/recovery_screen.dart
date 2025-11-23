@@ -13,6 +13,7 @@ import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
 import '../providers/app_provider.dart';
+import 'raw_data_manager/raw_data_manager_screen.dart';
 
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -1635,6 +1636,24 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   ],
                 ],
               ),
+            ),
+          ),
+
+          // Raw Data Manager
+          const SizedBox(height: 16),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.build_circle_outlined),
+              title: Text(l10n.rawDataManagerTitle),
+              subtitle: Text(l10n.rawDataManagerSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const RawDataManagerScreen(),
+                  ),
+                );
+              },
             ),
           ),
 

@@ -304,6 +304,31 @@ class DatabaseService {
     return 'note_synapse_test_${timestamp}_$randomSuffix.db';
   }
 
+  /// Returns the complete schema of the database as a list of CREATE TABLE statements
+  static List<String> getSchema() {
+    return [
+      _createNotesTable,
+      _createSubNotesTable,
+      _createTagsTable,
+      _createNoteTagsTable,
+      _createConversationTagsTable,
+      _createAttachmentsTable,
+      _createRelationshipsTable,
+      _createFiltersTable,
+      _createUserAppsTable,
+      _createAppRevisionsTable,
+      _createUserAppLibrariesTable,
+      _createUserAppLibraryDependenciesTable,
+      _createConversationsTable,
+      _createConversationMessagesTable,
+      _createConversationAttachmentsTable,
+      _createConversationMessageMappingTable,
+      _createMessageParentsTable,
+      _createConversationNoteMappingTable,
+      ..._createIndexes,
+    ];
+  }
+
   // For testing, allow creating new instances
   DatabaseService.createNew({String? databaseName})
     : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {

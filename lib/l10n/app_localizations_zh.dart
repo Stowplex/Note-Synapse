@@ -2483,7 +2483,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get annotate => '标注';
 
   @override
-  String get askAiHint => '向 AI 询问这条笔记...';
+  String get askAiHint => '向 AI 询问有关数据库架构或错误的信息...';
 
   @override
   String get send => '发送';
@@ -3372,4 +3372,150 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorInstallingStarterApps(String error) {
     return '安装入门应用时出错：$error';
   }
+
+  @override
+  String get rawDataManagerTitle => '原始数据管理器';
+
+  @override
+  String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
+
+  @override
+  String get advancedToolTitle => '高级工具';
+
+  @override
+  String get advancedToolWarning =>
+      '此工具提供对应用程序数据和数据库的原始访问权限。使用不当可能导致永久性数据丢失或损坏。\n\n除非您知道自己在做什么或在支持人员的指导下，否则请勿使用此工具。';
+
+  @override
+  String get iUnderstand => '我明白';
+
+  @override
+  String get fileManagerTab => '文件管理器';
+
+  @override
+  String get databaseManagerTab => '数据库管理器';
+
+  @override
+  String get warningDataInstability => '警告：直接修改数据可能会导致应用程序不稳定。';
+
+  @override
+  String get cache => '缓存';
+
+  @override
+  String get root => '根目录';
+
+  @override
+  String itemsCount(int count) {
+    return '$count 个项目';
+  }
+
+  @override
+  String get selectUnused => '选择未使用';
+
+  @override
+  String get noFilesFound => '未找到文件';
+
+  @override
+  String get used => '已使用';
+
+  @override
+  String get unused => '未使用';
+
+  @override
+  String get renameFile => '重命名文件';
+
+  @override
+  String get newName => '新名称';
+
+  @override
+  String get rename => '重命名';
+
+  @override
+  String get deleteFilesTitle => '删除文件？';
+
+  @override
+  String deleteFilesConfirmation(int count) {
+    return '您确定要删除 $count 个文件吗？此操作无法撤销。';
+  }
+
+  @override
+  String deletedFilesMessage(int count) {
+    return '已删除 $count 个文件';
+  }
+
+  @override
+  String errorRenamingFile(String error) {
+    return '重命名文件出错：$error';
+  }
+
+  @override
+  String get queryAndResults => '查询与结果';
+
+  @override
+  String get aiAssistant => 'AI 助手';
+
+  @override
+  String get notConnected => '未连接';
+
+  @override
+  String connectedTo(String name) {
+    return '已连接到：$name';
+  }
+
+  @override
+  String errorOpeningDefaultDb(String error) {
+    return '打开默认数据库出错：$error';
+  }
+
+  @override
+  String errorOpeningDb(String error) {
+    return '打开数据库出错：$error';
+  }
+
+  @override
+  String get databaseExportedSuccess => '数据库导出成功';
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get sqlQueryLabel => 'SQL 查询';
+
+  @override
+  String get sqlQueryHint => 'SELECT * FROM notes LIMIT 5';
+
+  @override
+  String get runQueryTooltip => '运行查询';
+
+  @override
+  String get enterQueryMessage => '输入查询以查看结果';
+
+  @override
+  String get noResultsReturned => '未返回结果';
+
+  @override
+  String queryExecutedMessage(int count) {
+    return '查询已执行。返回 $count 行。';
+  }
+
+  @override
+  String updateExecutedMessage(int count) {
+    return '更新已执行。影响 $count 行。';
+  }
+
+  @override
+  String queryError(String error) {
+    return '查询错误：$error';
+  }
+
+  @override
+  String get openDbFileTooltip => '打开数据库文件';
+
+  @override
+  String get resetToDefaultDbTooltip => '重置为默认数据库';
+
+  @override
+  String get exportDbTooltip => '导出数据库';
 }

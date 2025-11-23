@@ -1364,5 +1364,126 @@
             "type": "String"
           }
         }
+      },
+  "rawDataManagerTitle": "原始数据管理器",
+  "rawDataManagerSubtitle": "用于文件和数据库管理的高级工具",
+  "advancedToolTitle": "高级工具",
+  "advancedToolWarning": "此工具提供对应用程序数据和数据库的原始访问权限。使用不当可能导致永久性数据丢失或损坏。\n\n除非您知道自己在做什么或在支持人员的指导下，否则请勿使用此工具。",
+  "iUnderstand": "我明白",
+  "fileManagerTab": "文件管理器",
+  "databaseManagerTab": "数据库管理器",
+  "warningDataInstability": "警告：直接修改数据可能会导致应用程序不稳定。",
+  "attachments": "附件",
+  "cache": "缓存",
+  "root": "根目录",
+  "itemsCount": "{count} 个项目",
+  "@itemsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
+    }
+  },
+  "deselectAll": "取消全选",
+  "selectUnused": "选择未使用",
+  "noFilesFound": "未找到文件",
+  "used": "已使用",
+  "unused": "未使用",
+  "renameFile": "重命名文件",
+  "newName": "新名称",
+  "rename": "重命名",
+  "deleteFilesTitle": "删除文件？",
+  "deleteFilesConfirmation": "您确定要删除 {count} 个文件吗？此操作无法撤销。",
+  "@deleteFilesConfirmation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deletedFilesMessage": "已删除 {count} 个文件",
+  "@deletedFilesMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRenamingFile": "重命名文件出错：{error}",
+  "@errorRenamingFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "queryAndResults": "查询与结果",
+  "aiAssistant": "AI 助手",
+  "notConnected": "未连接",
+  "connectedTo": "已连接到：{name}",
+  "@connectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDefaultDb": "打开默认数据库出错：{error}",
+  "@errorOpeningDefaultDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDb": "打开数据库出错：{error}",
+  "@errorOpeningDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "databaseExportedSuccess": "数据库导出成功",
+  "exportFailed": "导出失败：{error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sqlQueryLabel": "SQL 查询",
+  "sqlQueryHint": "SELECT * FROM notes LIMIT 5",
+  "runQueryTooltip": "运行查询",
+  "enterQueryMessage": "输入查询以查看结果",
+  "noResultsReturned": "未返回结果",
+  "queryExecutedMessage": "查询已执行。返回 {count} 行。",
+  "@queryExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "updateExecutedMessage": "更新已执行。影响 {count} 行。",
+  "@updateExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryError": "查询错误：{error}",
+  "@queryError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "askAiHint": "向 AI 询问有关数据库架构或错误的信息...",
+  "openDbFileTooltip": "打开数据库文件",
+  "resetToDefaultDbTooltip": "重置为默认数据库",
+  "exportDbTooltip": "导出数据库"
 }

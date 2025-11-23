@@ -2569,7 +2569,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get annotate => 'Annotate';
 
   @override
-  String get askAiHint => 'Ask the AI about this note...';
+  String get askAiHint => 'Ask AI about DB schema or errors...';
 
   @override
   String get send => 'Send';
@@ -3551,4 +3551,152 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorInstallingStarterApps(String error) {
     return 'Error installing starter apps: $error';
   }
+
+  @override
+  String get rawDataManagerTitle => 'Raw Data Manager';
+
+  @override
+  String get rawDataManagerSubtitle =>
+      'Advanced tools for file and database management';
+
+  @override
+  String get advancedToolTitle => 'Advanced Tool';
+
+  @override
+  String get advancedToolWarning =>
+      'This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.';
+
+  @override
+  String get iUnderstand => 'I Understand';
+
+  @override
+  String get fileManagerTab => 'File Manager';
+
+  @override
+  String get databaseManagerTab => 'Database Manager';
+
+  @override
+  String get warningDataInstability =>
+      'Warning: Direct data modification can cause app instability.';
+
+  @override
+  String get cache => 'Cache';
+
+  @override
+  String get root => 'Root';
+
+  @override
+  String itemsCount(int count) {
+    return '$count items';
+  }
+
+  @override
+  String get selectUnused => 'Select Unused';
+
+  @override
+  String get noFilesFound => 'No files found';
+
+  @override
+  String get used => 'Used';
+
+  @override
+  String get unused => 'Unused';
+
+  @override
+  String get renameFile => 'Rename File';
+
+  @override
+  String get newName => 'New Name';
+
+  @override
+  String get rename => 'Rename';
+
+  @override
+  String get deleteFilesTitle => 'Delete Files?';
+
+  @override
+  String deleteFilesConfirmation(int count) {
+    return 'Are you sure you want to delete $count files? This cannot be undone.';
+  }
+
+  @override
+  String deletedFilesMessage(int count) {
+    return 'Deleted $count files';
+  }
+
+  @override
+  String errorRenamingFile(String error) {
+    return 'Error renaming file: $error';
+  }
+
+  @override
+  String get queryAndResults => 'Query & Results';
+
+  @override
+  String get aiAssistant => 'AI Assistant';
+
+  @override
+  String get notConnected => 'Not connected';
+
+  @override
+  String connectedTo(String name) {
+    return 'Connected to: $name';
+  }
+
+  @override
+  String errorOpeningDefaultDb(String error) {
+    return 'Error opening default DB: $error';
+  }
+
+  @override
+  String errorOpeningDb(String error) {
+    return 'Error opening DB: $error';
+  }
+
+  @override
+  String get databaseExportedSuccess => 'Database exported successfully';
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get sqlQueryLabel => 'SQL Query';
+
+  @override
+  String get sqlQueryHint => 'SELECT * FROM notes LIMIT 5';
+
+  @override
+  String get runQueryTooltip => 'Run Query';
+
+  @override
+  String get enterQueryMessage => 'Enter a query to see results';
+
+  @override
+  String get noResultsReturned => 'No results returned';
+
+  @override
+  String queryExecutedMessage(int count) {
+    return 'Query executed. $count rows returned.';
+  }
+
+  @override
+  String updateExecutedMessage(int count) {
+    return 'Update executed. $count rows affected.';
+  }
+
+  @override
+  String queryError(String error) {
+    return 'Query Error: $error';
+  }
+
+  @override
+  String get openDbFileTooltip => 'Open DB File';
+
+  @override
+  String get resetToDefaultDbTooltip => 'Reset to Default DB';
+
+  @override
+  String get exportDbTooltip => 'Export DB';
 }
