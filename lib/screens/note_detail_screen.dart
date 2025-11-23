@@ -54,7 +54,7 @@ class NoteDetailScreen extends StatefulWidget {
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
   late TextEditingController _titleController;
   late CodeLineEditingController _codeController;
-  // late FocusNode _contentFocusNode; // Not used with SynapseCodeEditor
+  late FocusNode _codeFocusNode;
   bool _isEditing = false;
   bool _hasChanges = false;
   bool _hasBeenSaved = false; // Track if note has been saved to database
@@ -104,7 +104,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     super.initState();
     _titleController = TextEditingController(text: widget.note.title);
     _codeController = CodeLineEditingController.fromText(widget.note.content);
-    // _contentFocusNode = FocusNode();
+    _codeFocusNode = FocusNode();
 
     // Initialize date fields for tasks
     if (widget.note.isTask) {
@@ -174,7 +174,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _titleController.dispose();
 
     _codeController.dispose();
-    // _contentFocusNode.dispose();
+    _codeFocusNode.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     super.dispose();
@@ -483,6 +483,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       index: newCursorPos.index,
       offset: newCursorPos.offset,
     );
+    // Request focus to keep editor active
+    _codeFocusNode.requestFocus();
   }
 
   int _getOffsetForPosition(CodeLines codeLines, CodeLinePosition position) {
@@ -546,6 +548,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       extentIndex: newEndPos.index,
       extentOffset: newEndPos.offset,
     );
+    // Request focus to keep editor active
+    _codeFocusNode.requestFocus();
   }
 
   void _toggleBold() => _wrapSelection('**', '**');
@@ -1010,6 +1014,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Expanded(
             child: SynapseCodeEditor(
               controller: _codeController,
+              focusNode: _codeFocusNode,
               wordWrap: true,
               actions: [
                 IconButton(
