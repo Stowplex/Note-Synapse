@@ -665,16 +665,17 @@ class GeminiModel implements AIModel {
 
     final duration = DateTime.now().difference(startTime);
 
-    LoggerService.logAiResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      responseBody: response.body,
-      requestId: actualRequestId,
-      duration: duration,
-    );
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: data,
+        requestId: actualRequestId,
+        duration: duration,
+      );
+
       if (data['candidates'] != null && data['candidates'].isNotEmpty) {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
@@ -768,6 +769,13 @@ class GeminiModel implements AIModel {
       );
       throw Exception('No content in Gemini API response');
     } else {
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
+        requestId: actualRequestId,
+        duration: duration,
+      );
       LoggerService.logAiError(
         error:
             'Failed to process request: ${response.statusCode} - ${response.body}',

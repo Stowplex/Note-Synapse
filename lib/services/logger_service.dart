@@ -87,64 +87,75 @@ class LoggerService {
     required Map<String, dynamic> requestBody,
     String? requestId,
   }) {
-    final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final requestIdStr =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final timestamp = DateTime.now();
 
     if (kDebugMode) {
-      _logger.d('🤖 AI REQUEST [$requestIdStr]', error: {
-        'endpoint': endpoint,
-        'headers': headers,
-        'body': requestBody,
-        'timestamp': timestamp.toIso8601String(),
-      });
+      _logger.d(
+        '🤖 AI REQUEST [$requestIdStr]',
+        error: {
+          'endpoint': endpoint,
+          'headers': headers,
+          'body': requestBody,
+          'timestamp': timestamp.toIso8601String(),
+        },
+      );
     }
 
     // Add to log bucket
-    _addToLogBucket(AiLogEntry(
-      id: requestIdStr,
-      type: 'request',
-      endpoint: endpoint,
-      data: {
-        'headers': headers,
-        'body': requestBody,
-      },
-      timestamp: timestamp,
-    ));
+    _addToLogBucket(
+      AiLogEntry(
+        id: requestIdStr,
+        type: 'request',
+        endpoint: endpoint,
+        data: {'headers': headers, 'body': requestBody},
+        timestamp: timestamp,
+      ),
+    );
   }
 
   static void logAiResponse({
     required int statusCode,
     required Map<String, String> headers,
-    required String responseBody,
+    required dynamic responseBody,
     String? requestId,
     Duration? duration,
   }) {
-    final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final durationStr = duration != null ? ' (${duration.inMilliseconds}ms)' : '';
+    final requestIdStr =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final durationStr = duration != null
+        ? ' (${duration.inMilliseconds}ms)'
+        : '';
     final timestamp = DateTime.now();
 
     if (kDebugMode) {
-      _logger.d('🤖 AI RESPONSE [$requestIdStr]$durationStr', error: {
-        'statusCode': statusCode,
-        'headers': headers,
-        'body': responseBody,
-        'timestamp': timestamp.toIso8601String(),
-      });
+      _logger.d(
+        '🤖 AI RESPONSE [$requestIdStr]$durationStr',
+        error: {
+          'statusCode': statusCode,
+          'headers': headers,
+          'body': responseBody,
+          'timestamp': timestamp.toIso8601String(),
+        },
+      );
     }
-    
+
     // Add to log bucket
-    _addToLogBucket(AiLogEntry(
-      id: requestIdStr,
-      type: 'response',
-      endpoint: '', // Will be filled by matching request if available
-      data: {
-        'statusCode': statusCode,
-        'headers': headers,
-        'body': responseBody,
-        'duration': duration?.inMilliseconds,
-      },
-      timestamp: timestamp,
-    ));
+    _addToLogBucket(
+      AiLogEntry(
+        id: requestIdStr,
+        type: 'response',
+        endpoint: '', // Will be filled by matching request if available
+        data: {
+          'statusCode': statusCode,
+          'headers': headers,
+          'body': responseBody,
+          'duration': duration?.inMilliseconds,
+        },
+        timestamp: timestamp,
+      ),
+    );
   }
 
   static void logAiError({
@@ -153,27 +164,32 @@ class LoggerService {
     String? requestId,
     Duration? duration,
   }) {
-    final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final durationStr = duration != null ? ' (${duration.inMilliseconds}ms)' : '';
+    final requestIdStr =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final durationStr = duration != null
+        ? ' (${duration.inMilliseconds}ms)'
+        : '';
     final timestamp = DateTime.now();
-    
-    _logger.e('🤖 AI ERROR [$requestIdStr]$durationStr', error: {
-      'endpoint': endpoint,
-      'error': error,
-      'timestamp': timestamp.toIso8601String(),
-    });
+
+    _logger.e(
+      '🤖 AI ERROR [$requestIdStr]$durationStr',
+      error: {
+        'endpoint': endpoint,
+        'error': error,
+        'timestamp': timestamp.toIso8601String(),
+      },
+    );
 
     // Add to log bucket
-    _addToLogBucket(AiLogEntry(
-      id: requestIdStr,
-      type: 'error',
-      endpoint: endpoint,
-      data: {
-        'error': error,
-        'duration': duration?.inMilliseconds,
-      },
-      timestamp: timestamp,
-    ));
+    _addToLogBucket(
+      AiLogEntry(
+        id: requestIdStr,
+        type: 'error',
+        endpoint: endpoint,
+        data: {'error': error, 'duration': duration?.inMilliseconds},
+        timestamp: timestamp,
+      ),
+    );
   }
 
   static void logAiConsole({
@@ -182,19 +198,22 @@ class LoggerService {
     String? requestId,
     Duration? duration,
   }) {
-    final requestIdStr = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final requestIdStr =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final timestamp = DateTime.now();
-  
+
     // Add to log bucket
-    _addToLogBucket(AiLogEntry(
-      id: requestIdStr,
-      type: 'console',
-      endpoint: endpoint,
-      data: {
-        'consoleOutput': consoleOutput,
-        'duration': duration?.inMilliseconds,
-      },
-      timestamp: timestamp,
-    ));
+    _addToLogBucket(
+      AiLogEntry(
+        id: requestIdStr,
+        type: 'console',
+        endpoint: endpoint,
+        data: {
+          'consoleOutput': consoleOutput,
+          'duration': duration?.inMilliseconds,
+        },
+        timestamp: timestamp,
+      ),
+    );
   }
 }

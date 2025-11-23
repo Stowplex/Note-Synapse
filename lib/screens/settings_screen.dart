@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_json_view/flutter_json_view.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
@@ -1171,16 +1171,98 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: theme.dividerColor, width: 1),
             ),
-            child: SelectableText(
-              data is Map || data is List
-                  ? const JsonEncoder.withIndent('  ').convert(data)
-                  : data.toString(),
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                color: theme.textTheme.bodyMedium?.color,
-              ),
-            ),
+            child: data is Map
+                ? JsonView.map(
+                    Map<String, dynamic>.from(data),
+                    theme: JsonViewTheme(
+                      keyStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                      stringStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.textTheme.bodyMedium?.color,
+                      ),
+                      intStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.secondary,
+                      ),
+                      doubleStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.secondary,
+                      ),
+                      boolStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.tertiary,
+                      ),
+                      openIcon: Icon(
+                        Icons.arrow_drop_down,
+                        size: 20,
+                        color: theme.iconTheme.color,
+                      ),
+                      closeIcon: Icon(
+                        Icons.arrow_right,
+                        size: 20,
+                        color: theme.iconTheme.color,
+                      ),
+                    ),
+                  )
+                : data is List
+                ? JsonView.map(
+                    {'items': data},
+                    theme: JsonViewTheme(
+                      keyStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                      stringStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.textTheme.bodyMedium?.color,
+                      ),
+                      intStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.secondary,
+                      ),
+                      doubleStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.secondary,
+                      ),
+                      boolStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: theme.colorScheme.tertiary,
+                      ),
+                      openIcon: Icon(
+                        Icons.arrow_drop_down,
+                        size: 20,
+                        color: theme.iconTheme.color,
+                      ),
+                      closeIcon: Icon(
+                        Icons.arrow_right,
+                        size: 20,
+                        color: theme.iconTheme.color,
+                      ),
+                    ),
+                  )
+                : SelectableText(
+                    data.toString(),
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: theme.textTheme.bodyMedium?.color,
+                    ),
+                  ),
           ),
         ],
       ),

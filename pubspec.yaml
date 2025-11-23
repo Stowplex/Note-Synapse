@@ -143,6 +143,9 @@ dependencies:
   # Flutter SVG for displaying SVG image
   flutter_svg: ^2.2.1
 
+  # JSON viewer widget
+  flutter_json_view: ^1.1.5
+
 
 dev_dependencies:
   flutter_test:

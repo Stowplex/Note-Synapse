@@ -673,16 +673,15 @@ class OpenAIModel implements AIModel {
 
     final duration = DateTime.now().difference(startTime);
 
-    LoggerService.logAiResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      responseBody: response.body,
-      requestId: requestId,
-      duration: duration,
-    );
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: data,
+        requestId: requestId,
+        duration: duration,
+      );
       if (data['choices'] != null && data['choices'].isNotEmpty) {
         final choice = data['choices'][0];
         final rawContent = choice['message']['content'];
@@ -706,6 +705,13 @@ class OpenAIModel implements AIModel {
       );
       throw Exception('No content in OpenAI API response');
     } else {
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
+        requestId: requestId,
+        duration: duration,
+      );
       LoggerService.logAiError(
         error:
             'Failed to process request: ${response.statusCode} - ${response.body}',
