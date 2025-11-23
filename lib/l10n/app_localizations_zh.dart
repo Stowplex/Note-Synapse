@@ -12,6 +12,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => '笔记突触';
 
   @override
+  String get untitled => 'Untitled';
+
+  @override
   String get settings => '设置';
 
   @override

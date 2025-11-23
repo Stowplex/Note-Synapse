@@ -104,6 +104,12 @@ abstract class AppLocalizations {
   /// **'Note Synapse'**
   String get appTitle;
 
+  /// No description provided for @untitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get untitled;
+
   /// No description provided for @settings.
   ///
   /// In en, this message translates to:

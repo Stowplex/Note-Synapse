@@ -548,33 +548,394 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  void _toggleBold() => _wrapSelection('**', '**');
-  void _toggleItalic() => _wrapSelection('*', '*');
-  void _toggleCode() => _wrapSelection('`', '`');
-  void _insertList() => _insertText('\n- ', selectionOffset: 3);
+  void _toggleBold() => _toggleMarker('**', '**');
+  void _toggleItalic() => _toggleMarker('*', '*');
+  void _toggleStrikethrough() => _toggleMarker('~~', '~~');
+  void _toggleInlineCode() => _toggleMarker('`', '`');
+  void _toggleCodeBlock() {
+    final sel = _codeController.selection;
+    if (sel.start == sel.end) {
+      // Insert ````|````, cursor goes between backticks
+      _insertText('````````', selectionOffset: 4);
+    } else {
+      _toggleMarker('````', '````');
+    }
+  }
+
+  void _toggleMarker(String prefix, String suffix) {
+    final sel = _codeController.selection;
+    final text = _codeController.text;
+    final codeLines = _codeController.value.codeLines;
+
+    final startOff = _getOffsetForPosition(codeLines, sel.start);
+    final endOff = _getOffsetForPosition(codeLines, sel.end);
+    final selectedText = text.substring(startOff, endOff);
+    final beforeText = text.substring(0, startOff);
+    final afterText = text.substring(endOff);
+
+    if (selectedText.isEmpty) {
+      // Check if cursor is between markers: **|**
+      if (beforeText.endsWith(prefix) && afterText.startsWith(suffix)) {
+        // Remove markers
+        final newText =
+            beforeText.substring(0, beforeText.length - prefix.length) +
+            afterText.substring(suffix.length);
+        _codeController.text = newText;
+
+        final newOffset = startOff - prefix.length;
+        final newPos = _getPositionForOffset(
+          _codeController.value.codeLines,
+          newOffset,
+        );
+        _codeController.selection = CodeLineSelection.collapsed(
+          index: newPos.index,
+          offset: newPos.offset,
+        );
+      } else {
+        // Insert markers with cursor between: **|**
+        _insertText('$prefix$suffix', selectionOffset: prefix.length);
+      }
+    } else if (selectedText.startsWith(prefix) &&
+        selectedText.endsWith(suffix) &&
+        selectedText.length > prefix.length + suffix.length) {
+      // Selection has markers: **abc** → abc (keep abc selected)
+      final unwrapped = selectedText.substring(
+        prefix.length,
+        selectedText.length - suffix.length,
+      );
+      final sb = StringBuffer();
+      sb.write(text.substring(0, startOff));
+      sb.write(unwrapped);
+      sb.write(text.substring(endOff));
+
+      _codeController.text = sb.toString();
+
+      // Keep the unwrapped text selected
+      final newStartPos = _getPositionForOffset(
+        _codeController.value.codeLines,
+        startOff,
+      );
+      final newEndPos = _getPositionForOffset(
+        _codeController.value.codeLines,
+        startOff + unwrapped.length,
+      );
+
+      _codeController.selection = CodeLineSelection(
+        baseIndex: newStartPos.index,
+        baseOffset: newStartPos.offset,
+        extentIndex: newEndPos.index,
+        extentOffset: newEndPos.offset,
+      );
+    } else {
+      // Add markers: abc → **abc** (select **abc** including markers for next toggle)
+      final sb = StringBuffer();
+      sb.write(text.substring(0, startOff));
+      sb.write(prefix);
+      sb.write(selectedText);
+      sb.write(suffix);
+      sb.write(text.substring(endOff));
+
+      _codeController.text = sb.toString();
+
+      // Select the entire wrapped text INCLUDING markers so next toggle can detect them
+      final newStartPos = _getPositionForOffset(
+        _codeController.value.codeLines,
+        startOff,
+      );
+      final newEndPos = _getPositionForOffset(
+        _codeController.value.codeLines,
+        startOff + prefix.length + selectedText.length + suffix.length,
+      );
+
+      _codeController.selection = CodeLineSelection(
+        baseIndex: newStartPos.index,
+        baseOffset: newStartPos.offset,
+        extentIndex: newEndPos.index,
+        extentOffset: newEndPos.offset,
+      );
+    }
+  }
+
+  void _toggleQuote() {
+    final sel = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+
+    if (sel.start == sel.end) {
+      // Toggle quote on current line
+      _toggleLinePrefix(sel.start.index, '> ');
+    } else {
+      // Toggle quote on selected lines
+      for (int i = sel.start.index; i <= sel.end.index; i++) {
+        _toggleLinePrefix(i, '> ');
+      }
+    }
+  }
+
+  void _toggleBulletList() {
+    final sel = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+
+    if (sel.start == sel.end) {
+      _toggleLinePrefix(sel.start.index, '- ');
+    } else {
+      for (int i = sel.start.index; i <= sel.end.index; i++) {
+        _toggleLinePrefix(i, '- ');
+      }
+    }
+  }
+
+  void _toggleNumberedList() {
+    final sel = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+
+    if (sel.start == sel.end) {
+      _toggleLinePrefix(sel.start.index, '1. ');
+    } else {
+      for (int i = sel.start.index; i <= sel.end.index; i++) {
+        final number = i - sel.start.index + 1;
+        _toggleLinePrefix(i, '$number. ');
+      }
+    }
+  }
+
+  void _toggleLinePrefix(int lineIndex, String prefix) {
+    final codeLines = _codeController.value.codeLines;
+    if (lineIndex < 0 || lineIndex >= codeLines.length) return;
+
+    final line = codeLines[lineIndex].text;
+    String newLine;
+
+    if (line.startsWith(prefix)) {
+      // Remove prefix
+      newLine = line.substring(prefix.length);
+    } else {
+      // Add prefix
+      newLine = prefix + line;
+    }
+
+    // Calculate offset for this line
+    int lineStartOffset = 0;
+    for (int i = 0; i < lineIndex; i++) {
+      lineStartOffset += codeLines[i].text.length + 1;
+    }
+
+    final text = _codeController.text;
+    final beforeLine = text.substring(0, lineStartOffset);
+    final afterLine = text.substring(lineStartOffset + line.length);
+
+    _codeController.text = beforeLine + newLine + afterLine;
+  }
+
+  void _insertList() => _toggleBulletList(); // For backward compatibility
+
+  Future<void> _showHeadingMenu(BuildContext context) async {
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy + renderBox.size.height,
+        position.dx + renderBox.size.width,
+        position.dy,
+      ),
+      items: [
+        const PopupMenuItem(value: '# ', child: Text('# Heading 1')),
+        const PopupMenuItem(value: '## ', child: Text('## Heading 2')),
+        const PopupMenuItem(value: '### ', child: Text('### Heading 3')),
+        const PopupMenuItem(value: '#### ', child: Text('#### Heading 4')),
+        const PopupMenuItem(value: '##### ', child: Text('##### Heading 5')),
+        const PopupMenuItem(value: '###### ', child: Text('###### Heading 6')),
+      ],
+    );
+
+    if (result != null) {
+      _insertAtLineStart(result);
+    }
+  }
+
+  Future<void> _showCheckboxMenu(BuildContext context) async {
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy + renderBox.size.height,
+        position.dx + renderBox.size.width,
+        position.dy,
+      ),
+      items: [
+        const PopupMenuItem(value: '- [ ] ', child: Text('☐ Unchecked')),
+        const PopupMenuItem(value: '- [x] ', child: Text('☑ Checked')),
+      ],
+    );
+
+    if (result != null) {
+      _insertAtLineStart(result);
+    }
+  }
+
+  void _insertAtLineStart(String prefix) {
+    final sel = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+
+    if (sel.start == sel.end) {
+      // Insert at current line start
+      final lineIndex = sel.start.index;
+      if (lineIndex >= codeLines.length) return;
+
+      final line = codeLines[lineIndex].text;
+      final newLine = prefix + line;
+
+      int lineStartOffset = 0;
+      for (int i = 0; i < lineIndex; i++) {
+        lineStartOffset += codeLines[i].text.length + 1;
+      }
+
+      final text = _codeController.text;
+      final beforeLine = text.substring(0, lineStartOffset);
+      final afterLine = text.substring(lineStartOffset + line.length);
+
+      _codeController.text = beforeLine + newLine + afterLine;
+
+      // Place cursor after prefix
+      final newOffset = lineStartOffset + prefix.length;
+      final newPos = _getPositionForOffset(
+        _codeController.value.codeLines,
+        newOffset,
+      );
+      _codeController.selection = CodeLineSelection.collapsed(
+        index: newPos.index,
+        offset: newPos.offset,
+      );
+    } else {
+      // Insert at start of each selected line
+      for (int i = sel.start.index; i <= sel.end.index; i++) {
+        if (i >= _codeController.value.codeLines.length) break;
+        _insertAtLineStartIndex(i, prefix);
+      }
+    }
+  }
+
+  void _insertAtLineStartIndex(int lineIndex, String prefix) {
+    final codeLines = _codeController.value.codeLines;
+    if (lineIndex < 0 || lineIndex >= codeLines.length) return;
+
+    final line = codeLines[lineIndex].text;
+    if (line.startsWith(prefix)) return; // Already has prefix
+
+    final newLine = prefix + line;
+
+    int lineStartOffset = 0;
+    for (int i = 0; i < lineIndex; i++) {
+      lineStartOffset += codeLines[i].text.length + 1;
+    }
+
+    final text = _codeController.text;
+    final beforeLine = text.substring(0, lineStartOffset);
+    final afterLine = text.substring(lineStartOffset + line.length);
+
+    _codeController.text = beforeLine + newLine + afterLine;
+  }
+
   void _insertCheckbox() => _insertText('\n- [ ] ', selectionOffset: 7);
   void _toggleHeading() => _insertText('\n# ', selectionOffset: 3);
   void _insertLink() => _wrapSelection('[', '](url)');
 
   Future<void> _showImagePicker(BuildContext context) async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    // Get selected text for alt text
+    final sel = _codeController.selection;
+    final text = _codeController.text;
+    final codeLines = _codeController.value.codeLines;
+    final startOff = _getOffsetForPosition(codeLines, sel.start);
+    final endOff = _getOffsetForPosition(codeLines, sel.end);
+    final selectedText = text.substring(startOff, endOff);
 
-    if (image != null) {
-      final fileName = p.basename(image.path);
-      final markdown = '![$fileName]($fileName)';
-      _insertText(markdown, selectionOffset: markdown.length);
+    // Load existing image attachments
+    final attachments = widget.isNewNote
+        ? <Attachment>[]
+        : await _databaseService.getAttachmentsForNote(widget.note.id);
 
-      // Handle image addition logic (copying, etc.)
-      // We reuse the logic from _handleToolbarImageAdded if possible, or inline it.
-      // Since _handleToolbarImageAdded was removed/unused, we should implement the logic here.
-      // But for now, let's just insert the markdown as requested.
-      // The user might want the file to be copied.
-      // Let's call _handleImageAdded(image.path) if we have such method.
-      // I'll add a call to _handleToolbarImageAdded logic here if I can find it.
-      // But I'll just leave it as is for now to fix the errors.
+    final imageAttachments = attachments.where((a) {
+      final lower = a.filePath.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
 
-      _handleToolbarImageAdded(image.path);
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _ImagePickerDialog(
+        initialAltText: selectedText,
+        existingAttachments: imageAttachments,
+        onSaveNote: () async {
+          // Save note if new with no title
+          if (widget.isNewNote && !_hasBeenSaved) {
+            final l10n = AppLocalizations.of(context)!;
+            if (_titleController.text.trim().isEmpty) {
+              _titleController.text = l10n.untitled;
+            }
+            await _autoSave();
+          }
+          return widget.note.id;
+        },
+        onAddAttachment: (File imageFile, String fileName) async {
+          // Use existing attachment logic
+          final bytes = await imageFile.readAsBytes();
+          final relativePath = await FileUtils.saveFileToPrivateStorage(
+            bytes,
+            fileName,
+          );
+
+          // Add to note's attachments
+          final currentNote = context.read<AppProvider>().notes.firstWhere(
+            (note) => note.id == widget.note.id,
+            orElse: () => widget.note,
+          );
+          final updatedAttachmentPaths = List<String>.from(
+            currentNote.attachmentPaths,
+          )..add(relativePath);
+          final updatedNote = currentNote.copyWith(
+            attachmentPaths: updatedAttachmentPaths,
+            updatedAt: DateTime.now(),
+          );
+          await context.read<AppProvider>().updateNote(updatedNote);
+
+          return relativePath;
+        },
+      ),
+    );
+
+    if (result != null) {
+      final markdown = '![${result['alt']}](${result['src']})';
+      if (selectedText.isNotEmpty) {
+        // Replace selected text with markdown
+        final sb = StringBuffer();
+        sb.write(text.substring(0, startOff));
+        sb.write(markdown);
+        sb.write(text.substring(endOff));
+        _codeController.text = sb.toString();
+      } else {
+        // Insert at cursor
+        _insertText(markdown, selectionOffset: markdown.length);
+      }
     }
   }
 
@@ -1024,24 +1385,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   tooltip: 'Italic',
                 ),
                 IconButton(
+                  icon: const Icon(Icons.strikethrough_s, size: 20),
+                  onPressed: _toggleStrikethrough,
+                  tooltip: 'Strikethrough',
+                ),
+                IconButton(
                   icon: const Icon(Icons.code, size: 20),
-                  onPressed: _toggleCode,
-                  tooltip: 'Code',
+                  onPressed: _toggleInlineCode,
+                  tooltip: 'Inline Code',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.data_object, size: 20),
+                  onPressed: _toggleCodeBlock,
+                  tooltip: 'Code Block',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.format_quote, size: 20),
+                  onPressed: _toggleQuote,
+                  tooltip: 'Quote',
                 ),
                 IconButton(
                   icon: const Icon(Icons.list, size: 20),
-                  onPressed: _insertList,
-                  tooltip: 'List',
+                  onPressed: _toggleBulletList,
+                  tooltip: 'Bullet List',
                 ),
                 IconButton(
-                  icon: const Icon(Icons.check_box_outlined, size: 20),
-                  onPressed: _insertCheckbox,
-                  tooltip: 'Checkbox',
+                  icon: const Icon(Icons.format_list_numbered, size: 20),
+                  onPressed: _toggleNumberedList,
+                  tooltip: 'Numbered List',
                 ),
-                IconButton(
-                  icon: const Icon(Icons.title, size: 20),
-                  onPressed: _toggleHeading,
-                  tooltip: 'Heading',
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.check_box_outlined, size: 20),
+                    onPressed: () => _showCheckboxMenu(context),
+                    tooltip: 'Checkbox',
+                  ),
+                ),
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.title, size: 20),
+                    onPressed: () => _showHeadingMenu(context),
+                    tooltip: 'Heading',
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.link, size: 20),
@@ -3820,5 +4205,224 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
         ),
       );
     }
+  }
+}
+
+// Image Picker Dialog Widget
+class _ImagePickerDialog extends StatefulWidget {
+  final String initialAltText;
+  final List<Attachment> existingAttachments;
+  final Future<String> Function() onSaveNote;
+  final Future<String> Function(File imageFile, String fileName)
+  onAddAttachment;
+
+  const _ImagePickerDialog({
+    required this.initialAltText,
+    required this.existingAttachments,
+    required this.onSaveNote,
+    required this.onAddAttachment,
+  });
+
+  @override
+  State<_ImagePickerDialog> createState() => _ImagePickerDialogState();
+}
+
+class _ImagePickerDialogState extends State<_ImagePickerDialog> {
+  late TextEditingController _altTextController;
+  late TextEditingController _srcController;
+  String? _selectedAttachmentPath;
+  bool _isImporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _altTextController = TextEditingController(text: widget.initialAltText);
+    _srcController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _altTextController.dispose();
+    _srcController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickNewImage() async {
+    setState(() {
+      _isImporting = true;
+    });
+
+    try {
+      // Ensure note is saved first
+      await widget.onSaveNote();
+
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+      if (image == null) {
+        setState(() {
+          _isImporting = false;
+        });
+        return;
+      }
+
+      // Generate unique filename
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = p.extension(image.path);
+      final fileName = 'image_$timestamp$extension';
+
+      // Save attachment using callback
+      final relativePath = await widget.onAddAttachment(
+        File(image.path),
+        fileName,
+      );
+
+      // Update UI
+      setState(() {
+        _selectedAttachmentPath = relativePath;
+        _srcController.text = relativePath;
+        _isImporting = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isImporting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to import image: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+
+    return AlertDialog(
+      title: const Text('Insert Image'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _altTextController,
+                decoration: const InputDecoration(
+                  labelText: 'Alt Text (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _srcController,
+                decoration: const InputDecoration(
+                  labelText: 'Source',
+                  border: OutlineInputBorder(),
+                ),
+                readOnly: true,
+              ),
+              const SizedBox(height: 16),
+              if (widget.existingAttachments.isNotEmpty) ...[
+                Text('Existing Attachments', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.existingAttachments.length,
+                    itemBuilder: (context, index) {
+                      final attachment = widget.existingAttachments[index];
+                      final isSelected =
+                          _selectedAttachmentPath == attachment.filePath;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedAttachmentPath = attachment.filePath;
+                            _srcController.text = attachment.filePath;
+                          });
+                        },
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outline,
+                              width: isSelected ? 3 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: FutureBuilder<String>(
+                              future: attachment.getAbsolutePath(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Image.file(
+                                  File(snapshot.data!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(Icons.broken_image);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isImporting ? null : _pickNewImage,
+          child: _isImporting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Pick'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: _srcController.text.isEmpty
+              ? null
+              : () {
+                  Navigator.pop(context, {
+                    'alt': _altTextController.text,
+                    'src': _srcController.text,
+                  });
+                },
+          child: const Text('OK'),
+        ),
+      ],
+    );
   }
 }

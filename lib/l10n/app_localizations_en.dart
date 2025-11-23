@@ -12,6 +12,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Note Synapse';
 
   @override
+  String get untitled => 'Untitled';
+
+  @override
   String get settings => 'Settings';
 
   @override
