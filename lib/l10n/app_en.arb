@@ -1500,6 +1500,7 @@
     }
   },
   "askAiHint": "Ask AI about DB schema or errors...",
+  "askAiAboutNoteHint": "Ask AI about this note...",
   "openDbFileTooltip": "Open DB File",
   "resetToDefaultDbTooltip": "Reset to Default DB",
   "exportDbTooltip": "Export DB"

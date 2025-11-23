@@ -6440,6 +6440,12 @@ abstract class AppLocalizations {
   /// **'Query Error: {error}'**
   String queryError(String error);
 
+  /// No description provided for @askAiAboutNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask AI about this note...'**
+  String get askAiAboutNoteHint;
+
   /// No description provided for @openDbFileTooltip.
   ///
   /// In en, this message translates to:

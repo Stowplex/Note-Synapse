@@ -3550,6 +3550,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get askAiAboutNoteHint => '向 AI 询问这条笔记...';
+
+  @override
   String get openDbFileTooltip => '打开数据库文件';
 
   @override

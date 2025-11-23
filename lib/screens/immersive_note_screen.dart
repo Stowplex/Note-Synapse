@@ -1366,7 +1366,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         decoration: InputDecoration.collapsed(
                           hintText: _isScratchpadMode
                               ? 'Send to scratchpad' // TODO: l10n
-                              : l10n.askAiHint,
+                              : l10n.askAiAboutNoteHint,
                         ),
                         onSubmitted: (_) {
                           if (!_isSending && !_isAborting) {

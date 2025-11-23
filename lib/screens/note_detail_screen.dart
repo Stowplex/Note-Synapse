@@ -19,6 +19,8 @@ import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
+import '../widgets/synapse_note_editor.dart';
+
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
@@ -35,7 +37,6 @@ import '../models/conversation.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import '../utils/remote_image_utils.dart';
-import '../widgets/synapse_code_editor.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -460,403 +461,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  // Markdown Helper Methods
-
-  void _insertText(String text, {int selectionOffset = 0}) {
-    final selection = _codeController.selection;
-    final currentText = _codeController.text;
-    final codeLines = _codeController.value.codeLines;
-
-    int startOffset = _getOffsetForPosition(codeLines, selection.start);
-    int endOffset = _getOffsetForPosition(codeLines, selection.end);
-
-    final newText = currentText.replaceRange(startOffset, endOffset, text);
-    _codeController.text = newText;
-
-    final newCursorOffset = startOffset + selectionOffset;
-    final newCursorPos = _getPositionForOffset(
-      _codeController.value.codeLines,
-      newCursorOffset,
-    );
-
-    _codeController.selection = CodeLineSelection.collapsed(
-      index: newCursorPos.index,
-      offset: newCursorPos.offset,
-    );
-  }
-
-  int _getOffsetForPosition(CodeLines codeLines, CodeLinePosition position) {
-    int offset = 0;
-    for (int i = 0; i < position.index && i < codeLines.length; i++) {
-      offset += codeLines[i].text.length + 1; // +1 for newline
-    }
-    return offset + position.offset;
-  }
-
-  CodeLinePosition _getPositionForOffset(CodeLines codeLines, int offset) {
-    int currentOffset = 0;
-    for (int i = 0; i < codeLines.length; i++) {
-      final lineLength = codeLines[i].text.length + 1; // +1 for newline
-      if (currentOffset + lineLength > offset) {
-        return CodeLinePosition(index: i, offset: offset - currentOffset);
-      }
-      currentOffset += lineLength;
-    }
-    if (codeLines.length > 0) {
-      return CodeLinePosition(
-        index: codeLines.length - 1,
-        offset: codeLines.last.text.length,
-      );
-    }
-    return const CodeLinePosition(index: 0, offset: 0);
-  }
-
-  void _wrapSelection(String prefix, String suffix) {
-    final selection = _codeController.selection;
-    final codeLines = _codeController.value.codeLines;
-    final startOffset = _getOffsetForPosition(codeLines, selection.start);
-    final endOffset = _getOffsetForPosition(codeLines, selection.end);
-
-    final text = _codeController.text;
-    final selectedText = text.substring(startOffset, endOffset);
-    final newText = '$prefix$selectedText$suffix';
-
-    final sb = StringBuffer();
-    sb.write(text.substring(0, startOffset));
-    sb.write(newText);
-    sb.write(text.substring(endOffset));
-
-    _codeController.text = sb.toString();
-
-    final newStartOffset = startOffset + prefix.length;
-    final newEndOffset = newStartOffset + selectedText.length;
-
-    final newStartPos = _getPositionForOffset(
-      _codeController.value.codeLines,
-      newStartOffset,
-    );
-    final newEndPos = _getPositionForOffset(
-      _codeController.value.codeLines,
-      newEndOffset,
-    );
-
-    _codeController.selection = CodeLineSelection(
-      baseIndex: newStartPos.index,
-      baseOffset: newStartPos.offset,
-      extentIndex: newEndPos.index,
-      extentOffset: newEndPos.offset,
-    );
-  }
-
-  void _toggleBold() => _toggleMarker('**', '**');
-  void _toggleItalic() => _toggleMarker('*', '*');
-  void _toggleStrikethrough() => _toggleMarker('~~', '~~');
-  void _toggleInlineCode() => _toggleMarker('`', '`');
-  void _toggleCodeBlock() {
-    final sel = _codeController.selection;
-    if (sel.start == sel.end) {
-      // Insert ````|````, cursor goes between backticks
-      _insertText('````````', selectionOffset: 4);
-    } else {
-      _toggleMarker('````', '````');
-    }
-  }
-
-  void _toggleMarker(String prefix, String suffix) {
-    final sel = _codeController.selection;
-    final text = _codeController.text;
-    final codeLines = _codeController.value.codeLines;
-
-    final startOff = _getOffsetForPosition(codeLines, sel.start);
-    final endOff = _getOffsetForPosition(codeLines, sel.end);
-    final selectedText = text.substring(startOff, endOff);
-    final beforeText = text.substring(0, startOff);
-    final afterText = text.substring(endOff);
-
-    if (selectedText.isEmpty) {
-      // Check if cursor is between markers: **|**
-      if (beforeText.endsWith(prefix) && afterText.startsWith(suffix)) {
-        // Remove markers
-        final newText =
-            beforeText.substring(0, beforeText.length - prefix.length) +
-            afterText.substring(suffix.length);
-        _codeController.text = newText;
-
-        final newOffset = startOff - prefix.length;
-        final newPos = _getPositionForOffset(
-          _codeController.value.codeLines,
-          newOffset,
-        );
-        _codeController.selection = CodeLineSelection.collapsed(
-          index: newPos.index,
-          offset: newPos.offset,
-        );
-      } else {
-        // Insert markers with cursor between: **|**
-        _insertText('$prefix$suffix', selectionOffset: prefix.length);
-      }
-    } else if (selectedText.startsWith(prefix) &&
-        selectedText.endsWith(suffix) &&
-        selectedText.length > prefix.length + suffix.length) {
-      // Selection has markers: **abc** → abc (keep abc selected)
-      final unwrapped = selectedText.substring(
-        prefix.length,
-        selectedText.length - suffix.length,
-      );
-      final sb = StringBuffer();
-      sb.write(text.substring(0, startOff));
-      sb.write(unwrapped);
-      sb.write(text.substring(endOff));
-
-      _codeController.text = sb.toString();
-
-      // Keep the unwrapped text selected
-      final newStartPos = _getPositionForOffset(
-        _codeController.value.codeLines,
-        startOff,
-      );
-      final newEndPos = _getPositionForOffset(
-        _codeController.value.codeLines,
-        startOff + unwrapped.length,
-      );
-
-      _codeController.selection = CodeLineSelection(
-        baseIndex: newStartPos.index,
-        baseOffset: newStartPos.offset,
-        extentIndex: newEndPos.index,
-        extentOffset: newEndPos.offset,
-      );
-    } else {
-      // Add markers: abc → **abc** (select **abc** including markers for next toggle)
-      final sb = StringBuffer();
-      sb.write(text.substring(0, startOff));
-      sb.write(prefix);
-      sb.write(selectedText);
-      sb.write(suffix);
-      sb.write(text.substring(endOff));
-
-      _codeController.text = sb.toString();
-
-      // Select the entire wrapped text INCLUDING markers so next toggle can detect them
-      final newStartPos = _getPositionForOffset(
-        _codeController.value.codeLines,
-        startOff,
-      );
-      final newEndPos = _getPositionForOffset(
-        _codeController.value.codeLines,
-        startOff + prefix.length + selectedText.length + suffix.length,
-      );
-
-      _codeController.selection = CodeLineSelection(
-        baseIndex: newStartPos.index,
-        baseOffset: newStartPos.offset,
-        extentIndex: newEndPos.index,
-        extentOffset: newEndPos.offset,
-      );
-    }
-  }
-
-  void _toggleQuote() {
-    final sel = _codeController.selection;
-    final codeLines = _codeController.value.codeLines;
-
-    if (sel.start == sel.end) {
-      // Toggle quote on current line
-      _toggleLinePrefix(sel.start.index, '> ');
-    } else {
-      // Toggle quote on selected lines
-      for (int i = sel.start.index; i <= sel.end.index; i++) {
-        _toggleLinePrefix(i, '> ');
-      }
-    }
-  }
-
-  void _toggleBulletList() {
-    final sel = _codeController.selection;
-    final codeLines = _codeController.value.codeLines;
-
-    if (sel.start == sel.end) {
-      _toggleLinePrefix(sel.start.index, '- ');
-    } else {
-      for (int i = sel.start.index; i <= sel.end.index; i++) {
-        _toggleLinePrefix(i, '- ');
-      }
-    }
-  }
-
-  void _toggleNumberedList() {
-    final sel = _codeController.selection;
-    final codeLines = _codeController.value.codeLines;
-
-    if (sel.start == sel.end) {
-      _toggleLinePrefix(sel.start.index, '1. ');
-    } else {
-      for (int i = sel.start.index; i <= sel.end.index; i++) {
-        final number = i - sel.start.index + 1;
-        _toggleLinePrefix(i, '$number. ');
-      }
-    }
-  }
-
-  void _toggleLinePrefix(int lineIndex, String prefix) {
-    final codeLines = _codeController.value.codeLines;
-    if (lineIndex < 0 || lineIndex >= codeLines.length) return;
-
-    final line = codeLines[lineIndex].text;
-    String newLine;
-
-    if (line.startsWith(prefix)) {
-      // Remove prefix
-      newLine = line.substring(prefix.length);
-    } else {
-      // Add prefix
-      newLine = prefix + line;
-    }
-
-    // Calculate offset for this line
-    int lineStartOffset = 0;
-    for (int i = 0; i < lineIndex; i++) {
-      lineStartOffset += codeLines[i].text.length + 1;
-    }
-
-    final text = _codeController.text;
-    final beforeLine = text.substring(0, lineStartOffset);
-    final afterLine = text.substring(lineStartOffset + line.length);
-
-    _codeController.text = beforeLine + newLine + afterLine;
-  }
-
-  void _insertList() => _toggleBulletList(); // For backward compatibility
-
-  Future<void> _showHeadingMenu(BuildContext context) async {
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-
-    final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
-
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy + renderBox.size.height,
-        position.dx + renderBox.size.width,
-        position.dy,
-      ),
-      items: [
-        const PopupMenuItem(value: '# ', child: Text('# Heading 1')),
-        const PopupMenuItem(value: '## ', child: Text('## Heading 2')),
-        const PopupMenuItem(value: '### ', child: Text('### Heading 3')),
-        const PopupMenuItem(value: '#### ', child: Text('#### Heading 4')),
-        const PopupMenuItem(value: '##### ', child: Text('##### Heading 5')),
-        const PopupMenuItem(value: '###### ', child: Text('###### Heading 6')),
-      ],
-    );
-
-    if (result != null) {
-      _insertAtLineStart(result);
-    }
-  }
-
-  Future<void> _showCheckboxMenu(BuildContext context) async {
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-
-    final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
-
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy + renderBox.size.height,
-        position.dx + renderBox.size.width,
-        position.dy,
-      ),
-      items: [
-        const PopupMenuItem(value: '- [ ] ', child: Text('☐ Unchecked')),
-        const PopupMenuItem(value: '- [x] ', child: Text('☑ Checked')),
-      ],
-    );
-
-    if (result != null) {
-      _insertAtLineStart(result);
-    }
-  }
-
-  void _insertAtLineStart(String prefix) {
-    final sel = _codeController.selection;
-    final codeLines = _codeController.value.codeLines;
-
-    if (sel.start == sel.end) {
-      // Insert at current line start
-      final lineIndex = sel.start.index;
-      if (lineIndex >= codeLines.length) return;
-
-      final line = codeLines[lineIndex].text;
-      final newLine = prefix + line;
-
-      int lineStartOffset = 0;
-      for (int i = 0; i < lineIndex; i++) {
-        lineStartOffset += codeLines[i].text.length + 1;
-      }
-
-      final text = _codeController.text;
-      final beforeLine = text.substring(0, lineStartOffset);
-      final afterLine = text.substring(lineStartOffset + line.length);
-
-      _codeController.text = beforeLine + newLine + afterLine;
-
-      // Place cursor after prefix
-      final newOffset = lineStartOffset + prefix.length;
-      final newPos = _getPositionForOffset(
-        _codeController.value.codeLines,
-        newOffset,
-      );
-      _codeController.selection = CodeLineSelection.collapsed(
-        index: newPos.index,
-        offset: newPos.offset,
-      );
-    } else {
-      // Insert at start of each selected line
-      for (int i = sel.start.index; i <= sel.end.index; i++) {
-        if (i >= _codeController.value.codeLines.length) break;
-        _insertAtLineStartIndex(i, prefix);
-      }
-    }
-  }
-
-  void _insertAtLineStartIndex(int lineIndex, String prefix) {
-    final codeLines = _codeController.value.codeLines;
-    if (lineIndex < 0 || lineIndex >= codeLines.length) return;
-
-    final line = codeLines[lineIndex].text;
-    if (line.startsWith(prefix)) return; // Already has prefix
-
-    final newLine = prefix + line;
-
-    int lineStartOffset = 0;
-    for (int i = 0; i < lineIndex; i++) {
-      lineStartOffset += codeLines[i].text.length + 1;
-    }
-
-    final text = _codeController.text;
-    final beforeLine = text.substring(0, lineStartOffset);
-    final afterLine = text.substring(lineStartOffset + line.length);
-
-    _codeController.text = beforeLine + newLine + afterLine;
-  }
-
-  void _insertCheckbox() => _insertText('\n- [ ] ', selectionOffset: 7);
-  void _toggleHeading() => _insertText('\n# ', selectionOffset: 3);
-  void _insertLink() => _wrapSelection('[', '](url)');
-
   Future<void> _showImagePicker(BuildContext context) async {
     // Get selected text for alt text
     final sel = _codeController.selection;
@@ -937,6 +541,58 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _insertText(markdown, selectionOffset: markdown.length);
       }
     }
+  }
+
+  void _insertText(String text, {int selectionOffset = 0}) {
+    final selection = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+    final startOffset = _getOffsetForPosition(codeLines, selection.start);
+    final endOffset = _getOffsetForPosition(codeLines, selection.end);
+
+    final currentText = _codeController.text;
+    final newText =
+        currentText.substring(0, startOffset) +
+        text +
+        currentText.substring(endOffset);
+
+    _codeController.text = newText;
+
+    final newCursorOffset = startOffset + selectionOffset;
+    final newPos = _getPositionForOffset(
+      _codeController.value.codeLines,
+      newCursorOffset,
+    );
+
+    _codeController.selection = CodeLineSelection.collapsed(
+      index: newPos.index,
+      offset: newPos.offset,
+    );
+  }
+
+  int _getOffsetForPosition(CodeLines codeLines, CodeLinePosition position) {
+    int offset = 0;
+    for (int i = 0; i < position.index && i < codeLines.length; i++) {
+      offset += codeLines[i].text.length + 1; // +1 for newline
+    }
+    return offset + position.offset;
+  }
+
+  CodeLinePosition _getPositionForOffset(CodeLines codeLines, int offset) {
+    int currentOffset = 0;
+    for (int i = 0; i < codeLines.length; i++) {
+      final lineLength = codeLines[i].text.length + 1; // +1 for newline
+      if (currentOffset + lineLength > offset) {
+        return CodeLinePosition(index: i, offset: offset - currentOffset);
+      }
+      currentOffset += lineLength;
+    }
+    if (codeLines.length > 0) {
+      return CodeLinePosition(
+        index: codeLines.length - 1,
+        offset: codeLines.last.text.length,
+      );
+    }
+    return const CodeLinePosition(index: 0, offset: 0);
   }
 
   Widget _buildViewingView(Note currentNote, AppLocalizations l10n) {
@@ -1369,78 +1025,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 16),
           ],
           Expanded(
-            child: SynapseCodeEditor(
+            child: SynapseNoteEditor(
               controller: _codeController,
               focusNode: _codeFocusNode,
-              wordWrap: true,
-              fontSize: 14.0,
-              fontFamily: 'Roboto Mono',
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.format_bold, size: 20),
-                  onPressed: _toggleBold,
-                  tooltip: 'Bold',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.format_italic, size: 20),
-                  onPressed: _toggleItalic,
-                  tooltip: 'Italic',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.strikethrough_s, size: 20),
-                  onPressed: _toggleStrikethrough,
-                  tooltip: 'Strikethrough',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.code, size: 20),
-                  onPressed: _toggleInlineCode,
-                  tooltip: 'Inline Code',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.data_object, size: 20),
-                  onPressed: _toggleCodeBlock,
-                  tooltip: 'Code Block',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.format_quote, size: 20),
-                  onPressed: _toggleQuote,
-                  tooltip: 'Quote',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.list, size: 20),
-                  onPressed: _toggleBulletList,
-                  tooltip: 'Bullet List',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.format_list_numbered, size: 20),
-                  onPressed: _toggleNumberedList,
-                  tooltip: 'Numbered List',
-                ),
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.check_box_outlined, size: 20),
-                    onPressed: () => _showCheckboxMenu(context),
-                    tooltip: 'Checkbox',
-                  ),
-                ),
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.title, size: 20),
-                    onPressed: () => _showHeadingMenu(context),
-                    tooltip: 'Heading',
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.link, size: 20),
-                  onPressed: _insertLink,
-                  tooltip: 'Link',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.image, size: 20),
-                  onPressed: () => _showImagePicker(context),
-                  tooltip: 'Image',
-                ),
-              ],
+              onPickImage: () => _showImagePicker(context),
             ),
           ),
         ],

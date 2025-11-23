@@ -3731,6 +3731,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get askAiAboutNoteHint => 'Ask AI about this note...';
+
+  @override
   String get openDbFileTooltip => 'Open DB File';
 
   @override
