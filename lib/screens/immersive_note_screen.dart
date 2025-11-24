@@ -607,8 +607,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     } catch (e) {
       controller.dispose();
       rethrow;
-    } finally {
-    }
+    } finally {}
   }
 
   Future<String> _runWithToolStatus(
@@ -3421,9 +3420,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _initialNotesById[note.id] = note;
         }
         if (conversationNotes.isNotEmpty) {
-          _noteOrder = conversationNotes
-              .map((note) => note.id)
-              .toList(growable: false);
+          _noteOrder = conversationNotes.map((note) => note.id).toList();
           _activeNoteIndex = min(
             _activeNoteIndex,
             conversationNotes.length - 1,
