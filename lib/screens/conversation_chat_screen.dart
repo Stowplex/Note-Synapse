@@ -446,7 +446,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final newLimit = await _showIterationLimitDialog(
       prompt.exhaustedIterations,
     );
+
     if (!mounted) return;
+
     if (newLimit == null) {
       return;
     }
@@ -530,9 +532,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       });
       return result;
     } catch (e) {
-      // Dispose immediately on error
-      controller.dispose();
       rethrow;
+    } finally {
+      controller.dispose();
     }
   }
 

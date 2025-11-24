@@ -471,6 +471,49 @@ class NotePromptBuilder {
         );
       }
     }
+
+    await _addRemoteImageAttachments(target, note, processed);
+  }
+
+  Future<void> _addRemoteImageAttachments(
+    List<PlatformFile> target,
+    Note note,
+    Set<String> processed,
+  ) async {
+    final remoteImages = RemoteImageUtils.extractRemoteImages(note.content);
+    if (remoteImages.isEmpty) {
+      return;
+    }
+
+    for (final image in remoteImages) {
+      try {
+        final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
+          noteId: note.id,
+          imageUrl: image.url,
+        );
+        if (absolutePath == null || processed.contains(absolutePath)) {
+          continue;
+        }
+        final file = File(absolutePath);
+        if (!await file.exists()) {
+          continue;
+        }
+        processed.add(absolutePath);
+        final bytes = await file.readAsBytes();
+        target.add(
+          PlatformFile(
+            name: absolutePath.split('/').last,
+            path: absolutePath,
+            size: bytes.length,
+            bytes: bytes,
+          ),
+        );
+      } catch (e) {
+        LoggerService.warning(
+          'Failed to include cached remote image for note ${note.id}: $e',
+        );
+      }
+    }
   }
 
   /// Build a context message that contains the aggregated notes and optional

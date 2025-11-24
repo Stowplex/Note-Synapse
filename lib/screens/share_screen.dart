@@ -1730,10 +1730,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       final isRawTextOrCode =
           !contentType.startsWith('text/html') &&
           (contentType.startsWith('text/') ||
-              contentType == 'application/json' ||
+              contentType.startsWith('application/json') ||
               contentType.startsWith('application/xml') ||
-              contentType == 'application/javascript' ||
-              contentType == 'text/x-java-source' ||
+              contentType.startsWith('application/javascript') ||
+              contentType.startsWith('text/x-java-source') ||
               path.endsWith('.java') ||
               path.endsWith('.kt') ||
               path.endsWith('.dart') ||
@@ -1870,28 +1870,28 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 response.headers['content-type']?.toLowerCase() ?? contentType;
             final isBinaryContent =
                 responseContentType.startsWith('application/pdf') ||
-                responseContentType.startsWith('application/msword') ||
-                responseContentType.startsWith('application/vnd.ms-word') ||
-                responseContentType.startsWith('application/vnd.ms-excel') ||
-                responseContentType.startsWith(
-                  'application/vnd.ms-powerpoint',
-                ) ||
-                responseContentType.startsWith(
-                  'application/vnd.openxmlformats',
-                ) ||
-                responseContentType.startsWith('application/zip') ||
-                responseContentType.startsWith('application/x-rar') ||
-                responseContentType.startsWith('application/x-tar') ||
-                responseContentType.startsWith('application/gzip') ||
-                (responseContentType.startsWith('application/') &&
-                    !responseContentType.startsWith('application/json') &&
-                    !responseContentType.startsWith('application/xml') &&
-                    !responseContentType.startsWith(
-                      'application/javascript',
-                    )) ||
-                !responseContentType.startsWith('text/') &&
-                    !responseContentType.startsWith('image/') &&
-                    !responseContentType.startsWith('video/');
+                    responseContentType.startsWith('application/msword') ||
+                    responseContentType.startsWith('application/vnd.ms-word') ||
+                    responseContentType.startsWith('application/vnd.ms-excel') ||
+                    responseContentType.startsWith(
+                      'application/vnd.ms-powerpoint',
+                    ) ||
+                    responseContentType.startsWith(
+                      'application/vnd.openxmlformats',
+                    ) ||
+                    responseContentType.startsWith('application/zip') ||
+                    responseContentType.startsWith('application/x-rar') ||
+                    responseContentType.startsWith('application/x-tar') ||
+                    responseContentType.startsWith('application/gzip') ||
+                    (responseContentType.startsWith('application/') &&
+                        !responseContentType.startsWith('application/json') &&
+                        !responseContentType.startsWith('application/xml') &&
+                        !responseContentType.startsWith(
+                          'application/javascript',
+                        )) ||
+                    !responseContentType.startsWith('text/') &&
+                        !responseContentType.startsWith('image/') &&
+                        !responseContentType.startsWith('video/');
 
             if (isBinaryContent || isPdfOrStaticFile) {
               String fileName = path.split('/').last;
