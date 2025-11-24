@@ -109,10 +109,6 @@ dependencies:
 
   flutter_math_fork: ^0.7.3
   
-  # Markdown toolbar
-  markdown_toolbar: # ^0.5.0
-    path: third_party/markdown_toolbar
-  
   # WebView for user-defined apps and content extraction
   flutter_inappwebview: ^6.0.0
   
@@ -138,8 +134,7 @@ dependencies:
   mcp_client: ^1.0.2
   
   # Code editor with syntax highlighting
-  re_editor: # ^0.8.0
-    path: third_party/re-editor
+  re_editor: ^0.8.0
   re_highlight: ^0.0.3
 
   # Flutter SVG for displaying SVG image

@@ -36,6 +36,7 @@ import '../models/conversation.dart';
 
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
+import 'conversation_chat_screen.dart';
 import '../utils/remote_image_utils.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -3637,7 +3638,18 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                       children: [
                                         IconButton(
                                           icon: const Icon(Icons.open_in_new),
-                                          onPressed: () {},
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    ConversationChatScreen(
+                                                      conversationId:
+                                                          conversation.id,
+                                                    ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete),

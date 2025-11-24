@@ -885,13 +885,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.3.0"
-  markdown_toolbar:
-    dependency: "direct main"
-    description:
-      path: "third_party/markdown_toolbar"
-      relative: true
-    source: path
-    version: "0.5.0"
   matcher:
     dependency: transitive
     description:
@@ -1247,9 +1240,10 @@ packages:
   re_editor:
     dependency: "direct main"
     description:
-      path: "third_party/re-editor"
-      relative: true
-    source: path
+      name: re_editor
+      sha256: dd4e6ca7350a8fa0cda4e425b82a0c3c010f0f6b3f618c74223e05b8129ab629
+      url: "https://pub.dev"
+    source: hosted
     version: "0.8.0"
   re_highlight:
     dependency: "direct main"
