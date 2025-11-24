@@ -766,36 +766,40 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
 
                     // Bottom Action Bar (Only visible when editing)
                     if (_isCodeEditable)
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          border: Border(
-                            top: BorderSide(
-                              color: theme.colorScheme.outlineVariant,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: _isSaving ? null : _saveCodeDirectly,
-                                icon: const Icon(Icons.save),
-                                label: Text(l10n.saveCode),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor:
-                                      Colors.green, // Match screenshot green
-                                  foregroundColor: Colors.white,
-                                ),
+                      CodeEditorTapRegion(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            border: Border(
+                              top: BorderSide(
+                                color: theme.colorScheme.outlineVariant,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            OutlinedButton(
-                              onPressed: _toggleCodeEdit,
-                              child: const Text('Cancel'),
-                            ),
-                          ],
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _isSaving
+                                      ? null
+                                      : _saveCodeDirectly,
+                                  icon: const Icon(Icons.save),
+                                  label: Text(l10n.saveCode),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor:
+                                        Colors.green, // Match screenshot green
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              OutlinedButton(
+                                onPressed: _toggleCodeEdit,
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     // AI Edit Section (Always visible, but only interactive when not editing code directly)

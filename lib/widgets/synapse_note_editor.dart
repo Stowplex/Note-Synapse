@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 import '../l10n/app_localizations.dart';
 import 'synapse_code_editor.dart';
@@ -20,6 +21,13 @@ class SynapseNoteEditor extends StatefulWidget {
 }
 
 class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data != null && data.text != null) {
+      _insertText(data.text!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -30,6 +38,11 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
       fontSize: 14.0,
       fontFamily: 'Roboto Mono',
       actions: [
+        IconButton(
+          icon: const Icon(Icons.paste, size: 20),
+          onPressed: _paste,
+          tooltip: 'Paste',
+        ),
         IconButton(
           icon: const Icon(Icons.format_bold, size: 20),
           onPressed: _toggleBold,
