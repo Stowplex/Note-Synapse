@@ -532,9 +532,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       });
       return result;
     } catch (e) {
+      controller.dispose();
       rethrow;
     } finally {
-      controller.dispose();
     }
   }
 

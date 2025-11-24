@@ -605,9 +605,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       });
       return result;
     } catch (e) {
+      controller.dispose();
       rethrow;
     } finally {
-      controller.dispose();
     }
   }
 
