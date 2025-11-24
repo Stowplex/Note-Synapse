@@ -648,254 +648,294 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
         controller: _tabController,
         children: [
           // Code Tab
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!_isCodeEditable) ...[
-                // App Info Section
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Card(
-                    elevation: 0,
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withOpacity(0.3),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'App Name',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.app.name,
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Description',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.app.description,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // App Code Header and Edit Button
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Code Tab
+          CustomScrollView(
+            slivers: [
+              if (!_isCodeEditable)
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'App Code',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      // App Info Section
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Card(
+                          elevation: 0,
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withOpacity(0.3),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'App Name',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.app.name,
+                                  style: theme.textTheme.bodyLarge,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Description',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.app.description,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      FilledButton.icon(
-                        onPressed: _toggleCodeEdit,
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: const Text('Edit Code Directly'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.blue, // Match screenshot blue
-                          foregroundColor: Colors.white,
+                      // App Code Header and Edit Button
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'App Code',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _toggleCodeEdit,
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('Edit Code Directly'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor:
+                                    Colors.blue, // Match screenshot blue
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-              ],
 
               // Editor Area
-              Expanded(
-                child: Stack(
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SynapseCodeEditor(
-                      controller: _isCodeEditable
-                          ? _codeController
-                          : _viewController,
-                      readOnly: !_isCodeEditable,
-                      wordWrap: false,
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 400),
+                        child: Stack(
+                          children: [
+                            SynapseCodeEditor(
+                              controller: _isCodeEditable
+                                  ? _codeController
+                                  : _viewController,
+                              readOnly: !_isCodeEditable,
+                              wordWrap: false,
+                            ),
+                            if (_isSaving)
+                              Container(
+                                color: Colors.black26,
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                    if (_isSaving)
+
+                    // Bottom Action Bar (Only visible when editing)
+                    if (_isCodeEditable)
                       Container(
-                        color: Colors.black26,
-                        child: const Center(child: CircularProgressIndicator()),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          border: Border(
+                            top: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _isSaving ? null : _saveCodeDirectly,
+                                icon: const Icon(Icons.save),
+                                label: Text(l10n.saveCode),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor:
+                                      Colors.green, // Match screenshot green
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            OutlinedButton(
+                              onPressed: _toggleCodeEdit,
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // AI Edit Section (Always visible, but only interactive when not editing code directly)
+                    if (!_isCodeEditable)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          border: Border(
+                            top: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  l10n.editSuggestion,
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.note_add),
+                                      onPressed: _showNoteSelectionDialog,
+                                      tooltip: l10n.addContextNotes,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.image),
+                                      onPressed: _showImageSourceDialog,
+                                      tooltip: l10n.addImage,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Form(
+                              key: _formKey,
+                              child: TextFormField(
+                                controller: _editSuggestionController,
+                                decoration: InputDecoration(
+                                  hintText: l10n.editSuggestionHint,
+                                  border: const OutlineInputBorder(),
+                                  suffixIcon: _isEditing
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(12.0),
+                                          child: SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        )
+                                      : IconButton(
+                                          icon: const Icon(Icons.send),
+                                          onPressed: _submitEdit,
+                                        ),
+                                ),
+                                maxLines: 3,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return l10n.pleaseEnterSuggestion;
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            if (_attachmentPaths.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: 100,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _attachmentPaths.length,
+                                  itemBuilder: (context, index) {
+                                    return Stack(
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
+                                          child: Image.file(
+                                            File(_attachmentPaths[index]),
+                                            height: 100,
+                                            width: 100,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          right: 0,
+                                          top: 0,
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () =>
+                                                _removeAttachment(index),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                            if (_selectedNotes.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    '${_selectedNotes.length} notes selected',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    onPressed: _clearSelectedNotes,
+                                    tooltip: 'Clear selected notes',
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (_isEditing)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 16.0),
+                                child: LinearProgressIndicator(),
+                              ),
+                          ],
+                        ),
                       ),
                   ],
                 ),
               ),
-
-              // Bottom Action Bar (Only visible when editing)
-              if (_isCodeEditable)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border(
-                      top: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _isSaving ? null : _saveCodeDirectly,
-                          icon: const Icon(Icons.save),
-                          label: Text(l10n.saveCode),
-                          style: FilledButton.styleFrom(
-                            backgroundColor:
-                                Colors.green, // Match screenshot green
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      OutlinedButton(
-                        onPressed: _toggleCodeEdit,
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  ),
-                ),
-              // AI Edit Section (Always visible, but only interactive when not editing code directly)
-              if (!_isCodeEditable)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border(
-                      top: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            l10n.editSuggestion,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.note_add),
-                                onPressed: _showNoteSelectionDialog,
-                                tooltip: l10n.addContextNotes,
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.image),
-                                onPressed: _showImageSourceDialog,
-                                tooltip: l10n.addImage,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Form(
-                        key: _formKey,
-                        child: TextFormField(
-                          controller: _editSuggestionController,
-                          decoration: InputDecoration(
-                            hintText: l10n.editSuggestionHint,
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.send),
-                              onPressed: _isEditing ? null : _submitEdit,
-                            ),
-                          ),
-                          maxLines: 3,
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return l10n.pleaseEnterSuggestion;
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                      if (_attachmentPaths.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _attachmentPaths.length,
-                            itemBuilder: (context, index) {
-                              return Stack(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: Image.file(
-                                      File(_attachmentPaths[index]),
-                                      height: 100,
-                                      width: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.close,
-                                        color: Colors.red,
-                                      ),
-                                      onPressed: () => _removeAttachment(index),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                      if (_selectedNotes.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Text(
-                              '${_selectedNotes.length} notes selected',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.clear, size: 16),
-                              onPressed: _clearSelectedNotes,
-                              tooltip: 'Clear selected notes',
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (_isEditing)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 16.0),
-                          child: LinearProgressIndicator(),
-                        ),
-                    ],
-                  ),
-                ),
             ],
           ),
 
