@@ -228,14 +228,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
-  Future<void> _loadIterationPreference() async {
-    final value = await ConversationSettingsService.getMaxToolIterations();
-    if (!mounted) return;
-    setState(() {
-      _maxToolIterations = value;
-    });
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
