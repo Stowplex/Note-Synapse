@@ -590,14 +590,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
   }
 }
 
-class AiConversationSettingsScreen extends StatefulWidget {
-  const AiConversationSettingsScreen({super.key});
-
-  @override
-  State<AiConversationSettingsScreen> createState() =>
-      _AiConversationSettingsScreenState();
-}
-
 class _AiConversationSettingsScreenState
     extends State<AiConversationSettingsScreen> {
   int _maxIterations = ConversationSettingsService.defaultMaxToolIterations;
