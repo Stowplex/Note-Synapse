@@ -8,6 +8,9 @@ import 'package:note_synapse/l10n/app_localizations.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
 
+import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 class ChatMessage {
   final String role;
   final String content;
@@ -192,6 +195,7 @@ $actualSchema
 The user is asking for help with database recovery or querying.
 Provide SQL queries if asked. Explain errors.
 Do NOT execute queries yourself, just suggest them.
+The response shall be in markdown format.
 ''';
 
       final response = await AIService.chatAI(
@@ -411,12 +415,35 @@ Do NOT execute queries yourself, just suggest them.
                         : Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: SelectableText(
-                    msg.content,
-                    style: TextStyle(
-                      color: isUser
-                          ? Theme.of(context).colorScheme.onPrimaryContainer
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                  child: SelectionArea(
+                    child: InteractiveCheckboxMarkdown(
+                      originalContent: msg.content,
+                      style: TextStyle(
+                        color: isUser
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      onLinkTap: (url, _) {
+                        final uri = Uri.tryParse(url);
+                        if (uri != null) {
+                          canLaunchUrl(uri).then((canLaunch) {
+                            if (canLaunch) {
+                              launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Could not open link: $url'),
+                                  ),
+                                );
+                              }
+                            }
+                          });
+                        }
+                      },
                     ),
                   ),
                 ),
