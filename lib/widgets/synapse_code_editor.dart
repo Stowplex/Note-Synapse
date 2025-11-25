@@ -19,6 +19,7 @@ class SynapseCodeEditor extends StatefulWidget {
   final bool wordWrap;
   final double fontSize;
   final String fontFamily;
+  final String? language;
 
   const SynapseCodeEditor({
     super.key,
@@ -29,6 +30,7 @@ class SynapseCodeEditor extends StatefulWidget {
     this.wordWrap = false,
     this.fontSize = 12.0,
     this.fontFamily = 'monospace',
+    this.language,
   });
 
   @override
@@ -144,29 +146,46 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
           CodeEditorTapRegion(child: _buildSearchBar(context)),
 
         Expanded(
-          child: CodeEditor(
-            controller: widget.controller,
-            focusNode: widget.focusNode,
-            toolbarController: _mobileToolbarController,
-            style: CodeEditorStyle(
-              fontSize: widget.fontSize,
-              fontFamily: widget.fontFamily,
-              codeTheme: CodeHighlightTheme(
-                languages: {
-                  'markdown': CodeHighlightThemeMode(mode: langMarkdown),
-                  'dart': CodeHighlightThemeMode(mode: langDart),
-                  'json': CodeHighlightThemeMode(mode: langJson),
-                  'xml': CodeHighlightThemeMode(mode: langXml),
-                  'yaml': CodeHighlightThemeMode(mode: langYaml),
-                  'javascript': CodeHighlightThemeMode(mode: langJavascript),
-                  'css': CodeHighlightThemeMode(mode: langCss),
-                },
-                theme: style,
-              ),
-            ),
-            wordWrap: widget.wordWrap,
-            findController: _findController,
-            readOnly: widget.readOnly,
+          child: Builder(
+            builder: (context) {
+              final Map<String, CodeHighlightThemeMode> allLanguages = {
+                'markdown': CodeHighlightThemeMode(mode: langMarkdown),
+                'dart': CodeHighlightThemeMode(mode: langDart),
+                'json': CodeHighlightThemeMode(mode: langJson),
+                'xml': CodeHighlightThemeMode(mode: langXml),
+                'yaml': CodeHighlightThemeMode(mode: langYaml),
+                'javascript': CodeHighlightThemeMode(mode: langJavascript),
+                'css': CodeHighlightThemeMode(mode: langCss),
+              };
+
+              CodeHighlightTheme codeTheme;
+              if (widget.language != null &&
+                  allLanguages.containsKey(widget.language)) {
+                codeTheme = CodeHighlightTheme(
+                  languages: {widget.language!: allLanguages[widget.language]!},
+                  theme: style,
+                );
+              } else {
+                codeTheme = CodeHighlightTheme(
+                  languages: allLanguages,
+                  theme: style,
+                );
+              }
+
+              return CodeEditor(
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                toolbarController: _mobileToolbarController,
+                style: CodeEditorStyle(
+                  fontSize: widget.fontSize,
+                  fontFamily: widget.fontFamily,
+                  codeTheme: codeTheme,
+                ),
+                wordWrap: widget.wordWrap,
+                findController: _findController,
+                readOnly: widget.readOnly,
+              );
+            },
           ),
         ),
       ],

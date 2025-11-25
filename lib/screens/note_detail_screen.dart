@@ -1030,6 +1030,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               controller: _codeController,
               focusNode: _codeFocusNode,
               onPickImage: () => _showImagePicker(context),
+              language: 'markdown',
             ),
           ),
         ],

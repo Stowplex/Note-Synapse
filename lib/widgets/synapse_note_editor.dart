@@ -8,12 +8,14 @@ class SynapseNoteEditor extends StatefulWidget {
   final CodeLineEditingController controller;
   final FocusNode? focusNode;
   final VoidCallback? onPickImage;
+  final String? language;
 
   const SynapseNoteEditor({
     super.key,
     required this.controller,
     this.focusNode,
     this.onPickImage,
+    this.language,
   });
 
   @override
@@ -37,6 +39,7 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
       wordWrap: true,
       fontSize: 14.0,
       fontFamily: 'Roboto Mono',
+      language: widget.language,
       actions: [
         IconButton(
           icon: const Icon(Icons.paste, size: 20),
