@@ -2962,9 +2962,10 @@ class DatabaseService {
   ) async {
     final db = await database;
     // Join with conversation_message_mapping to get messages for this conversation
+    // EXCLUDE metadata from the main query to avoid CursorWindow size limits
     final List<Map<String, dynamic>> maps = await db.rawQuery(
       '''
-      SELECT cm.* 
+      SELECT cm.id, cm.type, cm.content, cm.timestamp, cm.modelUsed
       FROM conversation_messages cm
       INNER JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
       WHERE cmm.conversationId = ?
@@ -2973,16 +2974,86 @@ class DatabaseService {
       [conversationId],
     );
 
-    return maps
-        .map((map) => _mapToConversationMessage(map, conversationId))
-        .toList()
-        .cast<ConversationMessage>();
+    final messages = <ConversationMessage>[];
+
+    for (final map in maps) {
+      // Create a mutable copy of the map
+      final messageMap = Map<String, dynamic>.from(map);
+
+      // Fetch metadata separately
+      try {
+        final metadataResult = await db.query(
+          'conversation_messages',
+          columns: ['metadata'],
+          where: 'id = ?',
+          whereArgs: [messageMap['id']],
+        );
+
+        if (metadataResult.isNotEmpty) {
+          messageMap['metadata'] = metadataResult.first['metadata'];
+        }
+      } catch (e) {
+        // Fallback: If fetching full metadata fails (e.g. single row too big),
+        // try to read it in chunks using substr.
+        // Note: This is a last resort and might be slow.
+        LoggerService.error(
+          'Error fetching metadata for message ${messageMap['id']}: $e. Attempting chunked read.',
+        );
+        try {
+          messageMap['metadata'] = await _readLargeMetadata(
+            db,
+            messageMap['id'] as String,
+          );
+        } catch (e2) {
+          LoggerService.error('Failed to read large metadata: $e2');
+          // Proceed without metadata rather than crashing the whole view
+        }
+      }
+
+      messages.add(_mapToConversationMessage(messageMap, conversationId));
+    }
+
+    return messages;
+  }
+
+  // Helper to read potentially huge metadata in chunks
+  Future<String?> _readLargeMetadata(Database db, String messageId) async {
+    final sb = StringBuffer();
+    int offset = 1; // SQLite substr is 1-based
+    const chunkSize = 1000000; // 1MB chunks
+
+    while (true) {
+      final List<Map<String, dynamic>> result = await db.rawQuery(
+        'SELECT substr(metadata, ?, ?) as chunk FROM conversation_messages WHERE id = ?',
+        [offset, chunkSize, messageId],
+      );
+
+      if (result.isEmpty || result.first['chunk'] == null) break;
+
+      final chunk = result.first['chunk'] as String;
+      if (chunk.isEmpty) break;
+
+      sb.write(chunk);
+      offset += chunkSize;
+
+      // If chunk is smaller than requested, we reached the end
+      if (chunk.length < chunkSize) break;
+    }
+
+    return sb.isNotEmpty ? sb.toString() : null;
   }
 
   Future<ConversationMessage?> getConversationMessage(String id) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'conversation_messages',
+      columns: [
+        'id',
+        'type',
+        'content',
+        'timestamp',
+        'modelUsed',
+      ], // Exclude metadata
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -3001,7 +3072,32 @@ class DatabaseService {
         ? mappingResult.first['conversationId'] as String
         : '';
 
-    return _mapToConversationMessage(maps.first, conversationId);
+    final messageMap = Map<String, dynamic>.from(maps.first);
+
+    // Fetch metadata separately
+    try {
+      final metadataResult = await db.query(
+        'conversation_messages',
+        columns: ['metadata'],
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (metadataResult.isNotEmpty) {
+        messageMap['metadata'] = metadataResult.first['metadata'];
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Error fetching metadata for message $id: $e. Attempting chunked read.',
+      );
+      try {
+        messageMap['metadata'] = await _readLargeMetadata(db, id);
+      } catch (e2) {
+        LoggerService.error('Failed to read large metadata: $e2');
+      }
+    }
+
+    return _mapToConversationMessage(messageMap, conversationId);
   }
 
   Future<void> updateConversationMessage(ConversationMessage message) async {

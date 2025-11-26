@@ -11,7 +11,7 @@ class ConversationService {
   static final ConversationService _instance = ConversationService._internal();
   factory ConversationService() => _instance;
   ConversationService._internal({DatabaseService? databaseService})
-      : _databaseService = databaseService ?? DatabaseService();
+    : _databaseService = databaseService ?? DatabaseService();
 
   final DatabaseService _databaseService;
   final Uuid _uuid = const Uuid();
@@ -371,6 +371,12 @@ class ConversationService {
     await refreshConversationTree();
 
     return message;
+  }
+
+  // Update an existing conversation message
+  Future<void> updateConversationMessage(ConversationMessage message) async {
+    await _databaseService.updateConversationMessage(message);
+    LoggerService.info('Updated conversation message: ${message.id}');
   }
 
   // Get all conversations

@@ -3,7 +3,6 @@ import 'dart:async';
 import '../models/mcp_endpoint.dart';
 import '../models/model_type.dart';
 import '../models/generation_context.dart';
-import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
@@ -56,11 +55,8 @@ class ConversationAiEngine {
       throw const ConversationCancelledException();
     }
 
-    // Use withoutTools path only if we have no tools AND no model features
-    if (!enableTools || activeTools.isEmpty) {
-      return _generateWithoutTools(request, isCancelled, generationContext);
-    }
-
+    // Always use the tool-enabled path to ensure consistent handling of parts_history
+    // and other metadata, even if no tools are active.
     return _generateWithTools(
       request: request,
       activeTools: activeTools,
@@ -70,41 +66,6 @@ class ConversationAiEngine {
       maxToolIterations: maxToolIterations,
       onIterationsExhausted: onIterationsExhausted,
     );
-  }
-
-  Future<ConversationAiResponse> _generateWithoutTools(
-    PromptRequest request,
-    CancellationCheck isCancelled,
-    GenerationContext generationContext,
-  ) async {
-    try {
-      if (isCancelled()) {
-        throw const ConversationCancelledException();
-      }
-
-      final responseText = await AIService.executePrompt(
-        request,
-        generationContext: generationContext,
-      );
-
-      if (isCancelled()) {
-        throw const ConversationCancelledException();
-      }
-
-      return ConversationAiResponse(content: responseText);
-    } on ConversationCancelledException {
-      rethrow;
-    } catch (e, stackTrace) {
-      LoggerService.error(
-        'Error generating AI response without tools: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      return const ConversationAiResponse(
-        content:
-            'I apologize, but I encountered an error while generating a response. Please try again.',
-      );
-    }
   }
 
   Future<ConversationAiResponse> _generateWithTools({
@@ -134,7 +95,7 @@ class ConversationAiEngine {
           : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
 
       LoggerService.info(
-        'Starting tool-enabled conversation with ${activeTools.length} services',
+        'Starting conversation with ${activeTools.length} tools',
         error: {'requestId': requestId},
       );
 
@@ -193,7 +154,7 @@ class ConversationAiEngine {
 
         final response = await ModelSelector.instance
             .generateWithToolsAndMessages(currentMessages, [
-              callToolFunction,
+              if (activeTools.isNotEmpty) callToolFunction,
             ], generationContext: generationContext);
 
         if (isCancelled()) {
@@ -202,6 +163,7 @@ class ConversationAiEngine {
 
         final textResponse = response['text'] as String?;
         final functionCalls = response['function_calls'] as List?;
+        final partsHistory = response['parts_history'] as List?;
 
         if (functionCalls != null && functionCalls.isNotEmpty) {
           LoggerService.info(
@@ -286,6 +248,8 @@ class ConversationAiEngine {
           if (toolResults.isNotEmpty) {
             final assistantMetadata = <String, dynamic>{
               'function_calls': functionCalls,
+              if (partsHistory != null) 'parts_history': partsHistory,
+              'modelUsed': ModelSelector.instance.currentModelConfig?.id,
             };
 
             if (toolCallsWithResults.isNotEmpty) {
@@ -349,11 +313,22 @@ class ConversationAiEngine {
           }
         }
 
-        if (textResponse != null && textResponse.isNotEmpty) {
-          conversationParts.add(textResponse);
+        if (textResponse != null ||
+            (partsHistory != null && partsHistory.isNotEmpty)) {
+          if (textResponse != null && textResponse.isNotEmpty) {
+            conversationParts.add(textResponse);
+          }
+
+          final finalMetadata = <String, dynamic>{
+            if (lastAssistantMetadata != null) ...lastAssistantMetadata,
+            if (functionCalls != null) 'function_calls': functionCalls,
+            if (partsHistory != null) 'parts_history': partsHistory,
+            'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+          };
+
           return ConversationAiResponse(
             content: conversationParts.join('\n\n'),
-            metadata: lastAssistantMetadata,
+            metadata: finalMetadata,
           );
         }
 
@@ -373,6 +348,7 @@ class ConversationAiEngine {
       return const ConversationAiResponse(
         content:
             'I encountered an error while coordinating tools for this request. Please try again.',
+        metadata: {'is_client_synthetic': true},
       );
     }
   }

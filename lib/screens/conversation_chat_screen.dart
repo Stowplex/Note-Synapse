@@ -534,8 +534,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     } catch (e) {
       controller.dispose();
       rethrow;
-    } finally {
-    }
+    } finally {}
   }
 
   Future<String> _runWithToolStatus(
@@ -2237,9 +2236,140 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     );
   }
 
+  Future<void> _showToolDetailsDialog(ConversationMessage message) async {
+    if (message.metadata == null) return;
+
+    final partsHistory =
+        (message.metadata!['parts_history'] as List?)?.cast<Map>() ?? [];
+    final functionCalls =
+        (message.metadata!['function_calls'] as List?)?.cast<Map>() ?? [];
+
+    if (partsHistory.isEmpty && functionCalls.isEmpty) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Tool Usage & Thoughts'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: ListView.builder(
+                itemCount: partsHistory.isNotEmpty
+                    ? partsHistory.length
+                    : functionCalls.length,
+                itemBuilder: (context, index) {
+                  if (partsHistory.isNotEmpty) {
+                    final part = partsHistory[index];
+                    final type = part['type'];
+                    final isIncluded = part['is_included'] ?? true;
+                    final thoughtSignature = part['thought_signature'];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      color: isIncluded
+                          ? null
+                          : Theme.of(context).disabledColor.withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  type == 'tool_call'
+                                      ? Icons.build
+                                      : type == 'image'
+                                      ? Icons.image
+                                      : Icons.text_fields,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  type.toString().toUpperCase(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Switch(
+                                  value: isIncluded,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      part['is_included'] = value;
+                                    });
+                                    // Update message metadata immediately (or on save)
+                                    // For now, we update the local object and save on close/change
+                                    message.metadata!['parts_history'] =
+                                        partsHistory;
+                                    _conversationService
+                                        .updateConversationMessage(message);
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (thoughtSignature != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Thought Signature: ${thoughtSignature.substring(0, 10)}...',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                            if (type == 'tool_call') ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Function: ${part['function_call']?['name']}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              Text(
+                                'Args: ${part['function_call']?['args']}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  } else {
+                    // Legacy function calls view
+                    final call = functionCalls[index];
+                    return ListTile(
+                      leading: const Icon(Icons.build),
+                      title: Text(call['name'] ?? 'Unknown Tool'),
+                      subtitle: Text(
+                        call['args'].toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMessageCard(ConversationMessage message) {
     final l10n = AppLocalizations.of(context)!;
     final isUser = message.type == MessageType.user;
+    final hasTools =
+        message.metadata != null &&
+        (message.metadata!.containsKey('parts_history') ||
+            message.metadata!.containsKey('function_calls'));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
@@ -2268,6 +2398,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   ),
                 ),
                 const Spacer(),
+                if (hasTools && !isUser) ...[
+                  IconButton(
+                    icon: const Icon(Icons.build_circle_outlined, size: 18),
+                    tooltip: 'View Tool Usage',
+                    onPressed: () => _showToolDetailsDialog(message),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Text(
                   _formatTimestamp(message.timestamp),
                   style: Theme.of(context).textTheme.bodySmall,
