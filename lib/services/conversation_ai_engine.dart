@@ -245,10 +245,44 @@ class ConversationAiEngine {
             }
           }
 
+          // Accumulate parts history
+          if (partsHistory != null) {
+            // If this is not the first iteration, we need to append to the existing history
+            // However, the model returns the full history of the *current* turn's generation
+            // We need to inject the tool results into this history for the next iteration
+            // But here, we are preparing the final metadata for the ConversationMessage.
+
+            // For the final message, we want the COMPLETE history of this interaction:
+            // 1. Initial thought + tool call (from first iteration)
+            // 2. Tool result (from execution)
+            // 3. Subsequent thought + response (from next iteration)
+
+            // Currently, 'partsHistory' only contains the parts from the *last* model response.
+            // We need to maintain a running list of parts across iterations.
+          }
+
+          // Initialize running parts history if needed
+          final runningPartsHistory =
+              lastAssistantMetadata?['parts_history'] as List? ?? [];
+          if (partsHistory != null) {
+            runningPartsHistory.addAll(partsHistory);
+          }
+
+          // Inject tool results into the running history
+          for (int i = 0; i < toolResults.length; i++) {
+            runningPartsHistory.add({
+              'type': 'tool_result',
+              'text': toolResults[i],
+              'is_included': true,
+              // Link to the corresponding tool call if possible?
+              // For now, just adding the result is enough for the UI to show it.
+            });
+          }
+
           if (toolResults.isNotEmpty) {
             final assistantMetadata = <String, dynamic>{
-              'function_calls': functionCalls,
-              if (partsHistory != null) 'parts_history': partsHistory,
+              'function_calls': functionCalls, // Keep for legacy
+              'parts_history': runningPartsHistory, // Updated history
               'modelUsed': ModelSelector.instance.currentModelConfig?.id,
             };
 
@@ -263,7 +297,6 @@ class ConversationAiEngine {
               metadata: assistantMetadata,
             );
             lastAssistantMetadata = assistantMetadata;
-
             if (ModelSelector.instance.currentModelConfig?.type ==
                 ModelType.openaiCompatible) {
               final toolMessages = toolCallsWithResults
@@ -319,10 +352,18 @@ class ConversationAiEngine {
             conversationParts.add(textResponse);
           }
 
+          // Use the accumulated history
+          final finalPartsHistory =
+              lastAssistantMetadata?['parts_history'] as List? ?? [];
+          if (partsHistory != null) {
+            // If this was the final response (no more tools), add its parts
+            finalPartsHistory.addAll(partsHistory);
+          }
+
           final finalMetadata = <String, dynamic>{
             if (lastAssistantMetadata != null) ...lastAssistantMetadata,
             if (functionCalls != null) 'function_calls': functionCalls,
-            if (partsHistory != null) 'parts_history': partsHistory,
+            'parts_history': finalPartsHistory,
             'modelUsed': ModelSelector.instance.currentModelConfig?.id,
           };
 
