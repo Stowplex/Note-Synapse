@@ -1870,28 +1870,28 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 response.headers['content-type']?.toLowerCase() ?? contentType;
             final isBinaryContent =
                 responseContentType.startsWith('application/pdf') ||
-                    responseContentType.startsWith('application/msword') ||
-                    responseContentType.startsWith('application/vnd.ms-word') ||
-                    responseContentType.startsWith('application/vnd.ms-excel') ||
-                    responseContentType.startsWith(
-                      'application/vnd.ms-powerpoint',
-                    ) ||
-                    responseContentType.startsWith(
-                      'application/vnd.openxmlformats',
-                    ) ||
-                    responseContentType.startsWith('application/zip') ||
-                    responseContentType.startsWith('application/x-rar') ||
-                    responseContentType.startsWith('application/x-tar') ||
-                    responseContentType.startsWith('application/gzip') ||
-                    (responseContentType.startsWith('application/') &&
-                        !responseContentType.startsWith('application/json') &&
-                        !responseContentType.startsWith('application/xml') &&
-                        !responseContentType.startsWith(
-                          'application/javascript',
-                        )) ||
-                    !responseContentType.startsWith('text/') &&
-                        !responseContentType.startsWith('image/') &&
-                        !responseContentType.startsWith('video/');
+                responseContentType.startsWith('application/msword') ||
+                responseContentType.startsWith('application/vnd.ms-word') ||
+                responseContentType.startsWith('application/vnd.ms-excel') ||
+                responseContentType.startsWith(
+                  'application/vnd.ms-powerpoint',
+                ) ||
+                responseContentType.startsWith(
+                  'application/vnd.openxmlformats',
+                ) ||
+                responseContentType.startsWith('application/zip') ||
+                responseContentType.startsWith('application/x-rar') ||
+                responseContentType.startsWith('application/x-tar') ||
+                responseContentType.startsWith('application/gzip') ||
+                (responseContentType.startsWith('application/') &&
+                    !responseContentType.startsWith('application/json') &&
+                    !responseContentType.startsWith('application/xml') &&
+                    !responseContentType.startsWith(
+                      'application/javascript',
+                    )) ||
+                !responseContentType.startsWith('text/') &&
+                    !responseContentType.startsWith('image/') &&
+                    !responseContentType.startsWith('video/');
 
             if (isBinaryContent || isPdfOrStaticFile) {
               String fileName = path.split('/').last;
@@ -2353,6 +2353,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         tags.add('markdown');
       }
 
+      // Process data URLs in the content
+      final dataUrlResult = await _processDataUrls(finalContent);
+      finalContent = dataUrlResult['content'] as String;
+      final newAttachments = dataUrlResult['attachments'] as List<String>;
+
       final note = Note(
         id: const Uuid().v4(),
         title: title,
@@ -2361,6 +2366,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         tags: tags.toList(),
+        attachmentPaths: newAttachments,
       );
 
       final preview = title.isNotEmpty
@@ -2385,6 +2391,66 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         _status = l10n.errorExtractingWebContent(e.toString());
       });
     }
+  }
+
+  Future<Map<String, dynamic>> _processDataUrls(String content) async {
+    String processedContent = content;
+    final List<String> newAttachments = [];
+
+    // Regex to find data URLs in markdown images: ![](data:image/type;base64,data)
+    // Captures: 1=alt text, 2=mime type, 3=base64 data
+    final dataUrlPattern = RegExp(
+      r'!\[([^\]]*)\]\(data:image\/([a-zA-Z0-9]+);base64,([^)]+)\)',
+    );
+
+    final matches = dataUrlPattern.allMatches(content).toList();
+
+    // Process matches in reverse order to avoid index issues when replacing
+    for (final match in matches.reversed) {
+      try {
+        final altText = match.group(1) ?? '';
+        final extension = match.group(2) ?? 'png';
+        final base64Data = match.group(3);
+
+        if (base64Data != null) {
+          // Decode base64 data
+          // Remove any newlines or whitespace that might be in the base64 string
+          final cleanBase64 = base64Data.replaceAll(RegExp(r'\s'), '');
+          final bytes = base64Decode(cleanBase64);
+
+          // Generate a filename
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final filename = 'extracted_image_$timestamp.$extension';
+
+          // Save to private storage
+          final relativePath = await FileUtils.saveFileToPrivateStorage(
+            bytes,
+            filename,
+          );
+
+          newAttachments.add(relativePath);
+
+          // The user requested that the replacement should NOT include "attachments/" portion,
+          // but only the base name.
+          // FileUtils.saveFileToPrivateStorage returns 'attachments/filename', so we split it.
+          final baseName = relativePath.split('/').last;
+
+          // Replace the data URL with the local filename
+          final replacement = '![$altText]($baseName)';
+
+          processedContent = processedContent.replaceRange(
+            match.start,
+            match.end,
+            replacement,
+          );
+        }
+      } catch (e) {
+        print('Error processing data URL: $e');
+        // Continue to next match if one fails
+      }
+    }
+
+    return {'content': processedContent, 'attachments': newAttachments};
   }
 
   Widget _buildHeader(AppLocalizations l10n) {
