@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../services/secure_storage_service.dart';
-import 'model_selection_screen.dart';
+import '../providers/app_provider.dart';
+import 'settings_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -12,63 +12,51 @@ class SetupScreen extends StatefulWidget {
 }
 
 class _SetupScreenState extends State<SetupScreen> {
-  final _apiKeyController = TextEditingController();
-  bool _isLoading = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveApiKey() async {
-    final l10n = AppLocalizations.of(context)!;
-    
-    if (_apiKeyController.text.trim().isEmpty) {
-      setState(() {
-        _error = l10n.pleaseEnterApiKey;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      await SecureStorageService.saveApiKey(_apiKeyController.text.trim());
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
-      }
-    } catch (e) {
-      setState(() {
-        _error = l10n.failedToSaveApiKey(e.toString());
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _openGoogleAIStudio() async {
-    const url = 'https://aistudio.google.com/app/apikey';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          Consumer<AppProvider>(
+            builder: (context, appProvider, child) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: DropdownButton<Locale>(
+                  value: appProvider.locale,
+                  icon: const Icon(Icons.language),
+                  underline: const SizedBox(),
+                  onChanged: (Locale? newValue) {
+                    if (newValue != null) {
+                      appProvider.changeLanguage(newValue);
+                    }
+                  },
+                  items: const [
+                    DropdownMenuItem(
+                      value: Locale('en', ''),
+                      child: Text('English'),
+                    ),
+                    DropdownMenuItem(
+                      value: Locale('zh', ''),
+                      child: Text('简体中文'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               Icon(
                 Icons.psychology,
                 size: 80,
@@ -85,9 +73,9 @@ class _SetupScreenState extends State<SetupScreen> {
               const SizedBox(height: 16),
               Text(
                 l10n.aiPoweredNoteTaking,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
@@ -98,14 +86,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Setup Required',
+                        l10n.setupRequired,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Choose your AI model and configure it to get started with Note Synapse.',
+                        'Configure your AI models to get started. You can add multiple models and switch between them.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -115,23 +103,31 @@ class _SetupScreenState extends State<SetupScreen> {
               const SizedBox(height: 24),
               SizedBox(
                 height: 50,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const ModelSelectionScreen(),
+                        builder: (context) => const AIModelSettingsScreen(),
                       ),
                     );
                   },
-                  child: const Text('Choose AI Model'),
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Configure Models'),
                 ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushReplacementNamed('/main');
+                },
+                child: Text(l10n.continueButton),
               ),
               const Spacer(),
               Text(
-                'Your API keys are stored securely and never shared.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                l10n.apiKeySecurityNote,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
             ],

@@ -240,6 +240,8 @@ class FileTypeUtils {
         return 'image/png';
       case 'gif':
         return 'image/gif';
+      case 'html':
+        return 'text/html';
       case 'bmp':
         return 'image/bmp';
       case 'webp':
@@ -325,6 +327,9 @@ class FileTypeUtils {
     if (type.startsWith('application/x-rar')) return 'rar';
     if (type.startsWith('application/x-tar')) return 'tar';
     if (type.startsWith('application/gzip')) return 'gz';
+
+    if (type.startsWith('text/html')) return 'html';
+    if (type.startsWith('text/')) return 'txt';
 
     // Generic binary
     if (type == 'application/octet-stream') return 'bin';

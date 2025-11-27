@@ -11,6 +11,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
@@ -18,6 +19,8 @@ import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
+import '../models/generation_context.dart';
+import '../models/model_config.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
 import '../services/conversation_service.dart';
@@ -45,6 +48,8 @@ import '../widgets/active_tool_count_badge.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'note_selection_dialog.dart';
+import 'note_action_app_selection_screen.dart';
+import 'settings_screen.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -65,7 +70,10 @@ class ImmersiveNoteScreen extends StatefulWidget {
 }
 
 class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
-    with TickerProviderStateMixin, NoteActionMixin<ImmersiveNoteScreen> {
+    with
+        TickerProviderStateMixin,
+        NoteActionMixin<ImmersiveNoteScreen>,
+        WidgetsBindingObserver {
   final ConversationService _conversationService = ConversationService();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
@@ -96,12 +104,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
+  final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
+
+  // Scratchpad State
+  bool _isScratchpadMode = false;
+  final List<ConversationMessage> _scratchpadItems = [];
+  bool _includeScratchpadInChat = false;
+  int _lastSavedScratchpadCount = 0;
+
+  bool get _isScratchpadDirty =>
+      _scratchpadItems.length != _lastSavedScratchpadCount;
 
   // MCP support
   List<McpEndpoint> _availableMcpEndpoints = [];
   final Set<String> _selectedMcpEndpointIds = {};
+  final Set<String> _selectedModelFeatures = {};
   Map<String, List<McpTool>> _mcpToolsByEndpoint = {};
   bool _isMcpPanelExpanded = false; // Collapsed by default
+
+  // Scratchpad editing state
+  int? _editingScratchpadIndex;
+  final TextEditingController _scratchpadEditController =
+      TextEditingController();
 
   // AI tool support
   Map<String, AiToolAppBundle> _aiToolBundles = {};
@@ -131,6 +155,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initialNotesById = {for (final note in widget.notes) note.id: note};
     _noteOrder = widget.notes.map((note) => note.id).toList();
     _conversationNotes = List<Note>.from(widget.notes);
@@ -168,7 +193,31 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
       _loadMcpEndpoints();
       _loadAiTools();
+      _loadModelFeatures();
     });
+  }
+
+  ModelConfig? _previousModelConfig;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh model features when app resumes (e.g., after model configuration change)
+      // Note: didChangeDependencies will also handle this if the provider updates,
+      // but this ensures we catch resume events specifically if needed.
+      _loadModelFeatures();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final appProvider = context.watch<AppProvider>();
+    if (_previousModelConfig != appProvider.modelConfig) {
+      _previousModelConfig = appProvider.modelConfig;
+      // Refresh model features when model config changes
+      _loadModelFeatures();
+    }
   }
 
   Future<void> _loadIterationPreference() async {
@@ -181,6 +230,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resolveIterationPrompt(null);
     _messageController.dispose();
     _chatScrollController.dispose();
@@ -274,6 +324,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _hasAssociatedConversations = false;
         });
       }
+    }
+  }
+
+  void _loadModelFeatures() {
+    // Clear selected features when model changes - user must explicitly toggle them on
+    if (mounted) {
+      setState(() {
+        _selectedModelFeatures.clear();
+      });
     }
   }
 
@@ -462,6 +521,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final newLimit = await _showIterationLimitDialog(
       prompt.exhaustedIterations,
     );
+    if (!mounted) return;
     if (newLimit == null) {
       return;
     }
@@ -488,7 +548,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       text: (currentLimit + 5).toString(),
     );
     try {
-      return await showDialog<int>(
+      final result = await showDialog<int>(
         context: context,
         builder: (dialogContext) {
           String? errorText;
@@ -539,9 +599,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           );
         },
       );
-    } finally {
+      // Delay disposal to ensure dialog has fully closed
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.dispose();
+      });
+      return result;
+    } catch (e) {
       controller.dispose();
-    }
+      rethrow;
+    } finally {}
   }
 
   Future<String> _runWithToolStatus(
@@ -684,21 +750,44 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   tooltip: l10n.viewTree,
                   onPressed: () => _openConversationTree(),
                 ),
-              if (_conversation != null)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (value) {
-                    if (value == 'open_chat') {
-                      _openConversationInChatMode();
-                    }
-                  },
-                  itemBuilder: (_) => [
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) {
+                  if (value == 'open_chat') {
+                    _openConversationInChatMode();
+                  } else if (value == 'note_action_apps') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => NoteActionAppSelectionScreen(
+                          selectedNotes: _conversationNotes,
+                        ),
+                      ),
+                    );
+                  } else if (value == 'ai_logs') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const AIDebugOverlayScreen(),
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (_conversation != null)
                     PopupMenuItem<String>(
                       value: 'open_chat',
                       child: Text(l10n.openInChatMode),
                     ),
-                  ],
-                ),
+                  if (_conversationNotes.isNotEmpty)
+                    PopupMenuItem<String>(
+                      value: 'note_action_apps',
+                      child: Text(l10n.noteActionApps),
+                    ),
+                  PopupMenuItem<String>(
+                    value: 'ai_logs',
+                    child: Text(l10n.aiLogs),
+                  ),
+                ],
+              ),
             ],
           ),
           body: SafeArea(
@@ -1212,19 +1301,61 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 _buildToolExecutionIndicator(),
                 Row(
                   children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.brush,
-                        color: _isPenMode ? theme.colorScheme.primary : null,
-                      ),
-                      tooltip: l10n.annotate,
-                      onPressed: () {
-                        setState(() {
-                          _isPenMode = !_isPenMode;
-                          _penStrokePoints.clear();
-                        });
-                      },
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.brush,
+                            color: _isPenMode
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: l10n.annotate,
+                          iconSize: 20,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPenMode = !_isPenMode;
+                              _penStrokePoints.clear();
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 4),
+                        IconButton(
+                          icon: Badge(
+                            isLabelVisible: _isScratchpadDirty,
+                            smallSize: 6,
+                            child: Icon(
+                              _isScratchpadMode
+                                  ? Icons.description
+                                  : Icons.description_outlined,
+                              color: _isScratchpadMode
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                          tooltip: 'Scratchpad', // TODO: l10n
+                          iconSize: 20,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isScratchpadMode = !_isScratchpadMode;
+                              // Do not auto-expand panel
+                            });
+                          },
+                        ),
+                      ],
                     ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: _messageController,
@@ -1232,7 +1363,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         maxLines: 6,
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
-                          hintText: l10n.askAiHint,
+                          hintText: _isScratchpadMode
+                              ? 'Send to scratchpad' // TODO: l10n
+                              : l10n.askAiAboutNoteHint,
                         ),
                         onSubmitted: (_) {
                           if (!_isSending && !_isAborting) {
@@ -1323,12 +1456,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
+          // MCP Selection (Only show if not in scratchpad mode)
+          if (!_isScratchpadMode &&
+              (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty))
             _buildMcpSelectionSection(l10n),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: _buildConversationList(l10n),
+              child: _isScratchpadMode
+                  ? _buildScratchpadList(l10n)
+                  : _buildConversationList(l10n),
             ),
           ),
         ],
@@ -1341,7 +1478,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final combinedTools = _buildActiveToolsMap();
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
-    final totalActiveCount = activeMcpCount + activeLocalCount;
+    final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final totalActiveCount =
+        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
@@ -1400,132 +1539,235 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             ),
           ),
           // Expandable content
-          if (_isMcpPanelExpanded) ...[
-            const SizedBox(height: 8),
-            if (_availableMcpEndpoints.isNotEmpty) ...[
-              Row(
-                children: [
-                  Icon(
-                    Icons.cloud,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.mcpTools,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeMcpCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeMcpCount,
-                      label: l10n.active,
-                    ),
-                ],
+          if (_isMcpPanelExpanded)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.35,
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _availableMcpEndpoints.map((endpoint) {
-                  final isSelected = _selectedMcpEndpointIds.contains(
-                    endpoint.id,
-                  );
-                  return FilterChip(
-                    label: Text(endpoint.name),
-                    selected: isSelected,
-                    onSelected: (selected) async {
-                      setState(() {
-                        if (selected) {
-                          _selectedMcpEndpointIds.add(endpoint.id);
-                        } else {
-                          _selectedMcpEndpointIds.remove(endpoint.id);
-                        }
-                      });
-                      await _updateMcpTools();
-                    },
-                    avatar: Icon(
-                      Icons.cloud,
-                      size: 16,
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (_aiToolBundles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.aiTools,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeLocalCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeLocalCount,
-                      label: l10n.active,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _aiToolBundles.entries.map((entry) {
-                  final serviceName = entry.key;
-                  final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(
-                    serviceName,
-                  );
-                  return FilterChip(
-                    label: Text(bundle.displayName),
-                    selected: selected,
-                    onSelected: (value) {
-                      _toggleAiToolService(serviceName, value);
-                    },
-                    avatar: Icon(
-                      Icons.smart_toy,
-                      size: 16,
-                      color: selected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (combinedTools.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                l10n.toolsAvailable(
-                  combinedTools.values.fold<int>(
-                    0,
-                    (sum, tools) => sum + tools.length,
-                  ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    if (_availableMcpEndpoints.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.cloud,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.mcpTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeMcpCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeMcpCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _availableMcpEndpoints.map((endpoint) {
+                          final isSelected = _selectedMcpEndpointIds.contains(
+                            endpoint.id,
+                          );
+                          return FilterChip(
+                            label: Text(endpoint.name),
+                            selected: isSelected,
+                            onSelected: (selected) async {
+                              setState(() {
+                                if (selected) {
+                                  _selectedMcpEndpointIds.add(endpoint.id);
+                                } else {
+                                  _selectedMcpEndpointIds.remove(endpoint.id);
+                                }
+                              });
+                              await _updateMcpTools();
+                            },
+                            avatar: Icon(
+                              Icons.cloud,
+                              size: 16,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+
+                    if (_aiToolBundles.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.aiTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeLocalCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeLocalCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _aiToolBundles.entries.map((entry) {
+                          final serviceName = entry.key;
+                          final bundle = entry.value;
+                          final selected = _selectedAiToolServices.contains(
+                            serviceName,
+                          );
+                          return FilterChip(
+                            label: Text(bundle.displayName),
+                            selected: selected,
+                            onSelected: (value) {
+                              _toggleAiToolService(serviceName, value);
+                            },
+                            avatar: Icon(
+                              Icons.smart_toy,
+                              size: 16,
+                              color: selected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    // Model Features Section
+                    if (context
+                                .read<AppProvider>()
+                                .modelConfig
+                                ?.modelFeatures !=
+                            null &&
+                        context
+                            .read<AppProvider>()
+                            .modelConfig!
+                            .modelFeatures!
+                            .isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.extension,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.modelFeatures,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_selectedModelFeatures.isNotEmpty)
+                            ActiveToolCountBadge(
+                              count: _selectedModelFeatures.length,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: context
+                            .read<AppProvider>()
+                            .modelConfig!
+                            .modelFeatures!
+                            .map((feature) {
+                              final isSelected = _selectedModelFeatures
+                                  .contains(feature);
+                              return FilterChip(
+                                label: Text(
+                                  feature
+                                      .split('_')
+                                      .map(
+                                        (word) =>
+                                            word[0].toUpperCase() +
+                                            word.substring(1),
+                                      )
+                                      .join(' '),
+                                ),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedModelFeatures.add(feature);
+                                    } else {
+                                      _selectedModelFeatures.remove(feature);
+                                    }
+                                  });
+                                },
+                                avatar: Icon(
+                                  Icons.extension,
+                                  size: 16,
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withOpacity(
+                                          0.6,
+                                        ),
+                                ),
+                              );
+                            })
+                            .toList(),
+                      ),
+                    ],
+                    if (combinedTools.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        l10n.toolsAvailable(
+                          combinedTools.values.fold<int>(
+                            0,
+                            (sum, tools) => sum + tools.length,
+                          ),
+                        ),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontStyle: FontStyle.italic,
-                ),
               ),
-            ],
-          ],
+            ),
         ],
       ),
     );
@@ -1570,6 +1812,270 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   void _collapseAiPanel() {
     setState(() {
       _isAiPanelExpanded = false;
+    });
+  }
+
+  Widget _buildScratchpadList(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+
+    if (_scratchpadItems.isEmpty) {
+      return Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                'Scratchpad is empty', // TODO: l10n
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          _buildScratchpadActions(l10n),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            controller: _chatScrollController,
+            padding: const EdgeInsets.only(bottom: 12),
+            itemCount: _scratchpadItems.length,
+            itemBuilder: (context, index) {
+              final item = _scratchpadItems[index];
+              final isEditing = _editingScratchpadIndex == index;
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isEditing)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _scratchpadEditController,
+                              maxLines: null,
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.all(8),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            onPressed: () => _saveScratchpadEdit(index),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _cancelScratchpadEdit,
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: SelectionArea(
+                              child: InteractiveCheckboxMarkdown(
+                                originalContent: item.content,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                onLinkTap: (url, _) =>
+                                    _handleMarkdownLinkTap(url, l10n),
+                              ),
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit,
+                                  size: 18,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _startScratchpadEdit(index),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _deleteScratchpadItem(index),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    if (item.attachmentPaths.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _buildMessageAttachmentChips(item, l10n),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildScratchpadActions(l10n),
+      ],
+    );
+  }
+
+  Widget _buildScratchpadActions(AppLocalizations l10n) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _scratchpadItems.isEmpty ? null : _addScratchpadToNote,
+            icon: const Icon(Icons.note_add, size: 18),
+            label: const Text('Add to Note'), // TODO: l10n
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _scratchpadItems.isEmpty ? null : _clearScratchpad,
+            icon: const Icon(Icons.clear_all, size: 18),
+            label: const Text('Clear'), // TODO: l10n
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Include in chat toggle
+        Tooltip(
+          message: 'Include scratchpad in chat context', // TODO: l10n
+          child: Switch(
+            value: _includeScratchpadInChat,
+            onChanged: (value) {
+              setState(() {
+                _includeScratchpadInChat = value;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _startScratchpadEdit(int index) {
+    setState(() {
+      _editingScratchpadIndex = index;
+      _scratchpadEditController.text = _scratchpadItems[index].content;
+    });
+  }
+
+  void _cancelScratchpadEdit() {
+    setState(() {
+      _editingScratchpadIndex = null;
+      _scratchpadEditController.clear();
+    });
+  }
+
+  void _saveScratchpadEdit(int index) {
+    if (index < 0 || index >= _scratchpadItems.length) return;
+    setState(() {
+      final oldItem = _scratchpadItems[index];
+      _scratchpadItems[index] = ConversationMessage(
+        id: oldItem.id,
+        conversationId: oldItem.conversationId,
+        content: _scratchpadEditController.text,
+        type: oldItem.type,
+        timestamp: oldItem.timestamp,
+        attachmentPaths: oldItem.attachmentPaths,
+      );
+      _editingScratchpadIndex = null;
+      _scratchpadEditController.clear();
+    });
+  }
+
+  void _deleteScratchpadItem(int index) {
+    setState(() {
+      _scratchpadItems.removeAt(index);
+      if (_editingScratchpadIndex == index) {
+        _cancelScratchpadEdit();
+      } else if (_editingScratchpadIndex != null &&
+          _editingScratchpadIndex! > index) {
+        _editingScratchpadIndex = _editingScratchpadIndex! - 1;
+      }
+    });
+  }
+
+  void _clearScratchpad() {
+    setState(() {
+      _scratchpadItems.clear();
+      _lastSavedScratchpadCount = 0; // Reset dirty state baseline
+      _cancelScratchpadEdit();
+    });
+  }
+
+  Future<void> _addScratchpadToNote() async {
+    if (_scratchpadItems.isEmpty) return;
+
+    // Construct content with inline attachments
+    final content = _scratchpadItems
+        .map((item) {
+          final text = item.content;
+          if (item.attachmentPaths.isEmpty) {
+            return text;
+          }
+          // Add attachments as inline markdown images
+          final attachmentsMarkdown = item.attachmentPaths
+              .map((path) {
+                final fileName = path.split(Platform.pathSeparator).last;
+                if (fileName.startsWith('syn_')) {
+                  return '![](${SynapseTempUtils.buildUriFromFileName(fileName)})';
+                }
+                return '![]($path)';
+              })
+              .join('\n');
+
+          if (text.trim().isEmpty) {
+            return attachmentsMarkdown;
+          }
+          return '$text\n$attachmentsMarkdown';
+        })
+        .join('\n\n');
+
+    // We pass empty attachmentPaths because we've embedded them in the content
+    // and ConversationAttachmentService will process them from there.
+    await handleAddContentToNote(
+      content: content,
+      contextNotes: _conversationNotes,
+      attachmentPaths: [],
+    );
+
+    // After adding, we update the "last saved" count to mark as clean?
+    // Or maybe we don't clear it, just mark as clean.
+    setState(() {
+      _lastSavedScratchpadCount = _scratchpadItems.length;
     });
   }
 
@@ -1814,6 +2320,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 ),
                 noteId: note.id,
                 originalContent: note.content,
+                hasWebViewNotifier: _hasWebViewNotifier,
                 onContentChanged: (newContent) {
                   context.read<AppProvider>().updateNoteContent(
                     note.id,
@@ -1874,6 +2381,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 ),
                                 noteId: note.id,
                                 originalContent: subNote.content,
+                                hasWebViewNotifier: _hasWebViewNotifier,
                                 onContentChanged: (_) {},
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
@@ -2357,7 +2865,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final content = trimmed;
     final attachments = List<PlatformFile>.from(_pendingAttachments);
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final generationContext = GenerationContext();
+    final requestId = generationContext.ensureRequestId();
     _currentRequestId = requestId;
 
     _messageController.clear();
@@ -2366,6 +2875,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
 
     try {
+      if (_isScratchpadMode) {
+        // Add to scratchpad
+        final message = ConversationMessage(
+          id: const Uuid().v4(), // Need uuid package or generate random string
+          conversationId: _conversation?.id ?? 'scratchpad',
+          content: content,
+          type: MessageType.user,
+          timestamp: DateTime.now(),
+          attachmentPaths: attachments.map((f) => f.path!).toList(),
+        );
+
+        setState(() {
+          _scratchpadItems.add(message);
+          _isSending = false;
+        });
+
+        // Scroll to bottom of scratchpad?
+        // We might need a separate scroll controller for scratchpad or reuse _chatScrollController if it's swapped.
+        // Since we swap the view, we can reuse _chatScrollController or just let it be.
+        // But _chatScrollController is attached to the ListView in _buildConversationList AND _buildScratchpadList?
+        // Yes, if we reuse it, we should be careful.
+        // Let's check _buildScratchpadList. I didn't assign a controller there.
+        // I should assign _chatScrollController to _buildScratchpadList's ListView as well.
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_chatScrollController.hasClients) {
+            _chatScrollController.animateTo(
+              _chatScrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+
+        return;
+      }
+
       // Create conversation on first message if it doesn't exist
       if (_conversation == null) {
         await _initializeConversation();
@@ -2394,7 +2940,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final response = await _generateAiResponse(
         content,
         attachments,
-        requestId,
+        generationContext,
       );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -2476,8 +3022,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
-    String requestId,
+    GenerationContext generationContext,
   ) async {
+    final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
     final contextMessage = await noteBuilder.buildContextMessage(
@@ -2546,6 +3093,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
+    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
+      final buffer = StringBuffer();
+      buffer.writeln('Context from Scratchpad:');
+      for (final item in _scratchpadItems) {
+        buffer.writeln('- ${item.content}');
+      }
+      messages.add(
+        PromptMessage(
+          role: PromptRole.user,
+          content: buffer.toString(),
+          // We could also attach scratchpad attachments here if needed,
+          // but for now let's just include text context.
+        ),
+      );
+    }
+
     messages.add(
       PromptMessage(
         role: PromptRole.user,
@@ -2570,15 +3133,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final activeTools = _buildActiveToolsMap();
 
+    // Add model features to generation context
+    if (_selectedModelFeatures.isNotEmpty) {
+      generationContext.setValue(
+        'modelFeatures',
+        _selectedModelFeatures.toList(),
+      );
+    }
+
     final response = await _aiEngine.generate(
       request: request,
       activeTools: activeTools,
-      enableTools: activeTools.isNotEmpty,
-      executeTool: (serviceName, toolName, params) async {
+      enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
+      executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
           if (_aiToolBundles.containsKey(serviceName)) {
             final runtime = await _getAiToolRuntime(serviceName);
-            return runtime.invoke(toolName, params);
+            return runtime.invoke(toolName, params, context);
           }
 
           return McpToolIntegrationService.executeToolCall(
@@ -2586,11 +3157,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             toolName: toolName,
             parameters: params,
             enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+            generationContext: context,
           );
         });
       },
       isCancelled: () => _cancelledRequestIds.contains(requestId),
-      requestId: requestId,
+      generationContext: generationContext,
       maxToolIterations: _maxToolIterations,
       onIterationsExhausted: _handleIterationsExhausted,
     );
@@ -2650,6 +3222,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         'Highlight referenced note sections explicitly when possible.',
         AIPrompts.mathFormulaGuidelines,
         AIPrompts.relationshipGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
       needTimeInContext: false,
@@ -2847,9 +3420,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _initialNotesById[note.id] = note;
         }
         if (conversationNotes.isNotEmpty) {
-          _noteOrder = conversationNotes
-              .map((note) => note.id)
-              .toList(growable: false);
+          _noteOrder = conversationNotes.map((note) => note.id).toList();
           _activeNoteIndex = min(
             _activeNoteIndex,
             conversationNotes.length - 1,
@@ -2943,15 +3514,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     Uint8List? regionBytes;
-    if (Platform.isIOS) {
+    if (Platform.isIOS || (Platform.isAndroid && _hasWebViewNotifier.value)) {
       final Offset boundaryOrigin = renderObject.localToGlobal(Offset.zero);
       final Offset captureOrigin =
           boundaryOrigin + Offset(cappedRect.left, cappedRect.top);
       regionBytes = await NativeCaptureUtils.captureRegion(
-        x: captureOrigin.dx * devicePixelRatio,
-        y: captureOrigin.dy * devicePixelRatio,
-        width: cappedRect.width * devicePixelRatio,
-        height: cappedRect.height * devicePixelRatio,
+        x: captureOrigin.dx,
+        y: captureOrigin.dy,
+        width: cappedRect.width,
+        height: cappedRect.height,
         devicePixelRatio: devicePixelRatio,
       );
       if (regionBytes != null && regionBytes.isEmpty) {

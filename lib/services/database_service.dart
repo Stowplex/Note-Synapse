@@ -17,6 +17,7 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
+import '../models/attachment.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
@@ -36,13 +37,13 @@ class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal({String? databaseNameOverride})
-      : _databaseNameOverride = databaseNameOverride {
+    : _databaseNameOverride = databaseNameOverride {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 22;
+  static const int DATABASE_VERSION = 25;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -113,6 +114,7 @@ class DatabaseService {
         fileType TEXT NOT NULL,
         isRelativePath INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
+        includeInAIContext INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
@@ -144,7 +146,7 @@ class DatabaseService {
   static const String _createUserAppsTable = '''
       CREATE TABLE user_apps(
         id TEXT PRIMARY KEY,
-        uuid TEXT NOT NULL,
+        uuid TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         steps TEXT NOT NULL,
@@ -302,9 +304,34 @@ class DatabaseService {
     return 'note_synapse_test_${timestamp}_$randomSuffix.db';
   }
 
+  /// Returns the complete schema of the database as a list of CREATE TABLE statements
+  static List<String> getSchema() {
+    return [
+      _createNotesTable,
+      _createSubNotesTable,
+      _createTagsTable,
+      _createNoteTagsTable,
+      _createConversationTagsTable,
+      _createAttachmentsTable,
+      _createRelationshipsTable,
+      _createFiltersTable,
+      _createUserAppsTable,
+      _createAppRevisionsTable,
+      _createUserAppLibrariesTable,
+      _createUserAppLibraryDependenciesTable,
+      _createConversationsTable,
+      _createConversationMessagesTable,
+      _createConversationAttachmentsTable,
+      _createConversationMessageMappingTable,
+      _createMessageParentsTable,
+      _createConversationNoteMappingTable,
+      ..._createIndexes,
+    ];
+  }
+
   // For testing, allow creating new instances
   DatabaseService.createNew({String? databaseName})
-      : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
+    : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
     // Initialize database factory using platform-specific implementation
     initializeDatabaseFactory();
   }
@@ -325,11 +352,15 @@ class DatabaseService {
       version: DATABASE_VERSION,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _onOpen,
       singleInstance: _databaseNameOverride == null,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    // Enable foreign key constraints for new databases
+    await db.execute('PRAGMA foreign_keys = ON');
+
     // Create all tables using schema constants
     await db.execute(_createNotesTable);
     await db.execute(_createSubNotesTable);
@@ -357,6 +388,12 @@ class DatabaseService {
     }
   }
 
+  Future<void> _onOpen(Database db) async {
+    // Enable foreign key constraints every time the database is opened
+    // This is required because SQLite disables foreign keys by default
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     await _executeMigrations(
       db,
@@ -382,6 +419,15 @@ class DatabaseService {
     22: MigrationStep(
       description: 'Create conversation_tags table for shared tag support',
       execute: _migrateToVersion22,
+    ),
+    23: MigrationStep(
+      description:
+          'Add UNIQUE constraint to user_apps.uuid column for foreign key integrity',
+      execute: _migrateToVersion23,
+    ),
+    25: MigrationStep(
+      description: 'Add includeInAIContext column to attachments table',
+      execute: _migrateToVersion24,
     ),
   };
 
@@ -503,6 +549,22 @@ class DatabaseService {
         );
         break;
 
+      case 23:
+        // User apps table UNIQUE constraint addition failed - recreate user_apps table
+        LoggerService.error(
+          'Recreating user_apps table due to UNIQUE constraint addition failure',
+        );
+        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
+        break;
+
+      case 25:
+        // Attachments table modification failed - recreate notes tables (which includes attachments)
+        LoggerService.error(
+          'Recreating notes tables due to attachments table modification failure',
+        );
+        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
+        break;
+
       default:
         // Unknown migration - fall back to full database recreation
         LoggerService.error(
@@ -582,8 +644,35 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
+    // Drop dependent tables first (reverse dependency order)
+    // user_app_library_dependencies depends on user_app_libraries
+    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    // user_app_libraries depends on user_apps
+    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
+    // app_revisions depends on user_apps
+    await db.execute('DROP TABLE IF EXISTS app_revisions');
+    // Now we can drop user_apps
     await db.execute('DROP TABLE IF EXISTS user_apps');
+
+    // Recreate tables in dependency order
     await db.execute(_createUserAppsTable);
+    await db.execute(_createAppRevisionsTable);
+    await db.execute(_createUserAppLibrariesTable);
+    await db.execute(_createUserAppLibraryDependenciesTable);
+
+    // Recreate indexes for library tables
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
+    );
   }
 
   Future<void> _recreateAppRevisionsTable(
@@ -868,6 +957,108 @@ class DatabaseService {
       LoggerService.info('Migration to version 22 completed successfully');
     } catch (e) {
       LoggerService.error('Error in migration to version 22: $e', error: e);
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion23(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 23: Adding UNIQUE constraint to user_apps.uuid column',
+    );
+
+    try {
+      // Check if user_apps table exists
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'",
+      );
+
+      if (tables.isEmpty) {
+        LoggerService.info(
+          'user_apps table does not exist, skipping migration',
+        );
+        return;
+      }
+
+      // Temporarily disable foreign key constraints
+      await db.execute('PRAGMA foreign_keys = OFF');
+
+      // Begin transaction
+      await db.execute('BEGIN TRANSACTION');
+
+      try {
+        // Rename the old table
+        await db.execute('ALTER TABLE user_apps RENAME TO user_apps_old');
+
+        // Create the new table with UNIQUE constraint on uuid
+        await db.execute(_createUserAppsTable);
+
+        // Copy data from old table to new table
+        await db.execute('''
+          INSERT INTO user_apps (id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt)
+          SELECT id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt
+          FROM user_apps_old
+        ''');
+
+        // Drop the old table
+        await db.execute('DROP TABLE user_apps_old');
+
+        // Commit transaction
+        await db.execute('COMMIT');
+
+        LoggerService.info(
+          'Successfully migrated user_apps table with UNIQUE uuid constraint',
+        );
+      } catch (e) {
+        // Rollback on error
+        await db.execute('ROLLBACK');
+        LoggerService.error(
+          'Error during user_apps table migration, rolled back: $e',
+        );
+        rethrow;
+      } finally {
+        // Re-enable foreign key constraints
+        await db.execute('PRAGMA foreign_keys = ON');
+      }
+
+      LoggerService.info('Migration to version 23 completed successfully');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 23: $e', error: e);
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion24(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 24: Adding includeInAIContext column to attachments table',
+    );
+
+    try {
+      // Check if column already exists
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any(
+        (column) => column['name'] == 'includeInAIContext',
+      );
+
+      if (!hasColumn) {
+        await db.execute(
+          'ALTER TABLE attachments ADD COLUMN includeInAIContext INTEGER NOT NULL DEFAULT 1',
+        );
+        LoggerService.info(
+          'Successfully added includeInAIContext column to attachments table',
+        );
+      } else {
+        LoggerService.info(
+          'includeInAIContext column already exists in attachments table',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error in migration to version 24: $e', error: e);
       rethrow;
     }
   }
@@ -1164,16 +1355,65 @@ class DatabaseService {
     }
 
     // Update attachments
+    // Update attachments
+    // First, get existing attachments to preserve metadata (like includeInAIContext)
+    final existingAttachments = await db.query(
+      'attachments',
+      columns: ['filePath', 'includeInAIContext'],
+      where: 'noteId = ?',
+      whereArgs: [note.id],
+    );
+
+    final Map<String, bool> existingContextMap = {};
+    for (final row in existingAttachments) {
+      existingContextMap[row['filePath'] as String] =
+          (row['includeInAIContext'] as int?) != 0;
+    }
+
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
       final isRelativePath = attachmentPath.startsWith('attachments/');
+
+      // Preserve includeInAIContext if it existed, otherwise default to true
+      final includeInAIContext = existingContextMap[attachmentPath] ?? true;
+
       await _insertAttachment(
         note.id,
         attachmentPath,
         isRelativePath: isRelativePath,
+        includeInAIContext: includeInAIContext,
       );
     }
+  }
+
+  /// Updates the includeInAIContext flag for a specific attachment
+  Future<void> updateAttachmentAIContext(
+    String noteId,
+    String filePath,
+    bool include,
+  ) async {
+    final db = await database;
+    await db.update(
+      'attachments',
+      {'includeInAIContext': include ? 1 : 0},
+      where: 'noteId = ? AND filePath = ?',
+      whereArgs: [noteId, filePath],
+    );
+  }
+
+  /// Gets all attachments for a specific note
+  Future<List<Attachment>> getAttachmentsForNote(String noteId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+
+    return List.generate(maps.length, (i) {
+      return Attachment.fromDatabase(maps[i]);
+    });
   }
 
   Future<void> deleteNote(String id) async {
@@ -1697,11 +1937,17 @@ class DatabaseService {
     String noteId,
     String filePath, {
     bool isRelativePath = false,
+    bool includeInAIContext = true,
   }) async {
     final db = await database;
     final fileName = filePath.split('/').last;
     final fileType = FileTypeUtils.getFileExtension(fileName);
     final uuid = Uuid();
+
+    // Default HTML files to be excluded from AI context to save tokens
+    final isHtml =
+        fileType.toLowerCase() == 'html' || fileType.toLowerCase() == 'htm';
+    final finalIncludeInAIContext = isHtml ? false : includeInAIContext;
 
     await db.insert('attachments', {
       'id': uuid.v4(),
@@ -1711,6 +1957,7 @@ class DatabaseService {
       'fileType': fileType,
       'isRelativePath': isRelativePath ? 1 : 0,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'includeInAIContext': finalIncludeInAIContext ? 1 : 0,
     });
   }
 
@@ -2049,17 +2296,36 @@ class DatabaseService {
 
   Future<Map<String, dynamic>?> getUserAppState(String id) async {
     final db = await database;
-    final maps = await db.query(
-      'user_apps',
-      columns: ['appState'],
-      where: 'id = ?',
-      whereArgs: [id],
+
+    // Use raw query with chunked TEXT reading to avoid cursor window issues
+    final results = await db.rawQuery(
+      '''
+      SELECT id,
+             CASE 
+               WHEN length(appState) > 0 THEN 'TEXT_DATA'
+               ELSE NULL 
+             END as has_text
+      FROM user_apps 
+      WHERE id = ?
+    ''',
+      [id],
     );
-    if (maps.isNotEmpty && maps.first['appState'] != null) {
-      return jsonDecode(maps.first['appState'] as String)
-          as Map<String, dynamic>;
+
+    if (results.isEmpty || results.first['has_text'] == null) {
+      return null;
     }
-    return null;
+
+    // Read TEXT data in chunks to avoid cursor window issues
+    try {
+      final textData = await _readTextInChunks(db, id);
+      if (textData.isEmpty) {
+        return null;
+      }
+      return jsonDecode(textData) as Map<String, dynamic>;
+    } catch (e) {
+      LoggerService.error('Failed to read appState for app $id: $e', error: e);
+      return null;
+    }
   }
 
   UserApp _userAppFromMap(Map<String, dynamic> map) {
@@ -2512,6 +2778,59 @@ class DatabaseService {
     } catch (e) {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);
       return <int>[];
+    }
+  }
+
+  // Helper method to read TEXT data in chunks to avoid cursor window issues
+  Future<String> _readTextInChunks(Database db, String appId) async {
+    const int chunkSize = 1024 * 1024; // 1MB chunks
+    final StringBuffer allText = StringBuffer();
+
+    try {
+      // Get the total size of the TEXT
+      final sizeResult = await db.rawQuery(
+        '''
+        SELECT length(appState) as text_size 
+        FROM user_apps 
+        WHERE id = ?
+      ''',
+        [appId],
+      );
+
+      if (sizeResult.isEmpty) {
+        return '';
+      }
+
+      final int totalSize = sizeResult.first['text_size'] as int;
+      if (totalSize == 0) {
+        return '';
+      }
+
+      // Read TEXT in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize)
+            ? totalSize - offset
+            : chunkSize;
+
+        final chunkResult = await db.rawQuery(
+          '''
+          SELECT substr(appState, ?, ?) as chunk
+          FROM user_apps 
+          WHERE id = ?
+        ''',
+          [offset + 1, currentChunkSize, appId],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as String;
+          allText.write(chunk);
+        }
+      }
+
+      return allText.toString();
+    } catch (e) {
+      LoggerService.error('Error reading TEXT in chunks: $e', error: e);
+      return '';
     }
   }
 

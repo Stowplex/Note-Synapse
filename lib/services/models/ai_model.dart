@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import '../prompts/prompt_models.dart';
 import '../prompts/system_prompt_builder.dart';
 import '../../models/model_config.dart';
+import '../../models/generation_context.dart';
 
 /// Base interface for AI models
 abstract class AIModel {
@@ -28,15 +29,16 @@ abstract class AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
+    final context = generationContext ?? GenerationContext();
     return generateWithMessages(
       request.buildFullMessageList(),
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -48,8 +50,9 @@ abstract class AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
+    final context = generationContext ?? GenerationContext();
     final request = PromptRequest.singleTurn(
       systemMessage: SystemPromptBuilder.build(
         taskContext:
@@ -68,7 +71,7 @@ abstract class AIModel {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -81,7 +84,7 @@ abstract class AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
     throw UnimplementedError('generateWithMessages must be implemented.');
   }
@@ -96,8 +99,9 @@ abstract class AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
     final request = PromptRequest.singleTurn(
       systemMessage: SystemPromptBuilder.build(
         taskContext:
@@ -117,7 +121,7 @@ abstract class AIModel {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -133,7 +137,7 @@ abstract class AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
     throw UnimplementedError('generateWithToolsAndMessages must be implemented.');
   }

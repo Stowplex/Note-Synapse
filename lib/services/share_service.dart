@@ -18,24 +18,28 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/file_utils.dart';
 import '../services/logger_service.dart';
-import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import 'svg_renderer_service.dart';
 
 class ShareService {
-  static const MethodChannel _channel = MethodChannel('com.github.kkspeed/share');
+  static const MethodChannel _channel = MethodChannel(
+    'com.github.kkspeed/share',
+  );
   static bool _initialized = false;
   static bool _waitingForNavigatorFrame = false;
   static bool _isPresentingShareScreen = false;
-  static final List<Map<String, dynamic>> _pendingSharedQueue = <Map<String, dynamic>>[];
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-  static final _ShareLifecycleObserver _lifecycleObserver = _ShareLifecycleObserver();
+  static final List<Map<String, dynamic>> _pendingSharedQueue =
+      <Map<String, dynamic>>[];
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+  static final _ShareLifecycleObserver _lifecycleObserver =
+      _ShareLifecycleObserver();
   static bool _observerAttached = false;
 
   static Future<void> init([AppProvider? appProvider]) async {
@@ -84,7 +88,7 @@ class ShareService {
       }
     });
   }
-  
+
   /// Generates markdown text from a list of notes with optional sub-notes and linked notes
   static Future<String> generateMarkdownText({
     required List<Note> notes,
@@ -95,24 +99,24 @@ class ShareService {
     final buffer = StringBuffer();
     final Set<String> visitedNoteIds = <String>{};
     final Queue<Note> noteQueue = Queue<Note>();
-    
+
     // Add root notes to the queue
     for (final note in notes) {
       noteQueue.add(note);
     }
-    
+
     // Breadth-first traversal
     while (noteQueue.isNotEmpty) {
       final currentNote = noteQueue.removeFirst();
-      
+
       // Skip if already processed
       if (visitedNoteIds.contains(currentNote.id)) {
         continue;
       }
-      
+
       // Mark as visited
       visitedNoteIds.add(currentNote.id);
-      
+
       // Add current note to buffer
       await _addNoteToBuffer(
         note: currentNote,
@@ -123,16 +127,22 @@ class ShareService {
         l10n: l10n,
         level: 0,
       );
-      
+
       // If including linked notes, add them to the queue for processing
       if (includeSubNotesAndLinkedNotes) {
         try {
-          final relationships = await appProvider.getNoteRelationships(currentNote.id);
+          final relationships = await appProvider.getNoteRelationships(
+            currentNote.id,
+          );
           final linkedNotes = await appProvider.getLinkedNotes(currentNote.id);
-          
+
           for (final relationship in relationships) {
             final linkedNote = linkedNotes.firstWhere(
-              (n) => n.id == (relationship.fromNoteId == currentNote.id ? relationship.toNoteId : relationship.fromNoteId),
+              (n) =>
+                  n.id ==
+                  (relationship.fromNoteId == currentNote.id
+                      ? relationship.toNoteId
+                      : relationship.fromNoteId),
               orElse: () => Note(
                 id: 'unknown',
                 title: 'Unknown Note',
@@ -142,9 +152,10 @@ class ShareService {
                 updatedAt: DateTime.now(),
               ),
             );
-            
+
             // Add to queue if not already visited and not unknown
-            if (linkedNote.id != 'unknown' && !visitedNoteIds.contains(linkedNote.id)) {
+            if (linkedNote.id != 'unknown' &&
+                !visitedNoteIds.contains(linkedNote.id)) {
               noteQueue.add(linkedNote);
             }
           }
@@ -154,10 +165,10 @@ class ShareService {
         }
       }
     }
-    
+
     return buffer.toString();
   }
-  
+
   /// Generates a PDF from selected notes and shares or saves it depending on the platform.
   static Future<_PdfShareResult?> shareAsPdf({
     required List<Note> notes,
@@ -184,8 +195,7 @@ class ShareService {
         pageSize: pageSize,
       );
 
-      final fileName =
-          'notes_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName = 'notes_${DateTime.now().millisecondsSinceEpoch}.pdf';
 
       File? cacheFile;
       if (!kIsWeb) {
@@ -203,16 +213,9 @@ class ShareService {
         );
       } else if (Platform.isAndroid) {
         final tempFile = cacheFile!;
-        await Share.shareXFiles(
-          [
-            XFile(
-              tempFile.path,
-              mimeType: 'application/pdf',
-              name: fileName,
-            ),
-          ],
-          subject: l10n.shareDialogTitle,
-        );
+        await Share.shareXFiles([
+          XFile(tempFile.path, mimeType: 'application/pdf', name: fileName),
+        ], subject: l10n.shareDialogTitle);
       } else if (Platform.isIOS) {
         // On iOS, try to use save dialog first, then fall back to share sheet if needed
         final tempFile = cacheFile!;
@@ -232,30 +235,16 @@ class ShareService {
           } else {
             // User cancelled save dialog, show share sheet instead
             // Share sheet allows saving to Files app and sharing to other apps
-            await Share.shareXFiles(
-              [
-                XFile(
-                  tempFile.path,
-                  mimeType: 'application/pdf',
-                  name: fileName,
-                ),
-              ],
-              subject: l10n.shareDialogTitle,
-            );
+            await Share.shareXFiles([
+              XFile(tempFile.path, mimeType: 'application/pdf', name: fileName),
+            ], subject: l10n.shareDialogTitle);
           }
         } catch (e) {
           // If save dialog is not supported or fails, use share sheet
           // Share sheet is the standard iOS way and allows saving to Files app
-          await Share.shareXFiles(
-            [
-              XFile(
-                tempFile.path,
-                mimeType: 'application/pdf',
-                name: fileName,
-              ),
-            ],
-            subject: l10n.shareDialogTitle,
-          );
+          await Share.shareXFiles([
+            XFile(tempFile.path, mimeType: 'application/pdf', name: fileName),
+          ], subject: l10n.shareDialogTitle);
         }
       } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
         final result = await FilePicker.platform.saveFile(
@@ -271,10 +260,7 @@ class ShareService {
         }
       }
 
-      return _PdfShareResult(
-        fileName: fileName,
-        cacheFile: cacheFile,
-      );
+      return _PdfShareResult(fileName: fileName, cacheFile: cacheFile);
     } catch (e, stackTrace) {
       LoggerService.error(
         'Error generating PDF for sharing: $e',
@@ -337,10 +323,7 @@ class ShareService {
   }) async {
     final fonts = await _PdfFontManager.instance.load();
 
-    final pageFormat = PdfPageFormat(
-      pageSize.width,
-      pageSize.height,
-    );
+    final pageFormat = PdfPageFormat(pageSize.width, pageSize.height);
 
     final theme = pw.ThemeData.withFont(
       base: fonts.base,
@@ -380,34 +363,34 @@ class ShareService {
       for (var i = 0; i < pdfAttachments.length; i++) {
         try {
           final pdfBytes = pdfAttachments[i];
-          LoggerService.debug('Converting PDF attachment ${i + 1} to images (${pdfBytes.length} bytes)');
-          
+          LoggerService.debug(
+            'Converting PDF attachment ${i + 1} to images (${pdfBytes.length} bytes)',
+          );
+
           // Convert each PDF page to an image and add it to the document
           await for (final page in Printing.raster(pdfBytes, dpi: 150)) {
             final imageBytes = await page.toPng();
             final image = pw.MemoryImage(imageBytes);
-            
+
             document.addPage(
               pw.Page(
                 pageFormat: pageFormat,
-                build: (context) => pw.Center(
-                  child: pw.Image(
-                    image,
-                    fit: pw.BoxFit.contain,
-                  ),
-                ),
+                build: (context) =>
+                    pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
               ),
             );
           }
-          
-          LoggerService.debug('Successfully added PDF attachment ${i + 1} as images');
+
+          LoggerService.debug(
+            'Successfully added PDF attachment ${i + 1} as images',
+          );
         } catch (e, stackTrace) {
           LoggerService.warning(
             'Failed to convert PDF attachment ${i + 1} to images: $e',
             error: e,
             stackTrace: stackTrace,
           );
-          
+
           // Add a placeholder page for the failed PDF
           document.addPage(
             pw.Page(
@@ -415,10 +398,7 @@ class ShareService {
               build: (context) => pw.Center(
                 child: pw.Text(
                   'PDF Attachment ${i + 1}\n(Preview unavailable)',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    color: PdfColors.grey600,
-                  ),
+                  style: pw.TextStyle(fontSize: 16, color: PdfColors.grey600),
                   textAlign: pw.TextAlign.center,
                 ),
               ),
@@ -434,13 +414,17 @@ class ShareService {
   }
 
   /// Collect all PDF attachments from the notes
-  static Future<List<Uint8List>> _collectPdfAttachments(List<Note> notes) async {
+  static Future<List<Uint8List>> _collectPdfAttachments(
+    List<Note> notes,
+  ) async {
     final pdfAttachments = <Uint8List>[];
-    
+
     for (final note in notes) {
       for (final attachmentPath in note.attachmentPaths) {
         try {
-          final extension = FileTypeUtils.getFileExtension(attachmentPath).toLowerCase();
+          final extension = FileTypeUtils.getFileExtension(
+            attachmentPath,
+          ).toLowerCase();
           if (extension != 'pdf') {
             continue;
           }
@@ -453,7 +437,9 @@ class ShareService {
 
           final bytes = await file.readAsBytes();
           pdfAttachments.add(bytes);
-          LoggerService.debug('Collected PDF attachment: $attachmentPath (${bytes.length} bytes)');
+          LoggerService.debug(
+            'Collected PDF attachment: $attachmentPath (${bytes.length} bytes)',
+          );
         } catch (e, stackTrace) {
           LoggerService.warning(
             'Failed to load PDF attachment $attachmentPath: $e',
@@ -640,350 +626,6 @@ class ShareService {
     return null;
   }
 
-  /// Renders an SVG string to PNG bytes using HeadlessInAppWebView
-  /// The SVG is rendered at 4K resolution (3840x2160) for high quality
-  static Future<Uint8List?> _renderSvgToPng(String svgContent) async {
-    try {
-      // Check if WebView is supported on this platform
-      if (kIsWeb) {
-        // WebView not available on web platform, return null to fall back
-        LoggerService.debug('SVG rendering via WebView not supported on web platform');
-        return null;
-      }
-
-      // Check if WebView is supported on this platform
-      if (!UserAppService.isWebViewSupported()) {
-        LoggerService.debug('WebView not supported on this platform');
-        return null;
-      }
-
-      final completer = Completer<Uint8List?>();
-      
-      // Create HTML page that renders SVG to canvas at 4K resolution
-      // Insert SVG directly into HTML (like interactive_checkbox_markdown.dart does)
-      final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: white;
-      overflow: hidden;
-    }
-    #svgContainer {
-      width: 3840px;
-      height: 2160px;
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-    #canvas {
-      display: none;
-    }
-  </style>
-</head>
-<body>
-  <div id="svgContainer">
-    $svgContent
-  </div>
-  <canvas id="canvas" width="3840" height="2160"></canvas>
-  <script>
-    (function() {
-      // Override console methods to properly stringify objects (like user_app_runtime_bridge)
-      const originalConsoleLog = console.log;
-      const originalConsoleError = console.error;
-      const originalConsoleWarn = console.warn;
-      
-      console.log = function(...args) {
-        const msg = args.map((arg) => {
-          if (typeof arg === 'string') return arg;
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch (_) {
-            return String(arg);
-          }
-        }).join('\\n');
-        originalConsoleLog(msg);
-      };
-      
-      console.error = function(...args) {
-        const msg = args.map((arg) => {
-          if (typeof arg === 'string') return arg;
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch (_) {
-            return String(arg);
-          }
-        }).join('\\n');
-        originalConsoleError(msg);
-      };
-      
-      console.warn = function(...args) {
-        const msg = args.map((arg) => {
-          if (typeof arg === 'string') return arg;
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch (_) {
-            return String(arg);
-          }
-        }).join('\\n');
-        originalConsoleWarn(msg);
-      };
-      
-      // Wait for DOM to be fully loaded
-      function renderSvg() {
-        const container = document.getElementById('svgContainer');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Get the SVG element from the container
-        const svgElement = container.querySelector('svg');
-        if (!svgElement) {
-          console.error('SVG element not found in container');
-          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-            window.flutter_inappwebview.callHandler('svgRendered', null);
-          }
-          return;
-        }
-        
-        // Create an image element to load the SVG
-        const img = new Image();
-        
-        img.onload = function() {
-          try {
-            // Clear canvas with white background
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Get image dimensions (use naturalWidth/Height for accurate SVG dimensions)
-            const imgWidth = img.naturalWidth || img.width || canvas.width;
-            const imgHeight = img.naturalHeight || img.height || canvas.height;
-            
-            // Validate dimensions
-            if (imgWidth <= 0 || imgHeight <= 0) {
-              console.error('Invalid image dimensions:', { imgWidth, imgHeight });
-              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                window.flutter_inappwebview.callHandler('svgRendered', null);
-              }
-              return;
-            }
-            
-            // Calculate aspect ratio and center the image
-            const svgAspect = imgWidth / imgHeight;
-            const canvasAspect = canvas.width / canvas.height;
-            
-            let drawWidth, drawHeight, drawX, drawY;
-            
-            if (svgAspect > canvasAspect) {
-              // SVG is wider - fit to width
-              drawWidth = canvas.width;
-              drawHeight = canvas.width / svgAspect;
-              drawX = 0;
-              drawY = (canvas.height - drawHeight) / 2;
-            } else {
-              // SVG is taller - fit to height
-              drawHeight = canvas.height;
-              drawWidth = canvas.height * svgAspect;
-              drawX = (canvas.width - drawWidth) / 2;
-              drawY = 0;
-            }
-            
-            // Draw the SVG image onto the canvas
-            ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-            
-            // Convert canvas to PNG data URL
-            let dataUrl;
-            try {
-              dataUrl = canvas.toDataURL('image/png');
-            } catch (error) {
-              console.error('Error converting canvas to data URL (possibly tainted):', error);
-              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                window.flutter_inappwebview.callHandler('svgRendered', null);
-              }
-              return;
-            }
-            
-            // Send the data URL back to Dart
-            console.log('SVG rendered successfully, sending data URL to Dart...');
-            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-              try {
-                window.flutter_inappwebview.callHandler('svgRendered', dataUrl);
-                console.log('Data URL sent to Dart handler');
-              } catch (error) {
-                console.error('Error calling handler:', error);
-                // Try one more time after a short delay
-                setTimeout(function() {
-                  if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                    window.flutter_inappwebview.callHandler('svgRendered', null);
-                  }
-                }, 100);
-              }
-            } else {
-              console.error('flutter_inappwebview handler not available');
-              // Try one more time after a short delay
-              setTimeout(function() {
-                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                  window.flutter_inappwebview.callHandler('svgRendered', null);
-                }
-              }, 100);
-            }
-          } catch (error) {
-            console.error('Error rendering SVG to canvas:', error);
-            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-              window.flutter_inappwebview.callHandler('svgRendered', null);
-            }
-          }
-        };
-        
-        img.onerror = function(error) {
-          console.error('Error loading SVG image:', error);
-          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-            window.flutter_inappwebview.callHandler('svgRendered', null);
-          }
-        };
-        
-        // Use SVG data URL instead of blob URL to avoid canvas tainting issues
-        try {
-          const svgString = new XMLSerializer().serializeToString(svgElement);
-          // Encode SVG as data URL to avoid CORS/tainting issues
-          const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
-          console.log('Created SVG data URL, loading image...');
-          img.src = svgDataUrl;
-        } catch (error) {
-          console.error('Error creating SVG data URL:', error);
-          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-            window.flutter_inappwebview.callHandler('svgRendered', null);
-          }
-        }
-      }
-      
-      // Wait for DOM to be ready, then render
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          // Add a small delay to ensure SVG is fully parsed
-          setTimeout(renderSvg, 100);
-        });
-      } else {
-        // DOM is already loaded, but wait a bit for SVG to be parsed
-        setTimeout(renderSvg, 100);
-      }
-    })();
-  </script>
-</body>
-</html>
-''';
-
-      HeadlessInAppWebView? headlessWebView;
-      
-      headlessWebView = HeadlessInAppWebView(
-        initialData: InAppWebViewInitialData(
-          data: htmlContent,
-          mimeType: 'text/html',
-          encoding: 'utf8',
-        ),
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          allowFileAccess: false,
-          allowContentAccess: false,
-          allowFileAccessFromFileURLs: false,
-        ),
-        onWebViewCreated: (controller) {
-          // Register JavaScript handler to receive the rendered image
-          controller.addJavaScriptHandler(
-            handlerName: 'svgRendered',
-            callback: (args) {
-              if (completer.isCompleted) {
-                return;
-              }
-              
-              try {
-                final dataUrl = args.isNotEmpty ? args[0] as String? : null;
-                if (dataUrl == null || dataUrl.isEmpty) {
-                  LoggerService.debug('SVG rendering returned null or empty data URL');
-                  completer.complete(null);
-                  return;
-                }
-                
-                // Parse data URL (format: data:image/png;base64,<base64data>)
-                final base64Data = dataUrl.split(',').last;
-                final imageBytes = base64Decode(base64Data);
-                LoggerService.debug('SVG successfully rendered to PNG: ${imageBytes.length} bytes');
-                completer.complete(Uint8List.fromList(imageBytes));
-              } catch (e, stackTrace) {
-                LoggerService.warning(
-                  'Failed to decode SVG rendered PNG: $e',
-                  error: e,
-                  stackTrace: stackTrace,
-                );
-                completer.complete(null);
-              }
-            },
-          );
-        },
-        onConsoleMessage: (controller, consoleMessage) {
-          // Log console messages for debugging
-          LoggerService.debug('[SVG Render] ${consoleMessage.message}');
-        },
-        onLoadStop: (controller, url) async {
-          LoggerService.debug('SVG rendering page loaded, waiting for render...');
-          // Wait a bit for the SVG to render
-          await Future.delayed(const Duration(milliseconds: 500));
-          
-          // If not completed yet, trigger a timeout
-          if (!completer.isCompleted) {
-            // Give it more time
-            await Future.delayed(const Duration(milliseconds: 2000));
-            if (!completer.isCompleted) {
-              LoggerService.warning('SVG rendering timeout - handler not called');
-              completer.complete(null);
-            }
-          }
-        },
-        onLoadError: (controller, url, code, message) {
-          if (completer.isCompleted) {
-            return;
-          }
-          LoggerService.warning(
-            'Failed to load SVG rendering page: $message ($code)',
-          );
-          completer.complete(null);
-        },
-      );
-
-      await headlessWebView.run();
-
-      try {
-        final result = await completer.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            LoggerService.warning('SVG rendering timeout');
-            return null;
-          },
-        );
-        return result;
-      } finally {
-        try {
-          if (headlessWebView.isRunning()) {
-            await headlessWebView.dispose();
-          }
-        } catch (e) {
-          LoggerService.warning('Error disposing headless webview: $e');
-        }
-      }
-    } catch (e, stackTrace) {
-      LoggerService.warning(
-        'Failed to render SVG to PNG: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      return null;
-    }
-  }
-  
   /// Adds a note to the buffer with proper markdown formatting
   static Future<void> _addNoteToBuffer({
     required Note note,
@@ -996,16 +638,18 @@ class ShareService {
   }) async {
     // Note: We don't need to check for duplicates here since the main BFS loop
     // already handles the visited check before calling this method
-    
+
     // Add note header
     final headerPrefix = '#${'#' * level}';
     buffer.writeln('$headerPrefix ${note.title}');
     buffer.writeln();
-    
+
     // Add note metadata
     buffer.writeln('**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}');
     if (note.isTask && note.status != null) {
-      buffer.writeln('**${l10n.status}:** ${_getStatusText(note.status!, l10n)}');
+      buffer.writeln(
+        '**${l10n.status}:** ${_getStatusText(note.status!, l10n)}',
+      );
     }
     if (note.tags.isNotEmpty) {
       buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
@@ -1015,24 +659,26 @@ class ShareService {
       buffer.writeln('**${l10n.updated}:** ${_formatDateTime(note.updatedAt)}');
     }
     buffer.writeln();
-    
+
     // Add note content
     if (note.content.isNotEmpty) {
       buffer.writeln(note.content);
       buffer.writeln();
     }
-    
+
     // Add sub-notes if requested
     if (includeSubNotesAndLinkedNotes && note.subNotes.isNotEmpty) {
       buffer.writeln('## ${l10n.subNotes}');
       buffer.writeln();
-      
+
       for (final subNote in note.subNotes) {
         buffer.writeln('### ${subNote.name}');
         if (subNote.isCompleted) {
           buffer.writeln('✅ **${l10n.completed}**');
         }
-        buffer.writeln('**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}');
+        buffer.writeln(
+          '**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}',
+        );
         buffer.writeln();
         if (subNote.content.isNotEmpty) {
           buffer.writeln(subNote.content);
@@ -1040,24 +686,25 @@ class ShareService {
         }
       }
     }
-    
+
     // Add separator between notes
     if (level == 0) {
       buffer.writeln('---');
       buffer.writeln();
     }
   }
-  
+
   /// Copies text to clipboard
   static Future<void> copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
   }
-  
+
   /// Shares text as a file (platform-specific)
   static Future<void> shareAsText(String text, BuildContext context) async {
     if (Platform.isAndroid || Platform.isIOS) {
       await _shareAsTextMobile(text, context);
-    } else if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+    } else if (!kIsWeb &&
+        (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
       await _shareAsTextDesktop(text, context);
     } else {
       // Fallback: copy to clipboard
@@ -1065,21 +712,23 @@ class ShareService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Text copied to clipboard (sharing not supported on this platform)'),
+            content: Text(
+              'Text copied to clipboard (sharing not supported on this platform)',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
       }
     }
   }
-  
+
   /// Mobile sharing using share_plus (Android and iOS)
-  static Future<void> _shareAsTextMobile(String text, BuildContext context) async {
+  static Future<void> _shareAsTextMobile(
+    String text,
+    BuildContext context,
+  ) async {
     try {
-      await Share.share(
-        text,
-        subject: 'Shared Notes',
-      );
+      await Share.share(text, subject: 'Shared Notes');
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1091,9 +740,12 @@ class ShareService {
       }
     }
   }
-  
+
   /// Desktop sharing (Linux, Windows, macOS) - Save as file
-  static Future<void> _shareAsTextDesktop(String text, BuildContext context) async {
+  static Future<void> _shareAsTextDesktop(
+    String text,
+    BuildContext context,
+  ) async {
     try {
       // Use file_picker to let user choose where to save
       final result = await FilePicker.platform.saveFile(
@@ -1102,11 +754,11 @@ class ShareService {
         type: FileType.custom,
         allowedExtensions: ['md'],
       );
-      
+
       if (result != null) {
         final file = File(result);
         await file.writeAsString(text);
-        
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1127,7 +779,7 @@ class ShareService {
       }
     }
   }
-  
+
   /// Helper method to get status text
   static String _getStatusText(TaskStatus status, AppLocalizations l10n) {
     switch (status) {
@@ -1141,14 +793,16 @@ class ShareService {
         return l10n.toDo;
     }
   }
-  
+
   /// Helper method to format DateTime
   static String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   /// Process shared content from platform channels
-  static Future<Map<String, dynamic>> processSharedContent(Map<String, dynamic> sharedData) async {
+  static Future<Map<String, dynamic>> processSharedContent(
+    Map<String, dynamic> sharedData,
+  ) async {
     try {
       final String? action = sharedData['action'];
       final String? type = sharedData['type'];
@@ -1161,35 +815,25 @@ class ShareService {
       if (action == 'SEND' || action == 'SEND_MULTIPLE') {
         // Handle URL content type (from clipboard detection)
         if (contentType == 'url' && url != null) {
-          return {
-            'success': true,
-            'contentType': 'url',
-            'url': url,
-          };
+          return {'success': true, 'contentType': 'url', 'url': url};
         }
         // Handle regular text content
         else if (type == 'text/plain' && text != null) {
           return await _processTextContent(text);
-        } 
+        }
         // Handle image content
         else if (type?.startsWith('image/') == true && filePath != null) {
           return await _processImageContent(filePath, fileName);
-        } 
+        }
         // Handle PDF content
         else if (type == 'application/pdf' && filePath != null) {
           return await _processPdfContent(filePath, fileName);
         }
       }
 
-      return {
-        'success': false,
-        'error': 'Unsupported content type: $type',
-      };
+      return {'success': false, 'error': 'Unsupported content type: $type'};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing shared content: $e',
-      };
+      return {'success': false, 'error': 'Error processing shared content: $e'};
     }
   }
 
@@ -1199,11 +843,7 @@ class ShareService {
       // Check if the text is a URL (fallback detection)
       final url = _extractUrl(text);
       if (url != null) {
-        return {
-          'success': true,
-          'contentType': 'url',
-          'url': url,
-        };
+        return {'success': true, 'contentType': 'url', 'url': url};
       }
 
       final note = Note(
@@ -1216,15 +856,9 @@ class ShareService {
         updatedAt: DateTime.now(),
       );
 
-      return {
-        'success': true,
-        'note': note,
-      };
+      return {'success': true, 'note': note};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing text content: $e',
-      };
+      return {'success': false, 'error': 'Error processing text content: $e'};
     }
   }
 
@@ -1232,7 +866,7 @@ class ShareService {
   static String? _extractUrl(String text) {
     final trimmedText = text.trim();
     final uriPattern = RegExp(r'^https?://[^\s]+$');
-    
+
     if (uriPattern.hasMatch(trimmedText)) {
       try {
         final uri = Uri.parse(trimmedText);
@@ -1243,30 +877,33 @@ class ShareService {
         // Invalid URI
       }
     }
-    
+
     return null;
   }
 
   /// Check if file already exists in persistent storage and get relative path
-  static Future<String?> _getOrCopyToPersistentStorage(String absolutePath, String fileName) async {
+  static Future<String?> _getOrCopyToPersistentStorage(
+    String absolutePath,
+    String fileName,
+  ) async {
     try {
       // Check if file already exists in persistent storage
       final appDir = await getApplicationDocumentsDirectory();
       final persistentPath = '${appDir.path}/attachments/$fileName';
       final persistentFile = File(persistentPath);
-      
+
       if (await persistentFile.exists()) {
         // File already exists, return relative path
         return 'attachments/$fileName';
       }
-      
+
       // File doesn't exist, copy from Android temp location to persistent storage
       final sourceFile = File(absolutePath);
       if (await sourceFile.exists()) {
         final bytes = await sourceFile.readAsBytes();
         return await FileUtils.saveFileToPrivateStorage(bytes, fileName);
       }
-      
+
       return null;
     } catch (e) {
       LoggerService.error('Error handling file: $e', error: e);
@@ -1275,10 +912,16 @@ class ShareService {
   }
 
   /// Process image content
-  static Future<Map<String, dynamic>> _processImageContent(String filePath, String? fileName) async {
+  static Future<Map<String, dynamic>> _processImageContent(
+    String filePath,
+    String? fileName,
+  ) async {
     try {
       // Check if file already exists in persistent storage or copy it
-      final relativePath = await _getOrCopyToPersistentStorage(filePath, fileName ?? 'shared_image');
+      final relativePath = await _getOrCopyToPersistentStorage(
+        filePath,
+        fileName ?? 'shared_image',
+      );
       if (relativePath == null) {
         return {
           'success': false,
@@ -1297,23 +940,23 @@ class ShareService {
         updatedAt: DateTime.now(),
       );
 
-      return {
-        'success': true,
-        'note': note,
-      };
+      return {'success': true, 'note': note};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing image content: $e',
-      };
+      return {'success': false, 'error': 'Error processing image content: $e'};
     }
   }
 
   /// Process PDF content
-  static Future<Map<String, dynamic>> _processPdfContent(String filePath, String? fileName) async {
+  static Future<Map<String, dynamic>> _processPdfContent(
+    String filePath,
+    String? fileName,
+  ) async {
     try {
       // Check if file already exists in persistent storage or copy it
-      final relativePath = await _getOrCopyToPersistentStorage(filePath, fileName ?? 'shared_pdf');
+      final relativePath = await _getOrCopyToPersistentStorage(
+        filePath,
+        fileName ?? 'shared_pdf',
+      );
       if (relativePath == null) {
         return {
           'success': false,
@@ -1332,27 +975,25 @@ class ShareService {
         updatedAt: DateTime.now(),
       );
 
-      return {
-        'success': true,
-        'note': note,
-      };
+      return {'success': true, 'note': note};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error processing PDF content: $e',
-      };
+      return {'success': false, 'error': 'Error processing PDF content: $e'};
     }
   }
 
   static Future<bool> _fetchAndQueueSharedContent() async {
     try {
-      final rawShared = await _channel.invokeMethod<Map<dynamic, dynamic>>('getSharedContent');
+      final rawShared = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'getSharedContent',
+      );
       if (rawShared == null || rawShared.isEmpty) {
         return false;
       }
 
       final normalized = _normalizeSharedData(rawShared);
-      LoggerService.info('ShareService received shared content: ${normalized.keys}');
+      LoggerService.info(
+        'ShareService received shared content: ${normalized.keys}',
+      );
       _pendingSharedQueue.add(normalized);
       return true;
     } catch (e, stackTrace) {
@@ -1365,7 +1006,9 @@ class ShareService {
     }
   }
 
-  static Map<String, dynamic> _normalizeSharedData(Map<dynamic, dynamic> input) {
+  static Map<String, dynamic> _normalizeSharedData(
+    Map<dynamic, dynamic> input,
+  ) {
     final result = <String, dynamic>{};
     input.forEach((key, value) {
       if (key == null) {
@@ -1373,12 +1016,16 @@ class ShareService {
       }
       final stringKey = key.toString();
       if (value is Map) {
-        result[stringKey] = _normalizeSharedData(value.cast<dynamic, dynamic>());
+        result[stringKey] = _normalizeSharedData(
+          value.cast<dynamic, dynamic>(),
+        );
       } else if (value is List) {
         result[stringKey] = value
-            .map((item) => item is Map
-                ? _normalizeSharedData(item.cast<dynamic, dynamic>())
-                : item)
+            .map(
+              (item) => item is Map
+                  ? _normalizeSharedData(item.cast<dynamic, dynamic>())
+                  : item,
+            )
             .toList();
       } else {
         result[stringKey] = value;
@@ -1494,10 +1141,7 @@ class _ShareLifecycleObserver extends WidgetsBindingObserver {
 }
 
 class _PdfShareResult {
-  const _PdfShareResult({
-    required this.fileName,
-    this.cacheFile,
-  });
+  const _PdfShareResult({required this.fileName, this.cacheFile});
 
   final String fileName;
   final File? cacheFile;
@@ -1580,12 +1224,12 @@ class _PdfNoteRenderer {
     required this.l10n,
     required this.pageFormat,
     required this.fonts,
-  })  : _contentWidth = math.max(pageFormat.width - 48, 0),
-        _markdownRenderer = _MarkdownPdfRenderer(
-          l10n: l10n,
-          maxContentWidth: math.max(pageFormat.width - 48, 0),
-          fonts: fonts,
-        );
+  }) : _contentWidth = math.max(pageFormat.width - 48, 0),
+       _markdownRenderer = _MarkdownPdfRenderer(
+         l10n: l10n,
+         maxContentWidth: math.max(pageFormat.width - 48, 0),
+         fonts: fonts,
+       );
 
   final List<Note> notes;
   final bool includeSubNotes;
@@ -1643,7 +1287,10 @@ class _PdfNoteRenderer {
         widgets.addAll(subNoteWidgets);
       }
 
-      final attachmentWidgets = await _buildAttachments(note, sectionTitleStyle);
+      final attachmentWidgets = await _buildAttachments(
+        note,
+        sectionTitleStyle,
+      );
       widgets.addAll(attachmentWidgets);
 
       if (index < notes.length - 1) {
@@ -1659,10 +1306,7 @@ class _PdfNoteRenderer {
 
   pw.Widget _buildMetadata(Note note) {
     final metadata = <pw.Widget>[
-      _metadataLine(
-        l10n.type,
-        note.isTask ? l10n.task : l10n.note,
-      ),
+      _metadataLine(l10n.type, note.isTask ? l10n.task : l10n.note),
     ];
 
     if (note.isTask && note.status != null) {
@@ -1675,12 +1319,7 @@ class _PdfNoteRenderer {
     }
 
     if (note.tags.isNotEmpty) {
-      metadata.add(
-        _metadataLine(
-          l10n.tags,
-          note.tags.join(', '),
-        ),
-      );
+      metadata.add(_metadataLine(l10n.tags, note.tags.join(', ')));
     }
 
     metadata
@@ -1722,12 +1361,7 @@ class _PdfNoteRenderer {
         text: pw.TextSpan(
           text: '$label: ',
           style: labelStyle,
-          children: [
-            pw.TextSpan(
-              text: value,
-              style: valueStyle,
-            ),
-          ],
+          children: [pw.TextSpan(text: value, style: valueStyle)],
         ),
       ),
     );
@@ -1741,12 +1375,7 @@ class _PdfNoteRenderer {
 
     widgets
       ..add(pw.SizedBox(height: 12))
-      ..add(
-        pw.Text(
-          l10n.subNotes,
-          style: sectionStyle,
-        ),
-      );
+      ..add(pw.Text(l10n.subNotes, style: sectionStyle));
 
     for (final subNote in note.subNotes) {
       final subNoteHeader = <pw.Widget>[
@@ -1819,10 +1448,7 @@ class _PdfNoteRenderer {
 
     final widgets = <pw.Widget>[
       pw.SizedBox(height: 12),
-      pw.Text(
-        l10n.attachments,
-        style: sectionStyle,
-      ),
+      pw.Text(l10n.attachments, style: sectionStyle),
     ];
 
     for (final rawPath in note.attachmentPaths) {
@@ -1835,10 +1461,10 @@ class _PdfNoteRenderer {
               padding: const pw.EdgeInsets.only(top: 6),
               child: pw.Text(
                 '$fileName (${l10n.attachmentMissing})',
-              style: pw.TextStyle(
+                style: pw.TextStyle(
                   fontSize: 10,
                   color: PdfColors.red700,
-                fontFallback: fonts.fallback,
+                  fontFallback: fonts.fallback,
                 ),
               ),
             ),
@@ -1847,8 +1473,10 @@ class _PdfNoteRenderer {
         }
 
         final extension = FileTypeUtils.getFileExtension(fileName);
-        final mimeType =
-            await FileTypeUtils.getMimeTypeForFile(rawPath, extension: extension);
+        final mimeType = await FileTypeUtils.getMimeTypeForFile(
+          rawPath,
+          extension: extension,
+        );
 
         widgets.add(
           pw.Padding(
@@ -1891,11 +1519,14 @@ class _PdfNoteRenderer {
                 continue;
               }
             }
-            
-            final svgContent = await ShareService._loadSvgStringFromFilePath(rawPath);
+
+            final svgContent = await ShareService._loadSvgStringFromFilePath(
+              rawPath,
+            );
             if (svgContent != null && svgContent.trim().isNotEmpty) {
-              // Render SVG to PNG using WebView at 4K resolution
-              final pngBytes = await ShareService._renderSvgToPng(svgContent);
+              final pngBytes = await SvgRendererService.renderSvgToPng(
+                svgContent,
+              );
               if (pngBytes != null) {
                 // Constrain the image to 500px width as per requirements
                 final maxWidth = math.min(_contentWidth, 500.0).toDouble();
@@ -2013,27 +1644,27 @@ class _MarkdownPdfRenderer {
     required this.l10n,
     required this.maxContentWidth,
     required this.fonts,
-  })  : _baseTextStyle = pw.TextStyle(
-          fontSize: 12,
-          lineSpacing: 1.3,
-          fontFallback: fonts.fallback,
-        ),
-        _linkStyle = pw.TextStyle(
-          color: PdfColors.blue,
-          decoration: pw.TextDecoration.underline,
-          fontFallback: fonts.fallback,
-        ),
-        _codeStyle = pw.TextStyle(
-          fontSize: 11,
-          font: fonts.monospace,
-          fontFallback: fonts.fallback,
-        ),
-        _imageFallbackStyle = pw.TextStyle(
-          fontSize: 10,
-          color: PdfColors.grey600,
-          fontStyle: pw.FontStyle.italic,
-          fontFallback: fonts.fallback,
-        );
+  }) : _baseTextStyle = pw.TextStyle(
+         fontSize: 12,
+         lineSpacing: 1.3,
+         fontFallback: fonts.fallback,
+       ),
+       _linkStyle = pw.TextStyle(
+         color: PdfColors.blue,
+         decoration: pw.TextDecoration.underline,
+         fontFallback: fonts.fallback,
+       ),
+       _codeStyle = pw.TextStyle(
+         fontSize: 11,
+         font: fonts.monospace,
+         fontFallback: fonts.fallback,
+       ),
+       _imageFallbackStyle = pw.TextStyle(
+         fontSize: 10,
+         color: PdfColors.grey600,
+         fontStyle: pw.FontStyle.italic,
+         fontFallback: fonts.fallback,
+       );
 
   final AppLocalizations l10n;
   final double maxContentWidth;
@@ -2081,10 +1712,7 @@ class _MarkdownPdfRenderer {
           return pw.Padding(
             padding: const pw.EdgeInsets.only(bottom: 6),
             child: pw.RichText(
-              text: pw.TextSpan(
-                style: _baseTextStyle,
-                children: spans,
-              ),
+              text: pw.TextSpan(style: _baseTextStyle, children: spans),
             ),
           );
         case 'h1':
@@ -2095,14 +1723,14 @@ class _MarkdownPdfRenderer {
         case 'h6':
           final level = int.tryParse(node.tag.substring(1)) ?? 1;
           final style = _headingStyle(level);
-          final spans = await _buildInlineSpans(node.children ?? [], styleOverride: style);
+          final spans = await _buildInlineSpans(
+            node.children ?? [],
+            styleOverride: style,
+          );
           return pw.Padding(
             padding: const pw.EdgeInsets.only(bottom: 6, top: 6),
             child: pw.RichText(
-              text: pw.TextSpan(
-                style: style,
-                children: spans,
-              ),
+              text: pw.TextSpan(style: style, children: spans),
             ),
           );
         case 'blockquote':
@@ -2122,10 +1750,7 @@ class _MarkdownPdfRenderer {
             decoration: pw.BoxDecoration(
               color: PdfColors.grey100,
               border: pw.Border(
-                left: pw.BorderSide(
-                  color: PdfColors.grey600,
-                  width: 3,
-                ),
+                left: pw.BorderSide(color: PdfColors.grey600, width: 3),
               ),
             ),
             child: pw.Column(
@@ -2134,11 +1759,10 @@ class _MarkdownPdfRenderer {
             ),
           );
         case 'pre':
-          final codeNode = (node.children ?? [])
-              .firstWhere(
-                (child) => child is md.Element && child.tag == 'code',
-                orElse: () => node,
-              );
+          final codeNode = (node.children ?? []).firstWhere(
+            (child) => child is md.Element && child.tag == 'code',
+            orElse: () => node,
+          );
           final codeText = _extractPlainText(codeNode).trimRight();
           return pw.Container(
             width: double.infinity,
@@ -2147,14 +1771,9 @@ class _MarkdownPdfRenderer {
             decoration: pw.BoxDecoration(
               color: PdfColors.grey100,
               borderRadius: pw.BorderRadius.circular(4),
-              border: pw.Border.all(
-                color: PdfColors.grey400,
-              ),
+              border: pw.Border.all(color: PdfColors.grey400),
             ),
-            child: pw.Text(
-              codeText,
-              style: _codeStyle,
-            ),
+            child: pw.Text(codeText, style: _codeStyle),
           );
         case 'hr':
           return pw.Padding(
@@ -2172,10 +1791,7 @@ class _MarkdownPdfRenderer {
           }
           return pw.Padding(
             padding: const pw.EdgeInsets.only(bottom: 6),
-            child: pw.Text(
-              text,
-              style: _baseTextStyle,
-            ),
+            child: pw.Text(text, style: _baseTextStyle),
           );
         case 'img':
           final spans = await _buildInlineSpan(node, _baseTextStyle);
@@ -2185,7 +1801,9 @@ class _MarkdownPdfRenderer {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: spans
-                .map((span) => span is pw.WidgetSpan ? span.child : pw.SizedBox())
+                .map(
+                  (span) => span is pw.WidgetSpan ? span.child : pw.SizedBox(),
+                )
                 .toList(),
           );
       }
@@ -2194,10 +1812,7 @@ class _MarkdownPdfRenderer {
       if (text.isEmpty) {
         return null;
       }
-      return pw.Text(
-        text,
-        style: _baseTextStyle,
-      );
+      return pw.Text(text, style: _baseTextStyle);
     }
     return null;
   }
@@ -2237,16 +1852,11 @@ class _MarkdownPdfRenderer {
       } else if (spans.every((span) => span is pw.WidgetSpan)) {
         contentWidget = pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: spans
-              .map((span) => (span as pw.WidgetSpan).child)
-              .toList(),
+          children: spans.map((span) => (span as pw.WidgetSpan).child).toList(),
         );
       } else {
         contentWidget = pw.RichText(
-          text: pw.TextSpan(
-            style: _baseTextStyle,
-            children: spans,
-          ),
+          text: pw.TextSpan(style: _baseTextStyle, children: spans),
         );
       }
 
@@ -2257,10 +1867,7 @@ class _MarkdownPdfRenderer {
             pw.Container(
               width: ordered ? 24 : 12,
               alignment: pw.Alignment.topRight,
-              child: pw.Text(
-                marker,
-                style: _baseTextStyle,
-              ),
+              child: pw.Text(marker, style: _baseTextStyle),
             ),
             pw.SizedBox(width: 6),
             pw.Expanded(child: contentWidget),
@@ -2296,7 +1903,9 @@ class _MarkdownPdfRenderer {
   }) async {
     final spans = <pw.InlineSpan>[];
     for (final node in nodes) {
-      spans.addAll(await _buildInlineSpan(node, styleOverride ?? _baseTextStyle));
+      spans.addAll(
+        await _buildInlineSpan(node, styleOverride ?? _baseTextStyle),
+      );
     }
     return spans;
   }
@@ -2339,12 +1948,7 @@ class _MarkdownPdfRenderer {
         if (text.isEmpty) {
           return const [];
         }
-        return [
-          pw.TextSpan(
-            text: text,
-            style: _codeStyle,
-          ),
-        ];
+        return [pw.TextSpan(text: text, style: _codeStyle)];
       case 'del':
         return _buildInlineSpans(
           node.children ?? [],
@@ -2401,24 +2005,21 @@ class _MarkdownPdfRenderer {
     if (ShareService._isSvgSource(src)) {
       final svgContent = await ShareService._loadSvgStringFromSource(src);
       if (svgContent != null && svgContent.trim().isNotEmpty) {
-        // Render SVG to PNG using WebView at 4K resolution
-        final pngBytes = await ShareService._renderSvgToPng(svgContent);
+        final pngBytes = await SvgRendererService.renderSvgToPng(svgContent);
         if (pngBytes != null) {
           // Constrain the image to 500px width as per requirements
           final maxWidth = math.min(maxContentWidth, 500.0).toDouble();
           final image = pw.MemoryImage(pngBytes);
           final imageWidget = pw.Container(
             padding: const pw.EdgeInsets.symmetric(vertical: 4),
-            child: pw.Image(
-              image,
-              width: maxWidth,
-              fit: pw.BoxFit.contain,
-            ),
+            child: pw.Image(image, width: maxWidth, fit: pw.BoxFit.contain),
           );
           return [pw.WidgetSpan(child: imageWidget)];
         } else {
           // Fallback: show placeholder if rendering failed
-          LoggerService.warning('Failed to render SVG to PNG from markdown: $src');
+          LoggerService.warning(
+            'Failed to render SVG to PNG from markdown: $src',
+          );
           // Return a placeholder text span
           return [
             pw.TextSpan(
@@ -2445,20 +2046,10 @@ class _MarkdownPdfRenderer {
 
     final placeholder = alt.isNotEmpty ? '![$alt]' : src;
     if (placeholder.isEmpty) {
-      return [
-        pw.TextSpan(
-          text: '[${l10n.image}]',
-          style: _imageFallbackStyle,
-        ),
-      ];
+      return [pw.TextSpan(text: '[${l10n.image}]', style: _imageFallbackStyle)];
     }
 
-    return [
-      pw.TextSpan(
-        text: placeholder,
-        style: _imageFallbackStyle,
-      ),
-    ];
+    return [pw.TextSpan(text: placeholder, style: _imageFallbackStyle)];
   }
 
   pw.TextStyle _headingStyle(int level) {

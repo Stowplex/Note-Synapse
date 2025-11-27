@@ -104,6 +104,12 @@ abstract class AppLocalizations {
   /// **'Note Synapse'**
   String get appTitle;
 
+  /// No description provided for @untitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get untitled;
+
   /// No description provided for @settings.
   ///
   /// In en, this message translates to:
@@ -155,7 +161,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiConversationSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Control tool iteration safety limits'**
+  /// **'Control AI conversation settings'**
   String get aiConversationSettingsSubtitle;
 
   /// No description provided for @aiConversationSettingsDescription.
@@ -2588,6 +2594,24 @@ abstract class AppLocalizations {
   /// **'Create your first custom app'**
   String get createFirstApp;
 
+  /// No description provided for @searchApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Search apps...'**
+  String get searchApps;
+
+  /// No description provided for @noAppsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps found'**
+  String get noAppsFound;
+
+  /// No description provided for @tryAdjustingSearchTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Try adjusting your search terms'**
+  String get tryAdjustingSearchTerms;
+
   /// No description provided for @createNewApp.
   ///
   /// In en, this message translates to:
@@ -2965,6 +2989,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI Debug Overlay'**
   String get aiDebugOverlayTitle;
+
+  /// No description provided for @aiLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Logs'**
+  String get aiLogs;
 
   /// No description provided for @refreshLogs.
   ///
@@ -3571,6 +3601,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'4000'**
   String get maxOutputTokensHint;
+
+  /// No description provided for @supportedAttachmentMimeTypesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Supported attachment MIME types'**
+  String get supportedAttachmentMimeTypesLabel;
+
+  /// No description provided for @supportedAttachmentMimeTypesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'image/png, application/pdf'**
+  String get supportedAttachmentMimeTypesHint;
+
+  /// No description provided for @supportedAttachmentMimeTypesHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma or newline separated. Leave empty to use the model preset.'**
+  String get supportedAttachmentMimeTypesHelper;
 
   /// No description provided for @required.
   ///
@@ -4286,6 +4334,72 @@ abstract class AppLocalizations {
   /// **'No tools cached for {name}. Click refresh to fetch tools.'**
   String noToolsCachedFor(Object name);
 
+  /// No description provided for @addContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Context Notes'**
+  String get addContextNotes;
+
+  /// No description provided for @libraries.
+  ///
+  /// In en, this message translates to:
+  /// **'Libraries'**
+  String get libraries;
+
+  /// No description provided for @noLibraries.
+  ///
+  /// In en, this message translates to:
+  /// **'No libraries'**
+  String get noLibraries;
+
+  /// No description provided for @usageInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage Instructions'**
+  String get usageInstructions;
+
+  /// No description provided for @libraryLinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Library Links'**
+  String get libraryLinks;
+
+  /// No description provided for @editUserApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit App'**
+  String get editUserApp;
+
+  /// No description provided for @viewCode.
+  ///
+  /// In en, this message translates to:
+  /// **'View Code'**
+  String get viewCode;
+
+  /// No description provided for @editCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Code'**
+  String get editCode;
+
+  /// No description provided for @code.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get code;
+
+  /// No description provided for @aiEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Edit'**
+  String get aiEdit;
+
+  /// No description provided for @pleaseEnterSuggestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a suggestion'**
+  String get pleaseEnterSuggestion;
+
   /// No description provided for @refreshTools.
   ///
   /// In en, this message translates to:
@@ -4315,6 +4429,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Note Action App'**
   String get noteActionApp;
+
+  /// No description provided for @noteActionApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Action Apps'**
+  String get noteActionApps;
 
   /// No description provided for @noteActionAppSubtitle.
   ///
@@ -4363,6 +4483,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI Tools'**
   String get aiTools;
+
+  /// No description provided for @modelFeatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Features'**
+  String get modelFeatures;
+
+  /// No description provided for @featureGoogleSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Search'**
+  String get featureGoogleSearch;
+
+  /// No description provided for @featureCodeExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Execution'**
+  String get featureCodeExecution;
+
+  /// No description provided for @featureWebSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Search'**
+  String get featureWebSearch;
 
   /// No description provided for @aiToolStartError.
   ///
@@ -4511,7 +4655,7 @@ abstract class AppLocalizations {
   /// No description provided for @askAiHint.
   ///
   /// In en, this message translates to:
-  /// **'Ask the AI about this note...'**
+  /// **'Ask AI about DB schema or errors...'**
   String get askAiHint;
 
   /// No description provided for @send.
@@ -5881,6 +6025,444 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fetch remote images'**
   String get fetchRemoteImages;
+
+  /// No description provided for @gettingStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting Started'**
+  String get gettingStarted;
+
+  /// No description provided for @gettingStartedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install user manual and starter apps'**
+  String get gettingStartedSubtitle;
+
+  /// No description provided for @installUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Install User Manual'**
+  String get installUserManual;
+
+  /// No description provided for @installUserManualSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install or update the user manual note'**
+  String get installUserManualSubtitle;
+
+  /// No description provided for @installStarterApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Starter Apps'**
+  String get installStarterApps;
+
+  /// No description provided for @installStarterAppsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse and install pre-configured apps'**
+  String get installStarterAppsSubtitle;
+
+  /// No description provided for @userManualInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual Information'**
+  String get userManualInfo;
+
+  /// No description provided for @installed.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get installed;
+
+  /// No description provided for @notInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Installed'**
+  String get notInstalled;
+
+  /// No description provided for @currentVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Version'**
+  String get currentVersion;
+
+  /// No description provided for @latestVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest Version'**
+  String get latestVersion;
+
+  /// No description provided for @lastUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Updated'**
+  String get lastUpdated;
+
+  /// No description provided for @newVersionAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'New version available!'**
+  String get newVersionAvailable;
+
+  /// No description provided for @updateUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Update User Manual'**
+  String get updateUserManual;
+
+  /// No description provided for @reinstallUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Reinstall User Manual'**
+  String get reinstallUserManual;
+
+  /// No description provided for @installing.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing...'**
+  String get installing;
+
+  /// No description provided for @updateUserManualConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?'**
+  String updateUserManualConfirm(String oldVersion, String newVersion);
+
+  /// No description provided for @userManualInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual installed successfully!'**
+  String get userManualInstalledSuccessfully;
+
+  /// No description provided for @userManualUpdatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'User Manual updated successfully!'**
+  String get userManualUpdatedSuccessfully;
+
+  /// No description provided for @errorInstallingUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing User Manual: {error}'**
+  String errorInstallingUserManual(String error);
+
+  /// No description provided for @whatIsUserManual.
+  ///
+  /// In en, this message translates to:
+  /// **'What is User Manual?'**
+  String get whatIsUserManual;
+
+  /// No description provided for @userManualDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.'**
+  String get userManualDescription;
+
+  /// No description provided for @noStarterAppsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter apps available'**
+  String get noStarterAppsAvailable;
+
+  /// No description provided for @noAppsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps selected'**
+  String get noAppsSelected;
+
+  /// No description provided for @appsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {app} other {apps}} selected'**
+  String appsSelected(int count);
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
+  /// No description provided for @proceedWithInstallation.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Selected Apps'**
+  String get proceedWithInstallation;
+
+  /// No description provided for @starterAppsInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {app} other {apps}} installed successfully!'**
+  String starterAppsInstalledSuccessfully(int count);
+
+  /// No description provided for @starterAppsInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to install {count} {count, plural, one {app} other {apps}}'**
+  String starterAppsInstallFailed(int count);
+
+  /// No description provided for @starterAppsPartialInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}'**
+  String starterAppsPartialInstall(int successCount, int failureCount);
+
+  /// No description provided for @errorInstallingStarterApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing starter apps: {error}'**
+  String errorInstallingStarterApps(String error);
+
+  /// No description provided for @rawDataManagerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw Data Manager'**
+  String get rawDataManagerTitle;
+
+  /// No description provided for @rawDataManagerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced tools for file and database management'**
+  String get rawDataManagerSubtitle;
+
+  /// No description provided for @advancedToolTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced Tool'**
+  String get advancedToolTitle;
+
+  /// No description provided for @advancedToolWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.'**
+  String get advancedToolWarning;
+
+  /// No description provided for @iUnderstand.
+  ///
+  /// In en, this message translates to:
+  /// **'I Understand'**
+  String get iUnderstand;
+
+  /// No description provided for @fileManagerTab.
+  ///
+  /// In en, this message translates to:
+  /// **'File Manager'**
+  String get fileManagerTab;
+
+  /// No description provided for @databaseManagerTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Database Manager'**
+  String get databaseManagerTab;
+
+  /// No description provided for @warningDataInstability.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning: Direct data modification can cause app instability.'**
+  String get warningDataInstability;
+
+  /// No description provided for @cache.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache'**
+  String get cache;
+
+  /// No description provided for @root.
+  ///
+  /// In en, this message translates to:
+  /// **'Root'**
+  String get root;
+
+  /// No description provided for @itemsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} items'**
+  String itemsCount(int count);
+
+  /// No description provided for @selectUnused.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Unused'**
+  String get selectUnused;
+
+  /// No description provided for @noFilesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No files found'**
+  String get noFilesFound;
+
+  /// No description provided for @used.
+  ///
+  /// In en, this message translates to:
+  /// **'Used'**
+  String get used;
+
+  /// No description provided for @unused.
+  ///
+  /// In en, this message translates to:
+  /// **'Unused'**
+  String get unused;
+
+  /// No description provided for @renameFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename File'**
+  String get renameFile;
+
+  /// No description provided for @newName.
+  ///
+  /// In en, this message translates to:
+  /// **'New Name'**
+  String get newName;
+
+  /// No description provided for @rename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get rename;
+
+  /// No description provided for @deleteFilesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Files?'**
+  String get deleteFilesTitle;
+
+  /// No description provided for @deleteFilesConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {count} files? This cannot be undone.'**
+  String deleteFilesConfirmation(int count);
+
+  /// No description provided for @deletedFilesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {count} files'**
+  String deletedFilesMessage(int count);
+
+  /// No description provided for @errorRenamingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Error renaming file: {error}'**
+  String errorRenamingFile(String error);
+
+  /// No description provided for @queryAndResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Query & Results'**
+  String get queryAndResults;
+
+  /// No description provided for @aiAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Assistant'**
+  String get aiAssistant;
+
+  /// No description provided for @notConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get notConnected;
+
+  /// No description provided for @connectedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to: {name}'**
+  String connectedTo(String name);
+
+  /// No description provided for @errorOpeningDefaultDb.
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening default DB: {error}'**
+  String errorOpeningDefaultDb(String error);
+
+  /// No description provided for @errorOpeningDb.
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening DB: {error}'**
+  String errorOpeningDb(String error);
+
+  /// No description provided for @databaseExportedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Database exported successfully'**
+  String get databaseExportedSuccess;
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @sqlQueryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'SQL Query'**
+  String get sqlQueryLabel;
+
+  /// No description provided for @sqlQueryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'SELECT * FROM notes LIMIT 5'**
+  String get sqlQueryHint;
+
+  /// No description provided for @runQueryTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Query'**
+  String get runQueryTooltip;
+
+  /// No description provided for @enterQueryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a query to see results'**
+  String get enterQueryMessage;
+
+  /// No description provided for @noResultsReturned.
+  ///
+  /// In en, this message translates to:
+  /// **'No results returned'**
+  String get noResultsReturned;
+
+  /// No description provided for @queryExecutedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Query executed. {count} rows returned.'**
+  String queryExecutedMessage(int count);
+
+  /// No description provided for @updateExecutedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Update executed. {count} rows affected.'**
+  String updateExecutedMessage(int count);
+
+  /// No description provided for @queryError.
+  ///
+  /// In en, this message translates to:
+  /// **'Query Error: {error}'**
+  String queryError(String error);
+
+  /// No description provided for @askAiAboutNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask AI about this note...'**
+  String get askAiAboutNoteHint;
+
+  /// No description provided for @openDbFileTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Open DB File'**
+  String get openDbFileTooltip;
+
+  /// No description provided for @resetToDefaultDbTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to Default DB'**
+  String get resetToDefaultDbTooltip;
+
+  /// No description provided for @exportDbTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Export DB'**
+  String get exportDbTooltip;
 }
 
 class _AppLocalizationsDelegate

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../models/mcp_endpoint.dart';
 import '../models/model_type.dart';
+import '../models/generation_context.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../services/mcp_tool_integration_service.dart';
@@ -32,6 +33,7 @@ typedef ToolExecutionCallback =
       String serviceName,
       String toolName,
       Map<String, dynamic> params,
+      GenerationContext generationContext,
     );
 
 typedef CancellationCheck = bool Function();
@@ -46,7 +48,7 @@ class ConversationAiEngine {
     required bool enableTools,
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
-    String? requestId,
+    required GenerationContext generationContext,
     int? maxToolIterations,
     IterationsExhaustedHandler? onIterationsExhausted,
   }) async {
@@ -54,8 +56,9 @@ class ConversationAiEngine {
       throw const ConversationCancelledException();
     }
 
+    // Use withoutTools path only if we have no tools AND no model features
     if (!enableTools || activeTools.isEmpty) {
-      return _generateWithoutTools(request, isCancelled, requestId);
+      return _generateWithoutTools(request, isCancelled, generationContext);
     }
 
     return _generateWithTools(
@@ -63,7 +66,7 @@ class ConversationAiEngine {
       activeTools: activeTools,
       executeTool: executeTool,
       isCancelled: isCancelled,
-      requestId: requestId,
+      generationContext: generationContext,
       maxToolIterations: maxToolIterations,
       onIterationsExhausted: onIterationsExhausted,
     );
@@ -72,7 +75,7 @@ class ConversationAiEngine {
   Future<ConversationAiResponse> _generateWithoutTools(
     PromptRequest request,
     CancellationCheck isCancelled,
-    String? requestId,
+    GenerationContext generationContext,
   ) async {
     try {
       if (isCancelled()) {
@@ -81,7 +84,7 @@ class ConversationAiEngine {
 
       final responseText = await AIService.executePrompt(
         request,
-        requestId: requestId,
+        generationContext: generationContext,
       );
 
       if (isCancelled()) {
@@ -109,11 +112,12 @@ class ConversationAiEngine {
     required Map<String, List<McpTool>> activeTools,
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
-    String? requestId,
+    required GenerationContext generationContext,
     int? maxToolIterations,
     IterationsExhaustedHandler? onIterationsExhausted,
   }) async {
     try {
+      final requestId = generationContext.ensureRequestId();
       if (isCancelled()) {
         throw const ConversationCancelledException();
       }
@@ -124,14 +128,14 @@ class ConversationAiEngine {
         ...request.conversationMessages,
       ];
 
-      final currentModelType = ModelSelector.instance.currentModelType;
-      final callToolFunction = currentModelType == ModelType.openaiCompatible
+      final modelType = ModelSelector.instance.currentModelConfig?.type;
+      final callToolFunction = modelType == ModelType.openaiCompatible
           ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
           : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
 
       LoggerService.info(
         'Starting tool-enabled conversation with ${activeTools.length} services',
-        error: {if (requestId != null) 'requestId': requestId},
+        error: {'requestId': requestId},
       );
 
       int iterationLimit =
@@ -188,7 +192,9 @@ class ConversationAiEngine {
         LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
         final response = await ModelSelector.instance
-            .generateWithToolsAndMessages(currentMessages, [callToolFunction]);
+            .generateWithToolsAndMessages(currentMessages, [
+              callToolFunction,
+            ], generationContext: generationContext);
 
         if (isCancelled()) {
           throw const ConversationCancelledException();
@@ -242,13 +248,19 @@ class ConversationAiEngine {
             LoggerService.debug('Tool parameters', error: params);
 
             try {
-              final result = await executeTool(serviceName, toolName, params);
+              final result = await executeTool(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
               final toolSummary =
                   'Tool: $serviceName.$toolName\nResult: $result';
               toolResults.add(toolSummary);
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
-              if (currentModelType == ModelType.openaiCompatible) {
+              if (ModelSelector.instance.currentModelConfig?.type ==
+                  ModelType.openaiCompatible) {
                 final timestamp = DateTime.now().millisecondsSinceEpoch
                     .toRadixString(36);
                 final shortName = toolName.length > 10
@@ -288,7 +300,8 @@ class ConversationAiEngine {
             );
             lastAssistantMetadata = assistantMetadata;
 
-            if (currentModelType == ModelType.openaiCompatible) {
+            if (ModelSelector.instance.currentModelConfig?.type ==
+                ModelType.openaiCompatible) {
               final toolMessages = toolCallsWithResults
                   .map(
                     (toolCall) => PromptMessage(

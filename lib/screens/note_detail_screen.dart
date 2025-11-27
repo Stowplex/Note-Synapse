@@ -1,20 +1,26 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:markdown_toolbar/markdown_toolbar.dart';
+import 'package:re_editor/re_editor.dart';
+
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/attachment.dart';
 import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
+import '../widgets/synapse_note_editor.dart';
+
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
@@ -27,9 +33,10 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../models/conversation.dart';
-import 'conversation_chat_screen.dart';
+
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
+import 'conversation_chat_screen.dart';
 import '../utils/remote_image_utils.dart';
 
 class NoteDetailScreen extends StatefulWidget {
@@ -48,8 +55,8 @@ class NoteDetailScreen extends StatefulWidget {
 
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
   late TextEditingController _titleController;
-  late TextEditingController _contentController;
-  late FocusNode _contentFocusNode;
+  late CodeLineEditingController _codeController;
+  late FocusNode _codeFocusNode;
   bool _isEditing = false;
   bool _hasChanges = false;
   bool _hasBeenSaved = false; // Track if note has been saved to database
@@ -69,12 +76,37 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Duration _playingPosition = Duration.zero;
   Duration _playingDuration = Duration.zero;
 
+  // Attachment metadata state
+  Map<String, Attachment> _attachmentsMap = {};
+
+  Future<void> _loadAttachments() async {
+    if (widget.isNewNote) return;
+    final attachments = await _databaseService.getAttachmentsForNote(
+      widget.note.id,
+    );
+
+    final Map<String, Attachment> tempMap = {};
+    for (var a in attachments) {
+      final fullPath = await FileUtils.getFullFilePath(
+        a.filePath,
+        a.isRelativePath,
+      );
+      tempMap[fullPath] = a;
+    }
+
+    if (mounted) {
+      setState(() {
+        _attachmentsMap = tempMap;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note.title);
-    _contentController = TextEditingController(text: widget.note.content);
-    _contentFocusNode = FocusNode();
+    _codeController = CodeLineEditingController.fromText(widget.note.content);
+    _codeFocusNode = FocusNode();
 
     // Initialize date fields for tasks
     if (widget.note.isTask) {
@@ -87,7 +119,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
 
     _titleController.addListener(_onTextChanged);
-    _contentController.addListener(_onTextChanged);
+    _titleController.addListener(_onTextChanged);
+    _codeController.addListener(_onTextChanged);
 
     // Start in editing mode for new notes
     if (widget.isNewNote) {
@@ -99,6 +132,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     // Load relationships
     _loadRelationships();
+
+    // Load attachment metadata
+    _loadAttachments();
 
     // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
@@ -117,6 +153,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   @override
+  void didUpdateWidget(NoteDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.note.id != oldWidget.note.id ||
+        widget.note.updatedAt != oldWidget.note.updatedAt) {
+      _loadAttachments();
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Reinitialize audio service if it was disposed
@@ -129,8 +174,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void dispose() {
     _autoSaveTimer?.cancel();
     _titleController.dispose();
-    _contentController.dispose();
-    _contentFocusNode.dispose();
+
+    _codeController.dispose();
+    _codeFocusNode.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     super.dispose();
@@ -179,6 +225,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _onTextChanged() {
+    // Avoid setState during build
+    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _onTextChanged());
+      return;
+    }
+
     if (!_hasChanges) {
       setState(() {
         _hasChanges = true;
@@ -408,6 +460,140 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showImagePicker(BuildContext context) async {
+    // Get selected text for alt text
+    final sel = _codeController.selection;
+    final text = _codeController.text;
+    final codeLines = _codeController.value.codeLines;
+    final startOff = _getOffsetForPosition(codeLines, sel.start);
+    final endOff = _getOffsetForPosition(codeLines, sel.end);
+    final selectedText = text.substring(startOff, endOff);
+
+    // Load existing image attachments
+    final attachments = widget.isNewNote
+        ? <Attachment>[]
+        : await _databaseService.getAttachmentsForNote(widget.note.id);
+
+    final imageAttachments = attachments.where((a) {
+      final lower = a.filePath.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _ImagePickerDialog(
+        initialAltText: selectedText,
+        existingAttachments: imageAttachments,
+        onSaveNote: () async {
+          // Save note if new with no title
+          if (widget.isNewNote && !_hasBeenSaved) {
+            final l10n = AppLocalizations.of(context)!;
+            if (_titleController.text.trim().isEmpty) {
+              _titleController.text = l10n.untitled;
+            }
+            await _autoSave();
+          }
+          return widget.note.id;
+        },
+        onAddAttachment: (File imageFile, String fileName) async {
+          // Use existing attachment logic
+          final bytes = await imageFile.readAsBytes();
+          final relativePath = await FileUtils.saveFileToPrivateStorage(
+            bytes,
+            fileName,
+          );
+
+          // Add to note's attachments
+          final currentNote = context.read<AppProvider>().notes.firstWhere(
+            (note) => note.id == widget.note.id,
+            orElse: () => widget.note,
+          );
+          final updatedAttachmentPaths = List<String>.from(
+            currentNote.attachmentPaths,
+          )..add(relativePath);
+          final updatedNote = currentNote.copyWith(
+            attachmentPaths: updatedAttachmentPaths,
+            updatedAt: DateTime.now(),
+          );
+          await context.read<AppProvider>().updateNote(updatedNote);
+
+          return relativePath;
+        },
+      ),
+    );
+
+    if (result != null) {
+      final markdown = '![${result['alt']}](${result['src']})';
+      if (selectedText.isNotEmpty) {
+        // Replace selected text with markdown
+        final sb = StringBuffer();
+        sb.write(text.substring(0, startOff));
+        sb.write(markdown);
+        sb.write(text.substring(endOff));
+        _codeController.text = sb.toString();
+      } else {
+        // Insert at cursor
+        _insertText(markdown, selectionOffset: markdown.length);
+      }
+    }
+  }
+
+  void _insertText(String text, {int selectionOffset = 0}) {
+    final selection = _codeController.selection;
+    final codeLines = _codeController.value.codeLines;
+    final startOffset = _getOffsetForPosition(codeLines, selection.start);
+    final endOffset = _getOffsetForPosition(codeLines, selection.end);
+
+    final currentText = _codeController.text;
+    final newText =
+        currentText.substring(0, startOffset) +
+        text +
+        currentText.substring(endOffset);
+
+    _codeController.text = newText;
+
+    final newCursorOffset = startOffset + selectionOffset;
+    final newPos = _getPositionForOffset(
+      _codeController.value.codeLines,
+      newCursorOffset,
+    );
+
+    _codeController.selection = CodeLineSelection.collapsed(
+      index: newPos.index,
+      offset: newPos.offset,
+    );
+  }
+
+  int _getOffsetForPosition(CodeLines codeLines, CodeLinePosition position) {
+    int offset = 0;
+    for (int i = 0; i < position.index && i < codeLines.length; i++) {
+      offset += codeLines[i].text.length + 1; // +1 for newline
+    }
+    return offset + position.offset;
+  }
+
+  CodeLinePosition _getPositionForOffset(CodeLines codeLines, int offset) {
+    int currentOffset = 0;
+    for (int i = 0; i < codeLines.length; i++) {
+      final lineLength = codeLines[i].text.length + 1; // +1 for newline
+      if (currentOffset + lineLength > offset) {
+        return CodeLinePosition(index: i, offset: offset - currentOffset);
+      }
+      currentOffset += lineLength;
+    }
+    if (codeLines.length > 0) {
+      return CodeLinePosition(
+        index: codeLines.length - 1,
+        offset: codeLines.last.text.length,
+      );
+    }
+    return const CodeLinePosition(index: 0, offset: 0);
   }
 
   Widget _buildViewingView(Note currentNote, AppLocalizations l10n) {
@@ -840,37 +1026,84 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             const SizedBox(height: 16),
           ],
           Expanded(
-            child: TextField(
-              controller: _contentController,
-              focusNode: _contentFocusNode,
-              decoration: InputDecoration(
-                labelText: l10n.content,
-                border: const OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
+            child: SynapseNoteEditor(
+              controller: _codeController,
+              focusNode: _codeFocusNode,
+              onPickImage: () => _showImagePicker(context),
+              language: 'markdown',
             ),
-          ),
-          const SizedBox(height: 8),
-          MarkdownToolbar(
-            collapsable: false,
-            useIncludedTextField: false,
-            controller: _contentController,
-            focusNode: _contentFocusNode,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            iconColor: Theme.of(context).colorScheme.onSurface,
-            dropdownTextColor: Theme.of(context).colorScheme.primary,
-            borderRadius: BorderRadius.circular(8.0),
-            width: 60.0,
-            height: 40.0,
-            spacing: 4.0,
-            runSpacing: 4.0,
           ),
         ],
       ),
     );
+  }
+
+  void _handleToolbarImageAdded(String imagePath) async {
+    // The image is already saved to the attachments directory by the picker/toolbar logic if needed.
+    // But wait, the toolbar logic I wrote:
+    // 1. _pickFromDevice calls onImageSelected with path.
+    // 2. _showImagePicker calls onImageAdded(imagePath).
+    // But it doesn't actually copy the file to the note's specific attachment folder if it's a new file from outside.
+    // The toolbar's _pickFromDevice just returns the XFile path.
+    // So I need to handle the copying here if it's not already in the attachments folder.
+
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final file = File(imagePath);
+      final fileName = p.basename(imagePath);
+
+      // Check if it's already in the attachments folder
+      // We assume attachments are stored in a specific way.
+      // FileUtils.saveFileToPrivateStorage handles this.
+
+      // If the path is already relative or in the private storage, we might not need to copy.
+      // But the picker returns a cache path or gallery path.
+
+      final bytes = await file.readAsBytes();
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        bytes,
+        fileName,
+      );
+
+      final currentNote = context.read<AppProvider>().notes.firstWhere(
+        (note) => note.id == widget.note.id,
+        orElse: () => widget.note,
+      );
+
+      final updatedAttachmentPaths = List<String>.from(
+        currentNote.attachmentPaths,
+      );
+      updatedAttachmentPaths.add(relativePath);
+
+      final updatedNote = currentNote.copyWith(
+        attachmentPaths: updatedAttachmentPaths,
+        updatedAt: DateTime.now(),
+      );
+
+      await context.read<AppProvider>().updateNote(updatedNote);
+
+      // Update local map
+      await _loadAttachments();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.photoAddedToNote),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error adding image from toolbar: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildDateSelectionFields() {
@@ -1237,7 +1470,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     // Update controllers with the latest content
     _titleController.text = currentNote.title;
-    _contentController.text = currentNote.content;
+    _codeController.text = currentNote.content;
 
     // Update date fields for tasks
     if (currentNote.isTask) {
@@ -1266,7 +1499,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _isEditing = false;
       _hasChanges = false;
       _titleController.text = currentNote.title;
-      _contentController.text = currentNote.content;
+      _codeController.text = currentNote.content;
       _dateValidationError = null;
 
       // Reset date fields for tasks
@@ -1284,7 +1517,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _autoSave() async {
     final l10n = AppLocalizations.of(context)!;
     if (_titleController.text.trim().isEmpty &&
-        _contentController.text.trim().isEmpty) {
+        _codeController.text.trim().isEmpty) {
       return; // Don't save empty notes
     }
 
@@ -1301,7 +1534,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
 
     final remoteImages = RemoteImageUtils.extractRemoteImages(
-      _contentController.text,
+      _codeController.text,
     );
     RemoteImageDownloadReport? downloadReport;
     if (remoteImages.isNotEmpty) {
@@ -1315,7 +1548,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       title: _titleController.text.trim().isEmpty
           ? 'Untitled'
           : _titleController.text.trim(),
-      content: _contentController.text.trim(),
+      content: _codeController.text.trim(),
       updatedAt: DateTime.now(),
       scheduledAt: _scheduledAt != null
           ? AppDateUtils.formatDateOnly(_scheduledAt!)
@@ -1400,7 +1633,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _fetchRemoteImages() async {
     final l10n = AppLocalizations.of(context)!;
     final remoteUrls = RemoteImageUtils.extractRemoteImages(
-      _contentController.text,
+      _codeController.text,
     ).map((image) => image.url).toSet();
 
     if (remoteUrls.isEmpty) {
@@ -1701,7 +1934,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _updateNote(Note newNote) {
     setState(() {
       _titleController.text = newNote.title;
-      _contentController.text = newNote.content;
+      _codeController.text = newNote.content;
       if (newNote.isTask) {
         _scheduledAt = newNote.scheduledAt != null
             ? DateTime.tryParse(newNote.scheduledAt!)
@@ -1863,6 +2096,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             minHeight: 40,
                           ),
                         ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.psychology,
+                          color:
+                              (_attachmentsMap[attachmentPath]
+                                      ?.includeInAIContext ??
+                                  true)
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.grey,
+                        ),
+                        onPressed: () async {
+                          final currentAttachment =
+                              _attachmentsMap[attachmentPath];
+                          final currentStatus =
+                              currentAttachment?.includeInAIContext ?? true;
+                          final newStatus = !currentStatus;
+
+                          LoggerService.debug(
+                            'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
+                          );
+
+                          // Optimistic update
+                          setState(() {
+                            if (currentAttachment != null) {
+                              _attachmentsMap[attachmentPath] =
+                                  currentAttachment.copyWith(
+                                    includeInAIContext: newStatus,
+                                  );
+                            }
+                          });
+
+                          try {
+                            if (currentAttachment != null) {
+                              await _databaseService.updateAttachmentAIContext(
+                                widget.note.id,
+                                currentAttachment
+                                    .filePath, // Use the DB stored path
+                                newStatus,
+                              );
+                            }
+                          } catch (e) {
+                            LoggerService.error(
+                              'Failed to update database: $e',
+                            );
+                            // Revert optimistic update on error
+                            setState(() {
+                              if (currentAttachment != null) {
+                                _attachmentsMap[attachmentPath] =
+                                    currentAttachment;
+                              }
+                            });
+                          }
+
+                          // Reload to ensure consistency
+                          await _loadAttachments();
+                        },
+                        tooltip: 'Include in AI Context',
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () =>
@@ -2680,7 +2976,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       // Update the content controller if we're in editing mode
       if (_isEditing) {
-        _contentController.text = updatedContent;
+        _codeController.text = updatedContent;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2731,7 +3027,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       // If we're in editing mode, update the content controller to reflect the changes
       if (_isEditing) {
-        _contentController.text = newContent;
+        _codeController.text = newContent;
         // Reset the hasChanges flag since we just updated the controller
         setState(() {
           _hasChanges = false;
@@ -3390,7 +3686,6 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                               context,
                                             ).textTheme.bodySmall,
                                             maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -3407,7 +3702,6 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
                                               context,
                                             ).textTheme.bodySmall,
                                             maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
@@ -3514,5 +3808,224 @@ class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
         ),
       );
     }
+  }
+}
+
+// Image Picker Dialog Widget
+class _ImagePickerDialog extends StatefulWidget {
+  final String initialAltText;
+  final List<Attachment> existingAttachments;
+  final Future<String> Function() onSaveNote;
+  final Future<String> Function(File imageFile, String fileName)
+  onAddAttachment;
+
+  const _ImagePickerDialog({
+    required this.initialAltText,
+    required this.existingAttachments,
+    required this.onSaveNote,
+    required this.onAddAttachment,
+  });
+
+  @override
+  State<_ImagePickerDialog> createState() => _ImagePickerDialogState();
+}
+
+class _ImagePickerDialogState extends State<_ImagePickerDialog> {
+  late TextEditingController _altTextController;
+  late TextEditingController _srcController;
+  String? _selectedAttachmentPath;
+  bool _isImporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _altTextController = TextEditingController(text: widget.initialAltText);
+    _srcController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _altTextController.dispose();
+    _srcController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickNewImage() async {
+    setState(() {
+      _isImporting = true;
+    });
+
+    try {
+      // Ensure note is saved first
+      await widget.onSaveNote();
+
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+      if (image == null) {
+        setState(() {
+          _isImporting = false;
+        });
+        return;
+      }
+
+      // Generate unique filename
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = p.extension(image.path);
+      final fileName = 'image_$timestamp$extension';
+
+      // Save attachment using callback
+      final relativePath = await widget.onAddAttachment(
+        File(image.path),
+        fileName,
+      );
+
+      // Update UI
+      setState(() {
+        _selectedAttachmentPath = relativePath;
+        _srcController.text = relativePath.replaceFirst('attachments/', '');
+        _isImporting = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isImporting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to import image: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+
+    return AlertDialog(
+      title: const Text('Insert Image'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _altTextController,
+                decoration: const InputDecoration(
+                  labelText: 'Alt Text (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _srcController,
+                decoration: const InputDecoration(
+                  labelText: 'Source',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (widget.existingAttachments.isNotEmpty) ...[
+                Text('Existing Attachments', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.existingAttachments.length,
+                    itemBuilder: (context, index) {
+                      final attachment = widget.existingAttachments[index];
+                      final isSelected =
+                          _selectedAttachmentPath == attachment.filePath;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedAttachmentPath = attachment.filePath;
+                            _srcController.text = attachment.filePath
+                                .replaceFirst('attachments/', '');
+                          });
+                        },
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outline,
+                              width: isSelected ? 3 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: FutureBuilder<String>(
+                              future: attachment.getAbsolutePath(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Image.file(
+                                  File(snapshot.data!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(Icons.broken_image);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isImporting ? null : _pickNewImage,
+          child: _isImporting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Pick'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: _srcController.text.isEmpty
+              ? null
+              : () {
+                  Navigator.pop(context, {
+                    'alt': _altTextController.text,
+                    'src': _srcController.text,
+                  });
+                },
+          child: const Text('OK'),
+        ),
+      ],
+    );
   }
 }

@@ -60,10 +60,7 @@ class AppProvider extends ChangeNotifier {
       _userApps = await UserAppService.getAllUserApps();
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
-      final selectedModel = await ModelStorageService.getSelectedModel();
-      if (selectedModel != null) {
-        _modelConfig = await ModelStorageService.getModelConfig(selectedModel);
-      }
+      _modelConfig = await ModelStorageService.getActiveModel();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
@@ -976,7 +973,9 @@ class AppProvider extends ChangeNotifier {
     try {
       // Construct user prompt from the provided information
       final promptBuffer = StringBuffer()
-        ..write('Create a $name app. Description: $description. Steps: ${steps.join(', ')}.');
+        ..write(
+          'Create a $name app. Description: $description. Steps: ${steps.join(', ')}.',
+        );
       if (contextNotes != null && contextNotes.isNotEmpty) {
         final titles = contextNotes.map((note) => note.title).join(', ');
         promptBuffer

@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 
 import '../../models/note.dart';
+import '../../models/attachment.dart';
 import '../../models/relationship.dart';
+import '../../utils/file_utils.dart';
+import '../../utils/prompt_injection_protection.dart';
 import '../../utils/remote_image_storage.dart';
 import '../../utils/remote_image_utils.dart';
 import '../database_service.dart';
@@ -45,7 +48,10 @@ class NotePromptBuilder {
       taskContext:
           'You answer detailed questions about the user\'s notes. The next message contains note context with optional attachments. '
           '${useOwnKnowledge ? 'You may augment answers with general knowledge when helpful.' : 'Do not use outside knowledge unless the notes lack the answer.'}',
-      guidelines: guidelines,
+      guidelines: [
+        ...guidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
+      ],
     );
 
     final contextMessage = await buildContextMessage(contextNotes);
@@ -104,6 +110,7 @@ class NotePromptBuilder {
         'Preserve critical information unless explicitly told to remove it.',
         'Indicate any assumptions made during transformation.',
         AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
     );
 
@@ -160,6 +167,7 @@ class NotePromptBuilder {
         'Derive relative dates using the current date/time context before responding.',
         'Create related notes that align with observed relationships.',
         AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
     );
 
@@ -272,9 +280,15 @@ class NotePromptBuilder {
     processed.add(note.id);
 
     final indent = '  ' * depth;
-    buffer.writeln('$indent- ${note.title} (${note.type.name})');
+    // Quote title to prevent injection
+    final safeTitle = PromptInjectionProtection.formatTitleAsData(note.title);
+    buffer.writeln('$indent- Title: $safeTitle (${note.type.name})');
     if (note.content.trim().isNotEmpty) {
-      buffer.writeln('$indent  Content: ${note.content.trim()}');
+      // Quote content as data to prevent prompt injection
+      buffer.writeln('$indent  Content (data only):');
+      buffer.writeln(
+        '$indent  ${PromptInjectionProtection.formatNoteContentAsData(note.content.trim())}',
+      );
     }
 
     if (note.tags.isNotEmpty) {
@@ -284,16 +298,37 @@ class NotePromptBuilder {
     if (note.subNotes.isNotEmpty) {
       buffer.writeln('$indent  Sub-notes:');
       for (final subNote in note.subNotes) {
+        // Quote sub-note content as data
+        final safeSubNoteContent =
+            PromptInjectionProtection.formatNoteContentAsData(subNote.content);
         buffer.writeln(
-          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}: ${subNote.content}',
+          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}:',
         );
+        buffer.writeln('$indent      $safeSubNoteContent');
       }
     }
 
-    if (note.attachmentPaths.isNotEmpty) {
-      buffer.writeln('$indent  Attachments:');
-      for (final attachment in note.attachmentPaths) {
-        buffer.writeln('$indent    - ${attachment.split('/').last}');
+    // Fetch attachments from DB to check includeInAIContext flag
+    try {
+      final attachments = await _databaseService.getAttachmentsForNote(note.id);
+      final validAttachments = attachments
+          .where((a) => a.includeInAIContext)
+          .toList();
+
+      if (validAttachments.isNotEmpty) {
+        buffer.writeln('$indent  Attachments:');
+        for (final attachment in validAttachments) {
+          buffer.writeln('$indent    - ${attachment.fileName}');
+        }
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to load attachments for context: $e');
+      // Fallback to note.attachmentPaths if DB fetch fails, but we can't filter
+      if (note.attachmentPaths.isNotEmpty) {
+        buffer.writeln('$indent  Attachments:');
+        for (final attachment in note.attachmentPaths) {
+          buffer.writeln('$indent    - ${attachment.split('/').last}');
+        }
       }
     }
 
@@ -357,26 +392,41 @@ class NotePromptBuilder {
     Note note,
     Set<String> processed,
   ) async {
-    for (final path in note.attachmentPaths) {
-      if (processed.contains(path)) continue;
-      processed.add(path);
+    try {
+      final attachments = await _databaseService.getAttachmentsForNote(note.id);
 
-      try {
-        final file = File(path);
-        if (!file.existsSync()) continue;
+      for (final attachment in attachments) {
+        if (!attachment.includeInAIContext) continue;
 
-        final bytes = await file.readAsBytes();
-        target.add(
-          PlatformFile(
-            name: path.split('/').last,
-            path: path,
-            size: bytes.length,
-            bytes: bytes,
-          ),
+        final fullPath = await FileUtils.getFullFilePath(
+          attachment.filePath,
+          attachment.isRelativePath,
         );
-      } catch (e) {
-        LoggerService.warning('Failed to read attachment $path: $e');
+
+        if (processed.contains(fullPath)) continue;
+        processed.add(fullPath);
+
+        try {
+          final file = File(fullPath);
+          if (!file.existsSync()) continue;
+
+          final bytes = await file.readAsBytes();
+          target.add(
+            PlatformFile(
+              name: attachment.fileName,
+              path: fullPath,
+              size: bytes.length,
+              bytes: bytes,
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning('Failed to read attachment $fullPath: $e');
+        }
       }
+    } catch (e) {
+      LoggerService.warning(
+        'Failed to load attachments for note ${note.id}: $e',
+      );
     }
 
     await _addRemoteImageAttachments(target, note, processed);

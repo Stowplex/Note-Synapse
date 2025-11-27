@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:markdown_toolbar/markdown_toolbar.dart';
+import 'package:re_editor/re_editor.dart';
+import '../widgets/synapse_note_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -11,11 +12,8 @@ class SubNoteEditScreen extends StatefulWidget {
   final SubNote? subNote; // null for new subnote, existing subnote for editing
   final bool isNewSubNote;
 
-  const SubNoteEditScreen({
-    super.key,
-    required this.parentNote,
-    this.subNote,
-  }) : isNewSubNote = subNote == null;
+  const SubNoteEditScreen({super.key, required this.parentNote, this.subNote})
+    : isNewSubNote = subNote == null;
 
   @override
   State<SubNoteEditScreen> createState() => _SubNoteEditScreenState();
@@ -23,22 +21,25 @@ class SubNoteEditScreen extends StatefulWidget {
 
 class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   late TextEditingController _nameController;
-  late TextEditingController _contentController;
+  late CodeLineEditingController _contentController;
   late FocusNode _contentFocusNode;
   bool _hasChanges = false;
   Timer? _autoSaveTimer;
-  String? _currentSubNoteId; // Track the current subnote ID for upsert operations
+  String?
+  _currentSubNoteId; // Track the current subnote ID for upsert operations
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.subNote?.name ?? '');
-    _contentController = TextEditingController(text: widget.subNote?.content ?? '');
+    _contentController = CodeLineEditingController.fromText(
+      widget.subNote?.content ?? '',
+    );
     _contentFocusNode = FocusNode();
-    
+
     _nameController.addListener(_onTextChanged);
     _contentController.addListener(_onTextChanged);
-    
+
     // Set up subnote ID
     if (widget.isNewSubNote) {
       _currentSubNoteId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -58,11 +59,16 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
 
   void _onTextChanged() {
     if (!_hasChanges) {
-      setState(() {
-        _hasChanges = true;
+      // Defer setState to avoid "setState during build" error from re_editor's initial notification
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_hasChanges) {
+          setState(() {
+            _hasChanges = true;
+          });
+        }
       });
     }
-    
+
     // Auto-save after 2 seconds of no typing
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
@@ -73,23 +79,28 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   }
 
   void _autoSave() {
-    if (_nameController.text.trim().isEmpty && _contentController.text.trim().isEmpty) {
+    if (_nameController.text.trim().isEmpty &&
+        _contentController.text.trim().isEmpty) {
       return; // Don't save empty subnotes
     }
-    
+
     final appProvider = context.read<AppProvider>();
-    
+
     // Create subnote with current ID (stable for new subnotes, original for existing)
     final subNote = SubNote(
       id: _currentSubNoteId!,
-      name: _nameController.text.trim().isEmpty ? 'Untitled' : _nameController.text.trim(),
+      name: _nameController.text.trim().isEmpty
+          ? 'Untitled'
+          : _nameController.text.trim(),
       content: _contentController.text.trim(),
-      createdAt: widget.isNewSubNote ? DateTime.now() : widget.subNote!.createdAt,
+      createdAt: widget.isNewSubNote
+          ? DateTime.now()
+          : widget.subNote!.createdAt,
     );
-    
+
     // Use upsert to either add new or update existing
     appProvider.upsertSubNoteInNote(widget.parentNote.id, subNote);
-    
+
     setState(() {
       _hasChanges = false;
     });
@@ -98,16 +109,18 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isNewSubNote ? l10n.addNewSubNote : l10n.editSubNote),
+        title: Text(
+          widget.isNewSubNote ? l10n.addNewSubNote : l10n.editSubNote,
+        ),
         actions: [
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
             child: Chip(
               label: Text(_hasChanges ? l10n.unsaved : l10n.saved),
-              backgroundColor: _hasChanges 
+              backgroundColor: _hasChanges
                   ? Colors.orange.withOpacity(0.1)
                   : Colors.green.withOpacity(0.1),
               labelStyle: TextStyle(
@@ -148,45 +161,22 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: TextField(
+            child: SynapseNoteEditor(
               controller: _contentController,
               focusNode: _contentFocusNode,
-              decoration: InputDecoration(
-                labelText: l10n.title,
-                border: const OutlineInputBorder(),
-                alignLabelWithHint: true,
-                hintText: 'Enter the sub-note content...',
-              ),
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
+              onPickImage: null, // No image picker for subnotes
+              language: 'markdown',
             ),
-          ),
-          const SizedBox(height: 8),
-          MarkdownToolbar(
-            useIncludedTextField: false,
-            controller: _contentController,
-            focusNode: _contentFocusNode,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            iconColor: Theme.of(context).colorScheme.onSurface,
-            dropdownTextColor: Theme.of(context).colorScheme.primary,
-            borderRadius: BorderRadius.circular(8.0),
-            width: 60.0,
-            height: 40.0,
-            spacing: 4.0,
-            runSpacing: 4.0,
           ),
         ],
       ),
     );
   }
 
-
-
   void _cancelEditing() {
     // Cancel any pending auto-save
     _autoSaveTimer?.cancel();
-    
+
     if (_hasChanges) {
       showDialog(
         context: context,

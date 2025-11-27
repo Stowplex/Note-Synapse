@@ -19,6 +19,8 @@ import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
+typedef OpenConversationsCallback = Future<void> Function(List<Note> notes, bool immersiveMode);
+typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
@@ -32,6 +34,8 @@ class UserAppRuntimeBridge {
     required this.isInteractive,
     List<Note>? selectedNotes,
     this.onOpenNote,
+    this.onOpenConversations,
+    this.onOpenAIActions,
   }) : _selectedNotes = selectedNotes ?? const [];
 
   final UserApp app;
@@ -40,6 +44,8 @@ class UserAppRuntimeBridge {
   final bool isInteractive;
   final List<Note> _selectedNotes;
   final OpenNoteCallback? onOpenNote;
+  final OpenConversationsCallback? onOpenConversations;
+  final OpenAIActionsCallback? onOpenAIActions;
 
   final DatabaseService _databaseService = DatabaseService();
   static final HttpClient _proxyHttpClient = HttpClient()
@@ -167,8 +173,20 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('saveNotes', notes ?? []);
             return result;
           },
+          deleteNotes: async (noteIds) => {
+            const result = await window.flutter_inappwebview.callHandler('deleteNotes', noteIds ?? []);
+            return result;
+          },
           openNote: async (noteId, replaceWindow = false) => {
             const result = await window.flutter_inappwebview.callHandler('openNote', noteId, replaceWindow === true);
+            return result;
+          },
+          openConversations: async (notes = [], immersiveMode = false) => {
+            const result = await window.flutter_inappwebview.callHandler('openConversations', notes ?? [], immersiveMode === true);
+            return result;
+          },
+          openAIActions: async (notes = []) => {
+            const result = await window.flutter_inappwebview.callHandler('openAIActions', notes ?? []);
             return result;
           },
           Notes: $notesJson,
@@ -654,6 +672,33 @@ class UserAppRuntimeBridge {
     );
 
     controller.addJavaScriptHandler(
+      handlerName: 'deleteNotes',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final noteIdsData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.deleteNotes] Called with ${noteIdsData.length} note IDs',
+          );
+          final deletedCount = await _deleteNotesFromJavaScript(noteIdsData);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.deleteNotes] Success - Deleted $deletedCount notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'deletedCount': deletedCount};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.deleteNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
       handlerName: 'openNote',
       callback: (args) async {
         final startTime = DateTime.now();
@@ -692,6 +737,137 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
             '[Synapse.openNote] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'openConversations',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (onOpenConversations == null) {
+            return {
+              'success': false,
+              'error': 'openConversations not supported in this context',
+            };
+          }
+
+          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          final immersiveMode = args.length > 1
+              ? (args[1] as bool? ?? false)
+              : false;
+
+          LoggerService.debug(
+            '[Synapse.openConversations] Called with ${notesData.length} notes, immersiveMode: $immersiveMode',
+          );
+
+          if (immersiveMode && notesData.isEmpty) {
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.warning(
+              '[Synapse.openConversations] Error: immersiveMode requires at least one note after ${duration.inMilliseconds}ms',
+            );
+            return {
+              'success': false,
+              'error': 'immersiveMode requires at least one note',
+            };
+          }
+
+          final notes = <Note>[];
+          for (final noteData in notesData) {
+            if (noteData is Map<String, dynamic> && noteData['id'] != null) {
+              final noteId = noteData['id'] as String;
+              final note = await _databaseService.getNote(noteId);
+              if (note != null) {
+                notes.add(note);
+              } else {
+                LoggerService.warning(
+                  '[Synapse.openConversations] Note not found: $noteId',
+                );
+              }
+            } else if (noteData is String) {
+              final note = await _databaseService.getNote(noteData);
+              if (note != null) {
+                notes.add(note);
+              } else {
+                LoggerService.warning(
+                  '[Synapse.openConversations] Note not found: $noteData',
+                );
+              }
+            }
+          }
+
+          await onOpenConversations!(notes, immersiveMode);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.openConversations] Success - Opened conversations with ${notes.length} notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.openConversations] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'openAIActions',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (onOpenAIActions == null) {
+            return {
+              'success': false,
+              'error': 'openAIActions not supported in this context',
+            };
+          }
+
+          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.openAIActions] Called with ${notesData.length} notes',
+          );
+
+          final notes = <Note>[];
+          for (final noteData in notesData) {
+            if (noteData is Map<String, dynamic> && noteData['id'] != null) {
+              final noteId = noteData['id'] as String;
+              final note = await _databaseService.getNote(noteId);
+              if (note != null) {
+                notes.add(note);
+              } else {
+                LoggerService.warning(
+                  '[Synapse.openAIActions] Note not found: $noteId',
+                );
+              }
+            } else if (noteData is String) {
+              final note = await _databaseService.getNote(noteData);
+              if (note != null) {
+                notes.add(note);
+              } else {
+                LoggerService.warning(
+                  '[Synapse.openAIActions] Note not found: $noteData',
+                );
+              }
+            }
+          }
+
+          await onOpenAIActions!(notes);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.openAIActions] Success - Opened AI actions with ${notes.length} notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.openAIActions] Error after ${duration.inMilliseconds}ms: $e',
             error: e,
           );
           return {'success': false, 'error': e.toString()};
@@ -1029,6 +1205,32 @@ class UserAppRuntimeBridge {
       }
     }
     return savedCount;
+  }
+
+  Future<int> _deleteNotesFromJavaScript(List<dynamic> noteIdsData) async {
+    var deletedCount = 0;
+    for (final noteIdData in noteIdsData) {
+      if (noteIdData is! String || noteIdData.trim().isEmpty) {
+        LoggerService.warning(
+          '[Synapse.deleteNotes] Invalid note ID: $noteIdData',
+        );
+        continue;
+      }
+      try {
+        final noteId = noteIdData.trim();
+        await appProvider.deleteNote(noteId);
+        deletedCount++;
+        LoggerService.debug(
+          '[Synapse.deleteNotes] Deleted note: $noteId',
+        );
+      } catch (e) {
+        LoggerService.error(
+          '[Synapse.deleteNotes] Error deleting note $noteIdData: $e',
+          error: e,
+        );
+      }
+    }
+    return deletedCount;
   }
 
   Future<Note> _createNoteFromJavaScriptData(Map<String, dynamic> data) async {

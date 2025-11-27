@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+9
+version: 1.0.0+10
 
 environment:
   sdk: ^3.9.2
@@ -86,7 +86,7 @@ dependencies:
   flutter_pdfview: ^1.3.1
   
   # UUID generation
-  uuid: ^4.2.1
+  uuid: ^4.5.2
   
   # File handling
   file_picker: ^8.0.0
@@ -109,11 +109,11 @@ dependencies:
 
   flutter_math_fork: ^0.7.3
   
-  # Markdown toolbar
-  markdown_toolbar: ^0.5.0
-  
   # WebView for user-defined apps and content extraction
   flutter_inappwebview: ^6.0.0
+  
+  # MIME detection
+  mime: ^2.0.0
   
   # Logging
   logger: ^2.0.2+1
@@ -139,6 +139,9 @@ dependencies:
 
   # Flutter SVG for displaying SVG image
   flutter_svg: ^2.2.1
+
+  # JSON viewer widget
+  flutter_json_view: ^1.1.5
 
 
 dev_dependencies:
@@ -180,6 +183,8 @@ flutter:
     - assets/scripts/mermaid.min.js
     - assets/scripts/svg.pan-zoom.min.js
     - assets/model_presets/
+    - assets/starter/
+    - assets/starter/apps/
 
   # Internationalization
   generate: true

@@ -10,6 +10,7 @@ import '../models/app_revision.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
+import '../models/generation_context.dart';
 import '../providers/app_provider.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_runtime_bridge.dart';
@@ -172,7 +173,11 @@ class AiToolRuntime {
     }
   }
 
-  Future<String> invoke(String toolName, Map<String, dynamic> params) async {
+  Future<String> invoke(
+    String toolName,
+    Map<String, dynamic> params,
+    GenerationContext generationContext,
+  ) async {
     await _ensureRunning();
     final controller = _controller;
     if (controller == null) {
@@ -183,7 +188,7 @@ class AiToolRuntime {
     _isCollectingConsoleLogs = true;
     _consoleLogBuffer.clear();
     final startTime = DateTime.now();
-    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final requestId = generationContext.ensureRequestId();
     final endpoint = 'AI Tool Invoke: ${bundle.app.name}.$toolName';
 
     try {

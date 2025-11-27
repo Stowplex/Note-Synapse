@@ -4,12 +4,15 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
+import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
+import '../../models/generation_context.dart';
+import '../../utils/synapse_temp_utils.dart';
 
 /// Gemini model implementation
 class GeminiModel implements AIModel {
@@ -28,7 +31,10 @@ class GeminiModel implements AIModel {
   @override
   Future<bool> isReady() async {
     try {
-      final apiKey = _config?.apiKey ?? await ModelStorageService.getModelApiKey(ModelType.gemini);
+      if (_config == null) return false;
+      final apiKey =
+          _config?.apiKey ??
+          await ModelStorageService.getModelApiKey(_config!.id);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('GeminiModel: Error checking readiness: $e');
@@ -41,11 +47,27 @@ class GeminiModel implements AIModel {
     if (config != null) {
       _config = config;
     } else {
-      _config = await ModelStorageService.getModelConfig(ModelType.gemini);
+      // If no config provided, try to get the active model if it matches this type
+      final activeModel = await ModelStorageService.getActiveModel();
+      if (activeModel?.type == ModelType.gemini) {
+        _config = activeModel;
+      }
+    }
+
+    if (_config == null) {
+      throw Exception(
+        'GeminiModel: Configuration not provided and no active Gemini model found',
+      );
     }
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
-      throw Exception('Gemini API key not configured');
+      // Try to fetch from storage using ID
+      final storedKey = await ModelStorageService.getModelApiKey(_config!.id);
+      if (storedKey != null && storedKey.isNotEmpty) {
+        _config = _config!.copyWith(apiKey: storedKey);
+      } else {
+        throw Exception('Gemini API key not configured');
+      }
     }
   }
 
@@ -57,25 +79,33 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
     return await _withErrorHandling('generation with attachments', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final apiKey = await _validateApiKey(requestId: actualRequestId);
 
       final generationConfig = {
-        'temperature': temperature ?? 0.1,
+        'temperature': 1.0, // Gemini 3 recommends temperature to be at 1.0
         'topK': topK ?? 32,
         'topP': topP ?? 1,
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
-      return await _makeGeminiRequest(apiKey, prompt,
-          attachedFiles: attachedFiles,
-          generationConfig: generationConfig,
-          requestId: actualRequestId);
-    });
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
+      return await _makeGeminiRequest(
+        apiKey,
+        prompt,
+        attachedFiles: sanitizedAttachments,
+        generationConfig: generationConfig,
+        requestId: actualRequestId,
+      );
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -85,7 +115,7 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) {
     return generateWithMessages(
       request.buildFullMessageList(),
@@ -93,7 +123,7 @@ class GeminiModel implements AIModel {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: generationContext,
     );
   }
 
@@ -104,28 +134,54 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
     return await _withErrorHandling('generation with messages', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final apiKey = await _validateApiKey(requestId: actualRequestId);
 
       final generationConfig = {
-        'temperature': temperature ?? 0.1,
+        'temperature': 1.0, // temperature ?? 0.1,
         'topK': topK ?? 32,
         'topP': topP ?? 1,
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
+
       // Convert messages array to Gemini format
       final requestBody = _buildRequestBodyFromMessages(
-        messages,
+        sanitizedMessages,
         generationConfig: generationConfig,
       );
 
-      return await _makeRequest(apiKey, requestBody, requestId: actualRequestId);
-    });
+      // Add model features if present
+      final modelFeatures =
+          context.getValue<List<String>>('modelFeatures') ?? [];
+      if (modelFeatures.isNotEmpty) {
+        final toolsList = <Map<String, dynamic>>[];
+        for (final feature in modelFeatures) {
+          if (feature == 'google_search') {
+            toolsList.add({'googleSearch': {}});
+          } else if (feature == 'code_execution') {
+            toolsList.add({'codeExecution': {}});
+          }
+        }
+        if (toolsList.isNotEmpty) {
+          requestBody['tools'] = toolsList;
+        }
+      }
+
+      return await _makeRequest(
+        apiKey,
+        requestBody,
+        requestId: actualRequestId,
+      );
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -137,29 +193,35 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
     return await _withErrorHandling('generation with tools', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
       final apiKey = await _validateApiKey(requestId: actualRequestId);
 
       final generationConfig = {
-        'temperature': temperature ?? 0.1,
+        'temperature':
+            1.0, // temperature ?? 0.1, Tools must be at temperature 1.0 or it may fail.
         'topK': topK ?? 32,
         'topP': topP ?? 1,
         'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
       };
 
+      final sanitizedAttachments = await _sanitizeAttachments(
+        attachedFiles,
+        actualRequestId,
+      );
+
       return await _makeGeminiRequestWithTools(
         apiKey,
         prompt,
         tools,
-        attachedFiles: attachedFiles,
+        attachedFiles: sanitizedAttachments,
         generationConfig: generationConfig,
         requestId: actualRequestId,
       );
-    });
+    }, requestId: actualRequestId);
   }
 
   @override
@@ -170,40 +232,77 @@ class GeminiModel implements AIModel {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
-    return await _withErrorHandling('generation with tools and messages', () async {
-      final actualRequestId =
-          requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final apiKey = await _validateApiKey(requestId: actualRequestId);
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling(
+      'generation with tools and messages',
+      () async {
+        final apiKey = await _validateApiKey(requestId: actualRequestId);
 
-      final generationConfig = {
-        'temperature': temperature ?? 0.1,
-        'topK': topK ?? 32,
-        'topP': topP ?? 1,
-        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
-      };
+        final generationConfig = {
+          'temperature': 1.0, // tools require temperature at 1.0
+          'topK': topK ?? 32,
+          'topP': topP ?? 1,
+          'maxOutputTokens':
+              maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+        };
 
-      // Convert messages array to Gemini format
-      final requestBody = _buildRequestBodyFromMessages(
-        messages,
-        generationConfig: generationConfig,
-      );
+        final sanitizedMessages = await _sanitizeMessages(
+          messages,
+          actualRequestId,
+        );
 
-      // Add tools to request body
-      if (tools.isNotEmpty) {
-        requestBody['tools'] = [
-          {'function_declarations': tools}
-        ];
-      }
+        // Convert messages array to Gemini format
+        final requestBody = _buildRequestBodyFromMessages(
+          sanitizedMessages,
+          generationConfig: generationConfig,
+        );
 
-      // Make request and get raw response
-      return await _makeRequestWithRawResponse(
-        apiKey,
-        requestBody,
-        requestId: actualRequestId,
-      );
-    });
+        // Add tools to request body
+        final modelFeatures =
+            context.getValue<List<String>>('modelFeatures') ?? [];
+        final hasTools = tools.isNotEmpty;
+        final hasModelFeatures = modelFeatures.isNotEmpty;
+
+        if (hasTools || hasModelFeatures) {
+          final toolsList = <Map<String, dynamic>>[];
+
+          if (hasTools) {
+            toolsList.add({'functionDeclarations': tools});
+          }
+
+          if (hasModelFeatures) {
+            for (final feature in modelFeatures) {
+              if (feature == 'google_search') {
+                toolsList.add({'googleSearch': {}});
+              } else if (feature == 'code_execution') {
+                toolsList.add({'codeExecution': {}});
+              }
+              // Add other features as needed
+            }
+          }
+
+          requestBody['tools'] = toolsList;
+
+          // Add toolConfig to enable function calling if we have function declarations
+          if (hasTools) {
+            requestBody['toolConfig'] = {
+              'functionCallingConfig': {'mode': 'VALIDATED'},
+            };
+          }
+        }
+
+        // Make request and get raw response
+        return await _makeRequestWithRawResponse(
+          apiKey,
+          requestBody,
+          requestId: actualRequestId,
+        );
+      },
+      requestId: actualRequestId,
+    );
   }
 
   /// Build request body from prompt messages.
@@ -223,15 +322,22 @@ class GeminiModel implements AIModel {
           break;
         case PromptRole.user:
           // Check if this is a function response (tool result)
-          if (message.metadata != null && message.metadata!['function_name'] != null) {
+          if (message.metadata != null &&
+              message.metadata!['function_name'] != null) {
             final functionName = message.metadata!['function_name'] as String;
-            
+
             // Parse the tool result content to extract the actual result
             // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
             final content = message.content;
-            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
-            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
-            
+            final resultMatch = RegExp(
+              r'Result:\s*(.+)',
+              dotAll: true,
+            ).firstMatch(content);
+            final errorMatch = RegExp(
+              r'Error:\s*(.+)',
+              dotAll: true,
+            ).firstMatch(content);
+
             final responseData = <String, dynamic>{};
             if (resultMatch != null) {
               responseData['result'] = resultMatch.group(1)?.trim() ?? '';
@@ -240,16 +346,16 @@ class GeminiModel implements AIModel {
             } else {
               responseData['result'] = content;
             }
-            
+
+            final functionResponse = <String, dynamic>{
+              'name': functionName,
+              'response': responseData,
+            };
+
             contents.add({
               'role': 'user',
               'parts': [
-                {
-                  'functionResponse': {
-                    'name': functionName,
-                    'response': responseData,
-                  }
-                }
+                {'functionResponse': functionResponse},
               ],
             });
           } else {
@@ -273,52 +379,64 @@ class GeminiModel implements AIModel {
                   'inline_data': {
                     'mime_type': mimeType,
                     'data': base64Encode(bytes),
-                  }
+                  },
                 });
               }
             }
 
-            contents.add({
-              'role': 'user',
-              'parts': parts,
-            });
+            contents.add({'role': 'user', 'parts': parts});
           }
           break;
         case PromptRole.assistant:
           final parts = <Map<String, dynamic>>[];
-          
+
           // Add text content if present
           if (message.content.trim().isNotEmpty) {
             parts.add({'text': message.content});
           }
-          
+
           // Add function calls if present in metadata
-          if (message.metadata != null && message.metadata!['function_calls'] != null) {
+          if (message.metadata != null &&
+              message.metadata!['function_calls'] != null) {
             final functionCalls = message.metadata!['function_calls'] as List;
             for (final functionCall in functionCalls) {
-              parts.add({
-                'functionCall': functionCall,
-              });
+              if (functionCall is Map<String, dynamic>) {
+                final callData = Map<String, dynamic>.from(functionCall);
+                final thoughtSignature =
+                    callData.remove('thoughtSignature') ??
+                    callData.remove('thought_signature');
+                final part = <String, dynamic>{'functionCall': callData};
+                if (thoughtSignature != null) {
+                  part['thoughtSignature'] = thoughtSignature;
+                }
+                parts.add(part);
+              } else {
+                parts.add({'functionCall': functionCall});
+              }
             }
           }
-          
-          contents.add({
-            'role': 'model',
-            'parts': parts,
-          });
+
+          contents.add({'role': 'model', 'parts': parts});
           break;
         case PromptRole.tool:
           // For Gemini, tool results should use functionResponse format
           // Check if we have function metadata to construct proper response
-          if (message.metadata != null && message.metadata!['function_name'] != null) {
+          if (message.metadata != null &&
+              message.metadata!['function_name'] != null) {
             final functionName = message.metadata!['function_name'] as String;
-            
+
             // Parse the tool result content to extract the actual result
             // Format: "Tool: service.tool\nResult: actual_result" or "Tool: service.tool\nError: error_msg"
             final content = message.content;
-            final resultMatch = RegExp(r'Result:\s*(.+)', dotAll: true).firstMatch(content);
-            final errorMatch = RegExp(r'Error:\s*(.+)', dotAll: true).firstMatch(content);
-            
+            final resultMatch = RegExp(
+              r'Result:\s*(.+)',
+              dotAll: true,
+            ).firstMatch(content);
+            final errorMatch = RegExp(
+              r'Error:\s*(.+)',
+              dotAll: true,
+            ).firstMatch(content);
+
             final responseData = <String, dynamic>{};
             if (resultMatch != null) {
               responseData['result'] = resultMatch.group(1)?.trim() ?? '';
@@ -327,7 +445,7 @@ class GeminiModel implements AIModel {
             } else {
               responseData['result'] = content;
             }
-            
+
             contents.add({
               'role': 'user',
               'parts': [
@@ -335,8 +453,8 @@ class GeminiModel implements AIModel {
                   'functionResponse': {
                     'name': functionName,
                     'response': responseData,
-                  }
-                }
+                  },
+                },
               ],
             });
           } else {
@@ -344,9 +462,7 @@ class GeminiModel implements AIModel {
             contents.add({
               'role': 'user',
               'parts': [
-                {
-                  'text': 'Tool result:\n${message.content}',
-                }
+                {'text': 'Tool result:\n${message.content}'},
               ],
             });
           }
@@ -356,9 +472,10 @@ class GeminiModel implements AIModel {
 
     final requestBody = <String, dynamic>{
       'contents': contents,
-      'generationConfig': generationConfig ??
+      'generationConfig':
+          generationConfig ??
           {
-            'temperature': 0.1,
+            'temperature': 1.0, // 0.1,
             'topK': 32,
             'topP': 1,
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
@@ -386,16 +503,16 @@ class GeminiModel implements AIModel {
         final bytes = File(file.path!).readAsBytesSync();
         return Uint8List.fromList(bytes);
       } catch (e) {
-        LoggerService.warning('GeminiModel: failed to read attachment ${file.path}: $e');
+        LoggerService.warning(
+          'GeminiModel: failed to read attachment ${file.path}: $e',
+        );
       }
     }
 
     return null;
   }
 
-
   // Private helper methods
-
 
   Future<T> _withErrorHandling<T>(
     String operation,
@@ -408,10 +525,10 @@ class GeminiModel implements AIModel {
     try {
       return await operationFunction();
     } catch (e) {
-      LoggerService.error('Error in $operation', error: {
-        'error': e.toString(),
-        'requestId': actualRequestId,
-      });
+      LoggerService.error(
+        'Error in $operation',
+        error: {'error': e.toString(), 'requestId': actualRequestId},
+      );
       rethrow;
     }
   }
@@ -425,13 +542,59 @@ class GeminiModel implements AIModel {
     return apiKey;
   }
 
+  Future<List<PlatformFile>> _sanitizeAttachments(
+    List<PlatformFile> attachments,
+    String requestId,
+  ) async {
+    if (attachments.isEmpty) {
+      return attachments;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeAttachments(
+      attachments,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.attachments;
+  }
+
+  Future<List<PromptMessage>> _sanitizeMessages(
+    List<PromptMessage> messages,
+    String requestId,
+  ) async {
+    if (messages.isEmpty) {
+      return messages;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeMessages(
+      messages,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.messages;
+  }
+
   Map<String, dynamic> _buildRequestBody(
     String prompt,
     List<PlatformFile> attachedFiles, {
     Map<String, dynamic>? generationConfig,
     List<Map<String, String>>? safetySettings,
   }) {
-    final parts = <Map<String, dynamic>>[{'text': prompt}];
+    final parts = <Map<String, dynamic>>[
+      {'text': prompt},
+    ];
 
     // Add file attachments if any
     if (attachedFiles.isNotEmpty) {
@@ -447,10 +610,7 @@ class GeminiModel implements AIModel {
           );
 
           parts.add({
-            'inline_data': {
-              'mime_type': mimeType,
-              'data': base64Data,
-            }
+            'inline_data': {'mime_type': mimeType, 'data': base64Data},
           });
         }
       }
@@ -458,11 +618,12 @@ class GeminiModel implements AIModel {
 
     final requestBody = {
       'contents': [
-        {'parts': parts}
+        {'parts': parts},
       ],
-      'generationConfig': generationConfig ??
+      'generationConfig':
+          generationConfig ??
           {
-            'temperature': 0.1,
+            'temperature': 1.0, // 0.1,
             'topK': 32,
             'topP': 1,
             'maxOutputTokens': _config?.maxOutputTokens ?? 65536,
@@ -485,7 +646,8 @@ class GeminiModel implements AIModel {
         requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
 
-    final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final endpoint =
+        _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
     final modelName = _config?.modelName ?? 'gemini-2.5-flash';
 
     LoggerService.logAiRequest(
@@ -503,16 +665,17 @@ class GeminiModel implements AIModel {
 
     final duration = DateTime.now().difference(startTime);
 
-    LoggerService.logAiResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      responseBody: response.body,
-      requestId: actualRequestId,
-      duration: duration,
-    );
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: data,
+        requestId: actualRequestId,
+        duration: duration,
+      );
+
       if (data['candidates'] != null && data['candidates'].isNotEmpty) {
         final candidate = data['candidates'][0];
         final content = candidate['content'];
@@ -524,9 +687,61 @@ class GeminiModel implements AIModel {
 
             for (final part in parts) {
               if (part is Map<String, dynamic>) {
+                // Skip thought parts
+                if (part['thought'] == true) {
+                  continue;
+                }
+
+                // Handle text
                 final text = part['text'];
                 if (text is String && text.isNotEmpty) {
                   buffer.write(text);
+                }
+
+                // Handle executableCode
+                final executableCode = part['executableCode'];
+                if (executableCode is Map<String, dynamic>) {
+                  final language = executableCode['language'] ?? 'python';
+                  final code = executableCode['code'] ?? '';
+                  buffer.writeln('\n```${language.toString().toLowerCase()}');
+                  buffer.writeln(code);
+                  buffer.writeln('```\n');
+                }
+
+                // Handle codeExecutionResult
+                final codeExecutionResult = part['codeExecutionResult'];
+                if (codeExecutionResult is Map<String, dynamic>) {
+                  final outcome = codeExecutionResult['outcome'];
+                  final output = codeExecutionResult['output'] ?? '';
+                  buffer.writeln('```text');
+                  buffer.writeln('Execution Result ($outcome)');
+                  buffer.writeln('---------- OUTPUT -----------');
+                  buffer.writeln('$output');
+                  buffer.writeln('```\n');
+                }
+
+                // Handle inline_data
+                final inlineData = part['inlineData'];
+                if (inlineData is Map<String, dynamic>) {
+                  final mimeType = inlineData['mimeType'] as String?;
+                  final data = inlineData['data'] as String?;
+
+                  if (mimeType != null && data != null) {
+                    // Check if it's an image
+                    if (mimeType.startsWith('image/')) {
+                      try {
+                        // Save to temp file and get URI
+                        final result = await SynapseTempUtils.saveTempData(
+                          mimeType: mimeType,
+                          base64Data: data,
+                        );
+                        buffer.writeln('\n![Generated Image](${result.uri})\n');
+                      } catch (e) {
+                        LoggerService.error('Failed to save inline image: $e');
+                        buffer.writeln('\n[Image generation failed]\n');
+                      }
+                    }
+                  }
                 }
               } else if (part is String && part.isNotEmpty) {
                 buffer.write(part);
@@ -535,22 +750,32 @@ class GeminiModel implements AIModel {
 
             final responseText = buffer.toString();
             if (responseText.isNotEmpty) {
-              LoggerService.debug('Gemini API request completed successfully', error: {
-                'responseLength': responseText.length,
-                'requestId': actualRequestId,
-                'duration': '${duration.inMilliseconds}ms',
-              });
+              LoggerService.debug(
+                'Gemini API request completed successfully',
+                error: {
+                  'responseLength': responseText.length,
+                  'requestId': actualRequestId,
+                  'duration': '${duration.inMilliseconds}ms',
+                },
+              );
               return responseText;
             }
           }
         }
       }
-      LoggerService.error('No content in Gemini API response', error: {
-        'responseData': data,
-        'requestId': actualRequestId,
-      });
+      LoggerService.error(
+        'No content in Gemini API response',
+        error: {'responseData': data, 'requestId': actualRequestId},
+      );
       throw Exception('No content in Gemini API response');
     } else {
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
+        requestId: actualRequestId,
+        duration: duration,
+      );
       LoggerService.logAiError(
         error:
             'Failed to process request: ${response.statusCode} - ${response.body}',
@@ -559,7 +784,8 @@ class GeminiModel implements AIModel {
         duration: duration,
       );
       throw Exception(
-          'Failed to process request: ${response.statusCode} - ${response.body}');
+        'Failed to process request: ${response.statusCode} - ${response.body}',
+      );
     }
   }
 
@@ -591,7 +817,7 @@ class GeminiModel implements AIModel {
   }) async {
     final actualRequestId =
         requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    
+
     final requestBody = _buildRequestBody(
       prompt,
       attachedFiles,
@@ -601,8 +827,12 @@ class GeminiModel implements AIModel {
     // Add tools to request body
     if (tools.isNotEmpty) {
       requestBody['tools'] = [
-        {'function_declarations': tools}
+        {'functionDeclarations': tools},
       ];
+      // Add toolConfig to enable function calling
+      requestBody['toolConfig'] = {
+        'functionCallingConfig': {'mode': 'VALIDATED'},
+      };
     }
 
     // Make request and get raw response
@@ -622,7 +852,8 @@ class GeminiModel implements AIModel {
         requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
 
-    final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final endpoint =
+        _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
     final modelName = _config?.modelName ?? 'gemini-2.5-flash';
 
     LoggerService.logAiRequest(
@@ -663,8 +894,14 @@ class GeminiModel implements AIModel {
             for (final part in parts) {
               if (part is Map<String, dynamic>) {
                 if (part.containsKey('functionCall')) {
-                  final fnCall = part['functionCall'];
-                  if (fnCall is Map<String, dynamic>) {
+                  final fnCallRaw = part['functionCall'];
+                  if (fnCallRaw is Map<String, dynamic>) {
+                    final fnCall = Map<String, dynamic>.from(fnCallRaw);
+                    final thoughtSignature =
+                        part['thoughtSignature'] ?? part['thought_signature'];
+                    if (thoughtSignature != null) {
+                      fnCall['thoughtSignature'] = thoughtSignature;
+                    }
                     functionCalls.add(fnCall);
                   }
                   continue;
@@ -681,12 +918,15 @@ class GeminiModel implements AIModel {
 
             final textResponse = textBuffer.toString();
 
-            LoggerService.debug('Gemini API request completed', error: {
-              'hasFunctionCalls': functionCalls.isNotEmpty,
-              'hasText': textResponse.isNotEmpty,
-              'requestId': actualRequestId,
-              'duration': '${duration.inMilliseconds}ms',
-            });
+            LoggerService.debug(
+              'Gemini API request completed',
+              error: {
+                'hasFunctionCalls': functionCalls.isNotEmpty,
+                'hasText': textResponse.isNotEmpty,
+                'requestId': actualRequestId,
+                'duration': '${duration.inMilliseconds}ms',
+              },
+            );
 
             return {
               'text': textResponse.isEmpty ? null : textResponse,
@@ -696,22 +936,26 @@ class GeminiModel implements AIModel {
           }
         }
       }
-      LoggerService.error('No content in Gemini API response', error: {
-        'responseData': data,
-        'requestId': actualRequestId,
-      });
+      LoggerService.error(
+        'No content in Gemini API response',
+        error: {'responseData': data, 'requestId': actualRequestId},
+      );
       throw Exception('No content in Gemini API response');
     } else {
-      final endpoint = _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+      final endpoint =
+          _config?.endpoint ??
+          'https://generativelanguage.googleapis.com/v1beta';
       final modelName = _config?.modelName ?? 'gemini-2.5-flash';
-      
+
       LoggerService.logAiError(
-        error: 'Gemini API request failed with status ${response.statusCode}: ${response.body}',
+        error:
+            'Gemini API request failed with status ${response.statusCode}: ${response.body}',
         endpoint: '$endpoint/models/$modelName:generateContent',
         requestId: actualRequestId,
       );
-      throw Exception('Gemini API request failed with status ${response.statusCode}: ${response.body}');
+      throw Exception(
+        'Gemini API request failed with status ${response.statusCode}: ${response.body}',
+      );
     }
   }
-
 }

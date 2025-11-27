@@ -9,6 +9,8 @@ import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/mcp_endpoint.dart';
+import '../models/generation_context.dart';
+import '../models/model_config.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -31,6 +33,7 @@ import 'note_detail_screen.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'note_action_app_selection_screen.dart';
+import 'settings_screen.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
 import '../services/user_app_service.dart';
@@ -54,7 +57,7 @@ class ConversationChatScreen extends StatefulWidget {
 }
 
 class _ConversationChatScreenState extends State<ConversationChatScreen>
-    with NoteActionMixin<ConversationChatScreen> {
+    with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
   final ConversationService _conversationService = ConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -88,14 +91,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
   ToolIterationPrompt? _iterationPrompt;
 
+  // Model Features support
+  final Set<String> _selectedModelFeatures = {};
+
   bool _hasInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMcpEndpoints();
     _loadIterationPreference();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh model features when app resumes (e.g., after model configuration change)
+      _loadModelFeatures();
+    }
+  }
+
+  ModelConfig? _previousModelConfig;
 
   @override
   void didChangeDependencies() {
@@ -103,6 +120,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     if (!_hasInitialized) {
       _hasInitialized = true;
       _initializeConversation();
+    }
+
+    final appProvider = context.watch<AppProvider>();
+    if (_previousModelConfig != appProvider.modelConfig) {
+      _previousModelConfig = appProvider.modelConfig;
+      // Refresh model features when model config changes
+      _loadModelFeatures();
     }
   }
 
@@ -148,9 +172,18 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     } finally {
       await _loadAiTools();
       if (mounted) {
+        // Initialize model features from config
+        _loadModelFeatures();
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _loadModelFeatures() {
+    // Clear selected features when model changes - user must explicitly toggle them on
+    setState(() {
+      _selectedModelFeatures.clear();
+    });
   }
 
   Future<void> _loadMcpEndpoints() async {
@@ -413,6 +446,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final newLimit = await _showIterationLimitDialog(
       prompt.exhaustedIterations,
     );
+
+    if (!mounted) return;
+
     if (newLimit == null) {
       return;
     }
@@ -439,7 +475,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       text: (currentLimit + 5).toString(),
     );
     try {
-      return await showDialog<int>(
+      final result = await showDialog<int>(
         context: context,
         builder: (dialogContext) {
           String? errorText;
@@ -490,8 +526,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           );
         },
       );
-    } finally {
+      // Delay disposal to ensure dialog has fully closed
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.dispose();
+      });
+      return result;
+    } catch (e) {
       controller.dispose();
+      rethrow;
+    } finally {
     }
   }
 
@@ -601,9 +644,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Future<void> _sendMessage() async {
     if (_messageController.text.isEmpty && _attachedFiles.isEmpty) return;
 
+    // Capture ScaffoldMessenger and Navigator before any async operations
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
+    GenerationContext? generationContext;
     _messageController.clear();
     setState(() {
       _attachedFiles.clear();
@@ -654,13 +702,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       _scrollToBottom();
 
       // Generate AI response
-      requestId = DateTime.now().millisecondsSinceEpoch.toString();
+      generationContext = GenerationContext();
+      requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
 
       final aiResponse = await _generateAIResponse(
         content,
         attachments,
-        requestId,
+        generationContext,
       );
 
       final aiMessage = await _conversationService.addAIResponse(
@@ -679,7 +728,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         _cancelledRequestIds.remove(requestId);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('AI request cancelled.'),
             duration: Duration(seconds: 2),
@@ -688,9 +737,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error sending message: $e')),
+        );
       }
     } finally {
       if (mounted) {
@@ -739,6 +788,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Future<void> _abortRequest() async {
     if (!_isSending || _currentRequestId == null) return;
 
+    // Capture ScaffoldMessenger before any async operations
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+
     setState(() {
       _isAborting = true;
     });
@@ -751,30 +804,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _cancelledRequestIds.add(_currentRequestId!);
 
     // Show feedback to user
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cancelling AI request...'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Cancelling AI request...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
 
     // Wait a moment for the request to be cancelled
     await Future.delayed(const Duration(milliseconds: 500));
 
-    setState(() {
-      _isSending = false;
-      _isAborting = false;
-      _currentRequestId = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isSending = false;
+        _isAborting = false;
+        _currentRequestId = null;
+      });
+    }
   }
 
   Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
-    String requestId,
+    GenerationContext generationContext,
   ) async {
+    final requestId = generationContext.ensureRequestId();
     try {
       if (_cancelledRequestIds.contains(requestId)) {
         throw const ConversationCancelledException();
@@ -786,16 +840,23 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         throw const ConversationCancelledException();
       }
 
-      final activeTools = _buildActiveToolsMap();
-      final response = await _aiEngine.generate(
+      // Add model features to generation context
+      if (_selectedModelFeatures.isNotEmpty) {
+        generationContext.setValue(
+          'modelFeatures',
+          _selectedModelFeatures.toList(),
+        );
+      }
+
+      final aiResponse = await _aiEngine.generate(
         request: request,
-        activeTools: activeTools,
-        enableTools: activeTools.isNotEmpty,
-        executeTool: (serviceName, toolName, params) async {
+        activeTools: _buildActiveToolsMap(),
+        enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
+        executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params);
+              return runtime.invoke(toolName, params, context);
             }
 
             return McpToolIntegrationService.executeToolCall(
@@ -803,11 +864,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
               toolName: toolName,
               parameters: params,
               enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              generationContext: context,
             );
           });
         },
         isCancelled: () => _cancelledRequestIds.contains(requestId),
-        requestId: requestId,
+        generationContext: generationContext,
         maxToolIterations: _maxToolIterations,
         onIterationsExhausted: _handleIterationsExhausted,
       );
@@ -816,7 +878,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         throw const ConversationCancelledException();
       }
 
-      return response;
+      return aiResponse;
     } on ConversationCancelledException {
       rethrow;
     } catch (e, stackTrace) {
@@ -964,6 +1026,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,
         AIPrompts.relationshipGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _conversationStartTime,
       needTimeInContext: false, // Precise time comes with user message.
@@ -1249,8 +1312,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final combinedTools = _buildActiveToolsMap();
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
-    final totalActiveCount = activeMcpCount + activeLocalCount;
+    final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final totalActiveCount =
+        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
     final headerTitle = l10n.mcpAndLocalTools;
+
+    // Get current model config to check for features
+    final appProvider = context.read<AppProvider>();
+    final modelConfig = appProvider.modelConfig;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1265,195 +1334,268 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header - clickable to toggle expansion
           InkWell(
             onTap: () {
               setState(() {
                 _isMcpPanelExpanded = !_isMcpPanelExpanded;
               });
             },
-            borderRadius: BorderRadius.circular(8),
             child: Row(
               children: [
                 Icon(
-                  Icons.cloud_sync,
+                  Icons.extension,
                   size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.7),
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   headerTitle,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.8),
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                if (totalActiveCount > 0) ...[
-                  const SizedBox(width: 8),
+                const Spacer(),
+                if (totalActiveCount > 0)
                   ActiveToolCountBadge(
                     count: totalActiveCount,
                     label: l10n.active,
                   ),
-                ],
-                const Spacer(),
-                // Chevron icon that rotates based on expansion state
-                AnimatedRotation(
-                  turns: _isMcpPanelExpanded ? 0 : 0.5,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
+                const SizedBox(width: 8),
+                Icon(
+                  _isMcpPanelExpanded
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_up,
+                  size: 20,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
                 ),
               ],
             ),
           ),
           // Expandable content
-          if (_isMcpPanelExpanded) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.cloud,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.7),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  l10n.mcpTools,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.8),
-                  ),
-                ),
-                const Spacer(),
-                if (activeMcpCount > 0)
-                  ActiveToolCountBadge(
-                    count: activeMcpCount,
-                    label: l10n.active,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: _availableMcpEndpoints.map((endpoint) {
-                final isSelected = _selectedMcpEndpointIds.contains(
-                  endpoint.id,
-                );
-                return FilterChip(
-                  label: Text(endpoint.name),
-                  selected: isSelected,
-                  onSelected: (selected) async {
-                    setState(() {
-                      if (selected) {
-                        _selectedMcpEndpointIds.add(endpoint.id);
-                      } else {
-                        _selectedMcpEndpointIds.remove(endpoint.id);
-                      }
-                    });
-                    await _updateMcpTools();
-                  },
-                  avatar: Icon(
-                    Icons.cloud,
-                    size: 16,
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(
+          if (_isMcpPanelExpanded)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cloud,
+                          size: 16,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          l10n.mcpTools,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.8),
+                              ),
+                        ),
+                        const Spacer(),
+                        if (activeMcpCount > 0)
+                          ActiveToolCountBadge(
+                            count: activeMcpCount,
+                            label: l10n.active,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: _availableMcpEndpoints.map((endpoint) {
+                        final isSelected = _selectedMcpEndpointIds.contains(
+                          endpoint.id,
+                        );
+                        return FilterChip(
+                          label: Text(endpoint.name),
+                          selected: isSelected,
+                          onSelected: (selected) async {
+                            setState(() {
+                              if (selected) {
+                                _selectedMcpEndpointIds.add(endpoint.id);
+                              } else {
+                                _selectedMcpEndpointIds.remove(endpoint.id);
+                              }
+                            });
+                            await _updateMcpTools();
+                          },
+                          avatar: Icon(
+                            Icons.cloud,
+                            size: 16,
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    if (_aiToolBundles.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.smart_toy,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.aiTools,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeLocalCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeLocalCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _aiToolBundles.entries.map((entry) {
+                          final serviceName = entry.key;
+                          final bundle = entry.value;
+                          final selected = _selectedAiToolServices.contains(
+                            serviceName,
+                          );
+                          return FilterChip(
+                            label: Text(bundle.displayName),
+                            selected: selected,
+                            onSelected: (value) {
+                              _toggleAiToolService(serviceName, value);
+                            },
+                            avatar: Icon(
+                              Icons.smart_toy,
+                              size: 16,
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (modelConfig?.modelFeatures != null &&
+                        modelConfig!.modelFeatures!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.stars,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.modelFeatures,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeModelFeaturesCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeModelFeaturesCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: modelConfig.modelFeatures!.map((feature) {
+                          final isSelected = _selectedModelFeatures.contains(
+                            feature,
+                          );
+                          String label = feature;
+                          if (feature == 'google_search') {
+                            label = l10n.featureGoogleSearch;
+                          } else if (feature == 'code_execution') {
+                            label = l10n.featureCodeExecution;
+                          } else if (feature == 'web_search') {
+                            label = l10n.featureWebSearch;
+                          }
+
+                          return FilterChip(
+                            label: Text(label),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedModelFeatures.add(feature);
+                                } else {
+                                  _selectedModelFeatures.remove(feature);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              Icons.stars,
+                              size: 16,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (combinedTools.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        l10n.toolsAvailable(
+                          combinedTools.values.fold<int>(
+                            0,
+                            (sum, tools) => sum + tools.length,
+                          ),
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
                             context,
                           ).colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                );
-              }).toList(),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            if (_aiToolBundles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy,
-                    size: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.aiTools,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (activeLocalCount > 0)
-                    ActiveToolCountBadge(
-                      count: activeLocalCount,
-                      label: l10n.active,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _aiToolBundles.entries.map((entry) {
-                  final serviceName = entry.key;
-                  final bundle = entry.value;
-                  final selected = _selectedAiToolServices.contains(
-                    serviceName,
-                  );
-                  return FilterChip(
-                    label: Text(bundle.displayName),
-                    selected: selected,
-                    onSelected: (value) {
-                      _toggleAiToolService(serviceName, value);
-                    },
-                    avatar: Icon(
-                      Icons.smart_toy,
-                      size: 16,
-                      color: selected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (combinedTools.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                l10n.toolsAvailable(
-                  combinedTools.values.fold<int>(
-                    0,
-                    (sum, tools) => sum + tools.length,
-                  ),
-                ),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.6),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ],
         ],
       ),
     );
@@ -1491,6 +1633,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     );
 
     if (result == true) {
+      // Capture ScaffoldMessenger and Navigator before any async operations
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+
       try {
         final forkedConversation = await _conversationService.forkConversation(
           originalConversationId: _conversation!.id,
@@ -1499,16 +1646,20 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         );
 
         // Navigate to the forked conversation
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) =>
-                ConversationChatScreen(conversationId: forkedConversation.id),
-          ),
-        );
+        if (mounted) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ConversationChatScreen(conversationId: forkedConversation.id),
+            ),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error forking conversation: $e')),
-        );
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('Error forking conversation: $e')),
+          );
+        }
       }
     }
   }
@@ -1738,6 +1889,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 _showConversationTagsDialog();
               } else if (value == 'open_immersive') {
                 _openInImmersiveMode();
+              } else if (value == 'note_action_apps') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        NoteActionAppSelectionScreen(selectedNotes: _notes),
+                  ),
+                );
+              } else if (value == 'ai_logs') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AIDebugOverlayScreen(),
+                  ),
+                );
               }
             },
             itemBuilder: (context) => [
@@ -1745,6 +1909,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                 PopupMenuItem<String>(
                   value: 'open_immersive',
                   child: Text(l10n.immersiveMode),
+                ),
+              if (_notes.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'note_action_apps',
+                  child: Text(l10n.noteActionApps),
                 ),
               if (_conversation != null)
                 PopupMenuItem<String>(
@@ -1756,6 +1925,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   value: 'new_conversation',
                   child: Text(l10n.newConversation),
                 ),
+              PopupMenuItem<String>(value: 'ai_logs', child: Text(l10n.aiLogs)),
             ],
           ),
         ],
@@ -2322,6 +2492,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resolveIterationPrompt(null);
     _messageController.dispose();
     _scrollController.dispose();

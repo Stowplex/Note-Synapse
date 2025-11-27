@@ -12,6 +12,7 @@ import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.github.kkspeed/share"
+    private val NATIVE_CAPTURE_CHANNEL = "note_synapse/native_capture"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -24,6 +25,8 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        val nativeCaptureChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_CAPTURE_CHANNEL)
+        NativeCaptureUtils(this, nativeCaptureChannel)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

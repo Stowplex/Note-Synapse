@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>USER_MANUAL</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="github-pandoc.css" />
+</head>
+<body>
+<h1 id="note-synapse-user-manual">Note Synapse User Manual</h1>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol type="1">
+<li><a href="#setup">Setup</a></li>
+<li><a href="#notes">Notes</a></li>
+<li><a href="#chat">Chat</a></li>
+<li><a href="#user-app">User App</a></li>
+<li><a href="#settings">Settings</a></li>
+</ol>
+<hr />
+<h2 id="setup">Setup</h2>
+<h3 id="how-to-set-up-api-key">How to Set Up API Key</h3>
+<ol type="1">
+<li>When you first launch the app, you’ll be prompted to enter an API
+key.</li>
+<li>Alternatively, navigate to <strong>Settings</strong> → <strong>AI
+API</strong> → <strong>API Key</strong>.</li>
+<li>Enter your API key in the provided field.</li>
+<li>Click the key icon or “Get API Key” button to open the API key
+provider’s website in your browser.</li>
+<li>The API key is securely stored and will be used for all AI
+operations.</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> You can configure multiple AI models with
+different API keys. Go to <strong>Settings</strong> → <strong>AI
+API</strong> → <strong>Model Configuration</strong> to add or change
+models.</p>
+</blockquote>
+<hr />
+<h2 id="notes">Notes</h2>
+<h3 id="how-to-create-a-note">How to Create a Note</h3>
+<h4 id="manually-from-text-image-attachment">Manually from Text, Image,
+Attachment</h4>
+<ol type="1">
+<li>From the main screen, tap the <strong>+</strong> (plus) button or
+the “Create Note” button.</li>
+<li><strong>For text notes:</strong>
+<ul>
+<li>Enter a title and content in the note editor.</li>
+<li>Tap <strong>Save</strong> to create the note.</li>
+</ul></li>
+<li><strong>For image notes:</strong>
+<ul>
+<li>Tap the image icon in the toolbar.</li>
+<li>Choose <strong>Take Photo</strong> or <strong>Pick from
+Gallery</strong>.</li>
+<li>The image will be attached to a new note automatically.</li>
+</ul></li>
+<li><strong>For file attachments:</strong>
+<ul>
+<li>Tap the attachment icon in the toolbar.</li>
+<li>Select a file from your device.</li>
+<li>The file will be attached to a new note automatically.</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of main screen with
+create note button]</p>
+</blockquote>
+<h4 id="clipboard-share">Clipboard, Share</h4>
+<ol type="1">
+<li><strong>From clipboard:</strong>
+<ul>
+<li>Copy text or an image to your clipboard.</li>
+<li>Open Note Synapse and use the share extension or paste option.</li>
+</ul></li>
+<li><strong>From share menu:</strong>
+<ul>
+<li>In any app, tap the <strong>Share</strong> button.</li>
+<li>Select <strong>Note Synapse</strong> from the share menu.</li>
+<li>The shared content will open in the Share Screen.</li>
+</ul></li>
+</ol>
+<h5 id="web-extraction">Web Extraction</h5>
+<p>When sharing a URL:</p>
+<ol type="1">
+<li>The Share Screen will detect the URL automatically.</li>
+<li>Tap <strong>Extract Web Content</strong> to open the web extraction
+dialog.</li>
+<li>A WebView will load the page.</li>
+<li>Use the extraction controls to:
+<ul>
+<li>Extract the main article content</li>
+<li>Select specific images to download</li>
+<li>Save the page as a note with extracted content</li>
+</ul></li>
+<li>Review the extracted content, edit the title and tags if
+needed.</li>
+<li>Tap <strong>Create Note</strong> or <strong>Append to Note</strong>
+to save.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of web extraction
+dialog with WebView]</p>
+</blockquote>
+<h4 id="ai-note-creation">AI Note Creation</h4>
+<ol type="1">
+<li>From the main screen or notes list, tap the AI icon or select
+<strong>AI Actions</strong>.</li>
+<li>Choose <strong>Create New Notes</strong>.</li>
+<li>Enter a prompt describing what you want to create.</li>
+<li>Optionally:
+<ul>
+<li>Attach files or images</li>
+<li>Select existing notes as context</li>
+</ul></li>
+<li>Tap <strong>Create</strong> to generate the note(s).</li>
+<li>Review the generated content and save.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of AI note creation
+dialog]</p>
+</blockquote>
+<h3 id="how-to-edit-a-note">How to Edit a Note</h3>
+<h4 id="manually">Manually</h4>
+<ol type="1">
+<li>Open a note by tapping it from the notes list.</li>
+<li>Tap the <strong>Edit</strong> button (pencil icon) in the
+toolbar.</li>
+<li>Modify the title, content, tags, or attachments.</li>
+<li>Changes are auto-saved as you type.</li>
+<li>Tap <strong>Done</strong> or the back button to exit edit mode.</li>
+</ol>
+<h4 id="with-ai-note-transform">With AI (Note Transform)</h4>
+<ol type="1">
+<li>Open a note.</li>
+<li>Tap the <strong>AI Actions</strong> button (or three-dot menu →
+<strong>Transform Note</strong>).</li>
+<li>Enter a transformation instruction (e.g., “Make this more concise”
+or “Translate to Spanish”).</li>
+<li>Optionally attach additional files for context.</li>
+<li>Tap <strong>Transform</strong>.</li>
+<li>Review the transformed content.</li>
+<li>Choose to:
+<ul>
+<li>Replace the original content</li>
+<li>Create a new note with the transformed content</li>
+<li>Cancel</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of note transform
+dialog]</p>
+</blockquote>
+<h3 id="subnotes">Subnotes</h3>
+<h4 id="reparent-subnote">Reparent Subnote</h4>
+<ol type="1">
+<li>Open a note that contains subnotes.</li>
+<li>Find the subnote you want to move.</li>
+<li>Tap the three-dot menu (⋮) next to the subnote.</li>
+<li>Select <strong>Reparent Subnote</strong>.</li>
+<li>In the dialog that appears:
+<ul>
+<li>Search for the target note by title or content</li>
+<li>Filter by tags if needed</li>
+<li>Select the destination note</li>
+</ul></li>
+<li>Tap <strong>Move</strong> to complete the reparenting.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of reparent subnote
+dialog]</p>
+</blockquote>
+<h3 id="task">Task</h3>
+<h4 id="how-to-specify-due-date">How to Specify Due Date</h4>
+<ol type="1">
+<li>Create a new task or convert an existing note to a task.</li>
+<li>Open the task detail screen.</li>
+<li>Tap the <strong>Due Date</strong> field.</li>
+<li>Select a date and time from the date picker.</li>
+<li>The due date will be saved automatically.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of task with due date
+picker]</p>
+</blockquote>
+<h4 id="how-to-change-status">How to Change Status</h4>
+<ol type="1">
+<li>Open a task.</li>
+<li>Find the status dropdown (usually in the header or toolbar).</li>
+<li>Select one of the following statuses:
+<ul>
+<li><strong>To Do</strong>: Task not started</li>
+<li><strong>In Progress</strong>: Task is being worked on</li>
+<li><strong>Completed</strong>: Task is finished</li>
+<li><strong>Cancelled</strong>: Task is abandoned</li>
+</ul></li>
+<li>The status change is saved automatically.</li>
+</ol>
+<p>Alternatively, you can change status from: - The task list view
+(status dropdown in each task card) - The calendar view - The TODO list
+view</p>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of task status
+dropdown]</p>
+</blockquote>
+<h4 id="how-to-convert-between-note-and-task">How to Convert Between
+Note and Task</h4>
+<ol type="1">
+<li>Open a note or task.</li>
+<li>Tap the three-dot menu (⋮) in the toolbar.</li>
+<li>Select <strong>Convert to Task</strong> or <strong>Convert to
+Note</strong>.</li>
+<li>The conversion happens immediately.
+<ul>
+<li>Notes converted to tasks will have status set to “To Do”</li>
+<li>Tasks converted to notes will lose task-specific fields (status, due
+date, etc.)</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of convert menu
+option]</p>
+</blockquote>
+<h4 id="how-to-view-tasks-on-calendar">How to View Tasks on
+Calendar</h4>
+<ol type="1">
+<li>Navigate to the <strong>Calendar</strong> tab in the main
+navigation.</li>
+<li>The calendar view shows:
+<ul>
+<li>Tasks scheduled for specific dates</li>
+<li>Tasks with due dates</li>
+</ul></li>
+<li>Tap on a date to see tasks for that day.</li>
+<li>Use the view switcher to change between:
+<ul>
+<li><strong>Month view</strong>: Full calendar month</li>
+<li><strong>Two Weeks view</strong>: Two-week period</li>
+<li><strong>Week view</strong>: Single week</li>
+</ul></li>
+<li>Tap a task in the calendar to open its details.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of calendar view with
+tasks]</p>
+</blockquote>
+<h4 id="how-to-view-tasks-timeline">How to View Tasks Timeline</h4>
+<ol type="1">
+<li>Navigate to the <strong>Calendar</strong> tab.</li>
+<li>Tap the view switcher and select <strong>Timeline</strong>.</li>
+<li>The timeline view shows all tasks and notes in chronological
+order.</li>
+<li>Tasks are grouped by date.</li>
+<li>Filter by tags using the tag filter chips at the top.</li>
+<li>Tap any item to open it.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of timeline view]</p>
+</blockquote>
+<h4 id="how-to-view-tasks-todo-list">How to View Tasks TODO List</h4>
+<ol type="1">
+<li>Navigate to the <strong>Calendar</strong> tab.</li>
+<li>Tap the view switcher and select <strong>TODO</strong>.</li>
+<li>The TODO list shows all tasks with their:
+<ul>
+<li>Status icons</li>
+<li>Titles and content preview</li>
+<li>Completion percentage (if applicable)</li>
+<li>Status dropdown for quick changes</li>
+</ul></li>
+<li>Filter by tags using the tag filter chips.</li>
+<li>Tap a task to open its details.</li>
+<li>Change task status directly from the list using the status
+dropdown.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of TODO list
+view]</p>
+</blockquote>
+<hr />
+<h2 id="chat">Chat</h2>
+<h3 id="how-to-chat">How to Chat</h3>
+<ol type="1">
+<li>Navigate to the <strong>Chat</strong> tab or tap the chat icon.</li>
+<li>Start a new conversation or open an existing one.</li>
+<li>Type your message in the input field at the bottom.</li>
+<li>Optionally:
+<ul>
+<li>Attach files or images</li>
+<li>Add notes as context (see below)</li>
+</ul></li>
+<li>Tap <strong>Send</strong> or press Enter.</li>
+<li>Wait for the AI response.</li>
+</ol>
+<h4 id="how-to-save-chat-to-note">How to Save Chat to Note</h4>
+<ol type="1">
+<li>During or after a chat, find the message you want to save.</li>
+<li>For assistant messages, tap the <strong>Add to Note</strong> button
+(note icon) in the message action row.</li>
+<li>Choose to:
+<ul>
+<li>Create a new note with the message content</li>
+<li>Append to an existing note</li>
+</ul></li>
+<li>The message content will be saved as a note.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of chat message with
+save to note button]</p>
+</blockquote>
+<h4 id="how-to-retry-chat">How to Retry Chat</h4>
+<ol type="1">
+<li>If an AI response fails or you want to regenerate:
+<ul>
+<li>Tap the <strong>Retry</strong> button (refresh icon) next to the
+failed message</li>
+<li>Or tap the three-dot menu on a message and select
+<strong>Retry</strong></li>
+</ul></li>
+<li>The AI will regenerate the response.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of retry button in
+chat]</p>
+</blockquote>
+<h4 id="how-to-configure-ai-tools-and-mcps">How to Configure AI Tools
+and MCPs</h4>
+<ol type="1">
+<li>In the chat screen, look for the <strong>Tools</strong> or
+<strong>MCP</strong> panel (usually collapsible).</li>
+<li><strong>For MCP servers:</strong>
+<ul>
+<li>Tap to expand the MCP panel</li>
+<li>Toggle MCP endpoints on/off using the filter chips</li>
+<li>Each endpoint shows available tools</li>
+</ul></li>
+<li><strong>For AI Tools:</strong>
+<ul>
+<li>Toggle AI tool services on/off using the filter chips</li>
+<li>Each service shows its available tools</li>
+</ul></li>
+<li>Active tools will be automatically used by the AI when
+relevant.</li>
+<li>To configure MCP servers globally:
+<ul>
+<li>Go to <strong>Settings</strong> → <strong>MCP Settings</strong></li>
+<li>Add, edit, or remove MCP endpoints</li>
+<li>Configure authentication (bearer tokens, etc.)</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of tools/MCP
+configuration panel in chat]</p>
+</blockquote>
+<h3 id="how-to-add-note-as-context-to-chat">How to Add Note as Context
+to Chat</h3>
+<ol type="1">
+<li>In the chat screen, tap the <strong>Add Notes</strong> button (note
+icon with plus).</li>
+<li>A note selection dialog will appear.</li>
+<li>Search or browse for notes to add.</li>
+<li>Select one or more notes.</li>
+<li>Tap <strong>Add</strong> to include them as context.</li>
+<li>The selected notes will appear as chips above the message
+input.</li>
+<li>The AI will have access to the content of these notes during the
+conversation.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of note selection
+dialog in chat]</p>
+</blockquote>
+<h3 id="how-to-view-past-chats">How to View Past Chats</h3>
+<ol type="1">
+<li>In the chat screen, tap the <strong>History</strong> button (clock
+icon) or three-dot menu → <strong>View History</strong>.</li>
+<li>The history dialog shows:
+<ul>
+<li>All past conversations</li>
+<li>Filtered by time range (Last 24 hours, Last week, Last month, All
+time)</li>
+<li>Filtered by tags (if conversations are tagged)</li>
+</ul></li>
+<li>Tap a conversation to open it.</li>
+<li>Use the search bar to find specific conversations.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of chat history
+dialog]</p>
+</blockquote>
+<h3 id="how-to-use-non-linear-chats">How to Use Non-Linear Chats</h3>
+<h4 id="fork">Fork</h4>
+<ol type="1">
+<li>In a conversation, find the message where you want to fork.</li>
+<li>Tap the three-dot menu on that message.</li>
+<li>Select <strong>Fork Conversation</strong>.</li>
+<li>If the message appears in multiple conversations, you’ll be asked to
+select which conversation context to use.</li>
+<li>A new conversation will be created starting from that message.</li>
+<li>You can continue the conversation from that point with different
+questions or directions.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of fork conversation
+option]</p>
+</blockquote>
+<h4 id="transform">Transform</h4>
+<ol type="1">
+<li>In a conversation, find the message you want to transform.</li>
+<li>Tap the three-dot menu on that message.</li>
+<li>Select <strong>Transform</strong> (if available).</li>
+<li>Enter a transformation instruction.</li>
+<li>The message content will be transformed using AI.</li>
+<li>You can use the transformed content to continue the
+conversation.</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> Transform functionality may vary depending on
+the message type and context.</p>
+</blockquote>
+<hr />
+<h2 id="user-app">User App</h2>
+<h3 id="how-to-create-an-app">How to Create an App</h3>
+<h4 id="user-app-1">User App</h4>
+<ol type="1">
+<li>Navigate to <strong>User Apps</strong> from the main menu.</li>
+<li>Tap the <strong>+</strong> (plus) button or <strong>Create
+App</strong>.</li>
+<li>Fill in the app details:
+<ul>
+<li><strong>Name</strong>: The app’s display name</li>
+<li><strong>Description</strong>: What the app does</li>
+<li><strong>Steps</strong>: List the steps/features the app should have
+(add multiple steps with the + button)</li>
+</ul></li>
+<li>Optionally:
+<ul>
+<li>Select <strong>App Type</strong>: Normal, Note Action, or AI
+Tool</li>
+<li>Add attachments (images, files) for reference</li>
+<li>Add notes as context</li>
+<li>Add third-party libraries (see below)</li>
+</ul></li>
+<li>Tap <strong>Create</strong> to generate the app.</li>
+<li>The AI will generate the HTML code for your app.</li>
+<li>Review the generated app in the preview.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of app creation
+form]</p>
+</blockquote>
+<h4 id="note-action-app">Note Action App</h4>
+<ol type="1">
+<li>Follow the steps above for creating a user app.</li>
+<li>Select <strong>App Type</strong>: <strong>Note Action
+App</strong>.</li>
+<li>Note Action Apps operate on pre-selected notes.</li>
+<li>When the app runs, it will receive the selected notes through
+<code>window.Synapse.Notes</code>.</li>
+<li>Design your app to process, analyze, or manipulate these notes.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of note action app
+type selection]</p>
+</blockquote>
+<h4 id="ai-tool">AI Tool</h4>
+<ol type="1">
+<li>Follow the steps above for creating a user app.</li>
+<li>Select <strong>App Type</strong>: <strong>AI Tool</strong>.</li>
+<li>AI Tool apps can be used as tools in chat conversations.</li>
+<li>The app should expose functions that can be called by the AI.</li>
+<li>Configure the tool’s description and parameters.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of AI tool app type
+selection]</p>
+</blockquote>
+<h4 id="provide-context-to-create-app">Provide Context to Create
+App</h4>
+<ol type="1">
+<li>When creating an app, you can provide context in several ways:
+<ul>
+<li><strong>Notes</strong>: Tap <strong>Add Notes</strong> and select
+relevant notes that describe what you want</li>
+<li><strong>Attachments</strong>: Add images or files that show examples
+or requirements</li>
+<li><strong>Libraries</strong>: Add third-party libraries that the app
+should use</li>
+</ul></li>
+<li>The AI will use this context to better understand your requirements
+and generate appropriate code.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of context selection
+in app creation]</p>
+</blockquote>
+<h3 id="how-to-iterate-app">How to Iterate App</h3>
+<h4 id="submit-edit-suggestion">Submit Edit Suggestion</h4>
+<ol type="1">
+<li>Open the app you want to edit.</li>
+<li>Tap <strong>Edit</strong> or the edit icon.</li>
+<li>In the edit screen, you’ll see tabs for:
+<ul>
+<li><strong>Edit Suggestion</strong>: Enter what you want to change</li>
+<li><strong>Code</strong>: View and edit the source code directly</li>
+<li><strong>Preview</strong>: See how the app looks</li>
+</ul></li>
+<li>In the <strong>Edit Suggestion</strong> tab:
+<ul>
+<li>Enter a description of the changes you want</li>
+<li>Optionally add notes, attachments, or libraries</li>
+</ul></li>
+<li>Tap <strong>Submit</strong> to generate a new revision.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of app edit
+suggestion form]</p>
+</blockquote>
+<h4 id="view-ai-response">View AI Response</h4>
+<ol type="1">
+<li>After submitting an edit suggestion, the AI will generate a new
+revision.</li>
+<li>The AI response (explanation of changes) will be shown in the
+revision details.</li>
+<li>You can view it in the <strong>Revisions</strong> section of the
+app.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of AI response in
+revision]</p>
+</blockquote>
+<h4 id="check-source-code">Check Source Code</h4>
+<ol type="1">
+<li>In the app edit screen, switch to the <strong>Code</strong>
+tab.</li>
+<li>You’ll see the full HTML source code of the app.</li>
+<li>You can:
+<ul>
+<li>View the code with syntax highlighting</li>
+<li>Edit the code directly</li>
+<li>Search within the code</li>
+</ul></li>
+<li>Changes made directly to the code will create a new revision when
+saved.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of code editor]</p>
+</blockquote>
+<h4 id="move-between-revisions">Move Between Revisions</h4>
+<ol type="1">
+<li>In the app detail screen, find the <strong>Revisions</strong>
+section.</li>
+<li>You’ll see a list of all revisions with:
+<ul>
+<li>Revision number</li>
+<li>Timestamp</li>
+<li>User prompt or edit description</li>
+<li>AI response summary</li>
+</ul></li>
+<li>Tap a revision to view its details.</li>
+<li>To switch to a different revision:
+<ul>
+<li>Tap <strong>Use This Revision</strong> or the pin icon</li>
+<li>The app will use that revision’s code</li>
+</ul></li>
+<li>You can compare revisions side-by-side.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of revisions
+list]</p>
+</blockquote>
+<h3 id="how-to-add-third-party-dependencies-to-app">How to Add Third
+Party Dependencies to App</h3>
+<ol type="1">
+<li>When creating or editing an app, find the <strong>Libraries</strong>
+section.</li>
+<li>Tap <strong>Add Library</strong>.</li>
+<li>For each library, provide:
+<ul>
+<li><strong>Name</strong>: The library name (e.g., “Chart.js”)</li>
+<li><strong>Usage Instructions</strong>: How the library should be used
+in the app</li>
+<li><strong>Links</strong>: CDN URLs or download links for the library
+files</li>
+</ul></li>
+<li>Add multiple dependency links for each library if needed.</li>
+<li>The libraries will be downloaded and included when the app
+runs.</li>
+<li>The AI will be informed about these libraries and can use them in
+the generated code.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of library
+configuration]</p>
+</blockquote>
+<h3 id="share-app">Share App</h3>
+<h4 id="export">Export</h4>
+<ol type="1">
+<li>Open the app you want to export.</li>
+<li>Tap the three-dot menu (⋮) or <strong>Share</strong> button.</li>
+<li>Select <strong>Export App</strong>.</li>
+<li>The app will be exported as a YAML file containing:
+<ul>
+<li>App metadata (name, description, type)</li>
+<li>The current revision’s HTML code (base64 encoded)</li>
+<li>Library dependencies and their links</li>
+</ul></li>
+<li>Choose where to save the file or share it via your device’s share
+menu.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of export app
+option]</p>
+</blockquote>
+<h4 id="import">Import</h4>
+<ol type="1">
+<li>Navigate to <strong>User Apps</strong>.</li>
+<li>Tap the <strong>+</strong> (plus) button or <strong>Import
+App</strong>.</li>
+<li>Select the YAML file you want to import.</li>
+<li>The import process will:
+<ul>
+<li>Parse the YAML file</li>
+<li>Create the app with its metadata</li>
+<li>Restore the HTML code</li>
+<li>Download and restore library dependencies</li>
+</ul></li>
+<li>Once imported, the app will appear in your apps list and be ready to
+use.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of import app
+dialog]</p>
+</blockquote>
+<hr />
+<h2 id="settings">Settings</h2>
+<h3 id="configure-color-theme">Configure Color Theme</h3>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> →
+<strong>Appearance</strong>.</li>
+<li>Toggle <strong>Dark Mode</strong> on or off.</li>
+<li>The theme change applies immediately.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of appearance
+settings]</p>
+</blockquote>
+<h3 id="configure-language">Configure Language</h3>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> →
+<strong>Language</strong>.</li>
+<li>Select your preferred language:
+<ul>
+<li><strong>English</strong></li>
+<li><strong>Chinese (Simplified)</strong></li>
+</ul></li>
+<li>The language change applies immediately.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of language
+settings]</p>
+</blockquote>
+<h3 id="ai-configuration">AI Configuration</h3>
+<h4 id="add-change-ai-models">Add / Change AI Models</h4>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> → <strong>AI API</strong> →
+<strong>Model Configuration</strong>.</li>
+<li>You’ll see a list of available model types (OpenAI, Gemini,
+etc.).</li>
+<li>To configure a model:
+<ul>
+<li>Tap on the model</li>
+<li>Enter or update the <strong>API Key</strong></li>
+<li>Optionally configure:
+<ul>
+<li><strong>Endpoint URL</strong> (for custom endpoints)</li>
+<li><strong>Model Name</strong> (specific model variant)</li>
+<li><strong>Display Name</strong></li>
+<li><strong>Max Input/Output Tokens</strong></li>
+</ul></li>
+</ul></li>
+<li>Tap <strong>Save</strong> to store the configuration.</li>
+<li>To add a new model type, tap <strong>Add Model</strong> and follow
+the same steps.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of model
+configuration screen]</p>
+</blockquote>
+<h4 id="add-custom-prompts">Add Custom Prompts</h4>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> → <strong>Prompt
+Settings</strong>.</li>
+<li>You’ll see different prompt categories:
+<ul>
+<li><strong>Note Transformation</strong>: Custom instructions for note
+transformations</li>
+<li><strong>Chat System</strong>: System-level instructions for chat
+conversations</li>
+<li><strong>Chat Per Message</strong>: Instructions added to each chat
+message</li>
+<li><strong>App Generation</strong>: Instructions for app
+generation</li>
+</ul></li>
+<li>Tap on a category to edit.</li>
+<li>Enter your custom prompt or instructions.</li>
+<li>These will be appended to the default prompts when using the
+respective features.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of prompt
+settings]</p>
+</blockquote>
+<h4 id="add-mcp-servers">Add MCP Servers</h4>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> → <strong>MCP
+Settings</strong>.</li>
+<li>Tap <strong>Add MCP Server</strong> or the <strong>+</strong>
+button.</li>
+<li>Fill in the server details:
+<ul>
+<li><strong>Name</strong>: Display name for the server</li>
+<li><strong>Base URL</strong>: The MCP server endpoint URL</li>
+<li><strong>Transport Type</strong>: HTTP or SSE (Server-Sent
+Events)</li>
+<li><strong>Bearer Token</strong>: Authentication token (if
+required)</li>
+<li><strong>Additional Headers</strong>: Custom headers (if needed)</li>
+</ul></li>
+<li>Tap <strong>Save</strong>.</li>
+<li>The MCP server will be available in chat conversations.</li>
+<li>To test the connection, tap <strong>Refresh Tools</strong> to fetch
+available tools from the server.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of MCP settings
+screen]</p>
+</blockquote>
+<h3 id="ai-debug">AI Debug</h3>
+<h4 id="how-to-debug-ai-activities">How to Debug AI Activities</h4>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> → <strong>AI Debug
+Overlay</strong>.</li>
+<li>Toggle the debug overlay on.</li>
+<li>When enabled, you’ll see a debug panel that shows:
+<ul>
+<li>All AI requests and responses</li>
+<li>Request IDs</li>
+<li>Endpoints called</li>
+<li>Headers and request bodies</li>
+<li>Response data</li>
+<li>Timing information</li>
+<li>Errors and warnings</li>
+</ul></li>
+<li>The debug overlay appears as a floating panel or overlay on relevant
+screens.</li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of AI debug
+overlay]</p>
+</blockquote>
+<h4 id="interpret-debugging-info">Interpret Debugging Info</h4>
+<p>The debug overlay shows:</p>
+<ul>
+<li><strong>Request ID</strong>: Unique identifier for each request
+(useful for tracking)</li>
+<li><strong>Endpoint</strong>: Which AI service/model was called</li>
+<li><strong>Headers</strong>: Authentication and request headers</li>
+<li><strong>Request Body</strong>: The full prompt and context sent to
+the AI</li>
+<li><strong>Response</strong>: The AI’s response</li>
+<li><strong>Duration</strong>: How long the request took</li>
+<li><strong>Status</strong>: Success or error status</li>
+<li><strong>Error Details</strong>: If an error occurred, details about
+what went wrong</li>
+</ul>
+<p>Use this information to: - Understand what prompts are being sent -
+Debug why certain responses are generated - Identify API errors or
+configuration issues - Optimize prompt structure</p>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of detailed debug
+info]</p>
+</blockquote>
+<h3 id="backup-and-recovery">Backup and Recovery</h3>
+<ol type="1">
+<li>Navigate to <strong>Settings</strong> →
+<strong>Recovery</strong>.</li>
+<li><strong>To create a backup:</strong>
+<ul>
+<li>Tap <strong>Backup All Notes</strong></li>
+<li>The backup process will:
+<ul>
+<li>Create a checkpoint of the database</li>
+<li>Copy the database file</li>
+<li>Copy all attachments</li>
+<li>Update file paths to be relative</li>
+<li>Package everything into a ZIP file</li>
+</ul></li>
+<li>Choose where to save the backup file</li>
+</ul></li>
+<li><strong>To restore from backup:</strong>
+<ul>
+<li>Tap <strong>Restore from Backup</strong></li>
+<li>Select the backup ZIP file</li>
+<li>The restore process will:
+<ul>
+<li>Extract the backup</li>
+<li>Validate the database version</li>
+<li>Migrate if needed</li>
+<li>Merge notes, tags, conversations, etc. with existing data</li>
+<li>Restore attachments</li>
+</ul></li>
+<li>Review the import log for any issues</li>
+</ul></li>
+<li><strong>To undo a restore:</strong>
+<ul>
+<li>If you just restored and want to undo:
+<ul>
+<li>Tap <strong>Undo Last Restore</strong></li>
+<li>The app will restore the database from before the import</li>
+</ul></li>
+</ul></li>
+<li><strong>Recovery points:</strong>
+<ul>
+<li>The app automatically creates recovery points before major
+operations</li>
+<li>You can view and restore from these recovery points in the Recovery
+screen</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Image Placeholder:</strong> [Screenshot of backup and
+recovery screen]</p>
+</blockquote>
+<hr />
+<h2 id="additional-tips">Additional Tips</h2>
+<ul>
+<li><strong>Search</strong>: Use the search bar in notes, chats, and
+apps lists to quickly find content.</li>
+<li><strong>Tags</strong>: Organize notes and conversations with tags
+for better filtering and organization.</li>
+<li><strong>Pinning</strong>: Pin important notes to keep them at the
+top of your list.</li>
+<li><strong>Archiving</strong>: Archive old notes to keep your main list
+clean without deleting them.</li>
+</ul>
+<hr />
+<p><em>Last Updated: [Date]</em></p>
+<p><em>For technical support or feature requests, please refer to the
+project repository.</em></p>
+</body>
+</html>

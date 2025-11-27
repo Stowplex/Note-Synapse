@@ -8,7 +8,7 @@
   "aiPrompts": "提示词",
   "aiPromptsSubtitle": "自定义AI提示词注入与覆写",
   "aiConversationSettings": "AI 会话",
-  "aiConversationSettingsSubtitle": "控制工具调用安全上限",
+  "aiConversationSettingsSubtitle": "调整AI对话参数",
   "aiConversationSettingsDescription": "设置默认的工具调用次数，超过此次数时会提示你确认。每个会话仍可单独调整。",
   "iterationLimitLabel": "工具迭代上限",
   "iterationLimitValueLabel": "当前上限",
@@ -482,6 +482,9 @@
   "myAppsSubtitle": "创建和管理自定义应用程序",
   "noUserApps": "还没有自定义应用",
   "createFirstApp": "创建您的第一个自定义应用",
+  "searchApps": "搜索应用...",
+  "noAppsFound": "未找到应用",
+  "tryAdjustingSearchTerms": "请尝试调整搜索词",
   "createNewApp": "创建新应用",
   "appName": "应用名称",
   "appNameHint": "为您的应用输入名称",
@@ -540,6 +543,7 @@
   "aiDebugOverlay": "AI调试覆盖层",
   "aiDebugOverlaySubtitle": "查看AI请求/响应日志",
   "aiDebugOverlayTitle": "AI调试覆盖层",
+  "aiLogs": "AI 日志",
   "refreshLogs": "刷新日志",
   "clearLogs": "清除日志",
   "noAiLogsAvailable": "没有AI日志可用",
@@ -644,6 +648,9 @@
   "maxInputTokensHint": "100000",
   "maxOutputTokens": "最大输出令牌",
   "maxOutputTokensHint": "4000",
+  "supportedAttachmentMimeTypesLabel": "支持的附件 MIME 类型",
+  "supportedAttachmentMimeTypesHint": "例如 image/png、application/pdf",
+  "supportedAttachmentMimeTypesHelper": "使用逗号或换行分隔。留空则使用模型预设值。",
   "required": "必填",
   "mustBePositiveNumber": "必须是正数",
   "modelCapabilities": "模型功能",
@@ -753,12 +760,24 @@
   "toolsCount": "工具：{count}",
   "noToolsAvailable": "没有可用工具",
   "noToolsCachedFor": "没有为{name}缓存工具。点击刷新以获取工具。",
+  "addContextNotes": "添加上下文笔记",
+  "libraries": "库",
+  "noLibraries": "没有库",
+  "usageInstructions": "使用说明",
+  "libraryLinks": "库链接",
+  "editUserApp": "编辑应用",
+  "viewCode": "查看代码",
+  "editCode": "编辑代码",
+  "code": "代码",
+  "aiEdit": "AI 编辑",
+  "pleaseEnterSuggestion": "请输入建议",
   "refreshTools": "刷新工具",
   "viewTools": "查看工具",
   "noMcpEndpointsConfigured": "未配置MCP端点",
   "clickAddMcpEndpointToGetStarted": "点击\"添加MCP端点\"开始",
   "updated": "更新",
   "noteActionApp": "笔记操作应用",
+  "noteActionApps": "笔记操作应用",
   "noteActionAppSubtitle": "此类应用将专门对预选笔记进行操作",
   "appType": "类型",
   "appTypeHint": "选择此应用的行为方式",
@@ -1270,5 +1289,214 @@
           "error": {}
         }
       },
-      "fetchRemoteImages": "抓取网络图片"
+      "fetchRemoteImages": "抓取网络图片",
+      "gettingStarted": "入门指南",
+      "gettingStartedSubtitle": "安装用户手册和入门应用",
+      "installUserManual": "安装用户手册",
+      "installUserManualSubtitle": "安装或更新用户手册笔记",
+      "installStarterApps": "安装入门应用",
+      "installStarterAppsSubtitle": "浏览并安装预配置的应用",
+      "userManualInfo": "用户手册信息",
+      "status": "状态",
+      "installed": "已安装",
+      "notInstalled": "未安装",
+      "currentVersion": "当前版本",
+      "latestVersion": "最新版本",
+      "lastUpdated": "最后更新",
+      "newVersionAvailable": "新版本可用！",
+      "updateUserManual": "更新用户手册",
+      "reinstallUserManual": "重新安装用户手册",
+      "installing": "安装中...",
+      "updateUserManualConfirm": "用户手册有新版本（{newVersion}）可用。您当前的版本是{oldVersion}。您想要更新吗？",
+      "@updateUserManualConfirm": {
+        "placeholders": {
+          "oldVersion": {
+            "type": "String"
+          },
+          "newVersion": {
+            "type": "String"
+          }
+        }
+      },
+      "userManualInstalledSuccessfully": "用户手册安装成功！",
+      "userManualUpdatedSuccessfully": "用户手册更新成功！",
+      "errorInstallingUserManual": "安装用户手册时出错：{error}",
+      "@errorInstallingUserManual": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "whatIsUserManual": "什么是用户手册？",
+      "userManualDescription": "用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。",
+      "noStarterAppsAvailable": "没有可用的入门应用",
+      "noAppsSelected": "未选择任何应用",
+      "appsSelected": "已选择{count}个应用",
+      "@appsSelected": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "deselectAll": "取消全选",
+      "proceedWithInstallation": "安装选中的应用",
+      "starterAppsInstalledSuccessfully": "{count}个应用安装成功！",
+      "@starterAppsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsInstallFailed": "{count}个应用安装失败",
+      "@starterAppsInstallFailed": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsPartialInstall": "成功安装{successCount}个应用，失败{failureCount}个应用",
+      "@starterAppsPartialInstall": {
+        "placeholders": {
+          "successCount": {
+            "type": "int"
+          },
+          "failureCount": {
+            "type": "int"
+          }
+        }
+      },
+      "errorInstallingStarterApps": "安装入门应用时出错：{error}",
+      "@errorInstallingStarterApps": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+  "rawDataManagerTitle": "原始数据管理器",
+  "rawDataManagerSubtitle": "用于文件和数据库管理的高级工具",
+  "advancedToolTitle": "高级工具",
+  "advancedToolWarning": "此工具提供对应用程序数据和数据库的原始访问权限。使用不当可能导致永久性数据丢失或损坏。\n\n除非您知道自己在做什么或在支持人员的指导下，否则请勿使用此工具。",
+  "iUnderstand": "我明白",
+  "fileManagerTab": "文件管理器",
+  "databaseManagerTab": "数据库管理器",
+  "warningDataInstability": "警告：直接修改数据可能会导致应用程序不稳定。",
+  "attachments": "附件",
+  "cache": "缓存",
+  "root": "根目录",
+  "itemsCount": "{count} 个项目",
+  "@itemsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deselectAll": "取消全选",
+  "selectUnused": "选择未使用",
+  "noFilesFound": "未找到文件",
+  "used": "已使用",
+  "unused": "未使用",
+  "renameFile": "重命名文件",
+  "newName": "新名称",
+  "rename": "重命名",
+  "deleteFilesTitle": "删除文件？",
+  "deleteFilesConfirmation": "您确定要删除 {count} 个文件吗？此操作无法撤销。",
+  "@deleteFilesConfirmation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deletedFilesMessage": "已删除 {count} 个文件",
+  "@deletedFilesMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRenamingFile": "重命名文件出错：{error}",
+  "@errorRenamingFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "queryAndResults": "查询与结果",
+  "aiAssistant": "AI 助手",
+  "notConnected": "未连接",
+  "connectedTo": "已连接到：{name}",
+  "@connectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDefaultDb": "打开默认数据库出错：{error}",
+  "@errorOpeningDefaultDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDb": "打开数据库出错：{error}",
+  "@errorOpeningDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "databaseExportedSuccess": "数据库导出成功",
+  "exportFailed": "导出失败：{error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sqlQueryLabel": "SQL 查询",
+  "sqlQueryHint": "SELECT * FROM notes LIMIT 5",
+  "runQueryTooltip": "运行查询",
+  "enterQueryMessage": "输入查询以查看结果",
+  "noResultsReturned": "未返回结果",
+  "queryExecutedMessage": "查询已执行。返回 {count} 行。",
+  "@queryExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "updateExecutedMessage": "更新已执行。影响 {count} 行。",
+  "@updateExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryError": "查询错误：{error}",
+  "@queryError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "askAiHint": "向 AI 询问有关数据库架构或错误的信息...",
+  "askAiAboutNoteHint": "向 AI 询问这条笔记...",
+  "openDbFileTooltip": "打开数据库文件",
+  "resetToDefaultDbTooltip": "重置为默认数据库",
+  "exportDbTooltip": "导出数据库"
 }

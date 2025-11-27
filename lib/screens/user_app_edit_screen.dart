@@ -2,13 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:flutter/services.dart';
+
 import 'package:re_editor/re_editor.dart';
-import 'package:re_highlight/languages/xml.dart';
-import 'package:re_highlight/languages/javascript.dart';
-import 'package:re_highlight/languages/css.dart';
-import 'package:re_highlight/styles/atom-one-dark.dart';
-import 'package:re_highlight/styles/atom-one-light.dart';
+
 import '../l10n/app_localizations.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
@@ -16,8 +12,9 @@ import '../models/user_app.dart';
 import '../models/user_app_library.dart';
 import '../providers/app_provider.dart';
 import '../services/user_app_library_service.dart';
-import '../utils/file_utils.dart';
+
 import 'note_selection_dialog.dart';
+import '../widgets/synapse_code_editor.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -37,17 +34,17 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _editSuggestionController = TextEditingController();
+
   late final CodeLineEditingController _codeController;
   late final CodeLineEditingController
   _viewController; // Read-only controller for viewing
-  late final CodeFindController _findController;
-  late final MobileSelectionToolbarController _mobileToolbarController;
-  late final MobileSelectionToolbarController _viewMobileToolbarController;
+
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isCodeEditable = false;
   bool _isSearchVisible = false; // Control search input visibility
   String _originalCode = '';
+
   List<String> _attachmentPaths = [];
   final List<Note> _selectedNotes = [];
 
@@ -61,48 +58,16 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
 
   // Prevent rapid state changes during transitions
   bool _isTransitioning = false;
-  static const int _readOnlyCodeLineCount = 20;
-  static const double _readOnlyCodeLineHeight = 20.0;
 
   @override
   void initState() {
     super.initState();
     _codeController = CodeLineEditingController.fromText('');
     _viewController = CodeLineEditingController.fromText('');
-    _findController = CodeFindController(_codeController);
-    _mobileToolbarController = MobileSelectionToolbarController(
-      builder: _buildMobileToolbar,
-    );
-    _viewMobileToolbarController = MobileSelectionToolbarController(
-      builder: _buildViewMobileToolbar,
-    );
-
-    // Add listener to find input controller to prevent text selection issues
-    // Use addPostFrameCallback to avoid potential issues during build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _findController.findInputController.addListener(() {
-          final text = _findController.findInputController.text;
-          final selection = _findController.findInputController.selection;
-
-          // If all text is selected, move cursor to end
-          if (selection.isValid &&
-              selection.start == 0 &&
-              selection.end == text.length &&
-              text.isNotEmpty) {
-            _findController.findInputController.selection =
-                TextSelection.fromPosition(TextPosition(offset: text.length));
-          }
-        });
-      }
-    });
-
-    // Note: No need to add listener to code controller as the mobile toolbar
-    // controller already handles selection-based UI updates automatically
 
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentRevisionCode();
-    _loadCurrentRevisionAttachments();
+
     _loadCurrentLibraries();
   }
 
@@ -236,7 +201,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     _editSuggestionController.dispose();
     _codeController.dispose();
     _viewController.dispose();
-    _findController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -295,13 +259,13 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       );
 
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate successful edit
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('App updated successfully with new revision'),
             backgroundColor: Colors.green,
           ),
         );
+        Navigator.pop(context, true); // Return true to indicate successful edit
       }
     } catch (e) {
       if (mounted) {
@@ -386,15 +350,15 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
           _isCodeEditable = false;
         });
 
-        // Return true to indicate successful save
-        Navigator.pop(context, true);
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.codeSavedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
+
+        // Return true to indicate successful save
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -533,12 +497,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     );
   }
 
-  void _removeSelectedNote(String noteId) {
-    setState(() {
-      _selectedNotes.removeWhere((note) => note.id == noteId);
-    });
-  }
-
   void _clearSelectedNotes() {
     if (_selectedNotes.isEmpty) return;
     setState(() {
@@ -658,1038 +616,458 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
   void _toggleSearch() {
     setState(() {
       _isSearchVisible = !_isSearchVisible;
-      if (_isSearchVisible) {
-        _findController.findMode();
-      } else {
-        _findController.close();
-      }
     });
-  }
-
-  void _copySelectedText() {
-    final selection = _codeController.selection;
-    if (!selection.isCollapsed) {
-      // Get the selected text using the proper CodeLineSelection methods
-      final codeLines = _codeController.value.codeLines;
-      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
-
-      Clipboard.setData(ClipboardData(text: selectedText));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
-      );
-    }
-  }
-
-  void _cutSelectedText() {
-    final selection = _codeController.selection;
-    if (!selection.isCollapsed) {
-      // Get the selected text using the proper CodeLineSelection methods
-      final codeLines = _codeController.value.codeLines;
-      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
-
-      // Copy to clipboard
-      Clipboard.setData(ClipboardData(text: selectedText));
-
-      // Delete the selected text
-      _deleteSelection(codeLines, selection);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cut: ${selectedText.length} characters')),
-      );
-    }
-  }
-
-  void _deleteSelection(CodeLines codeLines, CodeLineSelection selection) {
-    final startIndex = selection.startIndex;
-    final endIndex = selection.endIndex;
-    final startOffset = selection.startOffset;
-    final endOffset = selection.endOffset;
-
-    // Convert CodeLines to a list for easier manipulation
-    final linesList = <CodeLine>[];
-    for (int i = 0; i < codeLines.length; i++) {
-      linesList.add(codeLines[i]);
-    }
-
-    final newCodeLines = <CodeLine>[];
-
-    if (startIndex == endIndex) {
-      // Selection is within a single line
-      final line = linesList[startIndex];
-      final newText = line.text.substring(0, startOffset) +
-          line.text.substring(endOffset);
-      newCodeLines.addAll(linesList.sublist(0, startIndex));
-      newCodeLines.add(CodeLine(newText));
-      newCodeLines.addAll(linesList.sublist(startIndex + 1));
-
-      // Update selection to cursor position at startOffset
-      _codeController.value = CodeLineEditingValue(
-        codeLines: CodeLines.of(newCodeLines),
-        selection: CodeLineSelection.collapsed(
-          index: startIndex,
-          offset: startOffset,
-        ),
-      );
-    } else {
-      // Selection spans multiple lines
-      final firstLine = linesList[startIndex];
-      final lastLine = linesList[endIndex];
-      final mergedText = firstLine.text.substring(0, startOffset) +
-          lastLine.text.substring(endOffset);
-
-      newCodeLines.addAll(linesList.sublist(0, startIndex));
-      if (mergedText.isNotEmpty || newCodeLines.isEmpty) {
-        newCodeLines.add(CodeLine(mergedText));
-      }
-      newCodeLines.addAll(linesList.sublist(endIndex + 1));
-
-      // Update selection to cursor position at startIndex, startOffset
-      _codeController.value = CodeLineEditingValue(
-        codeLines: CodeLines.of(newCodeLines),
-        selection: CodeLineSelection.collapsed(
-          index: startIndex,
-          offset: startOffset,
-        ),
-      );
-    }
-  }
-
-  String _getSelectedTextFromCodeLines(
-    CodeLines codeLines,
-    CodeLineSelection selection,
-  ) {
-    if (selection.isCollapsed) return '';
-
-    final startIndex = selection.startIndex;
-    final endIndex = selection.endIndex;
-    final startOffset = selection.startOffset;
-    final endOffset = selection.endOffset;
-
-    if (startIndex == endIndex) {
-      // Selection is within a single line
-      return codeLines[startIndex].text.substring(startOffset, endOffset);
-    } else {
-      // Selection spans multiple lines
-      final buffer = StringBuffer();
-
-      // First line (from startOffset to end)
-      buffer.write(codeLines[startIndex].text.substring(startOffset));
-
-      // Middle lines (complete lines)
-      for (int i = startIndex + 1; i < endIndex; i++) {
-        buffer.write('\n');
-        buffer.write(codeLines[i].text);
-      }
-
-      // Last line (from start to endOffset)
-      if (endIndex < codeLines.length) {
-        buffer.write('\n');
-        buffer.write(codeLines[endIndex].text.substring(0, endOffset));
-      }
-
-      return buffer.toString();
-    }
-  }
-
-  void _selectAll() {
-    final codeLines = _codeController.value.codeLines;
-    if (codeLines.isNotEmpty) {
-      _codeController.selection = CodeLineSelection(
-        baseIndex: 0,
-        baseOffset: 0,
-        extentIndex: codeLines.length - 1,
-        extentOffset: codeLines.last.length,
-      );
-    }
-  }
-
-  /// Get the appropriate code theme based on the current app theme
-  /// Cached to avoid repeated Theme.of(context) calls during build
-  CodeHighlightTheme? _cachedCodeTheme;
-  Brightness? _lastBrightness;
-
-  CodeHighlightTheme get _codeTheme {
-    final currentBrightness = Theme.of(context).brightness;
-
-    // Only recreate theme if brightness has changed
-    if (_cachedCodeTheme == null || _lastBrightness != currentBrightness) {
-      _lastBrightness = currentBrightness;
-      final isDarkMode = currentBrightness == Brightness.dark;
-
-      _cachedCodeTheme = CodeHighlightTheme(
-        languages: {
-          'html': CodeHighlightThemeMode(
-            mode: langXml, // HTML uses XML highlighting mode
-          ),
-          'javascript': CodeHighlightThemeMode(mode: langJavascript),
-          'css': CodeHighlightThemeMode(mode: langCss),
-        },
-        theme: isDarkMode ? atomOneDarkTheme : atomOneLightTheme,
-      );
-    }
-
-    return _cachedCodeTheme!;
-  }
-
-  void _copyViewSelectedText() {
-    final selection = _viewController.selection;
-    if (!selection.isCollapsed) {
-      // Get the selected text using the proper CodeLineSelection methods
-      final codeLines = _viewController.value.codeLines;
-      final selectedText = _getSelectedTextFromCodeLines(codeLines, selection);
-
-      Clipboard.setData(ClipboardData(text: selectedText));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Copied: ${selectedText.length} characters')),
-      );
-    }
-  }
-
-  void _selectAllView() {
-    final codeLines = _viewController.value.codeLines;
-    if (codeLines.isNotEmpty) {
-      _viewController.selection = CodeLineSelection(
-        baseIndex: 0,
-        baseOffset: 0,
-        extentIndex: codeLines.length - 1,
-        extentOffset: codeLines.last.length,
-      );
-    }
-  }
-
-  void _undo() {
-    _codeController.undo();
-  }
-
-  void _redo() {
-    _codeController.redo();
-  }
-
-  bool get _canUndo => _codeController.canUndo;
-  bool get _canRedo => _codeController.canRedo;
-
-  Widget _buildMobileToolbar({
-    required BuildContext context,
-    required TextSelectionToolbarAnchors anchors,
-    required CodeLineEditingController controller,
-    required VoidCallback onDismiss,
-    required VoidCallback onRefresh,
-  }) {
-    final hasSelection = !controller.selection.isCollapsed;
-
-    return Align(
-      alignment: Alignment.center,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: hasSelection ? 140 : 100, // Wider when Cut/Copy buttons are visible
-          height: 40,
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Cut button when text is selected
-              if (hasSelection)
-                _buildCompactToolbarButton(
-                  context: context,
-                  icon: Icons.content_cut,
-                  onPressed: () {
-                    _cutSelectedText();
-                    onDismiss();
-                    onRefresh();
-                  },
-                ),
-              // Copy button when text is selected
-              if (hasSelection)
-                _buildCompactToolbarButton(
-                  context: context,
-                  icon: Icons.copy,
-                  onPressed: () {
-                    _copySelectedText();
-                    onDismiss();
-                  },
-                ),
-              // Select All button (always visible)
-              _buildCompactToolbarButton(
-                context: context,
-                icon: Icons.select_all,
-                onPressed: () {
-                  _selectAll();
-                  onRefresh();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildViewMobileToolbar({
-    required BuildContext context,
-    required TextSelectionToolbarAnchors anchors,
-    required CodeLineEditingController controller,
-    required VoidCallback onDismiss,
-    required VoidCallback onRefresh,
-  }) {
-    final hasSelection = !controller.selection.isCollapsed;
-
-    return Align(
-      alignment: Alignment.center,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: 100, // Same width as edit toolbar
-          height: 40,
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Copy button when text is selected
-              if (hasSelection)
-                _buildCompactToolbarButton(
-                  context: context,
-                  icon: Icons.copy,
-                  onPressed: () {
-                    _copyViewSelectedText();
-                    onDismiss();
-                  },
-                ),
-              // Select All button (always visible)
-              _buildCompactToolbarButton(
-                context: context,
-                icon: Icons.select_all,
-                onPressed: () {
-                  _selectAllView();
-                  onRefresh();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCompactToolbarButton({
-    required BuildContext context,
-    required IconData icon,
-    required VoidCallback? onPressed,
-  }) {
-    return SizedBox(
-      width: 40,
-      height: 32,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          child: Icon(
-            icon,
-            size: 16,
-            color: onPressed != null
-                ? Theme.of(context).textTheme.bodyMedium?.color
-                : Theme.of(context).disabledColor,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPermanentToolbar() {
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Undo button
-          IconButton(
-            icon: const Icon(Icons.undo, size: 18),
-            onPressed: _canUndo ? _undo : null,
-            tooltip: 'Undo',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          // Redo button
-          IconButton(
-            icon: const Icon(Icons.redo, size: 18),
-            onPressed: _canRedo ? _redo : null,
-            tooltip: 'Redo',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          const SizedBox(width: 8),
-          // Search toggle button
-          IconButton(
-            icon: Icon(
-              _isSearchVisible ? Icons.search_off : Icons.search,
-              size: 18,
-            ),
-            onPressed: _toggleSearch,
-            tooltip: _isSearchVisible ? 'Hide search' : 'Show search',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).dividerColor, width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _findController.findInputController,
-              focusNode: _findController.findInputFocusNode,
-              decoration: const InputDecoration(
-                hintText: 'Find...',
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                _findController.findMode();
-              },
-              onTap: () {
-                // Move cursor to end of text instead of selecting all
-                final text = _findController.findInputController.text;
-                _findController.findInputController.selection =
-                    TextSelection.fromPosition(
-                      TextPosition(offset: text.length),
-                    );
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Match counter
-          ValueListenableBuilder<CodeFindValue?>(
-            valueListenable: _findController,
-            builder: (context, value, child) {
-              if (value?.result != null && value!.result!.matches.isNotEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Text(
-                    '${value.result!.index + 1}/${value.result!.matches.length}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(fontSize: 12),
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up, size: 16),
-            onPressed: () => _findController.previousMatch(),
-            tooltip: 'Find previous',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down, size: 16),
-            onPressed: () => _findController.nextMatch(),
-            tooltip: 'Find next',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: const Icon(Icons.find_replace, size: 16),
-            onPressed: () => _findController.replaceMode(),
-            tooltip: 'Find and replace',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // Always resize to avoid keyboard
       appBar: AppBar(
-        title: Text(l10n.editApp),
+        title: Text(l10n.editUserApp),
+        actions: [
+          if (_isCodeEditable)
+            IconButton(
+              icon: Icon(_isSearchVisible ? Icons.search_off : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchVisible ? 'Hide Search' : 'Show Search',
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: l10n.basic),
-            Tab(text: l10n.advanced),
+            Tab(text: l10n.code),
+            Tab(text: l10n.libraries),
           ],
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: _isCodeEditable
-            ? _buildEditModeLayout(l10n)
-            : _buildViewModeLayout(l10n),
-      ),
-    );
-  }
-
-  Widget _buildViewModeLayout(AppLocalizations l10n) {
-    return TabBarView(
-      controller: _tabController,
-      physics: const NeverScrollableScrollPhysics(), // Disable tab swipe
-      children: [_buildBasicTab(l10n), _buildAdvancedTab(l10n)],
-    );
-  }
-
-  Widget _buildBasicTab(AppLocalizations l10n) {
-    final mediaQuery = MediaQuery.of(context);
-    final double bottomPadding = mediaQuery.padding.bottom;
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: bottomPadding + 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: TabBarView(
+        physics: const NeverScrollableScrollPhysics(),
+        controller: _tabController,
         children: [
-          _buildAppInfoCard(l10n),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildReadOnlyCodeHeader(l10n),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: _readOnlyCodeLineCount * _readOnlyCodeLineHeight,
-                  child: Card(
-                    child: Container(
-                      padding: const EdgeInsets.all(12.0),
-                      child: _buildReadOnlyCodeEditor(),
+          // Code Tab
+          // Code Tab
+          CustomScrollView(
+            slivers: [
+              if (!_isCodeEditable)
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // App Info Section
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Card(
+                          elevation: 0,
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withOpacity(0.3),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'App Name',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.app.name,
+                                  style: theme.textTheme.bodyLarge,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Description',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.app.description,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // App Code Header and Edit Button
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'App Code',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _toggleCodeEdit,
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('Edit Code Directly'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor:
+                                    Colors.blue, // Match screenshot blue
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+
+              // Editor Area
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 400),
+                        child: Stack(
+                          children: [
+                            SynapseCodeEditor(
+                              controller: _isCodeEditable
+                                  ? _codeController
+                                  : _viewController,
+                              readOnly: !_isCodeEditable,
+                              wordWrap: false,
+                            ),
+                            if (_isSaving)
+                              Container(
+                                color: Colors.black26,
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: _buildSuggestionSection(l10n),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildAppInfoCard(AppLocalizations l10n) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: SizedBox(
-        width: double.infinity,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.appName,
-                  style: Theme.of(context).textTheme.titleMedium,
+                    // Bottom Action Bar (Only visible when editing)
+                    if (_isCodeEditable)
+                      CodeEditorTapRegion(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            border: Border(
+                              top: BorderSide(
+                                color: theme.colorScheme.outlineVariant,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _isSaving
+                                      ? null
+                                      : _saveCodeDirectly,
+                                  icon: const Icon(Icons.save),
+                                  label: Text(l10n.saveCode),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor:
+                                        Colors.green, // Match screenshot green
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              OutlinedButton(
+                                onPressed: _toggleCodeEdit,
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    // AI Edit Section (Always visible, but only interactive when not editing code directly)
+                    if (!_isCodeEditable)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          border: Border(
+                            top: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  l10n.editSuggestion,
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.note_add),
+                                      onPressed: _showNoteSelectionDialog,
+                                      tooltip: l10n.addContextNotes,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.image),
+                                      onPressed: _showImageSourceDialog,
+                                      tooltip: l10n.addImage,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Form(
+                              key: _formKey,
+                              child: TextFormField(
+                                controller: _editSuggestionController,
+                                decoration: InputDecoration(
+                                  hintText: l10n.editSuggestionHint,
+                                  border: const OutlineInputBorder(),
+                                  suffixIcon: _isEditing
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(12.0),
+                                          child: SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        )
+                                      : IconButton(
+                                          icon: const Icon(Icons.send),
+                                          onPressed: _submitEdit,
+                                        ),
+                                ),
+                                maxLines: 3,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return l10n.pleaseEnterSuggestion;
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            if (_attachmentPaths.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: 100,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _attachmentPaths.length,
+                                  itemBuilder: (context, index) {
+                                    return Stack(
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
+                                          child: Image.file(
+                                            File(_attachmentPaths[index]),
+                                            height: 100,
+                                            width: 100,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          right: 0,
+                                          top: 0,
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () =>
+                                                _removeAttachment(index),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                            if (_selectedNotes.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    '${_selectedNotes.length} notes selected',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    onPressed: _clearSelectedNotes,
+                                    tooltip: 'Clear selected notes',
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (_isEditing)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 16.0),
+                                child: LinearProgressIndicator(),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.app.name,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  l10n.appDescription,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.app.description.length > 200
-                      ? '${widget.app.description.substring(0, 200)}...'
-                      : widget.app.description,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReadOnlyCodeHeader(AppLocalizations l10n) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(l10n.appCode, style: Theme.of(context).textTheme.titleMedium),
-        ElevatedButton.icon(
-          onPressed: _toggleCodeEdit,
-          icon: const Icon(Icons.edit, size: 16),
-          label: Text(l10n.editCodeDirectly),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildReadOnlyCodeEditor() {
-    return CodeEditor(
-      controller: _viewController,
-      toolbarController: _viewMobileToolbarController,
-      readOnly: true,
-      showCursorWhenReadOnly: true,
-      wordWrap: false,
-      style: CodeEditorStyle(
-        codeTheme: _codeTheme,
-        fontFamily: 'monospace',
-        fontSize: 12,
-      ),
-      chunkAnalyzer: DefaultCodeChunkAnalyzer(),
-    );
-  }
-
-  Widget _buildSuggestionSection(AppLocalizations l10n) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor, width: 1),
-        ),
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                l10n.editSuggestion,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_selectedNotes.isNotEmpty)
-                    IconButton(
-                      onPressed: _clearSelectedNotes,
-                      icon: const Icon(Icons.clear_all),
-                      tooltip: l10n.clearFilters,
-                    ),
-                  IconButton(
-                    onPressed: _showNoteSelectionDialog,
-                    icon: const Icon(Icons.note_add),
-                    tooltip: l10n.addNotes,
-                  ),
-                  IconButton(
-                    onPressed: _showImageSourceDialog,
-                    icon: const Icon(Icons.add_photo_alternate),
-                    tooltip: l10n.addImage,
-                  ),
-                ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _editSuggestionController,
-            decoration: InputDecoration(
-              hintText: l10n.editSuggestionHint,
-              border: const OutlineInputBorder(),
-            ),
-            maxLines: 3,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your edit suggestion';
-              }
-              return null;
-            },
-          ),
-          if (_selectedNotes.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              l10n.notesSelected(_selectedNotes.length),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _selectedNotes.map((note) {
-                return InputChip(
-                  label: Text(note.title),
-                  avatar: Icon(
-                    note.isTask ? Icons.check_circle : Icons.notes,
-                    size: 18,
-                  ),
-                  onDeleted: () => _removeSelectedNote(note.id),
-                );
-              }).toList(),
-            ),
-          ],
-          if (_attachmentPaths.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Attached Images:',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: _attachmentPaths.asMap().entries.map((entry) {
-                final index = entry.key;
-                final path = entry.value;
-                return Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () => FileUtils.openFile(path, context),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8.0),
-                          border: Border.all(
-                            color: Colors.grey.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(7.0),
-                          child: Image.file(
-                            File(path),
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: GestureDetector(
-                        onTap: () => _removeAttachment(index),
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ],
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _isEditing ? null : _submitEdit,
-            child: _isEditing
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(l10n.editingApp),
-                    ],
-                  )
-                : Text(l10n.submitEdit),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildAdvancedTab(AppLocalizations l10n) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Add Library Button
-          OutlinedButton.icon(
-            onPressed: _addLibrary,
-            icon: const Icon(Icons.add),
-            label: Text(l10n.addLibrary),
-          ),
-          const SizedBox(height: 16),
-
-          // Libraries List
-          if (_isLoadingLibraries)
-            const Center(child: CircularProgressIndicator())
-          else
-            ...List.generate(_modifiedLibraries.length, (index) {
-              return _buildLibraryCard(index, l10n);
-            }),
-
-          if (_modifiedLibraries.isEmpty && !_isLoadingLibraries) ...[
-            const SizedBox(height: 32),
-            Center(
-              child: Text(
-                'No libraries added yet. Click "Add Library" to get started.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLibraryCard(int index, AppLocalizations l10n) {
-    final library = _modifiedLibraries[index];
-    final links = _libraryLinks[library.id] ?? [];
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Library Header
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Library ${index + 1}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => _removeLibrary(index),
-                  icon: const Icon(Icons.delete),
-                  tooltip: l10n.removeLibrary,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Library Name
-            TextFormField(
-              initialValue: library.name,
-              decoration: InputDecoration(
-                labelText: l10n.libraryName,
-                hintText: l10n.libraryNameHint,
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (value) => _updateLibraryName(index, value),
-            ),
-            const SizedBox(height: 16),
-
-            // Library Usage
-            TextFormField(
-              initialValue: library.usageInstructions ?? '',
-              decoration: InputDecoration(
-                labelText: l10n.libraryUsage,
-                hintText: l10n.libraryUsageHint,
-                border: const OutlineInputBorder(),
-              ),
-              maxLines: 3,
-              onChanged: (value) => _updateLibraryUsage(index, value),
-            ),
-            const SizedBox(height: 16),
-
-            // Library Links
-            Text(
-              l10n.libraryLink,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-
-            ...List.generate(links.length, (linkIndex) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: links[linkIndex],
-                        decoration: InputDecoration(
-                          hintText: l10n.libraryLinkHint,
-                          border: const OutlineInputBorder(),
-                        ),
-                        onChanged: (value) =>
-                            _updateLibraryLink(index, linkIndex, value),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: links.length > 1
-                          ? () => _removeLibraryLink(index, linkIndex)
-                          : null,
-                      icon: const Icon(Icons.remove_circle),
-                      tooltip: l10n.removeLink,
-                    ),
-                  ],
-                ),
-              );
-            }),
-
-            // Add Link Button
-            OutlinedButton.icon(
-              onPressed: () => _addLibraryLink(index),
-              icon: const Icon(Icons.add),
-              label: Text(l10n.addLink),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEditModeLayout(AppLocalizations l10n) {
-    return Column(
-      children: [
-        // App Info Card (smaller in edit mode)
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
+          // Libraries Tab
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.app.name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(
-                          widget.app.description,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _isSaving ? null : _saveCodeDirectly,
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.save, size: 16),
-                        label: Text(l10n.saveCode),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: _isSaving ? null : _toggleCodeEdit,
-                        icon: const Icon(Icons.cancel, size: 16),
-                        label: Text(l10n.cancel),
-                      ),
-                    ],
+                  Text(l10n.libraries, style: theme.textTheme.titleLarge),
+                  FilledButton.icon(
+                    onPressed: _addLibrary,
+                    icon: const Icon(Icons.add),
+                    label: Text(l10n.addLibrary),
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
+              const SizedBox(height: 16),
+              if (_isLoadingLibraries)
+                const Center(child: CircularProgressIndicator())
+              else if (_modifiedLibraries.isEmpty)
+                Center(
+                  child: Text(
+                    l10n.noLibraries,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                ..._modifiedLibraries.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final library = entry.value;
+                  final links = _libraryLinks[library.id] ?? [];
 
-        // Permanent toolbar
-        _buildPermanentToolbar(),
-
-        // Search bar (only visible when search is enabled)
-        if (_isSearchVisible) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: _buildSearchBar(),
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  initialValue: library.name,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.libraryName,
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                  onChanged: (value) =>
+                                      _updateLibraryName(index, value),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _removeLibrary(index),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            initialValue: library.usageInstructions,
+                            decoration: InputDecoration(
+                              labelText: l10n.usageInstructions,
+                              border: const OutlineInputBorder(),
+                            ),
+                            maxLines: 3,
+                            onChanged: (value) =>
+                                _updateLibraryUsage(index, value),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.libraryLinks,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          ...links.asMap().entries.map((linkEntry) {
+                            final linkIndex = linkEntry.key;
+                            final link = linkEntry.value;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      initialValue: link,
+                                      decoration: InputDecoration(
+                                        labelText: l10n.libraryLink,
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      onChanged: (value) => _updateLibraryLink(
+                                        index,
+                                        linkIndex,
+                                        value,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                    onPressed: () =>
+                                        _removeLibraryLink(index, linkIndex),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          TextButton.icon(
+                            onPressed: () => _addLibraryLink(index),
+                            icon: const Icon(Icons.add),
+                            label: Text(l10n.addLink),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+            ],
           ),
         ],
-
-        // Full-screen code editor
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Card(
-              child: Container(
-                padding: const EdgeInsets.all(12.0),
-                child: CodeEditor(
-                  controller: _codeController,
-                  findController: _findController,
-                  toolbarController: _mobileToolbarController,
-                  wordWrap: false, // Disable word wrap
-                  style: CodeEditorStyle(
-                    codeTheme: _codeTheme,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
-                  chunkAnalyzer: DefaultCodeChunkAnalyzer(),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

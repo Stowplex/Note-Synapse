@@ -15,10 +15,7 @@ import '../services/logger_service.dart';
 class ImportAppScreen extends StatefulWidget {
   final String yamlFilePath;
 
-  const ImportAppScreen({
-    super.key,
-    required this.yamlFilePath,
-  });
+  const ImportAppScreen({super.key, required this.yamlFilePath});
 
   @override
   State<ImportAppScreen> createState() {
@@ -37,24 +34,28 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   @override
   void initState() {
     super.initState();
-    LoggerService.debug('ImportAppScreen initState called with file: ${widget.yamlFilePath}');
+    LoggerService.debug(
+      'ImportAppScreen initState called with file: ${widget.yamlFilePath}',
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // Only start import once when dependencies are available
     if (_progress == 0.0 && !_hasError) {
       if (widget.yamlFilePath.isEmpty) {
         setState(() {
           _currentStatus = AppLocalizations.of(context)!.errorYamlFilePathEmpty;
           _hasError = true;
-          _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorYamlFilePathEmpty}');
+          _progressSteps.add(
+            '✗ ${AppLocalizations.of(context)!.errorYamlFilePathEmpty}',
+          );
         });
         return;
       }
-      
+
       _importApp();
     }
   }
@@ -70,7 +71,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       final yamlFile = File(widget.yamlFilePath);
       final yamlContent = await yamlFile.readAsString();
       final yamlData = loadYaml(yamlContent);
-      
+
       // Convert YamlMap to Map<String, dynamic>
       final Map<String, dynamic> parsedData = {};
       if (yamlData is Map) {
@@ -86,7 +87,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       setState(() {
         _currentStatus = AppLocalizations.of(context)!.validatingYamlStructure;
         _progress = 0.2;
-        _progressSteps.add('✓ ${AppLocalizations.of(context)!.yamlFileReadSuccessfully}');
+        _progressSteps.add(
+          '✓ ${AppLocalizations.of(context)!.yamlFileReadSuccessfully}',
+        );
       });
 
       // Validate YAML structure
@@ -95,7 +98,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       setState(() {
         _currentStatus = AppLocalizations.of(context)!.processingAppData;
         _progress = 0.3;
-        _progressSteps.add('✓ ${AppLocalizations.of(context)!.yamlStructureValidated}');
+        _progressSteps.add(
+          '✓ ${AppLocalizations.of(context)!.yamlStructureValidated}',
+        );
       });
 
       // Extract app data
@@ -104,13 +109,17 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       setState(() {
         _currentStatus = AppLocalizations.of(context)!.checkingForExistingApp;
         _progress = 0.4;
-        _progressSteps.add('✓ ${AppLocalizations.of(context)!.appDataExtracted}');
+        _progressSteps.add(
+          '✓ ${AppLocalizations.of(context)!.appDataExtracted}',
+        );
       });
 
       // Check if app with same UUID exists
       final databaseService = DatabaseService();
       final existingApps = await databaseService.getAllUserApps();
-      final existingApp = existingApps.where((app) => app.uuid == appData['uuid']).firstOrNull;
+      final existingApp = existingApps
+          .where((app) => app.uuid == appData['uuid'])
+          .firstOrNull;
 
       print('DEBUG: Found ${existingApps.length} existing apps');
       print('DEBUG: Looking for UUID: ${appData['uuid']}');
@@ -129,14 +138,18 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         setState(() {
           _currentStatus = AppLocalizations.of(context)!.creatingNewApp;
           _progress = 0.5;
-          _progressSteps.add('✓ ${AppLocalizations.of(context)!.appCreatedSuccessfully}');
+          _progressSteps.add(
+            '✓ ${AppLocalizations.of(context)!.appCreatedSuccessfully}',
+          );
         });
 
         // Create new app
         await _createNewApp(appData, databaseService);
       }
-      
-      print('DEBUG: After app creation, _importedApp is: ${_importedApp != null}');
+
+      print(
+        'DEBUG: After app creation, _importedApp is: ${_importedApp != null}',
+      );
 
       if (_importedApp != null) {
         setState(() {
@@ -165,28 +178,44 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       await appProvider.loadData();
 
       setState(() {
-        _currentStatus = AppLocalizations.of(context)!.importCompletedSuccessfully;
+        _currentStatus = AppLocalizations.of(
+          context,
+        )!.importCompletedSuccessfully;
         _progress = 1.0;
         _isComplete = true;
-        _progressSteps.add('✓ ${AppLocalizations.of(context)!.importCompletedSuccessfully}');
+        _progressSteps.add(
+          '✓ ${AppLocalizations.of(context)!.importCompletedSuccessfully}',
+        );
       });
-
     } catch (e) {
       LoggerService.error('Error importing app: $e', error: e);
       setState(() {
-        _currentStatus = AppLocalizations.of(context)!.errorImportingApp(e.toString());
+        _currentStatus = AppLocalizations.of(
+          context,
+        )!.errorImportingApp(e.toString());
         _hasError = true;
-        _progressSteps.add('✗ ${AppLocalizations.of(context)!.errorImportingApp(e.toString())}');
+        _progressSteps.add(
+          '✗ ${AppLocalizations.of(context)!.errorImportingApp(e.toString())}',
+        );
       });
     }
   }
 
   void _validateYamlStructure(Map<String, dynamic> yamlData) {
-    final requiredFields = ['name', 'uuid', 'description', 'author', 'license', 'code'];
-    
+    final requiredFields = [
+      'name',
+      'uuid',
+      'description',
+      'author',
+      'license',
+      'code',
+    ];
+
     for (final field in requiredFields) {
       if (!yamlData.containsKey(field)) {
-        throw Exception(AppLocalizations.of(context)!.errorMissingRequiredFields);
+        throw Exception(
+          AppLocalizations.of(context)!.errorMissingRequiredFields,
+        );
       }
     }
 
@@ -198,7 +227,8 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
             throw Exception('Invalid library structure');
           }
           final libraryMap = library;
-          if (!libraryMap.containsKey('name') || !libraryMap.containsKey('dependencies')) {
+          if (!libraryMap.containsKey('name') ||
+              !libraryMap.containsKey('dependencies')) {
             throw Exception('Library must have name and dependencies');
           }
         }
@@ -216,7 +246,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       appType = _stringToAppType(yamlData['app_type']?.toString() ?? 'normal');
     } else if (yamlData.containsKey('note_action')) {
       // Old format: note_action: true/false (backward compatibility)
-      appType = yamlData['note_action'] == true ? UserAppType.noteAction : UserAppType.normal;
+      appType = yamlData['note_action'] == true
+          ? UserAppType.noteAction
+          : UserAppType.normal;
     } else {
       // Default to normal if neither field exists
       appType = UserAppType.normal;
@@ -251,7 +283,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   List<dynamic> _convertLibraries(dynamic libraries) {
     if (libraries == null) return [];
     if (libraries is! List) return [];
-    
+
     return libraries.map((lib) {
       if (lib is Map) {
         final Map<String, dynamic> convertedLib = {};
@@ -287,7 +319,10 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     return [];
   }
 
-  Future<void> _createNewApp(Map<String, dynamic> appData, DatabaseService databaseService) async {
+  Future<void> _createNewApp(
+    Map<String, dynamic> appData,
+    DatabaseService databaseService,
+  ) async {
     print('DEBUG: _createNewApp called');
     final appId = DateTime.now().millisecondsSinceEpoch.toString();
     final now = DateTime.now();
@@ -332,13 +367,21 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     setState(() {
       _importedApp = updatedApp;
     });
-    print('DEBUG: _createNewApp completed, _importedApp set to: ${_importedApp?.name}');
+    print(
+      'DEBUG: _createNewApp completed, _importedApp set to: ${_importedApp?.name}',
+    );
   }
 
-  Future<void> _createNewRevision(UserApp existingApp, Map<String, dynamic> appData, DatabaseService databaseService) async {
+  Future<void> _createNewRevision(
+    UserApp existingApp,
+    Map<String, dynamic> appData,
+    DatabaseService databaseService,
+  ) async {
     print('DEBUG: _createNewRevision called for app: ${existingApp.name}');
     // Get next revision number
-    final nextRevisionNumber = await databaseService.getNextRevisionNumber(existingApp.id);
+    final nextRevisionNumber = await databaseService.getNextRevisionNumber(
+      existingApp.id,
+    );
     final now = DateTime.now();
     print('DEBUG: Next revision number: $nextRevisionNumber');
 
@@ -370,12 +413,17 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     setState(() {
       _importedApp = updatedApp;
     });
-    print('DEBUG: _createNewRevision completed, _importedApp set to: ${_importedApp?.name}');
+    print(
+      'DEBUG: _createNewRevision completed, _importedApp set to: ${_importedApp?.name}',
+    );
   }
 
-  Future<void> _downloadDependencies(Map<String, dynamic> appData, DatabaseService databaseService) async {
+  Future<void> _downloadDependencies(
+    Map<String, dynamic> appData,
+    DatabaseService databaseService,
+  ) async {
     final libraries = _convertToList(appData['libraries']);
-    
+
     for (int i = 0; i < libraries.length; i++) {
       final library = libraries[i];
       final libraryName = library['name']?.toString() ?? '';
@@ -383,9 +431,13 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       final instructions = library['instructions']?.toString();
 
       setState(() {
-        _currentStatus = AppLocalizations.of(context)!.downloadingLibrary(libraryName);
+        _currentStatus = AppLocalizations.of(
+          context,
+        )!.downloadingLibrary(libraryName);
         _progress = 0.6 + (0.2 * (i + 1) / libraries.length);
-        _progressSteps.add(AppLocalizations.of(context)!.downloading(libraryName));
+        _progressSteps.add(
+          AppLocalizations.of(context)!.downloading(libraryName),
+        );
       });
 
       // Create library entry
@@ -397,7 +449,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
           revisionId = int.tryParse(parts.last) ?? 1;
         }
       }
-      
+
       final libraryId = await databaseService.insertUserAppLibrary(
         appUuid: appData['uuid'],
         revisionId: revisionId,
@@ -412,9 +464,16 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
 
         setState(() {
           final fileName = Uri.parse(link).pathSegments.last;
-          _currentStatus = AppLocalizations.of(context)!.downloadingDependency(fileName);
-          _progress = 0.6 + (0.2 * (i + 1) / libraries.length) + (0.1 * (j + 1) / dependencies.length);
-          _progressSteps.add(AppLocalizations.of(context)!.downloading(fileName));
+          _currentStatus = AppLocalizations.of(
+            context,
+          )!.downloadingDependency(fileName);
+          _progress =
+              0.6 +
+              (0.2 * (i + 1) / libraries.length) +
+              (0.1 * (j + 1) / dependencies.length);
+          _progressSteps.add(
+            AppLocalizations.of(context)!.downloading(fileName),
+          );
         });
 
         try {
@@ -431,16 +490,22 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
             );
 
             setState(() {
-              _progressSteps.add('  ✓ ${AppLocalizations.of(context)!.downloaded(localPath)}');
+              _progressSteps.add(
+                '  ✓ ${AppLocalizations.of(context)!.downloaded(localPath)}',
+              );
             });
           } else {
             setState(() {
-              _progressSteps.add('  ✗ ${AppLocalizations.of(context)!.failedToDownload(link, response.statusCode.toString())}');
+              _progressSteps.add(
+                '  ✗ ${AppLocalizations.of(context)!.failedToDownload(link, response.statusCode.toString())}',
+              );
             });
           }
         } catch (e) {
           setState(() {
-            _progressSteps.add('  ✗ ${AppLocalizations.of(context)!.errorDownloading(link, e.toString())}');
+            _progressSteps.add(
+              '  ✗ ${AppLocalizations.of(context)!.errorDownloading(link, e.toString())}',
+            );
           });
         }
       }
@@ -450,7 +515,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.importApp),
@@ -494,7 +559,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Log section
             Expanded(
               child: Card(
@@ -545,22 +610,27 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Close button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () =>
+                    Navigator.of(context).pop(_isComplete && !_hasError),
                 icon: Icon(
                   _isComplete && !_hasError ? Icons.check : Icons.close,
-                  color: _isComplete && !_hasError ? Colors.white : Colors.white,
+                  color: _isComplete && !_hasError
+                      ? Colors.white
+                      : Colors.white,
                 ),
                 label: Text(
                   '${l10n.close} ${_isComplete && !_hasError ? '✓' : '✗'}',
                   style: const TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isComplete && !_hasError ? Colors.green : Colors.red,
+                  backgroundColor: _isComplete && !_hasError
+                      ? Colors.green
+                      : Colors.red,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
@@ -576,11 +646,11 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     final buffer = StringBuffer();
     buffer.writeln(l10n.importingFromFile(widget.yamlFilePath));
     buffer.writeln('');
-    
+
     for (final step in _progressSteps) {
       buffer.writeln(step);
     }
-    
+
     if (_hasError) {
       buffer.writeln('');
       buffer.writeln('${l10n.error}: $_currentStatus');
@@ -588,7 +658,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       buffer.writeln('');
       buffer.writeln(l10n.importComplete);
     }
-    
+
     return buffer.toString();
   }
 

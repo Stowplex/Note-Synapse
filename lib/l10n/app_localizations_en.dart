@@ -12,6 +12,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Note Synapse';
 
   @override
+  String get untitled => 'Untitled';
+
+  @override
   String get settings => 'Settings';
 
   @override
@@ -38,7 +41,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiConversationSettingsSubtitle =>
-      'Control tool iteration safety limits';
+      'Control AI conversation settings';
 
   @override
   String get aiConversationSettingsDescription =>
@@ -1415,6 +1418,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createFirstApp => 'Create your first custom app';
 
   @override
+  String get searchApps => 'Search apps...';
+
+  @override
+  String get noAppsFound => 'No apps found';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Try adjusting your search terms';
+
+  @override
   String get createNewApp => 'Create New App';
 
   @override
@@ -1617,6 +1629,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDebugOverlayTitle => 'AI Debug Overlay';
+
+  @override
+  String get aiLogs => 'AI Logs';
 
   @override
   String get refreshLogs => 'Refresh logs';
@@ -1966,6 +1981,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get maxOutputTokensHint => '4000';
+
+  @override
+  String get supportedAttachmentMimeTypesLabel =>
+      'Supported attachment MIME types';
+
+  @override
+  String get supportedAttachmentMimeTypesHint => 'image/png, application/pdf';
+
+  @override
+  String get supportedAttachmentMimeTypesHelper =>
+      'Comma or newline separated. Leave empty to use the model preset.';
 
   @override
   String get required => 'Required';
@@ -2405,6 +2431,39 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get addContextNotes => 'Add Context Notes';
+
+  @override
+  String get libraries => 'Libraries';
+
+  @override
+  String get noLibraries => 'No libraries';
+
+  @override
+  String get usageInstructions => 'Usage Instructions';
+
+  @override
+  String get libraryLinks => 'Library Links';
+
+  @override
+  String get editUserApp => 'Edit App';
+
+  @override
+  String get viewCode => 'View Code';
+
+  @override
+  String get editCode => 'Edit Code';
+
+  @override
+  String get code => 'Code';
+
+  @override
+  String get aiEdit => 'AI Edit';
+
+  @override
+  String get pleaseEnterSuggestion => 'Please enter a suggestion';
+
+  @override
   String get refreshTools => 'Refresh Tools';
 
   @override
@@ -2419,6 +2478,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noteActionApp => 'Note Action App';
+
+  @override
+  String get noteActionApps => 'Note Action Apps';
 
   @override
   String get noteActionAppSubtitle =>
@@ -2445,6 +2507,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiTools => 'AI Tools';
+
+  @override
+  String get modelFeatures => 'Model Features';
+
+  @override
+  String get featureGoogleSearch => 'Google Search';
+
+  @override
+  String get featureCodeExecution => 'Code Execution';
+
+  @override
+  String get featureWebSearch => 'Web Search';
 
   @override
   String aiToolStartError(String appName, String error) {
@@ -2534,7 +2608,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get annotate => 'Annotate';
 
   @override
-  String get askAiHint => 'Ask the AI about this note...';
+  String get askAiHint => 'Ask AI about DB schema or errors...';
 
   @override
   String get send => 'Send';
@@ -3374,4 +3448,297 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fetchRemoteImages => 'Fetch remote images';
+
+  @override
+  String get gettingStarted => 'Getting Started';
+
+  @override
+  String get gettingStartedSubtitle => 'Install user manual and starter apps';
+
+  @override
+  String get installUserManual => 'Install User Manual';
+
+  @override
+  String get installUserManualSubtitle =>
+      'Install or update the user manual note';
+
+  @override
+  String get installStarterApps => 'Install Starter Apps';
+
+  @override
+  String get installStarterAppsSubtitle =>
+      'Browse and install pre-configured apps';
+
+  @override
+  String get userManualInfo => 'User Manual Information';
+
+  @override
+  String get installed => 'Installed';
+
+  @override
+  String get notInstalled => 'Not Installed';
+
+  @override
+  String get currentVersion => 'Current Version';
+
+  @override
+  String get latestVersion => 'Latest Version';
+
+  @override
+  String get lastUpdated => 'Last Updated';
+
+  @override
+  String get newVersionAvailable => 'New version available!';
+
+  @override
+  String get updateUserManual => 'Update User Manual';
+
+  @override
+  String get reinstallUserManual => 'Reinstall User Manual';
+
+  @override
+  String get installing => 'Installing...';
+
+  @override
+  String updateUserManualConfirm(String oldVersion, String newVersion) {
+    return 'A newer version ($newVersion) of the User Manual is available. Your current version is $oldVersion. Do you want to update?';
+  }
+
+  @override
+  String get userManualInstalledSuccessfully =>
+      'User Manual installed successfully!';
+
+  @override
+  String get userManualUpdatedSuccessfully =>
+      'User Manual updated successfully!';
+
+  @override
+  String errorInstallingUserManual(String error) {
+    return 'Error installing User Manual: $error';
+  }
+
+  @override
+  String get whatIsUserManual => 'What is User Manual?';
+
+  @override
+  String get userManualDescription =>
+      'The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.';
+
+  @override
+  String get noStarterAppsAvailable => 'No starter apps available';
+
+  @override
+  String get noAppsSelected => 'No apps selected';
+
+  @override
+  String appsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get proceedWithInstallation => 'Install Selected Apps';
+
+  @override
+  String starterAppsInstalledSuccessfully(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return '$count $_temp0 installed successfully!';
+  }
+
+  @override
+  String starterAppsInstallFailed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return 'Failed to install $count $_temp0';
+  }
+
+  @override
+  String starterAppsPartialInstall(int successCount, int failureCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      successCount,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failureCount,
+      locale: localeName,
+      other: 'apps',
+      one: 'app',
+    );
+    return 'Installed $successCount $_temp0, failed $failureCount $_temp1';
+  }
+
+  @override
+  String errorInstallingStarterApps(String error) {
+    return 'Error installing starter apps: $error';
+  }
+
+  @override
+  String get rawDataManagerTitle => 'Raw Data Manager';
+
+  @override
+  String get rawDataManagerSubtitle =>
+      'Advanced tools for file and database management';
+
+  @override
+  String get advancedToolTitle => 'Advanced Tool';
+
+  @override
+  String get advancedToolWarning =>
+      'This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.';
+
+  @override
+  String get iUnderstand => 'I Understand';
+
+  @override
+  String get fileManagerTab => 'File Manager';
+
+  @override
+  String get databaseManagerTab => 'Database Manager';
+
+  @override
+  String get warningDataInstability =>
+      'Warning: Direct data modification can cause app instability.';
+
+  @override
+  String get cache => 'Cache';
+
+  @override
+  String get root => 'Root';
+
+  @override
+  String itemsCount(int count) {
+    return '$count items';
+  }
+
+  @override
+  String get selectUnused => 'Select Unused';
+
+  @override
+  String get noFilesFound => 'No files found';
+
+  @override
+  String get used => 'Used';
+
+  @override
+  String get unused => 'Unused';
+
+  @override
+  String get renameFile => 'Rename File';
+
+  @override
+  String get newName => 'New Name';
+
+  @override
+  String get rename => 'Rename';
+
+  @override
+  String get deleteFilesTitle => 'Delete Files?';
+
+  @override
+  String deleteFilesConfirmation(int count) {
+    return 'Are you sure you want to delete $count files? This cannot be undone.';
+  }
+
+  @override
+  String deletedFilesMessage(int count) {
+    return 'Deleted $count files';
+  }
+
+  @override
+  String errorRenamingFile(String error) {
+    return 'Error renaming file: $error';
+  }
+
+  @override
+  String get queryAndResults => 'Query & Results';
+
+  @override
+  String get aiAssistant => 'AI Assistant';
+
+  @override
+  String get notConnected => 'Not connected';
+
+  @override
+  String connectedTo(String name) {
+    return 'Connected to: $name';
+  }
+
+  @override
+  String errorOpeningDefaultDb(String error) {
+    return 'Error opening default DB: $error';
+  }
+
+  @override
+  String errorOpeningDb(String error) {
+    return 'Error opening DB: $error';
+  }
+
+  @override
+  String get databaseExportedSuccess => 'Database exported successfully';
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get sqlQueryLabel => 'SQL Query';
+
+  @override
+  String get sqlQueryHint => 'SELECT * FROM notes LIMIT 5';
+
+  @override
+  String get runQueryTooltip => 'Run Query';
+
+  @override
+  String get enterQueryMessage => 'Enter a query to see results';
+
+  @override
+  String get noResultsReturned => 'No results returned';
+
+  @override
+  String queryExecutedMessage(int count) {
+    return 'Query executed. $count rows returned.';
+  }
+
+  @override
+  String updateExecutedMessage(int count) {
+    return 'Update executed. $count rows affected.';
+  }
+
+  @override
+  String queryError(String error) {
+    return 'Query Error: $error';
+  }
+
+  @override
+  String get askAiAboutNoteHint => 'Ask AI about this note...';
+
+  @override
+  String get openDbFileTooltip => 'Open DB File';
+
+  @override
+  String get resetToDefaultDbTooltip => 'Reset to Default DB';
+
+  @override
+  String get exportDbTooltip => 'Export DB';
 }

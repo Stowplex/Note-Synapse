@@ -29,11 +29,14 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   // Method channel for native iOS clipboard access
-  static const MethodChannel _iosMethodChannel = MethodChannel('note_synapse/share');
+  static const MethodChannel _iosMethodChannel = MethodChannel(
+    'note_synapse/share',
+  );
   int _currentIndex = 0;
-  
+
   // Audio recording service
   AudioRecordingService? _audioService;
+  AppProvider? _appProvider;
 
   final List<Widget> _screens = [
     const NotesScreen(),
@@ -49,19 +52,31 @@ class _MainScreenState extends State<MainScreen> {
     _setupAudioListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadData();
-      context.read<AppProvider>().addListener(_showNewNoteNotification);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<AppProvider>();
+    if (_appProvider != provider) {
+      _appProvider?.removeListener(_showNewNoteNotification);
+      _appProvider = provider;
+      _appProvider?.addListener(_showNewNoteNotification);
+    }
   }
 
   @override
   void dispose() {
     _audioService?.resetState();
-    context.read<AppProvider>().removeListener(_showNewNoteNotification);
+    _appProvider?.removeListener(_showNewNoteNotification);
     super.dispose();
   }
 
   void _showNewNoteNotification() {
-    if (context.read<AppProvider>().newNoteFromShare) {
+    if (!context.mounted) return;
+
+    if (_appProvider?.newNoteFromShare == true) {
       final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -69,7 +84,7 @@ class _MainScreenState extends State<MainScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      context.read<AppProvider>().newNoteFromShare = false;
+      _appProvider?.newNoteFromShare = false;
     }
   }
 
@@ -108,7 +123,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
-      floatingActionButton: _currentIndex == 0 
+      floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
               onPressed: () => _showAddNoteMenu(context),
               child: const Icon(Icons.add),
@@ -119,7 +134,7 @@ class _MainScreenState extends State<MainScreen> {
 
   void _showAddNoteMenu(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -134,7 +149,10 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Text(
                 l10n.addNewContent,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 20),
               Flexible(
@@ -226,7 +244,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-
   void _createNewNote(NoteType type) {
     final newNote = Note(
       id: const Uuid().v4(),
@@ -236,7 +253,7 @@ class _MainScreenState extends State<MainScreen> {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -268,7 +285,7 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _startAudioRecording() async {
     if (_audioService == null) return;
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final success = await _audioService!.startRecording();
       if (success) {
@@ -284,9 +301,11 @@ class _MainScreenState extends State<MainScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text((!kIsWeb && Platform.isLinux) 
-                  ? l10n.failedToStartRecordingLinux
-                  : l10n.failedToStartRecording),
+              content: Text(
+                (!kIsWeb && Platform.isLinux)
+                    ? l10n.failedToStartRecordingLinux
+                    : l10n.failedToStartRecording,
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -307,7 +326,7 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _stopAudioRecording(BuildContext context) async {
     if (_audioService == null) return;
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       final audioPath = await _audioService!.stopRecording();
       if (audioPath != null) {
@@ -315,13 +334,18 @@ class _MainScreenState extends State<MainScreen> {
         final file = File(audioPath);
         final bytes = await file.readAsBytes();
         final fileName = audioPath.split('/').last;
-        final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, fileName);
-        
+        final relativePath = await FileUtils.saveFileToPrivateStorage(
+          bytes,
+          fileName,
+        );
+
         // Create a note with the audio attachment
         final audioNote = Note(
           id: const Uuid().v4(),
-          title: '${l10n.audioNote} - ${DateTime.now().toString().substring(0, 16)}',
-          content: '${l10n.audioRecordingFrom} ${DateTime.now().toString().substring(0, 16)}',
+          title:
+              '${l10n.audioNote} - ${DateTime.now().toString().substring(0, 16)}',
+          content:
+              '${l10n.audioRecordingFrom} ${DateTime.now().toString().substring(0, 16)}',
           type: NoteType.note,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
@@ -331,11 +355,11 @@ class _MainScreenState extends State<MainScreen> {
         // Capture the AppProvider reference before the context might become invalid
         final appProvider = context.read<AppProvider>();
         await appProvider.addNote(audioNote);
-        
+
         if (mounted) {
           Navigator.pop(context);
           _resetVoiceRecording();
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(l10n.audioNoteSavedSuccessfully),
@@ -363,9 +387,12 @@ class _MainScreenState extends State<MainScreen> {
     _showImageSourceDialog(mainContext, appProvider);
   }
 
-  void _showImageSourceDialog(BuildContext mainContext, AppProvider appProvider) {
+  void _showImageSourceDialog(
+    BuildContext mainContext,
+    AppProvider appProvider,
+  ) {
     final l10n = AppLocalizations.of(mainContext)!;
-    
+
     showDialog(
       context: mainContext,
       builder: (dialogContext) => AlertDialog(
@@ -403,10 +430,14 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Future<void> _pickImage(ImageSource source, BuildContext context, AppProvider appProvider) async {
+  Future<void> _pickImage(
+    ImageSource source,
+    BuildContext context,
+    AppProvider appProvider,
+  ) async {
     try {
       final ImagePicker picker = ImagePicker();
-      
+
       final XFile? image = await picker.pickImage(
         source: source,
         maxWidth: 1920,
@@ -421,9 +452,9 @@ class _MainScreenState extends State<MainScreen> {
       // Try to show error message if context is still valid
       try {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error picking image: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
         }
       } catch (contextError) {
         // Context issue - error logged silently
@@ -431,20 +462,27 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  Future<void> _createImageNote(XFile image, BuildContext context, AppProvider appProvider) async {
+  Future<void> _createImageNote(
+    XFile image,
+    BuildContext context,
+    AppProvider appProvider,
+  ) async {
     try {
       // Read the image file
       final file = File(image.path);
       final fileExists = await file.exists();
-      
+
       if (!fileExists) {
         throw Exception('Image file does not exist at path: ${image.path}');
       }
-      
+
       // Read file bytes and save to private storage
       final bytes = await file.readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, image.name);
-      
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        bytes,
+        image.name,
+      );
+
       // Create a note with the image attachment
       final imageNote = Note(
         id: const Uuid().v4(),
@@ -458,7 +496,7 @@ class _MainScreenState extends State<MainScreen> {
 
       // Use the captured AppProvider reference instead of context.read
       await appProvider.addNote(imageNote);
-      
+
       // Try to show success message if context is still valid
       try {
         if (mounted) {
@@ -500,14 +538,19 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _createNoteFromClipboard(BuildContext context) async {
     try {
       String? clipboardText;
-      
+
       // On iOS, use native method channel to access clipboard
       // This avoids the "Operation not authorized" error
       if (Platform.isIOS) {
         try {
-          clipboardText = await _iosMethodChannel.invokeMethod<String>('getClipboardText');
+          clipboardText = await _iosMethodChannel.invokeMethod<String>(
+            'getClipboardText',
+          );
         } catch (e) {
-          LoggerService.error('Error accessing clipboard via native method: $e', error: e);
+          LoggerService.error(
+            'Error accessing clipboard via native method: $e',
+            error: e,
+          );
           // Fallback to Flutter Clipboard
           final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
           clipboardText = clipboardData?.text;
@@ -517,7 +560,7 @@ class _MainScreenState extends State<MainScreen> {
         final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
         clipboardText = clipboardData?.text;
       }
-      
+
       if (clipboardText == null || clipboardText.trim().isEmpty) {
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
@@ -532,10 +575,10 @@ class _MainScreenState extends State<MainScreen> {
       }
 
       clipboardText = clipboardText.trim();
-      
+
       // Check if the clipboard content is a URL
       final url = _extractUrl(clipboardText);
-      
+
       if (url != null) {
         // Navigate to share screen with URL data
         final sharedData = {
@@ -545,7 +588,7 @@ class _MainScreenState extends State<MainScreen> {
           'contentType': 'url',
           'url': url,
         };
-        
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -556,14 +599,15 @@ class _MainScreenState extends State<MainScreen> {
         // Create a regular note from clipboard text
         final newNote = Note(
           id: const Uuid().v4(),
-          title: 'Clipboard Note - ${DateTime.now().toString().substring(0, 16)}',
+          title:
+              'Clipboard Note - ${DateTime.now().toString().substring(0, 16)}',
           content: clipboardText,
           type: NoteType.note,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           tags: ['clipboard', 'text'],
         );
-        
+
         // Navigate to share screen with text data
         final sharedData = {
           'action': 'SEND',
@@ -572,7 +616,7 @@ class _MainScreenState extends State<MainScreen> {
           'contentType': 'text',
           'note': newNote.toJson(),
         };
-        
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -596,7 +640,7 @@ class _MainScreenState extends State<MainScreen> {
   String? _extractUrl(String text) {
     final trimmedText = text.trim();
     final uriPattern = RegExp(r'^https?://[^\s]+$');
-    
+
     if (uriPattern.hasMatch(trimmedText)) {
       try {
         final uri = Uri.parse(trimmedText);
@@ -607,10 +651,9 @@ class _MainScreenState extends State<MainScreen> {
         // Invalid URI
       }
     }
-    
+
     return null;
   }
-
 
   Future<void> _pickFile(BuildContext context, AppProvider appProvider) async {
     try {
@@ -622,7 +665,7 @@ class _MainScreenState extends State<MainScreen> {
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        
+
         if (file.path != null) {
           await _createFileNote(file, context, appProvider);
         } else if (file.bytes != null) {
@@ -647,17 +690,25 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  Future<void> _createFileNote(PlatformFile file, BuildContext context, AppProvider appProvider) async {
+  Future<void> _createFileNote(
+    PlatformFile file,
+    BuildContext context,
+    AppProvider appProvider,
+  ) async {
     try {
       // Read file bytes and save to private storage
       final bytes = await File(file.path!).readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(bytes, file.name);
-      
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        bytes,
+        file.name,
+      );
+
       // Create a note with the file attachment
       final fileNote = Note(
         id: const Uuid().v4(),
         title: 'File Note - ${file.name}',
-        content: 'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
+        content:
+            'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -665,7 +716,7 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       await appProvider.addNote(fileNote);
-      
+
       if (context.mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -689,15 +740,23 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  Future<void> _createFileNoteFromBytes(PlatformFile file, BuildContext context, AppProvider appProvider) async {
+  Future<void> _createFileNoteFromBytes(
+    PlatformFile file,
+    BuildContext context,
+    AppProvider appProvider,
+  ) async {
     try {
       // Save file bytes to private storage
-      final relativePath = await FileUtils.saveFileToPrivateStorage(file.bytes!, file.name);
-      
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        file.bytes!,
+        file.name,
+      );
+
       final fileNote = Note(
         id: const Uuid().v4(),
         title: 'File Note - ${file.name}',
-        content: 'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
+        content:
+            'File attachment: ${file.name}\nSize: ${_formatFileSize(file.size)}',
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -705,7 +764,7 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       await appProvider.addNote(fileNote);
-      
+
       if (context.mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -732,7 +791,8 @@ class _MainScreenState extends State<MainScreen> {
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
@@ -776,7 +836,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return AlertDialog(
       title: Text(_isRecording ? l10n.recording : l10n.voiceNoteRecording),
       content: Column(
@@ -790,11 +850,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
                 borderRadius: BorderRadius.circular(50),
                 border: Border.all(color: Colors.red.withOpacity(0.3)),
               ),
-              child: const Icon(
-                Icons.mic,
-                size: 48,
-                color: Colors.red,
-              ),
+              child: const Icon(Icons.mic, size: 48, color: Colors.red),
             ),
             const SizedBox(height: 16),
             Text(
@@ -807,9 +863,9 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
             const SizedBox(height: 8),
             Text(
               l10n.recordingWillContinue,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
           ] else ...[
@@ -851,4 +907,3 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
     );
   }
 }
-

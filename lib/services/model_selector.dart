@@ -8,6 +8,7 @@ import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
+import '../models/generation_context.dart';
 
 /// Service for selecting and managing AI models
 class ModelSelector {
@@ -17,39 +18,52 @@ class ModelSelector {
   ModelSelector._();
 
   AIModel? _currentModel;
-  ModelType? _currentModelType;
+  ModelConfig? _currentModelConfig;
 
   /// Get the current model
   AIModel? get currentModel => _currentModel;
 
-  /// Get the current model type
-  ModelType? get currentModelType => _currentModelType;
+  /// Get the current model config
+  ModelConfig? get currentModelConfig => _currentModelConfig;
 
   /// Initialize with the selected model
   Future<void> initialize(AppProvider appProvider) async {
     try {
-      final selectedModel = appProvider.modelConfig?.type ?? await ModelStorageService.getSelectedModel();
-      if (selectedModel != null) {
-        LoggerService.debug('ModelSelector: Selected model from storage: ${selectedModel.displayName}');
+      // Try to get from provider first, then storage
+      final selectedConfig =
+          appProvider.modelConfig ?? await ModelStorageService.getActiveModel();
 
-        await switchToModel(selectedModel, config: appProvider.modelConfig);
-        LoggerService.debug('ModelSelector: Successfully initialized with ${selectedModel.displayName}');
+      if (selectedConfig != null) {
+        LoggerService.debug(
+          'ModelSelector: Selected model from storage: ${selectedConfig.displayName} (${selectedConfig.id})',
+        );
+
+        await switchToModel(selectedConfig);
+        LoggerService.debug(
+          'ModelSelector: Successfully initialized with ${selectedConfig.displayName}',
+        );
       } else {
         LoggerService.debug('ModelSelector: No model selected.');
       }
     } catch (e) {
-      LoggerService.error('ModelSelector: Error during initialization with selected model: $e');
+      LoggerService.error(
+        'ModelSelector: Error during initialization with selected model: $e',
+      );
     }
   }
 
   /// Switch to a different model
-  Future<void> switchToModel(ModelType modelType, {ModelConfig? config}) async {
+  Future<void> switchToModel(ModelConfig config) async {
     try {
-      LoggerService.debug('ModelSelector: Switching to ${modelType.displayName}');
-      LoggerService.debug('ModelSelector: Previous model was: ${_currentModelType?.displayName ?? "None"}');
+      LoggerService.debug(
+        'ModelSelector: Switching to ${config.displayName} (${config.id})',
+      );
+      LoggerService.debug(
+        'ModelSelector: Previous model was: ${_currentModelConfig?.displayName ?? "None"}',
+      );
 
       // Create model instance
-      final model = _createModel(modelType);
+      final model = _createModel(config.type);
       LoggerService.debug('ModelSelector: Created model: ${model.runtimeType}');
 
       // Initialize the model
@@ -62,23 +76,27 @@ class ModelSelector {
       final isReady = await model.isReady();
       LoggerService.debug('ModelSelector: Model ready status: $isReady');
       if (!isReady) {
-        throw Exception('${modelType.displayName} is not ready. Please configure it first.');
+        throw Exception(
+          '${config.displayName} is not ready. Please configure it first.',
+        );
       }
 
       // Update current model
       LoggerService.debug('ModelSelector: Updating current model...');
       _currentModel = model;
-      _currentModelType = modelType;
+      _currentModelConfig = config;
 
       // Save selection
       LoggerService.debug('ModelSelector: Saving model selection...');
-      await ModelStorageService.setSelectedModel(modelType);
+      await ModelStorageService.activateModel(config.id);
 
-      LoggerService.debug('ModelSelector: Successfully switched to ${modelType.displayName}');
-      LoggerService.debug('ModelSelector: Current model type is now: ${_currentModelType?.displayName}');
+      LoggerService.debug(
+        'ModelSelector: Successfully switched to ${config.displayName}',
+      );
     } catch (e) {
-      LoggerService.error('ModelSelector: Error switching to ${modelType.displayName}: $e');
-      LoggerService.error('ModelSelector: Current model type remains: ${_currentModelType?.displayName}');
+      LoggerService.error(
+        'ModelSelector: Error switching to ${config.displayName}: $e',
+      );
       rethrow;
     }
   }
@@ -88,8 +106,6 @@ class ModelSelector {
     return ModelType.all;
   }
 
-
-
   /// Generate text using the current model
   Future<String> generateWithAttachments(
     String prompt,
@@ -98,12 +114,15 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
-      throw Exception('No model is currently selected. Please select a model first.');
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
     }
 
+    final context = generationContext ?? GenerationContext();
     // Model will handle capability limitations gracefully through limitation notes
     return await _currentModel!.generateWithAttachments(
       prompt,
@@ -112,7 +131,7 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -123,19 +142,22 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
-      throw Exception('No model is currently selected. Please select a model first.');
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithMessages(
       messages,
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -145,19 +167,22 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
-      throw Exception('No model is currently selected. Please select a model first.');
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateFromPrompt(
       request,
       temperature: temperature,
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -169,12 +194,15 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
-      throw Exception('No model is currently selected. Please select a model first.');
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithTools(
       prompt,
       attachedFiles,
@@ -183,7 +211,7 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
 
@@ -194,12 +222,15 @@ class ModelSelector {
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    String? requestId,
+    GenerationContext? generationContext,
   }) async {
     if (_currentModel == null) {
-      throw Exception('No model is currently selected. Please select a model first.');
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
     }
 
+    final context = generationContext ?? GenerationContext();
     return await _currentModel!.generateWithToolsAndMessages(
       messages,
       tools,
@@ -207,10 +238,9 @@ class ModelSelector {
       topK: topK,
       topP: topP,
       maxOutputTokens: maxOutputTokens,
-      requestId: requestId,
+      generationContext: context,
     );
   }
-
 
   /// Create a model instance for the given model type
   AIModel _createModel(ModelType modelType) {

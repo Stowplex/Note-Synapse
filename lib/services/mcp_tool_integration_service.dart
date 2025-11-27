@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../models/mcp_endpoint.dart';
+import '../models/generation_context.dart';
 import 'mcp_service.dart';
 import 'logger_service.dart';
 
@@ -49,7 +50,7 @@ class McpToolIntegrationService {
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        toolsDescription.writeln('Tool: ${tool.name}');
+        toolsDescription.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
@@ -154,7 +155,7 @@ class McpToolIntegrationService {
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        toolsDescription.writeln('Tool: ${tool.name}');
+        toolsDescription.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
@@ -252,13 +253,25 @@ class McpToolIntegrationService {
     buffer.writeln('When you call call_tool, always include a params object and populate every required field exactly as defined by the schema.');
     buffer.writeln('If a required value is missing, ask the user for it instead of guessing or omitting it.');
     buffer.writeln('Validate that types match the schema before calling the tool.\n');
+    buffer.writeln('IMPORTANT: All tools MUST be called through call_tool via endpoint and tool name instead of calling tool\'s name directly.\n');
+    buffer.writeln('''<example>
+Endpoint: example
+Tool Argument Name: tool_fn
+Parameters: a: string
+
+Good:
+call_tool({service: "example", name: "tool_fn", param: {a: "hello"}})
+
+Bad:
+tool_fn({a: "hello"})
+</example>\n''');
 
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
       buffer.writeln('=== Endpoint: $serviceName ===');
       
       for (final tool in entry.value) {
-        buffer.writeln('Tool: ${tool.name}');
+        buffer.writeln('Tool Name Argument: ${tool.name}');
         
         if (tool.description != null && tool.description!.isNotEmpty) {
           buffer.writeln('Description: ${tool.description}');
@@ -413,6 +426,7 @@ class McpToolIntegrationService {
     required String toolName,
     required Map<String, dynamic> parameters,
     required List<String> enabledEndpointIds,
+    required GenerationContext generationContext,
   }) async {
     try {
       // Find the endpoint by service name
@@ -422,7 +436,11 @@ class McpToolIntegrationService {
         orElse: () => throw Exception('Service not found or not enabled: $serviceName'),
       );
 
-      LoggerService.info('Executing MCP tool call: $serviceName.$toolName');
+      final requestId = generationContext.ensureRequestId();
+      LoggerService.info(
+        'Executing MCP tool call: $serviceName.$toolName',
+        error: {'requestId': requestId},
+      );
       LoggerService.debug('Tool parameters: ${jsonEncode(parameters)}');
 
       // Call the tool
@@ -502,4 +520,3 @@ class McpToolIntegrationService {
     }
   }
 }
-

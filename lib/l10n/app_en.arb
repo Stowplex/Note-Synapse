@@ -1,5 +1,6 @@
 {
   "appTitle": "Note Synapse",
+  "untitled": "Untitled",
   "settings": "Settings",
   "appearance": "Appearance",
   "appearanceSubtitle": "Theme and display settings",
@@ -8,7 +9,7 @@
   "aiPrompts": "Prompts",
   "aiPromptsSubtitle": "Customize AI prompt injections and overrides",
   "aiConversationSettings": "AI conversations",
-  "aiConversationSettingsSubtitle": "Control tool iteration safety limits",
+  "aiConversationSettingsSubtitle": "Control AI conversation settings",
   "aiConversationSettingsDescription": "Set the default number of tool iterations before Note Synapse asks for approval. You can still adjust the limit per conversation when needed.",
   "iterationLimitLabel": "Tool iteration limit",
   "iterationLimitValueLabel": "Current limit",
@@ -482,6 +483,9 @@
   "myAppsSubtitle": "Create and manage custom applications",
   "noUserApps": "No custom apps yet",
   "createFirstApp": "Create your first custom app",
+  "searchApps": "Search apps...",
+  "noAppsFound": "No apps found",
+  "tryAdjustingSearchTerms": "Try adjusting your search terms",
   "createNewApp": "Create New App",
   "appName": "App Name",
   "appNameHint": "Enter a name for your app",
@@ -548,6 +552,7 @@
   "aiDebugOverlay": "AI Debug Overlay",
   "aiDebugOverlaySubtitle": "View AI request/response logs",
   "aiDebugOverlayTitle": "AI Debug Overlay",
+  "aiLogs": "AI Logs",
   "refreshLogs": "Refresh logs",
   "clearLogs": "Clear logs",
   "basic": "Basic",
@@ -652,6 +657,9 @@
   "maxInputTokensHint": "100000",
   "maxOutputTokens": "Max Output Tokens",
   "maxOutputTokensHint": "4000",
+  "supportedAttachmentMimeTypesLabel": "Supported attachment MIME types",
+  "supportedAttachmentMimeTypesHint": "image/png, application/pdf",
+  "supportedAttachmentMimeTypesHelper": "Comma or newline separated. Leave empty to use the model preset.",
   "required": "Required",
   "mustBePositiveNumber": "Must be a positive number",
   "modelCapabilities": "Model Capabilities",
@@ -791,12 +799,24 @@
   "toolsCount": "Tools: {count}",
   "noToolsAvailable": "No tools available",
   "noToolsCachedFor": "No tools cached for {name}. Click refresh to fetch tools.",
+  "addContextNotes": "Add Context Notes",
+  "libraries": "Libraries",
+  "noLibraries": "No libraries",
+  "usageInstructions": "Usage Instructions",
+  "libraryLinks": "Library Links",
+  "editUserApp": "Edit App",
+  "viewCode": "View Code",
+  "editCode": "Edit Code",
+  "code": "Code",
+  "aiEdit": "AI Edit",
+  "pleaseEnterSuggestion": "Please enter a suggestion",
   "refreshTools": "Refresh Tools",
   "viewTools": "View Tools",
   "noMcpEndpointsConfigured": "No MCP endpoints configured",
   "clickAddMcpEndpointToGetStarted": "Click \"Add MCP Endpoint\" to get started",
   "updated": "Updated",
   "noteActionApp": "Note Action App",
+  "noteActionApps": "Note Action Apps",
   "noteActionAppSubtitle": "This type of app will operate specifically on pre-selected notes",
   "appType": "Type",
   "appTypeHint": "Select how this app should behave",
@@ -805,6 +825,10 @@
   "appTypeAiTool": "AI Tool",
   "aiToolAppSubtitle": "Expose custom JavaScript functions that the AI can call or you can test in a playground",
   "aiTools": "AI Tools",
+  "modelFeatures": "Model Features",
+  "featureGoogleSearch": "Google Search",
+  "featureCodeExecution": "Code Execution",
+  "featureWebSearch": "Web Search",
   "aiToolStartError": "Failed to start AI tool \"{appName}\": {error}",
   "@aiToolStartError": {
     "placeholders": {
@@ -1270,5 +1294,214 @@
           "error": {}
         }
       },
-      "fetchRemoteImages": "Fetch remote images"
+      "fetchRemoteImages": "Fetch remote images",
+      "gettingStarted": "Getting Started",
+      "gettingStartedSubtitle": "Install user manual and starter apps",
+      "installUserManual": "Install User Manual",
+      "installUserManualSubtitle": "Install or update the user manual note",
+      "installStarterApps": "Install Starter Apps",
+      "installStarterAppsSubtitle": "Browse and install pre-configured apps",
+      "userManualInfo": "User Manual Information",
+      "status": "Status",
+      "installed": "Installed",
+      "notInstalled": "Not Installed",
+      "currentVersion": "Current Version",
+      "latestVersion": "Latest Version",
+      "lastUpdated": "Last Updated",
+      "newVersionAvailable": "New version available!",
+      "updateUserManual": "Update User Manual",
+      "reinstallUserManual": "Reinstall User Manual",
+      "installing": "Installing...",
+      "updateUserManualConfirm": "A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?",
+      "@updateUserManualConfirm": {
+        "placeholders": {
+          "oldVersion": {
+            "type": "String"
+          },
+          "newVersion": {
+            "type": "String"
+          }
+        }
+      },
+      "userManualInstalledSuccessfully": "User Manual installed successfully!",
+      "userManualUpdatedSuccessfully": "User Manual updated successfully!",
+      "errorInstallingUserManual": "Error installing User Manual: {error}",
+      "@errorInstallingUserManual": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "whatIsUserManual": "What is User Manual?",
+      "userManualDescription": "The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.",
+      "noStarterAppsAvailable": "No starter apps available",
+      "noAppsSelected": "No apps selected",
+      "appsSelected": "{count} {count, plural, one {app} other {apps}} selected",
+      "@appsSelected": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "deselectAll": "Deselect All",
+      "proceedWithInstallation": "Install Selected Apps",
+      "starterAppsInstalledSuccessfully": "{count} {count, plural, one {app} other {apps}} installed successfully!",
+      "@starterAppsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsInstallFailed": "Failed to install {count} {count, plural, one {app} other {apps}}",
+      "@starterAppsInstallFailed": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "starterAppsPartialInstall": "Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}",
+      "@starterAppsPartialInstall": {
+        "placeholders": {
+          "successCount": {
+            "type": "int"
+          },
+          "failureCount": {
+            "type": "int"
+          }
+        }
+      },
+      "errorInstallingStarterApps": "Error installing starter apps: {error}",
+      "@errorInstallingStarterApps": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+  "rawDataManagerTitle": "Raw Data Manager",
+  "rawDataManagerSubtitle": "Advanced tools for file and database management",
+  "advancedToolTitle": "Advanced Tool",
+  "advancedToolWarning": "This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.",
+  "iUnderstand": "I Understand",
+  "fileManagerTab": "File Manager",
+  "databaseManagerTab": "Database Manager",
+  "warningDataInstability": "Warning: Direct data modification can cause app instability.",
+  "attachments": "Attachments",
+  "cache": "Cache",
+  "root": "Root",
+  "itemsCount": "{count} items",
+  "@itemsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deselectAll": "Deselect All",
+  "selectUnused": "Select Unused",
+  "noFilesFound": "No files found",
+  "used": "Used",
+  "unused": "Unused",
+  "renameFile": "Rename File",
+  "newName": "New Name",
+  "rename": "Rename",
+  "deleteFilesTitle": "Delete Files?",
+  "deleteFilesConfirmation": "Are you sure you want to delete {count} files? This cannot be undone.",
+  "@deleteFilesConfirmation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deletedFilesMessage": "Deleted {count} files",
+  "@deletedFilesMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRenamingFile": "Error renaming file: {error}",
+  "@errorRenamingFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "queryAndResults": "Query & Results",
+  "aiAssistant": "AI Assistant",
+  "notConnected": "Not connected",
+  "connectedTo": "Connected to: {name}",
+  "@connectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDefaultDb": "Error opening default DB: {error}",
+  "@errorOpeningDefaultDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorOpeningDb": "Error opening DB: {error}",
+  "@errorOpeningDb": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "databaseExportedSuccess": "Database exported successfully",
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sqlQueryLabel": "SQL Query",
+  "sqlQueryHint": "SELECT * FROM notes LIMIT 5",
+  "runQueryTooltip": "Run Query",
+  "enterQueryMessage": "Enter a query to see results",
+  "noResultsReturned": "No results returned",
+  "queryExecutedMessage": "Query executed. {count} rows returned.",
+  "@queryExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "updateExecutedMessage": "Update executed. {count} rows affected.",
+  "@updateExecutedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryError": "Query Error: {error}",
+  "@queryError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "askAiHint": "Ask AI about DB schema or errors...",
+  "askAiAboutNoteHint": "Ask AI about this note...",
+  "openDbFileTooltip": "Open DB File",
+  "resetToDefaultDbTooltip": "Reset to Default DB",
+  "exportDbTooltip": "Export DB"
 }

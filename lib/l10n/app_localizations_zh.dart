@@ -12,6 +12,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => '笔记突触';
 
   @override
+  String get untitled => 'Untitled';
+
+  @override
   String get settings => '设置';
 
   @override
@@ -36,7 +39,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConversationSettings => 'AI 会话';
 
   @override
-  String get aiConversationSettingsSubtitle => '控制工具调用安全上限';
+  String get aiConversationSettingsSubtitle => '调整AI对话参数';
 
   @override
   String get aiConversationSettingsDescription =>
@@ -1373,6 +1376,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createFirstApp => '创建您的第一个自定义应用';
 
   @override
+  String get searchApps => '搜索应用...';
+
+  @override
+  String get noAppsFound => '未找到应用';
+
+  @override
+  String get tryAdjustingSearchTerms => '请尝试调整搜索词';
+
+  @override
   String get createNewApp => '创建新应用';
 
   @override
@@ -1574,6 +1586,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDebugOverlayTitle => 'AI调试覆盖层';
+
+  @override
+  String get aiLogs => 'AI 日志';
 
   @override
   String get refreshLogs => '刷新日志';
@@ -1916,6 +1931,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get maxOutputTokensHint => '4000';
+
+  @override
+  String get supportedAttachmentMimeTypesLabel => '支持的附件 MIME 类型';
+
+  @override
+  String get supportedAttachmentMimeTypesHint => '例如 image/png、application/pdf';
+
+  @override
+  String get supportedAttachmentMimeTypesHelper => '使用逗号或换行分隔。留空则使用模型预设值。';
 
   @override
   String get required => '必填';
@@ -2335,6 +2359,39 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get addContextNotes => '添加上下文笔记';
+
+  @override
+  String get libraries => '库';
+
+  @override
+  String get noLibraries => '没有库';
+
+  @override
+  String get usageInstructions => '使用说明';
+
+  @override
+  String get libraryLinks => '库链接';
+
+  @override
+  String get editUserApp => '编辑应用';
+
+  @override
+  String get viewCode => '查看代码';
+
+  @override
+  String get editCode => '编辑代码';
+
+  @override
+  String get code => '代码';
+
+  @override
+  String get aiEdit => 'AI 编辑';
+
+  @override
+  String get pleaseEnterSuggestion => '请输入建议';
+
+  @override
   String get refreshTools => '刷新工具';
 
   @override
@@ -2348,6 +2405,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noteActionApp => '笔记操作应用';
+
+  @override
+  String get noteActionApps => '笔记操作应用';
 
   @override
   String get noteActionAppSubtitle => '此类应用将专门对预选笔记进行操作';
@@ -2372,6 +2432,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiTools => 'AI 工具';
+
+  @override
+  String get modelFeatures => 'Model Features';
+
+  @override
+  String get featureGoogleSearch => 'Google Search';
+
+  @override
+  String get featureCodeExecution => 'Code Execution';
+
+  @override
+  String get featureWebSearch => 'Web Search';
 
   @override
   String aiToolStartError(String appName, String error) {
@@ -2450,7 +2522,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get annotate => '标注';
 
   @override
-  String get askAiHint => '向 AI 询问这条笔记...';
+  String get askAiHint => '向 AI 询问有关数据库架构或错误的信息...';
 
   @override
   String get send => '发送';
@@ -3231,4 +3303,261 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fetchRemoteImages => '抓取网络图片';
+
+  @override
+  String get gettingStarted => '入门指南';
+
+  @override
+  String get gettingStartedSubtitle => '安装用户手册和入门应用';
+
+  @override
+  String get installUserManual => '安装用户手册';
+
+  @override
+  String get installUserManualSubtitle => '安装或更新用户手册笔记';
+
+  @override
+  String get installStarterApps => '安装入门应用';
+
+  @override
+  String get installStarterAppsSubtitle => '浏览并安装预配置的应用';
+
+  @override
+  String get userManualInfo => '用户手册信息';
+
+  @override
+  String get installed => '已安装';
+
+  @override
+  String get notInstalled => '未安装';
+
+  @override
+  String get currentVersion => '当前版本';
+
+  @override
+  String get latestVersion => '最新版本';
+
+  @override
+  String get lastUpdated => '最后更新';
+
+  @override
+  String get newVersionAvailable => '新版本可用！';
+
+  @override
+  String get updateUserManual => '更新用户手册';
+
+  @override
+  String get reinstallUserManual => '重新安装用户手册';
+
+  @override
+  String get installing => '安装中...';
+
+  @override
+  String updateUserManualConfirm(String oldVersion, String newVersion) {
+    return '用户手册有新版本（$newVersion）可用。您当前的版本是$oldVersion。您想要更新吗？';
+  }
+
+  @override
+  String get userManualInstalledSuccessfully => '用户手册安装成功！';
+
+  @override
+  String get userManualUpdatedSuccessfully => '用户手册更新成功！';
+
+  @override
+  String errorInstallingUserManual(String error) {
+    return '安装用户手册时出错：$error';
+  }
+
+  @override
+  String get whatIsUserManual => '什么是用户手册？';
+
+  @override
+  String get userManualDescription =>
+      '用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。';
+
+  @override
+  String get noStarterAppsAvailable => '没有可用的入门应用';
+
+  @override
+  String get noAppsSelected => '未选择任何应用';
+
+  @override
+  String appsSelected(int count) {
+    return '已选择$count个应用';
+  }
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get proceedWithInstallation => '安装选中的应用';
+
+  @override
+  String starterAppsInstalledSuccessfully(int count) {
+    return '$count个应用安装成功！';
+  }
+
+  @override
+  String starterAppsInstallFailed(int count) {
+    return '$count个应用安装失败';
+  }
+
+  @override
+  String starterAppsPartialInstall(int successCount, int failureCount) {
+    return '成功安装$successCount个应用，失败$failureCount个应用';
+  }
+
+  @override
+  String errorInstallingStarterApps(String error) {
+    return '安装入门应用时出错：$error';
+  }
+
+  @override
+  String get rawDataManagerTitle => '原始数据管理器';
+
+  @override
+  String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
+
+  @override
+  String get advancedToolTitle => '高级工具';
+
+  @override
+  String get advancedToolWarning =>
+      '此工具提供对应用程序数据和数据库的原始访问权限。使用不当可能导致永久性数据丢失或损坏。\n\n除非您知道自己在做什么或在支持人员的指导下，否则请勿使用此工具。';
+
+  @override
+  String get iUnderstand => '我明白';
+
+  @override
+  String get fileManagerTab => '文件管理器';
+
+  @override
+  String get databaseManagerTab => '数据库管理器';
+
+  @override
+  String get warningDataInstability => '警告：直接修改数据可能会导致应用程序不稳定。';
+
+  @override
+  String get cache => '缓存';
+
+  @override
+  String get root => '根目录';
+
+  @override
+  String itemsCount(int count) {
+    return '$count 个项目';
+  }
+
+  @override
+  String get selectUnused => '选择未使用';
+
+  @override
+  String get noFilesFound => '未找到文件';
+
+  @override
+  String get used => '已使用';
+
+  @override
+  String get unused => '未使用';
+
+  @override
+  String get renameFile => '重命名文件';
+
+  @override
+  String get newName => '新名称';
+
+  @override
+  String get rename => '重命名';
+
+  @override
+  String get deleteFilesTitle => '删除文件？';
+
+  @override
+  String deleteFilesConfirmation(int count) {
+    return '您确定要删除 $count 个文件吗？此操作无法撤销。';
+  }
+
+  @override
+  String deletedFilesMessage(int count) {
+    return '已删除 $count 个文件';
+  }
+
+  @override
+  String errorRenamingFile(String error) {
+    return '重命名文件出错：$error';
+  }
+
+  @override
+  String get queryAndResults => '查询与结果';
+
+  @override
+  String get aiAssistant => 'AI 助手';
+
+  @override
+  String get notConnected => '未连接';
+
+  @override
+  String connectedTo(String name) {
+    return '已连接到：$name';
+  }
+
+  @override
+  String errorOpeningDefaultDb(String error) {
+    return '打开默认数据库出错：$error';
+  }
+
+  @override
+  String errorOpeningDb(String error) {
+    return '打开数据库出错：$error';
+  }
+
+  @override
+  String get databaseExportedSuccess => '数据库导出成功';
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get sqlQueryLabel => 'SQL 查询';
+
+  @override
+  String get sqlQueryHint => 'SELECT * FROM notes LIMIT 5';
+
+  @override
+  String get runQueryTooltip => '运行查询';
+
+  @override
+  String get enterQueryMessage => '输入查询以查看结果';
+
+  @override
+  String get noResultsReturned => '未返回结果';
+
+  @override
+  String queryExecutedMessage(int count) {
+    return '查询已执行。返回 $count 行。';
+  }
+
+  @override
+  String updateExecutedMessage(int count) {
+    return '更新已执行。影响 $count 行。';
+  }
+
+  @override
+  String queryError(String error) {
+    return '查询错误：$error';
+  }
+
+  @override
+  String get askAiAboutNoteHint => '向 AI 询问这条笔记...';
+
+  @override
+  String get openDbFileTooltip => '打开数据库文件';
+
+  @override
+  String get resetToDefaultDbTooltip => '重置为默认数据库';
+
+  @override
+  String get exportDbTooltip => '导出数据库';
 }

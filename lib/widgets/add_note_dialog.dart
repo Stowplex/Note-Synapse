@@ -6,17 +6,20 @@ import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../screens/note_selection_dialog.dart';
+import '../services/conversation_attachment_service.dart';
 import 'ai_note_creator_dialog.dart';
 
 /// Dialog for choosing how to add or append a note from conversation messages
 class AddNoteDialog extends StatefulWidget {
   final String content;
   final List<Note> contextNotes;
+  final List<String> attachmentPaths;
 
   const AddNoteDialog({
     super.key,
     required this.content,
     this.contextNotes = const [],
+    this.attachmentPaths = const [],
   });
 
   /// Show the dialog and return the resulting action if any
@@ -24,12 +27,14 @@ class AddNoteDialog extends StatefulWidget {
     required BuildContext context,
     required String content,
     List<Note> contextNotes = const [],
+    List<String> attachmentPaths = const [],
   }) async {
     return await showDialog<AddNoteResult?>(
       context: context,
       builder: (dialogContext) => AddNoteDialog(
         content: content,
         contextNotes: contextNotes,
+        attachmentPaths: attachmentPaths,
       ),
     );
   }
@@ -179,10 +184,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
                   color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: Icon(
-                  icon,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                child: Icon(icon, color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -199,11 +201,10 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
-                          ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                   ],
                 ),
@@ -275,17 +276,37 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
     try {
       final appProvider = context.read<AppProvider>();
+      final noteId = const Uuid().v4();
+
+      // Process temporary attachments from content
+      final processedContent =
+          await ConversationAttachmentService.processContentForAttachments(
+            content: widget.content,
+            noteId: noteId,
+          );
+
+      // Process explicit attachments
+      final processedFiles =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: widget.attachmentPaths,
+            noteId: noteId,
+          );
+
+      final allAttachments = [
+        ...processedContent.attachmentPaths,
+        ...processedFiles,
+      ];
 
       final newNote = Note(
-        id: const Uuid().v4(),
+        id: noteId,
         title: title,
-        content: widget.content,
+        content: processedContent.content,
         type: NoteType.note,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         subNotes: const [],
         tags: const [],
-        attachmentPaths: const [],
+        attachmentPaths: allAttachments,
         scheduledAt: null,
         completeBy: null,
         status: null,
@@ -297,24 +318,17 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.noteCreatedSuccessfully(title)),
-          backgroundColor: Colors.green,
-        ),
+      Navigator.of(context).pop(
+        AddNoteResult.created([
+          newNote,
+        ], successMessage: l10n.noteCreatedSuccessfully(title)),
       );
-
-      Navigator.of(context).pop(AddNoteResult.created([newNote]));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.errorCreatingNote(e.toString())),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.of(context).pop();
+      Navigator.of(
+        context,
+      ).pop(AddNoteResult.error(l10n.errorCreatingNote(e.toString())));
     }
   }
 
@@ -329,10 +343,33 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => target,
       );
 
-      final combinedContent = _combineContent(existingNote.content, widget.content);
+      // Process temporary attachments from content
+      final processedContent =
+          await ConversationAttachmentService.processContentForAttachments(
+            content: widget.content,
+            noteId: existingNote.id,
+          );
+
+      // Process explicit attachments
+      final processedFiles =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: widget.attachmentPaths,
+            noteId: existingNote.id,
+          );
+
+      final combinedContent = _combineContent(
+        existingNote.content,
+        processedContent.content,
+      );
+
+      // Combine existing attachments with new ones
+      final updatedAttachments = List<String>.from(existingNote.attachmentPaths)
+        ..addAll(processedContent.attachmentPaths)
+        ..addAll(processedFiles);
 
       final updatedNote = existingNote.copyWith(
         content: combinedContent,
+        attachmentPaths: updatedAttachments,
         updatedAt: DateTime.now(),
       );
 
@@ -345,26 +382,19 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         orElse: () => updatedNote,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
-          ),
-          backgroundColor: Colors.green,
+      Navigator.of(context).pop(
+        AddNoteResult.appended(
+          refreshedNote,
+          successMessage:
+              '${l10n.contentAppendedSuccessfully} "${refreshedNote.title}"',
         ),
       );
-
-      Navigator.of(context).pop(AddNoteResult.appended(refreshedNote));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.errorUpdatingNote(e.toString())),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.of(context).pop();
+      Navigator.of(
+        context,
+      ).pop(AddNoteResult.error(l10n.errorUpdatingNote(e.toString())));
     }
   }
 
@@ -425,4 +455,3 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     return '$existingTrimmed\n\n$additionTrimmed';
   }
 }
-

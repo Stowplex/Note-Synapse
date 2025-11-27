@@ -160,6 +160,27 @@ void main() {
     });
 
     test('should insert and retrieve relationship', () async {
+      // Create the notes first (required for foreign key constraints)
+      final note1 = Note(
+        id: 'note-1',
+        title: 'First Note',
+        content: 'First content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      final note2 = Note(
+        id: 'note-2',
+        title: 'Second Note',
+        content: 'Second content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await databaseService.insertNote(note1);
+      await databaseService.insertNote(note2);
+
       final relationship = Relationship(
         id: 'rel-1',
         fromNoteId: 'note-1',
@@ -178,7 +199,6 @@ void main() {
       expect(relationships.first.type, 'related');
       expect(relationships.first.toNoteId, 'note-2');
     });
-
 
     test('should handle multiple notes correctly', () async {
       final notes = [
@@ -199,7 +219,7 @@ void main() {
           createdAt: DateTime.now().subtract(const Duration(hours: 1)),
           updatedAt: DateTime.now().subtract(const Duration(hours: 1)),
           scheduledAt: '2024-12-31',
-        completeBy: '2024-12-31',
+          completeBy: '2024-12-31',
           status: TaskStatus.todo,
           tags: ['tag2'],
         ),
@@ -266,5 +286,57 @@ void main() {
       final deletedNote = await databaseService.getNote('note-to-delete');
       expect(deletedNote, isNull);
     });
+
+    test(
+      'should handle attachment AI context toggle and preservation',
+      () async {
+        final note = Note(
+          id: 'note-with-attachment',
+          title: 'Attachment Note',
+          content: 'Content',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          attachmentPaths: ['attachments/doc.pdf'],
+        );
+
+        // 1. Insert note with attachment
+        await databaseService.insertNote(note);
+
+        // 2. Verify default includeInAIContext is true
+        var attachments = await databaseService.getAttachmentsForNote(
+          'note-with-attachment',
+        );
+        expect(attachments.length, 1);
+        expect(attachments.first.filePath, 'attachments/doc.pdf');
+        expect(attachments.first.includeInAIContext, isTrue);
+
+        // 3. Update includeInAIContext to false
+        await databaseService.updateAttachmentAIContext(
+          'note-with-attachment',
+          'attachments/doc.pdf',
+          false,
+        );
+
+        // 4. Verify persistence
+        attachments = await databaseService.getAttachmentsForNote(
+          'note-with-attachment',
+        );
+        expect(attachments.first.includeInAIContext, isFalse);
+
+        // 5. Update note (triggering updateNote which re-inserts attachments)
+        final updatedNote = note.copyWith(
+          title: 'Updated Title',
+          updatedAt: DateTime.now(),
+        );
+        await databaseService.updateNote(updatedNote);
+
+        // 6. Verify includeInAIContext is PRESERVED (remains false)
+        attachments = await databaseService.getAttachmentsForNote(
+          'note-with-attachment',
+        );
+        expect(attachments.first.includeInAIContext, isFalse);
+      },
+    );
   });
 }
