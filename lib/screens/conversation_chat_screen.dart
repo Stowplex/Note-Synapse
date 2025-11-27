@@ -41,15 +41,18 @@ import '../models/user_app.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
+import '../widgets/model_selector_button.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
   final List<String>? initialNoteIds;
+  final ModelConfig? initialModelOverride;
 
   const ConversationChatScreen({
     super.key,
     this.conversationId,
     this.initialNoteIds,
+    this.initialModelOverride,
   });
 
   @override
@@ -93,6 +96,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   // Model Features support
   final Set<String> _selectedModelFeatures = {};
+  ModelConfig? _selectedModel;
 
   bool _hasInitialized = false;
 
@@ -100,6 +104,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _selectedModel = widget.initialModelOverride;
     _loadMcpEndpoints();
     _loadIterationPreference();
   }
@@ -702,6 +707,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
       // Generate AI response
       generationContext = GenerationContext();
+      if (_selectedModel != null) {
+        generationContext.modelOverride = _selectedModel;
+      }
       requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
 
@@ -2083,17 +2091,34 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                         tooltip: 'Cancelling...',
                       )
                     else
-                      IconButton(
-                        onPressed: _isSending ? null : _sendMessage,
-                        icon: _isSending
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.send),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: _isSending ? null : _sendMessage,
+                            icon: _isSending
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          if (!_isSending)
+                            ModelSelectorButton(
+                              selectedModel: _selectedModel,
+                              onModelSelected: (model) {
+                                setState(() {
+                                  _selectedModel = model;
+                                });
+                              },
+                              isSendButton: true,
+                            ),
+                        ],
                       ),
                   ],
                 ),

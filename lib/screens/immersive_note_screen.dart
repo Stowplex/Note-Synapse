@@ -50,6 +50,7 @@ import 'conversation_chat_screen.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
+import '../widgets/model_selector_button.dart';
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -198,6 +199,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   ModelConfig? _previousModelConfig;
+  ModelConfig? _selectedModel;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -1399,10 +1401,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       return _buildAbortButtonWithSpinner(l10n);
     }
 
-    return IconButton(
-      icon: const Icon(Icons.send),
-      tooltip: l10n.send,
-      onPressed: _sendMessage,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.send),
+          tooltip: l10n.send,
+          onPressed: _sendMessage,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+        ModelSelectorButton(
+          selectedModel: _selectedModel,
+          onModelSelected: (model) {
+            setState(() {
+              _selectedModel = model;
+            });
+          },
+          isSendButton: true,
+        ),
+      ],
     );
   }
 
@@ -2866,6 +2884,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final content = trimmed;
     final attachments = List<PlatformFile>.from(_pendingAttachments);
     final generationContext = GenerationContext();
+    if (_selectedModel != null) {
+      generationContext.modelOverride = _selectedModel;
+    }
     final requestId = generationContext.ensureRequestId();
     _currentRequestId = requestId;
 

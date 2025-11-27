@@ -12,12 +12,11 @@ import '../widgets/interactive_checkbox_markdown.dart';
 import '../utils/file_utils.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
+import '../widgets/model_selector_button.dart';
+import '../models/generation_context.dart';
+import '../models/model_config.dart';
 
-enum AIInteractionType {
-  noteTransformation,
-  newNoteCreation,
-  aiConversation,
-}
+enum AIInteractionType { noteTransformation, newNoteCreation, aiConversation }
 
 class AIActionScreen extends StatefulWidget {
   final List<Note> selectedNotes;
@@ -34,6 +33,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   bool _isProcessing = false;
   String? _response;
   final List<PlatformFile> _attachedFiles = [];
+  ModelConfig? _selectedModel;
 
   @override
   void dispose() {
@@ -44,7 +44,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.aiActions),
@@ -57,7 +57,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
             ),
         ],
       ),
-      body: _response != null ? _buildResponseView(l10n) : _buildActionSelectionView(l10n),
+      body: _response != null
+          ? _buildResponseView(l10n)
+          : _buildActionSelectionView(l10n),
     );
   }
 
@@ -69,9 +71,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
         children: [
           Text(
             l10n.selectAIAction,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           if (widget.selectedNotes.length == 1) ...[
@@ -101,43 +103,43 @@ class _AIActionScreenState extends State<AIActionScreen> {
             if (_selectedAction != AIInteractionType.aiConversation) ...[
               Text(
                 l10n.enterYourPrompt,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               TextField(
-              controller: _promptController,
-              decoration: InputDecoration(
-                hintText: _getPromptHint(l10n),
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.edit),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.attach_file),
-                      onPressed: _attachFiles,
-                      tooltip: l10n.attachFiles,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt),
-                      onPressed: _captureImage,
-                      tooltip: 'Take photo',
-                    ),
-                  ],
+                controller: _promptController,
+                decoration: InputDecoration(
+                  hintText: _getPromptHint(l10n),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.edit),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.attach_file),
+                        onPressed: _attachFiles,
+                        tooltip: l10n.attachFiles,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.camera_alt),
+                        onPressed: _captureImage,
+                        tooltip: 'Take photo',
+                      ),
+                    ],
+                  ),
                 ),
+                maxLines: 6,
+                minLines: 3,
+                textInputAction: TextInputAction.newline,
+                onSubmitted: (value) {
+                  // Only submit if there's content and user presses Enter
+                  // For now, we'll rely on the Process button for submission
+                  // Ctrl+Enter handling would require more complex keyboard event handling
+                },
               ),
-              maxLines: 6,
-              minLines: 3,
-              textInputAction: TextInputAction.newline,
-              onSubmitted: (value) {
-                // Only submit if there's content and user presses Enter
-                // For now, we'll rely on the Process button for submission
-                // Ctrl+Enter handling would require more complex keyboard event handling
-              },
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
             ],
             if (_selectedAction != AIInteractionType.aiConversation) ...[
               if (_attachedFiles.isNotEmpty) ...[
@@ -146,18 +148,45 @@ class _AIActionScreenState extends State<AIActionScreen> {
               ],
             ],
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _processAction,
-                child: _isProcessing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_selectedAction == AIInteractionType.aiConversation ? l10n.startConversation : l10n.process),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isProcessing ? null : _processAction,
+                    style: ElevatedButton.styleFrom(
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.horizontal(
+                          left: Radius.circular(20),
+                          right: Radius.zero,
+                        ),
+                      ),
+                    ),
+                    child: _isProcessing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(
+                            _selectedAction == AIInteractionType.aiConversation
+                                ? l10n.startConversation
+                                : l10n.process,
+                          ),
+                  ),
+                ),
+                if (_selectedAction != AIInteractionType.aiConversation) ...[
+                  const SizedBox(width: 8),
+                  ModelSelectorButton(
+                    selectedModel: _selectedModel,
+                    onModelSelected: (model) {
+                      setState(() {
+                        _selectedModel = model;
+                      });
+                    },
+                    isSendButton: true,
+                  ),
+                ],
+              ],
             ),
           ],
         ],
@@ -172,15 +201,22 @@ class _AIActionScreenState extends State<AIActionScreen> {
     required AIInteractionType action,
   }) {
     final isSelected = _selectedAction == action;
-    
+
     return Card(
       elevation: isSelected ? 4 : 2,
-      shadowColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.3) : null,
-      color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+      shadowColor: isSelected
+          ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
+          : null,
+      color: isSelected
+          ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+          : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: isSelected 
-            ? BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), width: 2)
+        side: isSelected
+            ? BorderSide(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                width: 2,
+              )
             : BorderSide.none,
       ),
       child: InkWell(
@@ -199,7 +235,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: isSelected 
+                  color: isSelected
                       ? Theme.of(context).primaryColor.withOpacity(0.1)
                       : Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(24),
@@ -207,7 +243,11 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 child: Icon(
                   icon,
                   size: 24,
-                  color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
               const SizedBox(width: 16),
@@ -220,14 +260,18 @@ class _AIActionScreenState extends State<AIActionScreen> {
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? Theme.of(context).primaryColor : null,
+                        color: isSelected
+                            ? Theme.of(context).primaryColor
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
                       ),
                     ),
                   ],
@@ -241,11 +285,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                     color: Theme.of(context).primaryColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
                 ),
             ],
           ),
@@ -262,9 +302,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
         children: [
           Text(
             l10n.response,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -288,9 +328,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
           if (_selectedAction == AIInteractionType.noteTransformation) ...[
             Text(
               'Original Note',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -314,10 +354,15 @@ class _AIActionScreenState extends State<AIActionScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _selectedAction == AIInteractionType.newNoteCreation
+                  onPressed:
+                      _selectedAction == AIInteractionType.newNoteCreation
                       ? () => Navigator.of(context).pop()
                       : _clearResponse,
-                  child: Text(_selectedAction == AIInteractionType.newNoteCreation ? l10n.close : l10n.cancel),
+                  child: Text(
+                    _selectedAction == AIInteractionType.newNoteCreation
+                        ? l10n.close
+                        : l10n.cancel,
+                  ),
                 ),
               ),
               if (_selectedAction != AIInteractionType.newNoteCreation) ...[
@@ -325,7 +370,11 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _saveResponse,
-                    child: Text(_selectedAction == AIInteractionType.noteTransformation ? 'Replace' : 'Save Response'),
+                    child: Text(
+                      _selectedAction == AIInteractionType.noteTransformation
+                          ? 'Replace'
+                          : 'Save Response',
+                    ),
                   ),
                 ),
               ],
@@ -348,10 +397,11 @@ class _AIActionScreenState extends State<AIActionScreen> {
   }
 
   Future<void> _processAction() async {
-    if (_selectedAction != AIInteractionType.aiConversation && _promptController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a prompt')),
-      );
+    if (_selectedAction != AIInteractionType.aiConversation &&
+        _promptController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a prompt')));
       return;
     }
 
@@ -364,12 +414,18 @@ class _AIActionScreenState extends State<AIActionScreen> {
       final appProvider = context.read<AppProvider>();
       String response;
 
+      final generationContext = GenerationContext();
+      if (_selectedModel != null) {
+        generationContext.modelOverride = _selectedModel;
+      }
+
       switch (_selectedAction) {
         case AIInteractionType.noteTransformation:
           response = await appProvider.transformNote(
             widget.selectedNotes.first,
             _promptController.text.trim(),
             attachedFiles: _attachedFiles,
+            generationContext: generationContext,
           );
           break;
         case AIInteractionType.newNoteCreation:
@@ -377,6 +433,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
             _promptController.text.trim(),
             widget.selectedNotes,
             attachedFiles: _attachedFiles,
+            generationContext: generationContext,
           );
           response = l10n.multipleNotesCreatedSuccessfully(newNotes.length);
           break;
@@ -386,7 +443,10 @@ class _AIActionScreenState extends State<AIActionScreen> {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => ConversationChatScreen(
-                  initialNoteIds: widget.selectedNotes.map((note) => note.id).toList(),
+                  initialNoteIds: widget.selectedNotes
+                      .map((note) => note.id)
+                      .toList(),
+                  initialModelOverride: _selectedModel,
                 ),
               ),
             );
@@ -407,12 +467,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
         setState(() {
           _isProcessing = false;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -455,7 +512,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
   Future<void> _captureImage() async {
     try {
       final ImagePicker picker = ImagePicker();
-      
+
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1920,
@@ -467,18 +524,18 @@ class _AIActionScreenState extends State<AIActionScreen> {
         // Convert XFile to PlatformFile for consistency with existing attachment system
         final file = File(image.path);
         final bytes = await file.readAsBytes();
-        
+
         final platformFile = PlatformFile(
           name: image.name,
           size: bytes.length,
           bytes: bytes,
           path: image.path,
         );
-        
+
         setState(() {
           _attachedFiles.add(platformFile);
         });
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -512,20 +569,28 @@ class _AIActionScreenState extends State<AIActionScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.attach_file, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+              Icon(
+                Icons.attach_file,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
               const SizedBox(width: 8),
               Text(
                 'Attached Files (${_attachedFiles.length})',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.8),
                 ),
               ),
             ],
@@ -542,14 +607,20 @@ class _AIActionScreenState extends State<AIActionScreen> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withOpacity(0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       _getFileIcon(file.extension),
                       size: 16,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -580,7 +651,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
 
   IconData _getFileIcon(String? extension) {
     if (extension == null) return Icons.insert_drive_file;
-    
+
     switch (extension.toLowerCase()) {
       case 'jpg':
       case 'jpeg':
@@ -616,9 +687,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
   void _saveResponse() async {
     if (_response == null || _response!.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No response to save')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No response to save')));
       return;
     }
 
@@ -687,11 +758,11 @@ class _AIActionScreenState extends State<AIActionScreen> {
     // Take the first line or first 50 characters as title
     final lines = _response!.split('\n');
     final firstLine = lines.first.trim();
-    
+
     if (firstLine.length > 50) {
       return '${firstLine.substring(0, 47)}...';
     }
-    
+
     return firstLine.isEmpty ? 'AI Response' : firstLine;
   }
 

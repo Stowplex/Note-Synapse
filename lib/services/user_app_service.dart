@@ -16,6 +16,7 @@ import 'prompts/note_prompt_builder.dart';
 import 'prompts/prompt_configuration_service.dart';
 import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
+import '../models/generation_context.dart';
 
 class UserAppService {
   // Get all user apps
@@ -185,6 +186,7 @@ class UserAppService {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       // Generate the app using AI
@@ -196,6 +198,7 @@ class UserAppService {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
 
       // Parse the AI response to extract code and explanation
@@ -369,6 +372,7 @@ class UserAppService {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       // Generate new app based on original and edit suggestion
@@ -382,6 +386,7 @@ class UserAppService {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
 
       // Parse the AI response to extract code and explanation
@@ -475,6 +480,7 @@ class UserAppService {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       final noteContextPayload = await _buildNoteContextPayload(contextNotes);
@@ -492,9 +498,10 @@ class UserAppService {
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateAppWithAttachments(
+      final response = await AIService.generateApp(
         prompt,
-        attachedFiles,
+        attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -514,6 +521,7 @@ class UserAppService {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       final noteContextPayload = await _buildNoteContextPayload(contextNotes);
@@ -592,9 +600,10 @@ Here's the updated application with your requested changes:
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateAppWithAttachments(
+      final response = await AIService.generateApp(
         prompt,
-        attachedFiles,
+        attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
       return response; // Return the full response, let parseAIResponse handle the parsing
     } catch (e) {
@@ -1346,7 +1355,9 @@ Example SQL queries you can use:
   }
 
   // Build libraries section from user-provided libraries
-  static String _buildLibrariesSectionForPrompt(List<UserAppLibraryInfo>? libraries) {
+  static String _buildLibrariesSectionForPrompt(
+    List<UserAppLibraryInfo>? libraries,
+  ) {
     if (libraries == null || libraries.isEmpty) {
       return '';
     }
@@ -1550,7 +1561,14 @@ ${libraries.map((lib) => '''
 
     final completer = Completer<Map<String, dynamic>>();
     const timeout = Duration(seconds: 45);
-    const allowedSchemes = {'http', 'https', 'data', 'about', 'file', 'javascript'};
+    const allowedSchemes = {
+      'http',
+      'https',
+      'data',
+      'about',
+      'file',
+      'javascript',
+    };
 
     final headlessWebView = HeadlessInAppWebView(
       initialUrlRequest: URLRequest(url: WebUri(url)),
@@ -1599,7 +1617,7 @@ ${libraries.map((lib) => '''
             ''',
           );
           final htmlContent = htmlResult?.toString() ?? '';
-          
+
           if (htmlContent.isEmpty) {
             throw Exception('Failed to extract HTML content from webpage');
           }
@@ -1611,7 +1629,10 @@ ${libraries.map((lib) => '''
           final title = titleResult?.toString().trim() ?? '';
 
           // Convert HTML to markdown, ignoring script and style tags (like share_screen.dart)
-          final markdown = html2md.convert(htmlContent, ignore: ['script', 'style']);
+          final markdown = html2md.convert(
+            htmlContent,
+            ignore: ['script', 'style'],
+          );
 
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(

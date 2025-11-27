@@ -15,6 +15,9 @@ import '../services/user_app_library_service.dart';
 
 import 'note_selection_dialog.dart';
 import '../widgets/synapse_code_editor.dart';
+import '../models/generation_context.dart';
+import '../models/model_config.dart';
+import '../widgets/model_selector_button.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -47,6 +50,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
 
   List<String> _attachmentPaths = [];
   final List<Note> _selectedNotes = [];
+  ModelConfig? _selectedModel;
 
   // Tab management
   late TabController _tabController;
@@ -247,6 +251,12 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
         }
       }
 
+      // Create generation context with override
+      final generationContext = GenerationContext();
+      if (_selectedModel != null) {
+        generationContext.modelOverride = _selectedModel;
+      }
+
       // Create the new revision using the existing editUserApp method
       await appProvider.editUserApp(
         originalApp: currentApp,
@@ -256,6 +266,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
             ? List<Note>.from(_selectedNotes)
             : null,
         libraries: librariesForAI,
+        generationContext: generationContext,
       );
 
       if (mounted) {
@@ -860,9 +871,23 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
                                             ),
                                           ),
                                         )
-                                      : IconButton(
-                                          icon: const Icon(Icons.send),
-                                          onPressed: _submitEdit,
+                                      : Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.send),
+                                              onPressed: _submitEdit,
+                                            ),
+                                            ModelSelectorButton(
+                                              selectedModel: _selectedModel,
+                                              onModelSelected: (model) {
+                                                setState(() {
+                                                  _selectedModel = model;
+                                                });
+                                              },
+                                              isSendButton: true,
+                                            ),
+                                          ],
                                         ),
                                 ),
                                 maxLines: 3,

@@ -15,6 +15,7 @@ import '../services/user_app_service.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
+import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
@@ -288,12 +289,14 @@ class AppProvider extends ChangeNotifier {
     Note note,
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
   }) async {
     try {
       final response = await AIService.transformNote(
         note,
         transformationPrompt,
         attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
 
       return response;
@@ -309,12 +312,14 @@ class AppProvider extends ChangeNotifier {
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
     bool persist = true,
+    GenerationContext? generationContext,
   }) async {
     try {
       final newNotes = await AIService.createNewNotes(
         prompt,
         contextNotes,
         attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
 
       if (!persist) {
@@ -969,6 +974,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       // Construct user prompt from the provided information
@@ -993,6 +999,7 @@ class AppProvider extends ChangeNotifier {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
       _userApps.add(app);
       notifyListeners();
@@ -1011,6 +1018,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       final revision = await UserAppService.editUserApp(
@@ -1019,6 +1027,7 @@ class AppProvider extends ChangeNotifier {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
 
       // Update the app in our local list
