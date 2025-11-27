@@ -256,6 +256,8 @@ class FileTypeUtils {
         return 'application/msword';
       case 'docx':
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xlsx':
+	return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       case 'rtf':
         return 'application/rtf';
       case 'odt':
