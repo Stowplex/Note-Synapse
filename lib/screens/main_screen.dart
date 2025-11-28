@@ -810,12 +810,12 @@ class _MainScreenState extends State<MainScreen> {
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
