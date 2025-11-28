@@ -25,11 +25,20 @@ class UserAppViewScreen extends StatefulWidget {
   final List<Note>? selectedNotes;
   final bool isEmbedded;
 
+  final bool showDeleteAction;
+  final bool showEditAction;
+  final bool showRevisionHistory;
+  final List<Widget>? extraActions;
+
   const UserAppViewScreen({
     super.key,
     required this.app,
     this.selectedNotes,
     this.isEmbedded = false,
+    this.showDeleteAction = true,
+    this.showEditAction = true,
+    this.showRevisionHistory = true,
+    this.extraActions,
   });
 
   @override
@@ -37,12 +46,10 @@ class UserAppViewScreen extends StatefulWidget {
 }
 
 class UserAppViewScreenState extends State<UserAppViewScreen> {
-  InAppWebViewController? _webViewController;
   final List<String> _consoleOutput = [];
   bool _isLoading = true;
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
-  String? _errorMessage;
 
   @override
   void initState() {
@@ -296,27 +303,30 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
                 ],
               ),
               actions: [
+                if (widget.extraActions != null) ...widget.extraActions!,
                 IconButton(
                   icon: const Icon(Icons.code),
-                  onPressed: () => _showConsole(context),
+                  onPressed: () => showConsole(context),
                   tooltip: l10n.console,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _navigateToEdit(context),
-                  tooltip: l10n.edit,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: () => _showDeleteDialog(context, l10n),
-                  tooltip: l10n.delete,
-                ),
+                if (widget.showEditAction)
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _navigateToEdit(context),
+                    tooltip: l10n.edit,
+                  ),
+                if (widget.showDeleteAction)
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => _showDeleteDialog(context, l10n),
+                    tooltip: l10n.delete,
+                  ),
               ],
             ),
       body: Column(
         children: [
           // Revision tabs
-          if (revisions.isNotEmpty)
+          if (widget.showRevisionHistory && revisions.isNotEmpty)
             Container(
               height: 60,
               decoration: BoxDecoration(
@@ -819,34 +829,57 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
                       'Console Logs',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
+                    Row(
+                      children: [
+                        if (_consoleOutput.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () {
+                              final text = _consoleOutput.join('\n');
+                              Clipboard.setData(ClipboardData(text: text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    )!.consoleOutputCopied,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy, size: 16),
+                            label: const Text('Copy'),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
               const Divider(height: 1),
               Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _consoleOutput
-                      .length, // Changed from _logs to _consoleOutput
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      child: Text(
-                        _consoleOutput[index], // Changed from _logs to _consoleOutput
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 12,
+                child: SelectionArea(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _consoleOutput.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
                         ),
-                      ),
-                    );
-                  },
+                        child: Text(
+                          _consoleOutput[index],
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -888,94 +921,6 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showConsole(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  l10n.consoleOutput,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Row(
-                  children: [
-                    if (_consoleOutput.isNotEmpty)
-                      IconButton(
-                        onPressed: () => _copyConsoleToClipboard(context),
-                        icon: const Icon(Icons.copy),
-                        tooltip: l10n.copyToClipboard,
-                      ),
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _consoleOutput.clear();
-                        });
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.clear),
-                      tooltip: l10n.clearConsole,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _consoleOutput.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.noConsoleOutput,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _consoleOutput.length,
-                      itemBuilder: (context, index) {
-                        final message = _consoleOutput[index];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: Text(
-                            message,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(fontFamily: 'monospace'),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _copyConsoleToClipboard(BuildContext context) {
-    if (_consoleOutput.isEmpty) return;
-
-    final consoleText = _consoleOutput.join('\n');
-    Clipboard.setData(ClipboardData(text: consoleText));
-
-    final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.consoleOutputCopied),
-        duration: const Duration(seconds: 2),
       ),
     );
   }

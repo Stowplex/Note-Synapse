@@ -124,8 +124,7 @@ dependencies:
   # YAML parsing
   yaml: ^3.1.2
   
-  # Debug overlay
-  flutter_debug_overlay: ^0.1.0
+
   
   # Graph visualization for conversation tree
   graphview: ^1.5.1

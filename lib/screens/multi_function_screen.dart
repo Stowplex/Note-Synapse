@@ -49,45 +49,53 @@ class _MultiFunctionScreenState extends State<MultiFunctionScreen> {
           return const CalendarScreen();
         }
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(app.name),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.code),
-                onPressed: () {
-                  _userAppViewKey.currentState?.showConsole(context);
-                },
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'remove') {
-                    appProvider.setCurrentMultiFunctionApp(null);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'remove',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.close),
-                        const SizedBox(width: 8),
-                        Text(
-                          AppLocalizations.of(context)!.removeFromMultiFunction,
-                        ),
-                      ],
-                    ),
+        return UserAppViewScreen(
+          key: _userAppViewKey,
+          app: app,
+          selectedNotes: null,
+          isEmbedded: false,
+          showDeleteAction: false,
+          showEditAction: false,
+          showRevisionHistory: false,
+          extraActions: [
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'remove') {
+                  // Delay removal to allow popup menu to close and avoid "deactivated widget" error
+                  Future.delayed(const Duration(milliseconds: 300), () async {
+                    if (context.mounted) {
+                      await appProvider.removeAppFromMultiFunction(app.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              AppLocalizations.of(
+                                context,
+                              )!.appRemovedFromMultiFunction,
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  });
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'remove',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.close),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocalizations.of(context)!.removeFromMultiFunction,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
-          body: UserAppViewScreen(
-            key: _userAppViewKey,
-            app: app,
-            selectedNotes: null,
-            isEmbedded: true,
-          ),
+                ),
+              ],
+            ),
+          ],
         );
       },
     );
