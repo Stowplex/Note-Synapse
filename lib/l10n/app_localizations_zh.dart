@@ -2354,6 +2354,166 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noToolsAvailable => '没有可用工具';
 
   @override
+  String get multiFunction => 'Multi-function';
+
+  @override
+  String get addToMultiFunction => 'Add to multi-function tab';
+
+  @override
+  String get removeFromMultiFunction => 'Remove from multi-function view';
+
+  @override
+  String get setAsDefaultView => 'Set as default view';
+
+  @override
+  String get defaultView => 'Default View';
+
+  @override
+  String get appAddedToMultiFunction => 'App added to multi-function tab';
+
+  @override
+  String get appRemovedFromMultiFunction =>
+      'App removed from multi-function tab';
+
+  @override
+  String get defaultViewUpdated => 'Default view updated';
+
+  @override
+  String get selectView => 'Select View';
+
+  @override
+  String get switchToCalendar => 'Switch to Calendar';
+
+  @override
+  String get rawDataManager => 'Raw Data Manager';
+
+  @override
+  String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
+
+  @override
+  String get files => 'Files';
+
+  @override
+  String get database => 'Database';
+
+  @override
+  String get tables => 'Tables';
+
+  @override
+  String get query => 'Query';
+
+  @override
+  String get executeQuery => 'Execute Query';
+
+  @override
+  String get noData => 'No data';
+
+  @override
+  String rowsAffected(Object count) {
+    return '$count rows affected';
+  }
+
+  @override
+  String errorExecutingQuery(Object error) {
+    return 'Error executing query: $error';
+  }
+
+  @override
+  String get tableSchema => 'Table Schema';
+
+  @override
+  String get columns => 'Columns';
+
+  @override
+  String get indexes => 'Indexes';
+
+  @override
+  String get foreignKeys => 'Foreign Keys';
+
+  @override
+  String get browseTable => 'Browse Table';
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get download => 'Download';
+
+  @override
+  String get deleteFile => 'Delete File';
+
+  @override
+  String confirmDeleteFile(Object fileName) {
+    return 'Are you sure you want to delete \"$fileName\"?';
+  }
+
+  @override
+  String get fileDeletedSuccessfully => 'File deleted successfully';
+
+  @override
+  String errorDeletingFile(Object error) {
+    return 'Error deleting file: $error';
+  }
+
+  @override
+  String get uploadFile => 'Upload File';
+
+  @override
+  String get fileUploadedSuccessfully => 'File uploaded successfully';
+
+  @override
+  String errorUploadingFile(Object error) {
+    return 'Error uploading file: $error';
+  }
+
+  @override
+  String get createDirectory => 'Create Directory';
+
+  @override
+  String get directoryName => 'Directory Name';
+
+  @override
+  String get directoryCreatedSuccessfully => 'Directory created successfully';
+
+  @override
+  String errorCreatingDirectory(Object error) {
+    return 'Error creating directory: $error';
+  }
+
+  @override
+  String get path => 'Path';
+
+  @override
+  String get size => 'Size';
+
+  @override
+  String get modified => 'Modified';
+
+  @override
+  String get chat => 'Chat';
+
+  @override
+  String get chatWithDatabase => 'Chat with Database';
+
+  @override
+  String get askQuestionAboutDatabase =>
+      'Ask a question about your database...';
+
+  @override
+  String get send => '发送';
+
+  @override
+  String get aiResponse => 'AI Response';
+
+  @override
+  String errorSendingMessage(Object error) {
+    return 'Error sending message: $error';
+  }
+
+  @override
+  String get thinking => 'Thinking...';
+
+  @override
   String noToolsCachedFor(Object name) {
     return '没有为$name缓存工具。点击刷新以获取工具。';
   }
@@ -2523,9 +2683,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get askAiHint => '向 AI 询问有关数据库架构或错误的信息...';
-
-  @override
-  String get send => '发送';
 
   @override
   String get startConversationHint => '先向 AI 询问关于你的笔记。';
@@ -3414,9 +3571,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rawDataManagerTitle => '原始数据管理器';
-
-  @override
-  String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
 
   @override
   String get advancedToolTitle => '高级工具';

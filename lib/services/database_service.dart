@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 25;
+  static const int DATABASE_VERSION = 26;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -267,6 +267,14 @@ class DatabaseService {
         UNIQUE(conversationId, noteId)
       )
   ''';
+  static const String _createMultiFunctionAppsTable = '''
+      CREATE TABLE multi_function_apps(
+        appId TEXT PRIMARY KEY,
+        isDefault INTEGER NOT NULL DEFAULT 0,
+        addedAt INTEGER NOT NULL,
+        FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
+      )
+  ''';
 
   // Index creation constants
   static const List<String> _createIndexes = [
@@ -325,6 +333,7 @@ class DatabaseService {
       _createConversationMessageMappingTable,
       _createMessageParentsTable,
       _createConversationNoteMappingTable,
+      _createMultiFunctionAppsTable,
       ..._createIndexes,
     ];
   }
@@ -381,6 +390,7 @@ class DatabaseService {
     await db.execute(_createMessageParentsTable);
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
+    await db.execute(_createMultiFunctionAppsTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -428,6 +438,10 @@ class DatabaseService {
     25: MigrationStep(
       description: 'Add includeInAIContext column to attachments table',
       execute: _migrateToVersion24,
+    ),
+    26: MigrationStep(
+      description: 'Create multi_function_apps table',
+      execute: _migrateToVersion26,
     ),
   };
 
@@ -563,6 +577,17 @@ class DatabaseService {
           'Recreating notes tables due to attachments table modification failure',
         );
         await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
+        break;
+
+      case 26:
+        // Multi-function apps table creation failed - recreate the table
+        LoggerService.error(
+          'Recreating multi_function_apps table due to creation failure',
+        );
+        await _recreateMultiFunctionAppsTable(
+          db,
+          isBackupMigration: isBackupMigration,
+        );
         break;
 
       default:
@@ -708,6 +733,14 @@ class DatabaseService {
     );
   }
 
+  Future<void> _recreateMultiFunctionAppsTable(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
+    await db.execute(_createMultiFunctionAppsTable);
+  }
+
   // Recreate main database tables
   Future<void> _recreateMainDatabase(Database db, int newVersion) async {
     // Drop all tables
@@ -722,6 +755,7 @@ class DatabaseService {
     await db.execute('DROP TABLE IF EXISTS app_revisions');
     await db.execute('DROP TABLE IF EXISTS user_app_libraries');
     await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
 
     // Recreate all tables using schema constants
     await _onCreate(db, newVersion);
@@ -1061,6 +1095,13 @@ class DatabaseService {
       LoggerService.error('Error in migration to version 24: $e', error: e);
       rethrow;
     }
+  }
+
+  static Future<void> _migrateToVersion26(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createMultiFunctionAppsTable);
   }
 
   // Migrate existing conversation data to new structure
@@ -3744,5 +3785,68 @@ class DatabaseService {
   Future<List<String>> getConversationTagNames(String conversationId) async {
     final tags = await getConversationTags(conversationId);
     return tags.map((tag) => tag.name).toList();
+  }
+
+  // Multi-function Apps Methods
+
+  Future<void> addAppToMultiFunction(String appId) async {
+    final db = await database;
+    await db.insert('multi_function_apps', {
+      'appId': appId,
+      'isDefault': 0,
+      'addedAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> removeAppFromMultiFunction(String appId) async {
+    final db = await database;
+    await db.delete(
+      'multi_function_apps',
+      where: 'appId = ?',
+      whereArgs: [appId],
+    );
+  }
+
+  Future<void> setMultiFunctionDefaultApp(String appId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Reset all to not default
+      await txn.update('multi_function_apps', {'isDefault': 0});
+      // Set the specific app to default
+      await txn.update(
+        'multi_function_apps',
+        {'isDefault': 1},
+        where: 'appId = ?',
+        whereArgs: [appId],
+      );
+    });
+  }
+
+  Future<void> clearMultiFunctionDefaultApp() async {
+    final db = await database;
+    await db.update('multi_function_apps', {'isDefault': 0});
+  }
+
+  Future<List<String>> getMultiFunctionApps() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'multi_function_apps',
+      orderBy: 'addedAt DESC',
+    );
+    return maps.map((map) => map['appId'] as String).toList();
+  }
+
+  Future<String?> getMultiFunctionDefaultAppId() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'multi_function_apps',
+      where: 'isDefault = ?',
+      whereArgs: [1],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['appId'] as String;
+    }
+    return null;
   }
 }

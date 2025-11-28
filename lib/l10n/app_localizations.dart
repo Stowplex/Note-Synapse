@@ -4328,6 +4328,294 @@ abstract class AppLocalizations {
   /// **'No tools available'**
   String get noToolsAvailable;
 
+  /// No description provided for @multiFunction.
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-function'**
+  String get multiFunction;
+
+  /// No description provided for @addToMultiFunction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to multi-function tab'**
+  String get addToMultiFunction;
+
+  /// No description provided for @removeFromMultiFunction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from multi-function view'**
+  String get removeFromMultiFunction;
+
+  /// No description provided for @setAsDefaultView.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as default view'**
+  String get setAsDefaultView;
+
+  /// No description provided for @defaultView.
+  ///
+  /// In en, this message translates to:
+  /// **'Default View'**
+  String get defaultView;
+
+  /// No description provided for @appAddedToMultiFunction.
+  ///
+  /// In en, this message translates to:
+  /// **'App added to multi-function tab'**
+  String get appAddedToMultiFunction;
+
+  /// No description provided for @appRemovedFromMultiFunction.
+  ///
+  /// In en, this message translates to:
+  /// **'App removed from multi-function tab'**
+  String get appRemovedFromMultiFunction;
+
+  /// No description provided for @defaultViewUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Default view updated'**
+  String get defaultViewUpdated;
+
+  /// No description provided for @selectView.
+  ///
+  /// In en, this message translates to:
+  /// **'Select View'**
+  String get selectView;
+
+  /// No description provided for @switchToCalendar.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Calendar'**
+  String get switchToCalendar;
+
+  /// No description provided for @rawDataManager.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw Data Manager'**
+  String get rawDataManager;
+
+  /// No description provided for @rawDataManagerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced tools for file and database management'**
+  String get rawDataManagerSubtitle;
+
+  /// No description provided for @files.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get files;
+
+  /// No description provided for @database.
+  ///
+  /// In en, this message translates to:
+  /// **'Database'**
+  String get database;
+
+  /// No description provided for @tables.
+  ///
+  /// In en, this message translates to:
+  /// **'Tables'**
+  String get tables;
+
+  /// No description provided for @query.
+  ///
+  /// In en, this message translates to:
+  /// **'Query'**
+  String get query;
+
+  /// No description provided for @executeQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Execute Query'**
+  String get executeQuery;
+
+  /// No description provided for @noData.
+  ///
+  /// In en, this message translates to:
+  /// **'No data'**
+  String get noData;
+
+  /// No description provided for @rowsAffected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} rows affected'**
+  String rowsAffected(Object count);
+
+  /// No description provided for @errorExecutingQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Error executing query: {error}'**
+  String errorExecutingQuery(Object error);
+
+  /// No description provided for @tableSchema.
+  ///
+  /// In en, this message translates to:
+  /// **'Table Schema'**
+  String get tableSchema;
+
+  /// No description provided for @columns.
+  ///
+  /// In en, this message translates to:
+  /// **'Columns'**
+  String get columns;
+
+  /// No description provided for @indexes.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexes'**
+  String get indexes;
+
+  /// No description provided for @foreignKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Foreign Keys'**
+  String get foreignKeys;
+
+  /// No description provided for @browseTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse Table'**
+  String get browseTable;
+
+  /// No description provided for @refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get refresh;
+
+  /// No description provided for @download.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get download;
+
+  /// No description provided for @deleteFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete File'**
+  String get deleteFile;
+
+  /// No description provided for @confirmDeleteFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete \"{fileName}\"?'**
+  String confirmDeleteFile(Object fileName);
+
+  /// No description provided for @fileDeletedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'File deleted successfully'**
+  String get fileDeletedSuccessfully;
+
+  /// No description provided for @errorDeletingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting file: {error}'**
+  String errorDeletingFile(Object error);
+
+  /// No description provided for @uploadFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload File'**
+  String get uploadFile;
+
+  /// No description provided for @fileUploadedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'File uploaded successfully'**
+  String get fileUploadedSuccessfully;
+
+  /// No description provided for @errorUploadingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Error uploading file: {error}'**
+  String errorUploadingFile(Object error);
+
+  /// No description provided for @createDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Directory'**
+  String get createDirectory;
+
+  /// No description provided for @directoryName.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory Name'**
+  String get directoryName;
+
+  /// No description provided for @directoryCreatedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory created successfully'**
+  String get directoryCreatedSuccessfully;
+
+  /// No description provided for @errorCreatingDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Error creating directory: {error}'**
+  String errorCreatingDirectory(Object error);
+
+  /// No description provided for @path.
+  ///
+  /// In en, this message translates to:
+  /// **'Path'**
+  String get path;
+
+  /// No description provided for @size.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get size;
+
+  /// No description provided for @modified.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified'**
+  String get modified;
+
+  /// No description provided for @chat.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get chat;
+
+  /// No description provided for @chatWithDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with Database'**
+  String get chatWithDatabase;
+
+  /// No description provided for @askQuestionAboutDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask a question about your database...'**
+  String get askQuestionAboutDatabase;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get send;
+
+  /// No description provided for @aiResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Response'**
+  String get aiResponse;
+
+  /// No description provided for @errorSendingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Error sending message: {error}'**
+  String errorSendingMessage(Object error);
+
+  /// No description provided for @thinking.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking...'**
+  String get thinking;
+
   /// No description provided for @noToolsCachedFor.
   ///
   /// In en, this message translates to:
@@ -4657,12 +4945,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ask AI about DB schema or errors...'**
   String get askAiHint;
-
-  /// No description provided for @send.
-  ///
-  /// In en, this message translates to:
-  /// **'Send'**
-  String get send;
 
   /// No description provided for @startConversationHint.
   ///
@@ -6217,12 +6499,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Raw Data Manager'**
   String get rawDataManagerTitle;
-
-  /// No description provided for @rawDataManagerSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Advanced tools for file and database management'**
-  String get rawDataManagerSubtitle;
 
   /// No description provided for @advancedToolTitle.
   ///

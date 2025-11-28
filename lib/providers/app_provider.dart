@@ -33,6 +33,8 @@ class AppProvider extends ChangeNotifier {
   Locale _locale = const Locale('en', '');
   ModelConfig? _modelConfig;
   bool newNoteFromShare = false;
+  List<String> _multiFunctionApps = [];
+  String? _currentMultiFunctionAppId;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -44,6 +46,8 @@ class AppProvider extends ChangeNotifier {
   bool get isDarkMode => _isDarkMode;
   Locale get locale => _locale;
   ModelConfig? get modelConfig => _modelConfig;
+  List<String> get multiFunctionApps => _multiFunctionApps;
+  String? get currentMultiFunctionAppId => _currentMultiFunctionAppId;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -62,6 +66,10 @@ class AppProvider extends ChangeNotifier {
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
       _modelConfig = await ModelStorageService.getActiveModel();
+
+      await _refreshMultiFunctionApps();
+      _currentMultiFunctionAppId = await _databaseService
+          .getMultiFunctionDefaultAppId();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
@@ -1252,5 +1260,66 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  // Multi-function Apps Methods
+
+  Future<void> _refreshMultiFunctionApps() async {
+    _multiFunctionApps = await _databaseService.getMultiFunctionApps();
+  }
+
+  Future<void> addAppToMultiFunction(String appId) async {
+    try {
+      await _databaseService.addAppToMultiFunction(appId);
+      await _refreshMultiFunctionApps();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeAppFromMultiFunction(String appId) async {
+    try {
+      await _databaseService.removeAppFromMultiFunction(appId);
+      await _refreshMultiFunctionApps();
+
+      // If the removed app was the current default, clear it
+      if (_currentMultiFunctionAppId == appId) {
+        _currentMultiFunctionAppId = null;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setMultiFunctionDefaultApp(String appId) async {
+    try {
+      await _databaseService.setMultiFunctionDefaultApp(appId);
+      _currentMultiFunctionAppId = appId;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearMultiFunctionDefaultApp() async {
+    try {
+      await _databaseService.clearMultiFunctionDefaultApp();
+      _currentMultiFunctionAppId = null;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void setCurrentMultiFunctionApp(String? appId) {
+    _currentMultiFunctionAppId = appId;
+    notifyListeners();
   }
 }

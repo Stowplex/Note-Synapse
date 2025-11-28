@@ -9,9 +9,10 @@ import 'package:file_picker/file_picker.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/user_app.dart';
 import '../services/audio_recording_service.dart';
 import 'notes_screen.dart';
-import 'calendar_screen.dart';
+import 'multi_function_screen.dart';
 import 'user_apps_list_screen.dart';
 import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
@@ -40,7 +41,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const NotesScreen(),
-    const CalendarScreen(),
+    MultiFunctionScreen(),
     const UserAppsListScreen(),
     const SettingsScreen(),
   ];
@@ -96,32 +97,25 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.note),
-            label: AppLocalizations.of(context)!.notes,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.calendar_today),
-            label: AppLocalizations.of(context)!.calendar,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.apps),
-            label: AppLocalizations.of(context)!.myApps,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.settings),
-            label: AppLocalizations.of(context)!.settings,
-          ),
-        ],
+      bottomNavigationBar: BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(0, Icons.note, AppLocalizations.of(context)!.notes),
+            _buildNavItem(
+              1,
+              Icons.dashboard, // Changed icon to represent multi-function
+              AppLocalizations.of(context)!.multiFunction,
+              onLongPress: () => _showMultiFunctionMenu(context),
+            ),
+            _buildNavItem(2, Icons.apps, AppLocalizations.of(context)!.myApps),
+            _buildNavItem(
+              3,
+              Icons.settings,
+              AppLocalizations.of(context)!.settings,
+            ),
+          ],
+        ),
       ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
@@ -794,6 +788,139 @@ class _MainScreenState extends State<MainScreen> {
     if (bytes < 1024 * 1024 * 1024)
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  Widget _buildNavItem(
+    int index,
+    IconData icon,
+    String label, {
+    VoidCallback? onLongPress,
+  }) {
+    final isSelected = _currentIndex == index;
+    final color = isSelected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).unselectedWidgetColor;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _currentIndex = index;
+        });
+      },
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMultiFunctionMenu(BuildContext context) async {
+    final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    // Ensure we switch to the tab first
+    setState(() {
+      _currentIndex = 1;
+    });
+
+    final addedApps = appProvider.multiFunctionApps;
+    final currentDefault = appProvider.currentMultiFunctionAppId;
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(l10n.selectView),
+            // style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.calendar_today),
+            title: Text(l10n.calendar),
+            trailing: currentDefault == null ? const Icon(Icons.check) : null,
+            onTap: () {
+              appProvider.setCurrentMultiFunctionApp(null);
+              Navigator.pop(context);
+            },
+            onLongPress: () {
+              appProvider.clearMultiFunctionDefaultApp();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(l10n.defaultViewUpdated)));
+            },
+          ),
+          if (addedApps.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(l10n.noAppsFound),
+            ),
+          ...addedApps.map((appId) {
+            final app = appProvider.userApps.firstWhere(
+              (a) => a.id == appId,
+              orElse: () => UserApp(
+                id: appId,
+                uuid: '',
+                name: 'Unknown App',
+                description: '',
+                steps: [],
+                htmlContent: '',
+                type: UserAppType.normal,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              ),
+            );
+
+            return ListTile(
+              leading: const Icon(Icons.web),
+              title: Text(app.name),
+              trailing: currentDefault == appId
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () {
+                appProvider.setCurrentMultiFunctionApp(appId);
+                Navigator.pop(context);
+              },
+              onLongPress: () {
+                appProvider.setMultiFunctionDefaultApp(appId);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(l10n.defaultViewUpdated)),
+                );
+              },
+            );
+          }),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              l10n.setAsDefaultView, // "Long press to set as default"
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
