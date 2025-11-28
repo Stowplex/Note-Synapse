@@ -862,13 +862,6 @@ class _MainScreenState extends State<MainScreen> {
               appProvider.setCurrentMultiFunctionApp(null);
               Navigator.pop(context);
             },
-            onLongPress: () {
-              appProvider.clearMultiFunctionDefaultApp();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(l10n.defaultViewUpdated)));
-            },
           ),
           if (addedApps.isEmpty)
             Padding(
@@ -900,13 +893,6 @@ class _MainScreenState extends State<MainScreen> {
               onTap: () {
                 appProvider.setCurrentMultiFunctionApp(appId);
                 Navigator.pop(context);
-              },
-              onLongPress: () {
-                appProvider.setMultiFunctionDefaultApp(appId);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.defaultViewUpdated)),
-                );
               },
             );
           }),

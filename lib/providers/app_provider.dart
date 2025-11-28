@@ -1318,8 +1318,18 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  void setCurrentMultiFunctionApp(String? appId) {
-    _currentMultiFunctionAppId = appId;
-    notifyListeners();
+  Future<void> setCurrentMultiFunctionApp(String? appId) async {
+    try {
+      if (appId == null) {
+        await _databaseService.clearMultiFunctionDefaultApp();
+      } else {
+        await _databaseService.setMultiFunctionDefaultApp(appId);
+      }
+      _currentMultiFunctionAppId = appId;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
   }
 }
