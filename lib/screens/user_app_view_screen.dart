@@ -13,6 +13,7 @@ import '../models/note.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../services/global_library_service.dart';
 import '../utils/file_utils.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
@@ -581,13 +582,60 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
               'onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}',
             );
             if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'text/plain',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
+              final fileName = request.url.host;
+              final service = GlobalLibraryService();
+
+              // Check if it's a custom library first (or built-in that we want to serve from file)
+              final customPath = await service.resolveLibraryPath(fileName);
+
+              if (customPath != null) {
+                // Serve from file system
+                final file = File(customPath);
+                if (await file.exists()) {
+                  final data = await file.readAsBytes();
+                  // Determine content type based on extension
+                  final contentType = fileName.endsWith('.css')
+                      ? 'text/css'
+                      : 'application/javascript';
+                  return CustomSchemeResponse(
+                    contentType: contentType,
+                    data: data,
+                  );
+                }
+              }
+
+              // Fallback to assets/scripts for built-ins if not found via service or if service returns null
+              // (This maintains backward compatibility and handles built-ins if they are not fully migrated to file paths yet,
+              // though our service should handle them if we mapped them correctly.
+              // However, built-ins in YAML point to assets/scripts/..., so resolveLibraryPath might return that relative path?
+              // Wait, resolveLibraryPath implementation:
+              // For custom libs, it returns full path.
+              // For built-ins, I didn't implement logic to return asset path in resolveLibraryPath yet.
+              // Let's check GlobalLibraryService.resolveLibraryPath implementation again.
+
+              // Actually, I should probably update resolveLibraryPath to handle built-ins too or handle it here.
+              // In GlobalLibraryService, I only checked custom libs.
+              // Let's stick to the plan: built-ins are in assets/scripts.
+
+              try {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/$fileName",
+                );
+                return CustomSchemeResponse(
+                  contentType: 'text/plain',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              } catch (e) {
+                LoggerService.warning(
+                  'Failed to load asset: assets/scripts/$fileName',
+                );
+                return CustomSchemeResponse(
+                  contentType: 'text/plain',
+                  data: Uint8List.fromList(
+                    utf8.encode('/* Asset not found: $fileName */'),
+                  ),
+                );
+              }
             } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
               return await bridge.handleSynapseUserScheme(request.url);
             } else if (request.url.scheme.toLowerCase() == 'synapsetemp') {

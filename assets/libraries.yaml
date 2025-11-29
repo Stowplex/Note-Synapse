@@ -1,0 +1,93 @@
+libraries:
+  - id: chartjs
+    name: Chart.js
+    version: "2.9.4"
+    description: Simple yet flexible JavaScript charting for designers & developers
+    usage: |
+      You are provided with the chart.js libary (version 2.9.4). You can import it with:
+      ```html
+      <script src="synapse://chart.min.js"></script>
+      <script src="synapse://chartjs-adapter-date-fns.bundle.min.js"></script>
+      ```
+      IMPORTANT: You must include both chart.min.js and chartjs-adapter-date-fns.bundle.min.js for
+                 charts to work properly.
+    assets:
+      - path: assets/scripts/chart.min.js
+        type: script
+
+  - id: bootstrap
+    name: Bootstrap
+    version: "4.6"
+    description: The most popular HTML, CSS, and JS library in the world
+    usage: |
+      You are provided with the bootstrap library (version 4.6). You can import it with:
+      ```html
+      <link rel="stylesheet" href="synapse://bootstrap.min.css">
+      ```
+    assets:
+      - path: assets/scripts/bootstrap.min.css
+        type: style
+
+  - id: mermaid
+    name: Mermaid
+    version: "11.12.1"
+    description: Generation of diagrams like flowcharts or sequence diagrams from text
+    usage: |
+      You are provided with the mermaid library (version 11). You can import it with:
+
+      ```html
+      <script src="synapse://mermaid.min.js"></script>
+      ```
+
+      IMPORTANT:
+        - Ensure all node text (labels) in the mindmap DO NOT use parentheses "()", brackets "[]" or braces "{}"
+        - DO NOT enclose node text in quotes "". Note text should be plain text directly within the node definition.
+          For example, use `root((My Root Node))` and `node(My Node Label)`, not `root( "My Root Node" )` or `node( "My Node Label" )`.
+          This is crucial to avoid parsing errors.
+        - Comments with % should be on its ownline, per requirement of mermaid parser.
+    assets:
+      - path: assets/scripts/mermaid.min.js
+        type: script
+
+  - id: svg-pan-zoom
+    name: svg-pan-zoom
+    version: "3.6.2"
+    description: Library that enables panning and zooming of SVG.
+    usage: |
+      You are provided with the mermaid svg-pan-zoom (version 3.6.2). You can import it with:
+
+      ```html
+      <script src="synapse://svg.pan-zoom.min.js"></script>
+      ```
+
+      Example use:
+
+      ```javascript
+      svgPanZoom('#demo-tiger', {
+         viewportSelector: '.svg-pan-zoom_viewport'
+       , panEnabled: true
+       , controlIconsEnabled: false
+       , zoomEnabled: true
+       , dblClickZoomEnabled: true
+       , mouseWheelZoomEnabled: true
+       , preventMouseEventsDefault: true
+       , zoomScaleSensitivity: 0.2
+       , minZoom: 0.5
+       , maxZoom: 10
+       , fit: true
+       , contain: false
+       , center: true
+       , refreshRate: 'auto'
+       , beforeZoom: function(){}
+       , onZoom: function(){}
+       , beforePan: function(){}
+       , onPan: function(){}
+       , onUpdatedCTM: function(){}
+       , customEventsHandler: {}
+       , eventsListenerElement: null
+       });
+      ```
+    assets:
+      - path: assets/scripts/svg.pan-zoom.min.js
+        type: script
+

@@ -16,6 +16,7 @@ import 'prompt_settings_screen.dart';
 import 'getting_started_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
+import 'settings/user_app_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -133,6 +134,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const RecoveryScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.apps),
+              title: const Text('User App'),
+              subtitle: const Text('Manage user app settings and libraries'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const UserAppSettingsScreen(),
+                ),
               ),
             ),
           ),

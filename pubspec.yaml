@@ -176,11 +176,13 @@ flutter:
   assets:
     - assets/scripts/Readability.min.js
     - assets/scripts/chart.min.js
+    - assets/scripts/chartjs-adapter-date-fns.bundle.min.js
     - assets/scripts/bootstrap.min.css
     - assets/scripts/highlight.min.js
     - assets/scripts/highlight.min.css
     - assets/scripts/mermaid.min.js
     - assets/scripts/svg.pan-zoom.min.js
+    - assets/libraries.yaml
     - assets/model_presets/
     - assets/starter/
     - assets/starter/apps/
