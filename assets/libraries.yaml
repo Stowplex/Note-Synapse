@@ -14,6 +14,8 @@ libraries:
     assets:
       - path: assets/scripts/chart.min.js
         type: script
+      - path: assets/scripts/chart-adapter-date-fns.bundle.min.js
+        type: script
 
   - id: bootstrap
     name: Bootstrap
