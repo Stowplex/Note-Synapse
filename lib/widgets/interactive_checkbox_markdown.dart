@@ -563,31 +563,19 @@ class _InteractiveCheckboxMarkdownState
     required Widget image,
     required String imageUrl,
     required bool isSvg,
-    VoidCallback? onSvgBackgroundToggle,
+    VoidCallback? onBackgroundToggle,
     VoidCallback? onFullscreen,
   }) {
     return FutureBuilder<_ImageSourceType>(
       future: _determineImageSourceType(imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
-              ),
-              child: image,
-            ),
-            _ImageInfoBar(
-              sourceType: sourceType,
-              isSvg: isSvg,
-              onSvgBackgroundToggle: onSvgBackgroundToggle,
-              onFullscreen: onFullscreen,
-            ),
-          ],
+        return _ImageWithInfoBar(
+          image: image,
+          sourceType: sourceType,
+          isSvg: isSvg,
+          onBackgroundToggle: onBackgroundToggle,
+          onFullscreen: onFullscreen,
         );
       },
     );
@@ -1567,7 +1555,7 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
             _ImageInfoBar(
               sourceType: sourceType,
               isSvg: true,
-              onSvgBackgroundToggle: () {
+              onBackgroundToggle: () {
                 _svgWebViewKey.currentState?.toggleBackground();
               },
               onFullscreen: () {
@@ -1590,13 +1578,13 @@ class _ImageInfoBar extends StatelessWidget {
   const _ImageInfoBar({
     required this.sourceType,
     required this.isSvg,
-    this.onSvgBackgroundToggle,
+    this.onBackgroundToggle,
     this.onFullscreen,
   });
 
   final _ImageSourceType sourceType;
   final bool isSvg;
-  final VoidCallback? onSvgBackgroundToggle;
+  final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
 
   @override
@@ -1624,10 +1612,10 @@ class _ImageInfoBar extends StatelessWidget {
             size: 22,
             color: colorScheme.onSurfaceVariant.withOpacity(0.5),
           ),
-          if (isSvg && onSvgBackgroundToggle != null) ...[
+          if (onBackgroundToggle != null) ...[
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: onSvgBackgroundToggle,
+              onTap: onBackgroundToggle,
               child: Icon(
                 Icons.contrast,
                 size: 22,
@@ -1648,6 +1636,75 @@ class _ImageInfoBar extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ImageWithInfoBar extends StatefulWidget {
+  const _ImageWithInfoBar({
+    required this.image,
+    required this.sourceType,
+    required this.isSvg,
+    this.onBackgroundToggle,
+    this.onFullscreen,
+  });
+
+  final Widget image;
+  final _ImageSourceType sourceType;
+  final bool isSvg;
+  final VoidCallback? onBackgroundToggle;
+  final VoidCallback? onFullscreen;
+
+  @override
+  State<_ImageWithInfoBar> createState() => _ImageWithInfoBarState();
+}
+
+class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
+  bool _isDarkBackground = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // If it's SVG, the background toggle is handled by the SVG widget itself (via onBackgroundToggle callback)
+    // If it's a regular image, we handle the background here if onBackgroundToggle is NOT provided by the parent
+    // But wait, for regular images, we want to provide the toggle functionality HERE.
+    // The previous implementation for SVG had onSvgBackgroundToggle passed down.
+    // For regular images, we want to introduce this functionality.
+
+    final showLocalToggle = !widget.isSvg;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(4),
+          ),
+          child: Container(
+            color: showLocalToggle
+                ? (_isDarkBackground
+                      ? const Color(0xFF1E1E1E)
+                      : const Color(0xFFFFFFFF))
+                : null,
+            child: widget.image,
+          ),
+        ),
+        _ImageInfoBar(
+          sourceType: widget.sourceType,
+          isSvg: widget.isSvg,
+          onBackgroundToggle:
+              widget.onBackgroundToggle ??
+              (showLocalToggle
+                  ? () {
+                      setState(() {
+                        _isDarkBackground = !_isDarkBackground;
+                      });
+                    }
+                  : null),
+          onFullscreen: widget.onFullscreen,
+        ),
+      ],
     );
   }
 }
@@ -2109,11 +2166,7 @@ class _FullscreenViewer extends StatelessWidget {
   Widget _buildContent(BuildContext context) {
     if (imageWidget != null) {
       // For images, use InteractiveViewer for pinch-zoom and pan
-      return InteractiveViewer(
-        minScale: 0.5,
-        maxScale: 4.0,
-        child: imageWidget!,
-      );
+      return _FullscreenImageWidget(imageWidget: imageWidget!);
     } else if (svgContent != null) {
       // For SVG, render in webview with pan-zoom support
       return _FullscreenSvgWebView(svgContent: svgContent!);
@@ -2352,6 +2405,56 @@ class _FullscreenHtmlWebView extends StatelessWidget {
         }
         return null;
       },
+    );
+  }
+}
+
+class _FullscreenImageWidget extends StatefulWidget {
+  const _FullscreenImageWidget({required this.imageWidget});
+
+  final Widget imageWidget;
+
+  @override
+  State<_FullscreenImageWidget> createState() => _FullscreenImageWidgetState();
+}
+
+class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
+  bool _isDarkBackground = false;
+
+  void _toggleBackground() {
+    setState(() {
+      _isDarkBackground = !_isDarkBackground;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Container(
+          color: _isDarkBackground
+              ? const Color(0xFF1E1E1E)
+              : const Color(0xFFFFFFFF),
+          child: Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: widget.imageWidget,
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: FloatingActionButton(
+            mini: true,
+            backgroundColor: Colors.white.withOpacity(0.9),
+            foregroundColor: Colors.black87,
+            onPressed: _toggleBackground,
+            child: const Icon(Icons.contrast, size: 20),
+          ),
+        ),
+      ],
     );
   }
 }
