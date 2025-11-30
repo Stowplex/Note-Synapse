@@ -59,6 +59,14 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.watch<AppProvider>();
+    final notes = _filterNotes(appProvider.notes, appProvider);
+
+    final allSelected =
+        notes.isNotEmpty &&
+        notes.every((note) => _selectedNotes.contains(note));
+    final noneSelected =
+        notes.isNotEmpty && !notes.any((note) => _selectedNotes.contains(note));
 
     return Scaffold(
       appBar: AppBar(
@@ -92,6 +100,12 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: MaterialLocalizations.of(context).showMenuTooltip,
               onSelected: (value) {
                 switch (value) {
+                  case 'selectAll':
+                    _selectAll(notes);
+                    break;
+                  case 'deselectAll':
+                    _deselectAll(notes);
+                    break;
                   case 'share':
                     if (_selectedNotes.isNotEmpty) {
                       _shareSelectedNotes();
@@ -110,6 +124,28 @@ class _NotesScreenState extends State<NotesScreen> {
                 }
               },
               itemBuilder: (context) => [
+                if (!allSelected)
+                  PopupMenuItem(
+                    value: 'selectAll',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.select_all, size: 20),
+                        const SizedBox(width: 8),
+                        const Text('Select All'),
+                      ],
+                    ),
+                  ),
+                if (!noneSelected)
+                  PopupMenuItem(
+                    value: 'deselectAll',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.deselect, size: 20),
+                        const SizedBox(width: 8),
+                        const Text('Deselect All'),
+                      ],
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'share',
                   enabled: _selectedNotes.isNotEmpty,
@@ -287,7 +323,8 @@ class _NotesScreenState extends State<NotesScreen> {
             );
           }
 
-          final notes = _filterNotes(appProvider.notes, appProvider);
+          // final notes = _filterNotes(appProvider.notes, appProvider);
+          // Already calculated in build method
 
           if (notes.isEmpty) {
             return Center(
@@ -490,6 +527,32 @@ class _NotesScreenState extends State<NotesScreen> {
     setState(() {
       _isMultiSelectMode = false;
       _selectedNotes.clear();
+    });
+  }
+
+  void _selectAll(List<Note> currentNotes) {
+    setState(() {
+      for (final note in currentNotes) {
+        if (!_selectedNotes.contains(note)) {
+          _selectedNotes.add(note);
+        }
+      }
+    });
+  }
+
+  void _deselectAll(List<Note> currentNotes) {
+    setState(() {
+      for (final note in currentNotes) {
+        _selectedNotes.remove(note);
+      }
+      // If no notes selected at all, exit multi-select mode?
+      // User said: "If none are selected, 'Deselect All' will not be visible."
+      // This implies we stay in the mode but with 0 selected?
+      // But usually 0 selected means exit.
+      // Let's check _handleNoteTap logic. It removes note.
+      // If list is empty, it doesn't exit mode automatically there.
+      // But _exitMultiSelectMode is called by 'X' button.
+      // So we can stay in mode with 0 items.
     });
   }
 
