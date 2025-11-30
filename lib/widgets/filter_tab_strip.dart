@@ -42,6 +42,18 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     super.dispose();
   }
 
+  void _showCreateFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          CustomFilterDialog(availableTags: widget.availableTags),
+    ).then((result) {
+      if (result is Filter) {
+        widget.onFilterCreated(result);
+      }
+    });
+  }
+
   void _showEditFilterDialog(Filter filter) {
     showDialog(
       context: context,
@@ -221,7 +233,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
           // Add Filter Button
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _showHierarchyDialog(null),
+            onPressed: _showCreateFilterDialog,
             tooltip: 'Add Filter',
           ),
           const SizedBox(width: 8),
