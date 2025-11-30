@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/filter.dart';
 import '../l10n/app_localizations.dart';
 import 'custom_filter_dialog.dart';
+import 'hierarchy_dialog.dart';
 
 class FilterTabStrip extends StatefulWidget {
   final String selectedFilterId;
@@ -29,6 +30,7 @@ class FilterTabStrip extends StatefulWidget {
 
 class _FilterTabStripState extends State<FilterTabStrip> {
   final ScrollController _scrollController = ScrollController();
+  bool _isHierarchyEnabled = false;
 
   @override
   void dispose() {
@@ -39,9 +41,8 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   void _showCreateFilterDialog() {
     showDialog(
       context: context,
-      builder: (context) => CustomFilterDialog(
-        availableTags: widget.availableTags,
-      ),
+      builder: (context) =>
+          CustomFilterDialog(availableTags: widget.availableTags),
     ).then((result) {
       if (result is Filter) {
         widget.onFilterCreated(result);
@@ -62,7 +63,6 @@ class _FilterTabStripState extends State<FilterTabStrip> {
       }
     });
   }
-
 
   void _showDeleteConfirmation(Filter filter) {
     final l10n = AppLocalizations.of(context)!;
@@ -92,10 +92,41 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
+  void _showHierarchyDialog(Filter rootFilter) {
+    showDialog(
+      context: context,
+      builder: (context) => HierarchyDialog(
+        rootFilter: rootFilter,
+        allFilters: widget.customFilters,
+        onSelect: (filter) {
+          widget.onFilterSelected(filter.id);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
+    List<Filter> visibleFilters = widget.customFilters;
+    if (_isHierarchyEnabled) {
+      visibleFilters = widget.customFilters.where((f) {
+        // Show if it is NOT a child of any other filter in the list
+        // If two filters are mutually children (identical), use ID to break tie
+        return !widget.customFilters.any((other) {
+          if (f == other) return false;
+          if (!f.isChildOf(other)) return false;
+          // f is child of other.
+          // If other is ALSO child of f (identical), only hide if f.id > other.id
+          if (other.isChildOf(f)) {
+            return f.id.compareTo(other.id) > 0;
+          }
+          return true;
+        });
+      }).toList();
+    }
+
     return SizedBox(
       height: 48,
       child: SingleChildScrollView(
@@ -110,12 +141,18 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             _buildTab('archived', l10n.archivedNotes, Icons.archive),
             const SizedBox(width: 8),
             _buildTab('all', l10n.allNotes, Icons.list),
-            ...widget.customFilters.map((filter) => [
-              const SizedBox(width: 8),
-              _buildCustomFilterTab(filter),
-            ]).expand((x) => x),
+            ...visibleFilters
+                .map(
+                  (filter) => [
+                    const SizedBox(width: 8),
+                    _buildCustomFilterTab(filter),
+                  ],
+                )
+                .expand((x) => x),
             const SizedBox(width: 8),
             _buildAddButton(),
+            const SizedBox(width: 8),
+            _buildHierarchyToggle(),
             const SizedBox(width: 16), // Extra space at the end
           ],
         ),
@@ -125,18 +162,18 @@ class _FilterTabStripState extends State<FilterTabStrip> {
 
   Widget _buildTab(String id, String label, IconData icon) {
     final isSelected = widget.selectedFilterId == id;
-    
+
     return GestureDetector(
       onTap: () => widget.onFilterSelected(id),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected 
+          color: isSelected
               ? Theme.of(context).colorScheme.primary
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outline,
           ),
@@ -147,7 +184,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             Icon(
               icon,
               size: 16,
-              color: isSelected 
+              color: isSelected
                   ? Theme.of(context).colorScheme.onPrimary
                   : Theme.of(context).colorScheme.onSurface,
             ),
@@ -155,7 +192,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             Text(
               label,
               style: TextStyle(
-                color: isSelected 
+                color: isSelected
                     ? Theme.of(context).colorScheme.onPrimary
                     : Theme.of(context).colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -169,18 +206,21 @@ class _FilterTabStripState extends State<FilterTabStrip> {
 
   Widget _buildCustomFilterTab(Filter filter) {
     final isSelected = widget.selectedFilterId == filter.id;
-    
+    final hasChildren = widget.customFilters.any(
+      (other) => other != filter && other.isChildOf(filter),
+    );
+
     return GestureDetector(
       onTap: () => widget.onFilterSelected(filter.id),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected 
+          color: isSelected
               ? Theme.of(context).colorScheme.secondary
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? Theme.of(context).colorScheme.secondary
                 : Theme.of(context).colorScheme.outline,
           ),
@@ -191,12 +231,25 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             Text(
               filter.name,
               style: TextStyle(
-                color: isSelected 
+                color: isSelected
                     ? Theme.of(context).colorScheme.onSecondary
                     : Theme.of(context).colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
+            if (_isHierarchyEnabled && hasChildren) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => _showHierarchyDialog(filter),
+                child: Icon(
+                  Icons.arrow_drop_down,
+                  size: 20,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onSecondary
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ],
             if (isSelected) ...[
               const SizedBox(width: 8),
               GestureDetector(
@@ -214,7 +267,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
               child: Icon(
                 Icons.close,
                 size: 16,
-                color: isSelected 
+                color: isSelected
                     ? Theme.of(context).colorScheme.onSecondary
                     : Theme.of(context).colorScheme.onSurface,
               ),
@@ -250,11 +303,41 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             const SizedBox(width: 4),
             Text(
               l10n.addFilter,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHierarchyToggle() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isHierarchyEnabled = !_isHierarchyEnabled;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _isHierarchyEnabled
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _isHierarchyEnabled
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outline,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Icon(
+          Icons.account_tree,
+          size: 16,
+          color: _isHierarchyEnabled
+              ? Theme.of(context).colorScheme.onPrimaryContainer
+              : Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );

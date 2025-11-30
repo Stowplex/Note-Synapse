@@ -48,4 +48,28 @@ class Filter {
   bool get hasValidCriteria {
     return (includeText?.isNotEmpty == true) || includeTags.isNotEmpty;
   }
+
+  bool isChildOf(Filter other) {
+    if (id == other.id) return false;
+
+    // 1. Check text criteria
+    // If parent has text, child must have it as substring
+    // If parent has NO text, this condition is trivially true
+    if (other.includeText != null && other.includeText!.isNotEmpty) {
+      if (includeText == null || !includeText!.contains(other.includeText!)) {
+        return false;
+      }
+    }
+
+    // 2. Check tag criteria
+    // Parent's tags must be a subset of Child's tags
+    // If parent has NO tags, this condition is trivially true
+    if (other.includeTags.isNotEmpty) {
+      if (!other.includeTags.every((tag) => includeTags.contains(tag))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 }
