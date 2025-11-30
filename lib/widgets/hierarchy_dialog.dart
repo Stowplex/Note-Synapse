@@ -30,13 +30,62 @@ class HierarchyDialog extends StatefulWidget {
 class _HierarchyDialogState extends State<HierarchyDialog> {
   late Set<String> _selectedIds;
   final Set<String> _expandedIds = {};
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _selectedIds = Set.from(widget.initialSelectedIds ?? {});
-    // Auto-expand root if present, or maybe expand all by default?
     // User requirement: "They should start collapsed."
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query != _searchQuery) {
+      setState(() {
+        _searchQuery = query;
+        if (_searchQuery.isNotEmpty) {
+          _expandMatchingFilters();
+        }
+      });
+    }
+  }
+
+  void _expandMatchingFilters() {
+    _expandedIds.clear();
+    final matches = widget.allFilters.where((f) {
+      return f.name.toLowerCase().contains(_searchQuery);
+    });
+
+    for (final match in matches) {
+      // Find all ancestors
+      var current = match;
+      // We need to find parents. Since we don't have parent links, we search in allFilters.
+      // This is O(N^2) roughly, but N is small.
+      bool changed = true;
+      while (changed) {
+        changed = false;
+        try {
+          // Find a parent for 'current'
+          final parent = widget.allFilters.firstWhere(
+            (p) => current.isChildOf(p) && current != p,
+          );
+          _expandedIds.add(parent.id);
+          current = parent;
+          changed = true;
+        } catch (e) {
+          // No parent found
+        }
+      }
+    }
   }
 
   void _toggleSelection(String id) {
@@ -102,13 +151,20 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
             // Toolbar
             Row(
               children: [
-                Text(
-                  widget.rootFilter != null
-                      ? 'Hierarchy: ${widget.rootFilter!.name}'
-                      : 'Filters',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search filters...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.unfold_more),
                   tooltip: 'Expand All',
@@ -182,6 +238,9 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
     final hasTags = filter.includeTags.isNotEmpty;
     final hasText =
         filter.includeText != null && filter.includeText!.isNotEmpty;
+    final isMatched =
+        _searchQuery.isNotEmpty &&
+        filter.name.toLowerCase().contains(_searchQuery);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +248,12 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
         InkWell(
           onTap: () => _toggleSelection(filter.id),
           onLongPress: () => _toggleSelection(filter.id),
-          child: Padding(
+          child: Container(
+            color: isMatched
+                ? Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withOpacity(0.3)
+                : null,
             padding: EdgeInsets.only(left: depth * 16.0, top: 2.0, bottom: 2.0),
             child: Row(
               children: [
