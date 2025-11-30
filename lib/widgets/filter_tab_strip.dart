@@ -5,9 +5,11 @@ import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import 'custom_filter_dialog.dart';
 import 'hierarchy_dialog.dart';
+import 'active_filters_dialog.dart';
 
 class FilterTabStrip extends StatefulWidget {
   final Set<String> selectedFilterIds;
+  final Set<String> additionalSelectedTags;
   final List<Filter> customFilters;
   final List<String> availableTags;
   final Function(Set<String>) onFilterSelected;
@@ -18,6 +20,7 @@ class FilterTabStrip extends StatefulWidget {
   const FilterTabStrip({
     super.key,
     required this.selectedFilterIds,
+    this.additionalSelectedTags = const {},
     required this.customFilters,
     required this.availableTags,
     required this.onFilterSelected,
@@ -37,18 +40,6 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _showCreateFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          CustomFilterDialog(availableTags: widget.availableTags),
-    ).then((result) {
-      if (result is Filter) {
-        widget.onFilterCreated(result);
-      }
-    });
   }
 
   void _showEditFilterDialog(Filter filter) {
@@ -114,6 +105,85 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
+  void _showActiveFiltersDialog() {
+    // Collect active filters
+    final activeFilters = <Filter>[];
+    for (final id in widget.selectedFilterIds) {
+      if (id == 'default' ||
+          id == 'pinned' ||
+          id == 'archived' ||
+          id == 'all') {
+        // Built-in filters, maybe we should represent them as Filter objects or just skip?
+        // User request implies showing details.
+        // Let's create dummy filters for built-ins for display purposes.
+        if (id == 'default') {
+          activeFilters.add(
+            Filter(
+              id: 'default',
+              name: 'Active Notes',
+              includeTags: [],
+              includeText: '',
+              includeArchived: false,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        } else if (id == 'pinned') {
+          activeFilters.add(
+            Filter(
+              id: 'pinned',
+              name: 'Pinned Notes',
+              includeTags: [],
+              includeText: '',
+              includeArchived: false,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        } else if (id == 'archived') {
+          activeFilters.add(
+            Filter(
+              id: 'archived',
+              name: 'Archived Notes',
+              includeTags: [],
+              includeText: '',
+              includeArchived: true,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        } else if (id == 'all') {
+          activeFilters.add(
+            Filter(
+              id: 'all',
+              name: 'All Notes',
+              includeTags: [],
+              includeText: '',
+              includeArchived: false,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
+      } else {
+        try {
+          final filter = widget.customFilters.firstWhere((f) => f.id == id);
+          activeFilters.add(filter);
+        } catch (e) {
+          // Filter not found
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => ActiveFiltersDialog(
+        selectedFilters: activeFilters,
+        additionalTags: widget.additionalSelectedTags,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -138,35 +208,49 @@ class _FilterTabStripState extends State<FilterTabStrip> {
       }).toList();
     }
 
-    return SizedBox(
-      height: 48,
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _buildHierarchyToggle(appProvider),
+    final hasActiveFilters =
+        widget.selectedFilterIds.any((id) => id != 'default') ||
+        widget.additionalSelectedTags.isNotEmpty;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildHierarchyToggle(appProvider),
+          const SizedBox(width: 8),
+          // Add Filter Button
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _showHierarchyDialog(null),
+            tooltip: 'Add Filter',
+          ),
+          const SizedBox(width: 8),
+          // Filter Icon
+          if (hasActiveFilters) ...[
+            IconButton(
+              icon: Icon(
+                Icons.filter_list,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              tooltip: 'Active Filters',
+              onPressed: _showActiveFiltersDialog,
+            ),
             const SizedBox(width: 8),
-            _buildAddButton(),
-            const SizedBox(width: 8),
-            _buildTab('default', l10n.defaultNotes, Icons.note),
-            const SizedBox(width: 8),
-            _buildTab('pinned', l10n.pinnedNotes, Icons.push_pin),
-            const SizedBox(width: 8),
-            _buildTab('archived', l10n.archivedNotes, Icons.archive),
-            const SizedBox(width: 8),
-            _buildTab('all', l10n.allNotes, Icons.list),
-            ...visibleFilters
-                .map(
-                  (filter) => [
-                    const SizedBox(width: 8),
-                    _buildCustomFilterTab(filter, isHierarchyEnabled),
-                  ],
-                )
-                .expand((x) => x),
-            const SizedBox(width: 16), // Extra space at the end
           ],
-        ),
+          // Default Filter Tab
+          _buildTab('default', l10n.defaultNotes, Icons.note),
+          const SizedBox(width: 8),
+          _buildTab('pinned', l10n.pinnedNotes, Icons.push_pin),
+          const SizedBox(width: 8),
+          _buildTab('archived', l10n.archivedNotes, Icons.archive),
+          const SizedBox(width: 8),
+          _buildTab('all', l10n.allNotes, Icons.list),
+          for (final filter in visibleFilters) ...[
+            const SizedBox(width: 8),
+            _buildCustomFilterTab(filter, isHierarchyEnabled),
+          ],
+          const SizedBox(width: 16), // Extra space at the end
+        ],
       ),
     );
   }
@@ -284,28 +368,6 @@ class _FilterTabStripState extends State<FilterTabStrip> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddButton() {
-    return GestureDetector(
-      onTap: _showCreateFilterDialog,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline,
-            style: BorderStyle.solid,
-          ),
-        ),
-        child: Icon(
-          Icons.add,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );

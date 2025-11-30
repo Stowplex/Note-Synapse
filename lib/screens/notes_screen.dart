@@ -275,6 +275,7 @@ class _NotesScreenState extends State<NotesScreen> {
 
                           return FilterTabStrip(
                             selectedFilterIds: _selectedFilterIds,
+                            additionalSelectedTags: _selectedTags,
                             customFilters: appProvider.filters,
                             availableTags: _availableTags,
                             onFilterSelected: _onFilterSelected,
