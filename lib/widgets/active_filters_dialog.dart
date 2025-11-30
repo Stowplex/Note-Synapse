@@ -5,10 +5,15 @@ class ActiveFiltersDialog extends StatelessWidget {
   final List<Filter> selectedFilters;
   final Set<String> additionalTags;
 
+  final Function(Filter) onRemoveFilter;
+  final VoidCallback onClearTags;
+
   const ActiveFiltersDialog({
     super.key,
     required this.selectedFilters,
     required this.additionalTags,
+    required this.onRemoveFilter,
+    required this.onClearTags,
   });
 
   @override
@@ -84,11 +89,25 @@ class ActiveFiltersDialog extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            filter.name,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  filter.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                onPressed: () => onRemoveFilter(filter),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Remove filter',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           if (filter.includeTags.isNotEmpty) ...[
@@ -145,11 +164,23 @@ class ActiveFiltersDialog extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Additional Tags',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Additional Tags',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                onPressed: onClearTags,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Clear tags',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Wrap(

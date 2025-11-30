@@ -16,6 +16,7 @@ class FilterTabStrip extends StatefulWidget {
   final Function(Filter) onFilterCreated;
   final Function(Filter) onFilterUpdated;
   final Function(String) onFilterDeleted;
+  final Function(Set<String>) onTagsUpdated;
 
   const FilterTabStrip({
     super.key,
@@ -27,6 +28,7 @@ class FilterTabStrip extends StatefulWidget {
     required this.onFilterCreated,
     required this.onFilterUpdated,
     required this.onFilterDeleted,
+    required this.onTagsUpdated,
   });
 
   @override
@@ -118,81 +120,130 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   }
 
   void _showActiveFiltersDialog() {
-    // Collect active filters
-    final activeFilters = <Filter>[];
-    for (final id in widget.selectedFilterIds) {
-      if (id == 'default' ||
-          id == 'pinned' ||
-          id == 'archived' ||
-          id == 'all') {
-        // Built-in filters, maybe we should represent them as Filter objects or just skip?
-        // User request implies showing details.
-        // Let's create dummy filters for built-ins for display purposes.
-        if (id == 'default') {
-          activeFilters.add(
-            Filter(
-              id: 'default',
-              name: 'Active Notes',
-              includeTags: [],
-              includeText: '',
-              includeArchived: false,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        } else if (id == 'pinned') {
-          activeFilters.add(
-            Filter(
-              id: 'pinned',
-              name: 'Pinned Notes',
-              includeTags: [],
-              includeText: '',
-              includeArchived: false,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        } else if (id == 'archived') {
-          activeFilters.add(
-            Filter(
-              id: 'archived',
-              name: 'Archived Notes',
-              includeTags: [],
-              includeText: '',
-              includeArchived: true,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        } else if (id == 'all') {
-          activeFilters.add(
-            Filter(
-              id: 'all',
-              name: 'All Notes',
-              includeTags: [],
-              includeText: '',
-              includeArchived: false,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        }
-      } else {
-        try {
-          final filter = widget.customFilters.firstWhere((f) => f.id == id);
-          activeFilters.add(filter);
-        } catch (e) {
-          // Filter not found
-        }
-      }
-    }
-
     showDialog(
       context: context,
-      builder: (context) => ActiveFiltersDialog(
-        selectedFilters: activeFilters,
-        additionalTags: widget.additionalSelectedTags,
-      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Collect active filters based on CURRENT widget state
+            // Note: widget.selectedFilterIds is updated by parent, so if we call onFilterSelected,
+            // the parent rebuilds, and this dialog (being a child of the context that showed it?)
+            // actually, showDialog pushes a new route. The parent rebuild doesn't automatically rebuild the dialog content
+            // unless we pass fresh data.
+            // BUT, we want the dialog to reflect the changes immediately.
+            // Since the dialog is modal, we can maintain a local copy of the state?
+            // OR, we rely on the callbacks to update the parent, and we just close the dialog if everything is empty.
+            // Wait, if we update parent, the dialog is still showing old data.
+            // We need to update the dialog's view of the data.
+            // Let's use local state for the dialog and sync it?
+            // No, simpler: Just close the dialog if everything is cleared.
+            // If removing one item, we want to see it disappear.
+            // So we need local state in StatefulBuilder.
+
+            final currentFilterIds = Set<String>.from(widget.selectedFilterIds);
+            final currentTags = Set<String>.from(widget.additionalSelectedTags);
+
+            // Helper to rebuild list
+            List<Filter> getActiveFilters() {
+              final activeFilters = <Filter>[];
+              for (final id in currentFilterIds) {
+                if (id == 'default' ||
+                    id == 'pinned' ||
+                    id == 'archived' ||
+                    id == 'all') {
+                  if (id == 'default') {
+                    activeFilters.add(
+                      Filter(
+                        id: 'default',
+                        name: 'Active Notes',
+                        includeTags: [],
+                        includeText: '',
+                        includeArchived: false,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                  } else if (id == 'pinned') {
+                    activeFilters.add(
+                      Filter(
+                        id: 'pinned',
+                        name: 'Pinned Notes',
+                        includeTags: [],
+                        includeText: '',
+                        includeArchived: false,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                  } else if (id == 'archived') {
+                    activeFilters.add(
+                      Filter(
+                        id: 'archived',
+                        name: 'Archived Notes',
+                        includeTags: [],
+                        includeText: '',
+                        includeArchived: true,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                  } else if (id == 'all') {
+                    activeFilters.add(
+                      Filter(
+                        id: 'all',
+                        name: 'All Notes',
+                        includeTags: [],
+                        includeText: '',
+                        includeArchived: false,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                  }
+                } else {
+                  try {
+                    final filter = widget.customFilters.firstWhere(
+                      (f) => f.id == id,
+                    );
+                    activeFilters.add(filter);
+                  } catch (e) {
+                    // Filter not found
+                  }
+                }
+              }
+              return activeFilters;
+            }
+
+            return ActiveFiltersDialog(
+              selectedFilters: getActiveFilters(),
+              additionalTags: currentTags,
+              onRemoveFilter: (filter) {
+                setState(() {
+                  currentFilterIds.remove(filter.id);
+                  // Also update parent immediately
+                  final newIds = Set<String>.from(currentFilterIds);
+                  if (newIds.isEmpty && currentTags.isEmpty) {
+                    newIds.add('default');
+                    Navigator.of(context).pop(); // Close if empty
+                  }
+                  widget.onFilterSelected(newIds);
+                });
+              },
+              onClearTags: () {
+                setState(() {
+                  currentTags.clear();
+                  // Update parent
+                  widget.onTagsUpdated({});
+                  if (currentFilterIds.isEmpty) {
+                    widget.onFilterSelected({'default'});
+                    Navigator.of(context).pop();
+                  }
+                });
+              },
+            );
+          },
+        );
+      },
     );
   }
 

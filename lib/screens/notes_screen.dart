@@ -282,6 +282,11 @@ class _NotesScreenState extends State<NotesScreen> {
                             onFilterCreated: _onFilterCreated,
                             onFilterUpdated: _onFilterUpdated,
                             onFilterDeleted: _onFilterDeleted,
+                            onTagsUpdated: (tags) {
+                              setState(() {
+                                _selectedTags = tags;
+                              });
+                            },
                           );
                         },
                       ),
