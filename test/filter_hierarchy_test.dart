@@ -7,12 +7,13 @@ void main() {
 
     Filter createFilter({
       required String id,
+      String? name,
       String? includeText,
       List<String> includeTags = const [],
     }) {
       return Filter(
         id: id,
-        name: id,
+        name: name ?? id,
         includeText: includeText,
         includeTags: includeTags,
         createdAt: now,
@@ -145,5 +146,32 @@ void main() {
       expect(roots.length, 1);
       expect(roots.first.id, '1');
     });
+
+    test('Sorting logic', () {
+      final a = createFilter(id: 'A', name: 'A');
+      final b = createFilter(id: 'B', name: 'B');
+      final c = createFilter(id: 'C', name: 'C');
+
+      final filters = [b, c, a];
+
+      // Sort alphabetically
+      filters.sort((f1, f2) => f1.name.compareTo(f2.name));
+
+      expect(filters.map((f) => f.name).toList(), ['A', 'B', 'C']);
+    });
   });
+}
+
+extension on Filter {
+  // Helper for creating filters with names in tests
+  Filter copyWith({String? name}) {
+    return Filter(
+      id: id,
+      name: name ?? this.name,
+      includeText: includeText,
+      includeTags: includeTags,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
 }

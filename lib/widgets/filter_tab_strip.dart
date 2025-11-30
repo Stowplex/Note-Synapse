@@ -92,7 +92,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
-  void _showHierarchyDialog(Filter rootFilter) {
+  void _showHierarchyDialog(Filter? rootFilter) {
     showDialog(
       context: context,
       builder: (context) => HierarchyDialog(
@@ -100,6 +100,17 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         allFilters: widget.customFilters,
         onSelect: (filter) {
           widget.onFilterSelected(filter.id);
+        },
+        onEdit: (filter) {
+          // Close hierarchy dialog first? Or keep it open?
+          // If we close it, we can reopen it after edit if needed.
+          // For now, let's close it to avoid state issues, as the edit dialog is modal.
+          Navigator.of(context).pop();
+          _showEditFilterDialog(filter);
+        },
+        onDelete: (filter) {
+          Navigator.of(context).pop();
+          _showDeleteConfirmation(filter);
         },
       ),
     );
@@ -134,6 +145,10 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
+            _buildHierarchyToggle(),
+            const SizedBox(width: 8),
+            _buildAddButton(),
+            const SizedBox(width: 8),
             _buildTab('default', l10n.defaultNotes, Icons.note),
             const SizedBox(width: 8),
             _buildTab('pinned', l10n.pinnedNotes, Icons.push_pin),
@@ -149,10 +164,6 @@ class _FilterTabStripState extends State<FilterTabStrip> {
                   ],
                 )
                 .expand((x) => x),
-            const SizedBox(width: 8),
-            _buildAddButton(),
-            const SizedBox(width: 8),
-            _buildHierarchyToggle(),
             const SizedBox(width: 16), // Extra space at the end
           ],
         ),
@@ -279,11 +290,10 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   }
 
   Widget _buildAddButton() {
-    final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
       onTap: _showCreateFilterDialog,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
@@ -292,20 +302,10 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             style: BorderStyle.solid,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.add,
-              size: 16,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              l10n.addFilter,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-            ),
-          ],
+        child: Icon(
+          Icons.add,
+          size: 16,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -317,6 +317,9 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         setState(() {
           _isHierarchyEnabled = !_isHierarchyEnabled;
         });
+      },
+      onLongPress: () {
+        _showHierarchyDialog(null); // Show all hierarchy
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
