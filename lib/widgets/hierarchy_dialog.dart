@@ -190,7 +190,7 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
           onTap: () => _toggleSelection(filter.id),
           onLongPress: () => _toggleSelection(filter.id),
           child: Padding(
-            padding: EdgeInsets.only(left: depth * 16.0, top: 4.0, bottom: 4.0),
+            padding: EdgeInsets.only(left: depth * 16.0, top: 2.0, bottom: 2.0),
             child: Row(
               children: [
                 // Expand/Collapse Indicator
@@ -262,25 +262,34 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
                   ),
                 ),
 
-                // Edit/Delete Buttons (only if selected)
-                if (isSelected) ...[
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 16),
-                    onPressed: () => widget.onEdit(filter),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    splashRadius: 20,
+                // Edit/Delete Buttons
+                Visibility(
+                  visible: isSelected,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 16),
+                        onPressed: () => widget.onEdit(filter),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        onPressed: () => widget.onDelete(filter),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: () => widget.onDelete(filter),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    splashRadius: 20,
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                ),
               ],
             ),
           ),
