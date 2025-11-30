@@ -7,17 +7,17 @@ import 'custom_filter_dialog.dart';
 import 'hierarchy_dialog.dart';
 
 class FilterTabStrip extends StatefulWidget {
-  final String selectedFilterId;
+  final Set<String> selectedFilterIds;
   final List<Filter> customFilters;
   final List<String> availableTags;
-  final Function(String) onFilterSelected;
+  final Function(Set<String>) onFilterSelected;
   final Function(Filter) onFilterCreated;
   final Function(Filter) onFilterUpdated;
   final Function(String) onFilterDeleted;
 
   const FilterTabStrip({
     super.key,
-    required this.selectedFilterId,
+    required this.selectedFilterIds,
     required this.customFilters,
     required this.availableTags,
     required this.onFilterSelected,
@@ -99,13 +99,10 @@ class _FilterTabStripState extends State<FilterTabStrip> {
       builder: (context) => HierarchyDialog(
         rootFilter: rootFilter,
         allFilters: widget.customFilters,
-        onSelect: (filter) {
-          widget.onFilterSelected(filter.id);
+        onConfirmSelection: (selectedIds) {
+          widget.onFilterSelected(selectedIds);
         },
         onEdit: (filter) {
-          // Close hierarchy dialog first? Or keep it open?
-          // If we close it, we can reopen it after edit if needed.
-          // For now, let's close it to avoid state issues, as the edit dialog is modal.
           Navigator.of(context).pop();
           _showEditFilterDialog(filter);
         },
@@ -175,10 +172,10 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   }
 
   Widget _buildTab(String id, String label, IconData icon) {
-    final isSelected = widget.selectedFilterId == id;
+    final isSelected = widget.selectedFilterIds.contains(id);
 
     return GestureDetector(
-      onTap: () => widget.onFilterSelected(id),
+      onTap: () => widget.onFilterSelected({id}),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -219,13 +216,13 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   }
 
   Widget _buildCustomFilterTab(Filter filter, bool isHierarchyEnabled) {
-    final isSelected = widget.selectedFilterId == filter.id;
+    final isSelected = widget.selectedFilterIds.contains(filter.id);
     final hasChildren = widget.customFilters.any(
       (other) => other != filter && other.isChildOf(filter),
     );
 
     return GestureDetector(
-      onTap: () => widget.onFilterSelected(filter.id),
+      onTap: () => widget.onFilterSelected({filter.id}),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(

@@ -30,8 +30,9 @@ class _NotesScreenState extends State<NotesScreen> {
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
   List<String> _availableTags = [];
-  String _selectedFilterId =
-      'default'; // 'default', 'pinned', 'archived', 'all', or custom filter ID
+  Set<String> _selectedFilterIds = {
+    'default',
+  }; // 'default', 'pinned', 'archived', 'all', or custom filter IDs
 
   @override
   void initState() {
@@ -237,7 +238,7 @@ class _NotesScreenState extends State<NotesScreen> {
                           }
 
                           return FilterTabStrip(
-                            selectedFilterId: _selectedFilterId,
+                            selectedFilterIds: _selectedFilterIds,
                             customFilters: appProvider.filters,
                             availableTags: _availableTags,
                             onFilterSelected: _onFilterSelected,
@@ -356,9 +357,9 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
-  void _onFilterSelected(String filterId) {
+  void _onFilterSelected(Set<String> filterIds) {
     setState(() {
-      _selectedFilterId = filterId;
+      _selectedFilterIds = filterIds;
     });
   }
 
@@ -372,10 +373,13 @@ class _NotesScreenState extends State<NotesScreen> {
 
   void _onFilterDeleted(String filterId) {
     context.read<AppProvider>().deleteFilter(filterId);
-    // If the deleted filter was selected, switch to default
-    if (_selectedFilterId == filterId) {
+    // If the deleted filter was selected, remove it
+    if (_selectedFilterIds.contains(filterId)) {
       setState(() {
-        _selectedFilterId = 'default';
+        _selectedFilterIds.remove(filterId);
+        if (_selectedFilterIds.isEmpty) {
+          _selectedFilterIds = {'default'};
+        }
       });
     }
   }
@@ -383,24 +387,49 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> _filterNotes(List<Note> notes, AppProvider appProvider) {
     List<Note> filteredNotes = notes;
 
-    // Handle built-in filters
-    if (_selectedFilterId == 'default') {
-      filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
-    } else if (_selectedFilterId == 'pinned') {
-      filteredNotes = filteredNotes
-          .where((note) => note.pinned && !note.isArchived)
-          .toList();
-    } else if (_selectedFilterId == 'archived') {
-      filteredNotes = filteredNotes.where((note) => note.isArchived).toList();
-    } else if (_selectedFilterId == 'all') {
-      // No additional filtering needed
+    // Combine notes from all selected filters (Union)
+    Set<String> noteIds = {};
+    List<Note> unionNotes = [];
+
+    // If 'all' is selected, it overrides everything else
+    if (_selectedFilterIds.contains('all')) {
+      // No filtering needed for 'all' (except search/tags later)
+      // But we need to handle other filters if 'all' is NOT selected.
+      // Wait, if 'all' is selected, we start with ALL notes.
+      // If we have 'all' AND 'pinned', do we show all? Yes.
+      // So if 'all' is present, we can just use 'notes' as base.
+      filteredNotes = notes;
     } else {
-      // Handle custom filter
-      final customFilter = appProvider.filters.firstWhere(
-        (filter) => filter.id == _selectedFilterId,
-        orElse: () => throw Exception('Filter not found'),
-      );
-      filteredNotes = appProvider.getFilteredNotes(customFilter);
+      for (final filterId in _selectedFilterIds) {
+        List<Note> subset = [];
+        if (filterId == 'default') {
+          subset = notes.where((note) => !note.isArchived).toList();
+        } else if (filterId == 'pinned') {
+          subset = notes
+              .where((note) => note.pinned && !note.isArchived)
+              .toList();
+        } else if (filterId == 'archived') {
+          subset = notes.where((note) => note.isArchived).toList();
+        } else {
+          // Custom filter
+          try {
+            final customFilter = appProvider.filters.firstWhere(
+              (filter) => filter.id == filterId,
+            );
+            subset = appProvider.getFilteredNotes(customFilter);
+          } catch (e) {
+            // Filter might not exist (deleted?), skip
+            continue;
+          }
+        }
+
+        for (final note in subset) {
+          if (noteIds.add(note.id)) {
+            unionNotes.add(note);
+          }
+        }
+      }
+      filteredNotes = unionNotes;
     }
 
     // Filter by tags (OR logic - show notes that have ANY of the selected tags)

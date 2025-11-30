@@ -86,23 +86,30 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
       builder: (context) => HierarchyDialog(
         allFilters: appProvider.filters,
         filterPredicate: (f) => f.includeTags.isNotEmpty,
-        onSelect: (filter) {
+        onConfirmSelection: (selectedIds) {
           setState(() {
-            for (final tag in filter.includeTags) {
-              if (!_selectedTags.contains(tag) &&
-                  !widget.excludedTags.contains(tag)) {
-                _selectedTags.add(tag);
-                _filterDerivedTags.add(tag);
-              } else if (_selectedTags.contains(tag)) {
-                // If already selected, mark as derived as well to show color?
-                // Or just keep as is. User requirement: "If these tags already exists, they will also show a different color"
-                _filterDerivedTags.add(tag);
+            for (final filterId in selectedIds) {
+              try {
+                final filter = appProvider.filters.firstWhere(
+                  (f) => f.id == filterId,
+                );
+                for (final tag in filter.includeTags) {
+                  if (!_selectedTags.contains(tag) &&
+                      !widget.excludedTags.contains(tag)) {
+                    _selectedTags.add(tag);
+                    _filterDerivedTags.add(tag);
+                  } else if (_selectedTags.contains(tag)) {
+                    _filterDerivedTags.add(tag);
+                  }
+                }
+              } catch (e) {
+                // Filter might not exist
               }
             }
           });
         },
         onEdit: (filter) {
-          // No-op or handle if needed, but mainly for selection here
+          // No-op
         },
         onDelete: (filter) {
           // No-op
