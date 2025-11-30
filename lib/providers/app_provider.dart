@@ -384,30 +384,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> removeTagFromNote(String noteId, String tagName) async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
-
-      final note = _notes[noteIndex];
-      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
-
-      final updatedTags = List<String>.from(note.tags)..remove(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
-
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
-
   List<String> getAllAvailableTags() {
     final allTags = <String>{};
     for (final note in _notes) {
@@ -717,6 +693,82 @@ class AppProvider extends ChangeNotifier {
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeTagFromNote(String noteId, String tagName) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+
+      final note = _notes[noteIndex];
+      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
+
+      final updatedTags = List<String>.from(note.tags)..remove(tagName);
+      final updatedNote = note.copyWith(
+        tags: updatedTags,
+        updatedAt: DateTime.now(),
+      );
+
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      _tags = await _databaseService.getAllTags();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> batchUpdateTags(
+    List<String> noteIds,
+    List<String> tagsToAdd,
+    List<String> tagsToRemove,
+  ) async {
+    try {
+      bool hasChanges = false;
+
+      for (final noteId in noteIds) {
+        final noteIndex = _notes.indexWhere((n) => n.id == noteId);
+        if (noteIndex == -1) continue;
+
+        final note = _notes[noteIndex];
+        final currentTags = Set<String>.from(note.tags);
+        bool noteChanged = false;
+
+        // Add tags
+        for (final tag in tagsToAdd) {
+          if (currentTags.add(tag)) {
+            noteChanged = true;
+          }
+        }
+
+        // Remove tags
+        for (final tag in tagsToRemove) {
+          if (currentTags.remove(tag)) {
+            noteChanged = true;
+          }
+        }
+
+        if (noteChanged) {
+          final updatedNote = note.copyWith(
+            tags: currentTags.toList(),
+            updatedAt: DateTime.now(),
+          );
+
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        _tags = await _databaseService.getAllTags();
+        notifyListeners();
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
