@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../screens/tag_management_screen.dart';
+import 'hierarchy_dialog.dart';
 
 class TagSelectionDialog extends StatefulWidget {
   final List<String> initialSelectedTags;
@@ -36,6 +37,7 @@ class TagSelectionDialog extends StatefulWidget {
 class _TagSelectionDialogState extends State<TagSelectionDialog> {
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _selectedTags = {};
+  final Set<String> _filterDerivedTags = {}; // Tags added via "Add from Filter"
   String _tagSearchQuery = '';
 
   @override
@@ -63,6 +65,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
     setState(() {
       if (_selectedTags.contains(tag)) {
         _selectedTags.remove(tag);
+        _filterDerivedTags.remove(tag); // Also remove from derived set
       } else {
         _selectedTags.add(tag);
       }
@@ -73,8 +76,37 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
     Navigator.pop(context); // Close the tag selection dialog first
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const TagManagementScreen(),
+      MaterialPageRoute(builder: (context) => const TagManagementScreen()),
+    );
+  }
+
+  void _openFilterSelection(BuildContext context, AppProvider appProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => HierarchyDialog(
+        allFilters: appProvider.filters,
+        filterPredicate: (f) => f.includeTags.isNotEmpty,
+        onSelect: (filter) {
+          setState(() {
+            for (final tag in filter.includeTags) {
+              if (!_selectedTags.contains(tag) &&
+                  !widget.excludedTags.contains(tag)) {
+                _selectedTags.add(tag);
+                _filterDerivedTags.add(tag);
+              } else if (_selectedTags.contains(tag)) {
+                // If already selected, mark as derived as well to show color?
+                // Or just keep as is. User requirement: "If these tags already exists, they will also show a different color"
+                _filterDerivedTags.add(tag);
+              }
+            }
+          });
+        },
+        onEdit: (filter) {
+          // No-op or handle if needed, but mainly for selection here
+        },
+        onDelete: (filter) {
+          // No-op
+        },
       ),
     );
   }
@@ -161,12 +193,19 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                               spacing: 8,
                               runSpacing: 4,
                               children: _selectedTags.map((tag) {
+                                final isDerived = _filterDerivedTags.contains(
+                                  tag,
+                                );
                                 return Chip(
                                   label: Text(tag),
+                                  backgroundColor: isDerived
+                                      ? Colors.purple.withOpacity(0.1)
+                                      : null,
                                   deleteIcon: const Icon(Icons.close, size: 18),
                                   onDeleted: () {
                                     setState(() {
                                       _selectedTags.remove(tag);
+                                      _filterDerivedTags.remove(tag);
                                     });
                                   },
                                 );
@@ -285,6 +324,10 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () => _openFilterSelection(context, appProvider),
+              child: const Text('Add from filter'),
+            ),
             if (widget.showManageTagsButton) ...[
               TextButton(
                 onPressed: () => _navigateToTagManagement(context),

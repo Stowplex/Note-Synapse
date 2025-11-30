@@ -7,6 +7,7 @@ class HierarchyDialog extends StatelessWidget {
   final Function(Filter) onSelect;
   final Function(Filter) onEdit;
   final Function(Filter) onDelete;
+  final bool Function(Filter)? filterPredicate;
 
   const HierarchyDialog({
     super.key,
@@ -15,6 +16,7 @@ class HierarchyDialog extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.onDelete,
+    this.filterPredicate,
   });
 
   @override
@@ -62,6 +64,11 @@ class HierarchyDialog extends StatelessWidget {
       }).toList();
     }
 
+    // Apply predicate if provided
+    if (filterPredicate != null) {
+      initialFilters = initialFilters.where(filterPredicate!).toList();
+    }
+
     if (initialFilters.isEmpty) {
       return const Text('No filters found.');
     }
@@ -87,9 +94,19 @@ class HierarchyDialog extends StatelessWidget {
   }
 
   Widget _buildNode(BuildContext context, Filter filter) {
-    final children = _getDirectChildren(filter, allFilters);
+    var children = _getDirectChildren(filter, allFilters);
+
+    // Apply predicate to children as well
+    if (filterPredicate != null) {
+      children = children.where(filterPredicate!).toList();
+    }
+
     // Sort children alphabetically
     children.sort((a, b) => a.name.compareTo(b.name));
+
+    final hasTags = filter.includeTags.isNotEmpty;
+    final hasText =
+        filter.includeText != null && filter.includeText!.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(left: 16.0),
@@ -107,6 +124,15 @@ class HierarchyDialog extends StatelessWidget {
               else
                 const SizedBox(width: 16),
               const SizedBox(width: 8),
+              // Icons based on filter content
+              if (hasTags) ...[
+                const Icon(Icons.label, size: 14, color: Colors.blueGrey),
+                const SizedBox(width: 4),
+              ],
+              if (hasText) ...[
+                const Icon(Icons.text_fields, size: 14, color: Colors.blueGrey),
+                const SizedBox(width: 4),
+              ],
               Expanded(
                 child: InkWell(
                   onTap: () {
@@ -129,14 +155,6 @@ class HierarchyDialog extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.edit, size: 16),
                 onPressed: () {
-                  // Navigator.of(context).pop(); // Keep dialog open? User request implies behavior same as filter line.
-                  // In filter line, edit dialog opens.
-                  // If we want to keep hierarchy dialog open, we need to handle the result and refresh.
-                  // But HierarchyDialog is stateless.
-                  // If we open on top, we need to make sure HierarchyDialog rebuilds if name changes.
-                  // Since it's stateless and passed `allFilters`, it won't auto-update unless parent rebuilds.
-                  // So closing it might be safer, or we rely on parent to rebuild it.
-                  // Let's just call the callback.
                   onEdit(filter);
                 },
                 padding: EdgeInsets.zero,

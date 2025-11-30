@@ -35,6 +35,7 @@ class AppProvider extends ChangeNotifier {
   bool newNoteFromShare = false;
   List<String> _multiFunctionApps = [];
   String? _currentMultiFunctionAppId;
+  bool _isHierarchyEnabled = false;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -48,6 +49,7 @@ class AppProvider extends ChangeNotifier {
   ModelConfig? get modelConfig => _modelConfig;
   List<String> get multiFunctionApps => _multiFunctionApps;
   String? get currentMultiFunctionAppId => _currentMultiFunctionAppId;
+  bool get isHierarchyEnabled => _isHierarchyEnabled;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -70,6 +72,8 @@ class AppProvider extends ChangeNotifier {
       await _refreshMultiFunctionApps();
       _currentMultiFunctionAppId = await _databaseService
           .getMultiFunctionDefaultAppId();
+
+      await _loadHierarchyPreference();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
@@ -571,6 +575,31 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       LoggerService.error('Error loading language preference: $e', error: e);
       _locale = const Locale('en', ''); // Default to English
+    }
+  }
+
+  void toggleHierarchy() {
+    _isHierarchyEnabled = !_isHierarchyEnabled;
+    _saveHierarchyPreference();
+    notifyListeners();
+  }
+
+  Future<void> _saveHierarchyPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_hierarchy_enabled', _isHierarchyEnabled);
+    } catch (e) {
+      LoggerService.error('Error saving hierarchy preference: $e', error: e);
+    }
+  }
+
+  Future<void> _loadHierarchyPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isHierarchyEnabled = prefs.getBool('is_hierarchy_enabled') ?? false;
+    } catch (e) {
+      LoggerService.error('Error loading hierarchy preference: $e', error: e);
+      _isHierarchyEnabled = false;
     }
   }
 

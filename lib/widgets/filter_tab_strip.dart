@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/filter.dart';
+import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import 'custom_filter_dialog.dart';
 import 'hierarchy_dialog.dart';
@@ -30,7 +32,6 @@ class FilterTabStrip extends StatefulWidget {
 
 class _FilterTabStripState extends State<FilterTabStrip> {
   final ScrollController _scrollController = ScrollController();
-  bool _isHierarchyEnabled = false;
 
   @override
   void dispose() {
@@ -119,9 +120,11 @@ class _FilterTabStripState extends State<FilterTabStrip> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.watch<AppProvider>();
+    final isHierarchyEnabled = appProvider.isHierarchyEnabled;
 
     List<Filter> visibleFilters = widget.customFilters;
-    if (_isHierarchyEnabled) {
+    if (isHierarchyEnabled) {
       visibleFilters = widget.customFilters.where((f) {
         // Show if it is NOT a child of any other filter in the list
         // If two filters are mutually children (identical), use ID to break tie
@@ -145,7 +148,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _buildHierarchyToggle(),
+            _buildHierarchyToggle(appProvider),
             const SizedBox(width: 8),
             _buildAddButton(),
             const SizedBox(width: 8),
@@ -160,7 +163,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
                 .map(
                   (filter) => [
                     const SizedBox(width: 8),
-                    _buildCustomFilterTab(filter),
+                    _buildCustomFilterTab(filter, isHierarchyEnabled),
                   ],
                 )
                 .expand((x) => x),
@@ -215,7 +218,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
-  Widget _buildCustomFilterTab(Filter filter) {
+  Widget _buildCustomFilterTab(Filter filter, bool isHierarchyEnabled) {
     final isSelected = widget.selectedFilterId == filter.id;
     final hasChildren = widget.customFilters.any(
       (other) => other != filter && other.isChildOf(filter),
@@ -248,7 +251,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-            if (_isHierarchyEnabled && hasChildren) ...[
+            if (isHierarchyEnabled && hasChildren) ...[
               const SizedBox(width: 4),
               GestureDetector(
                 onTap: () => _showHierarchyDialog(filter),
@@ -311,12 +314,11 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
-  Widget _buildHierarchyToggle() {
+  Widget _buildHierarchyToggle(AppProvider appProvider) {
+    final isHierarchyEnabled = appProvider.isHierarchyEnabled;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _isHierarchyEnabled = !_isHierarchyEnabled;
-        });
+        appProvider.toggleHierarchy();
       },
       onLongPress: () {
         _showHierarchyDialog(null); // Show all hierarchy
@@ -324,12 +326,12 @@ class _FilterTabStripState extends State<FilterTabStrip> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: _isHierarchyEnabled
+          color: isHierarchyEnabled
               ? Theme.of(context).colorScheme.primaryContainer
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _isHierarchyEnabled
+            color: isHierarchyEnabled
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outline,
             style: BorderStyle.solid,
@@ -338,7 +340,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         child: Icon(
           Icons.account_tree,
           size: 16,
-          color: _isHierarchyEnabled
+          color: isHierarchyEnabled
               ? Theme.of(context).colorScheme.onPrimaryContainer
               : Theme.of(context).colorScheme.onSurface,
         ),
