@@ -30,13 +30,17 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.existingFilter?.name ?? '');
-    _includeTextController = TextEditingController(text: widget.existingFilter?.includeText ?? '');
+    _nameController = TextEditingController(
+      text: widget.existingFilter?.name ?? '',
+    );
+    _includeTextController = TextEditingController(
+      text: widget.existingFilter?.includeText ?? '',
+    );
     _includeTagsController = TextEditingController();
     _includeArchived = widget.existingFilter?.includeArchived ?? false;
     _selectedTags = Set.from(widget.existingFilter?.includeTags ?? []);
     _updateTagsDisplay();
-    
+
     // Add listeners to update validation state
     _nameController.addListener(_onTextChanged);
     _includeTextController.addListener(_onTextChanged);
@@ -64,13 +68,13 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
 
   void _showTagSelector() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     final result = await showDialog<List<String>>(
       context: context,
       builder: (context) => TagSelectionDialog(
         title: l10n.selectTags,
         initialSelectedTags: _selectedTags.toList(),
-        allowCreateNew: false,
+        allowCreateNew: true,
         allowEmptySelection: true,
         showManageTagsButton: false, // No manage tags in filter creator
         returnAsSet: false,
@@ -94,14 +98,17 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
 
   bool _isValid() {
     return _nameController.text.trim().isNotEmpty &&
-           (_includeTextController.text.trim().isNotEmpty || _selectedTags.isNotEmpty);
+        (_includeTextController.text.trim().isNotEmpty ||
+            _selectedTags.isNotEmpty);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(widget.existingFilter != null ? l10n.editFilter : l10n.createFilter),
+      title: Text(
+        widget.existingFilter != null ? l10n.editFilter : l10n.createFilter,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -144,11 +151,15 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
               Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: _selectedTags.map((tag) => Chip(
-                  label: Text(tag),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () => _removeTag(tag),
-                )).toList(),
+                children: _selectedTags
+                    .map(
+                      (tag) => Chip(
+                        label: Text(tag),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () => _removeTag(tag),
+                      ),
+                    )
+                    .toList(),
               ),
             ],
             const SizedBox(height: 16),
@@ -172,7 +183,9 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
         ),
         ElevatedButton(
           onPressed: _isValid() ? _saveFilter : null,
-          child: Text(widget.existingFilter != null ? l10n.update : l10n.create),
+          child: Text(
+            widget.existingFilter != null ? l10n.update : l10n.create,
+          ),
         ),
       ],
     );
@@ -182,7 +195,9 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     final filter = Filter(
       id: widget.existingFilter?.id ?? _uuid.v4(),
       name: _nameController.text.trim(),
-      includeText: _includeTextController.text.trim().isEmpty ? null : _includeTextController.text.trim(),
+      includeText: _includeTextController.text.trim().isEmpty
+          ? null
+          : _includeTextController.text.trim(),
       includeTags: _selectedTags.toList(),
       includeArchived: _includeArchived,
       createdAt: widget.existingFilter?.createdAt ?? DateTime.now(),
