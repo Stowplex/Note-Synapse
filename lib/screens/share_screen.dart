@@ -1662,7 +1662,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   String? _downloadedFilePath;
   String? _activeAction;
   InAppWebViewController? _controller;
-  WebUri? _currentUrl;
 
   @override
   void didChangeDependencies() {
@@ -1701,8 +1700,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
         try {
           final headResponse = await http.head(Uri.parse(widget.url));
-          detectedContentType = headResponse.headers['content-type']
-              ?.toLowerCase();
+          if (headResponse.statusCode == 200) {
+            detectedContentType = headResponse.headers['content-type']
+                ?.toLowerCase();
+          }
         } catch (_) {
           // Ignore HEAD failures and fall back to WebView.
         }
@@ -2110,8 +2111,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     if (_controller == null) {
       return;
     }
-    final target = _currentUrl ?? WebUri(widget.url);
-    await _controller!.loadUrl(urlRequest: URLRequest(url: target));
+    await _controller!.reload();
   }
 
   Future<bool> _applyReadabilityMode() async {
@@ -2648,7 +2648,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       },
       onLoadStart: (controller, url) {
         setState(() {
-          _currentUrl = url;
           _isLoading = true;
           _status = l10n.loadingWebPage;
           _errorMessage = null;
@@ -2660,7 +2659,6 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           return;
         }
         setState(() {
-          _currentUrl = url;
           _isLoading = false;
           _status = l10n.webExtractionStatusReady;
           _errorMessage = null;
