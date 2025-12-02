@@ -7,6 +7,7 @@ class HierarchyDialog extends StatefulWidget {
   final Set<String>? initialSelectedIds;
   final Function(Set<String>) onConfirmSelection;
   final Function(Filter) onEdit;
+  final Function(Filter) onPin;
   final Function(Filter) onDelete;
   final bool Function(Filter)? filterPredicate;
   final bool multiSelectMode;
@@ -18,6 +19,7 @@ class HierarchyDialog extends StatefulWidget {
     this.initialSelectedIds,
     required this.onConfirmSelection,
     required this.onEdit,
+    required this.onPin,
     required this.onDelete,
     this.filterPredicate,
     this.multiSelectMode = true,
@@ -342,7 +344,20 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
                         constraints: const BoxConstraints(),
                         splashRadius: 20,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(
+                          filter.isPinned
+                              ? Icons.push_pin
+                              : Icons.push_pin_outlined,
+                          size: 16,
+                        ),
+                        onPressed: () => widget.onPin(filter),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(Icons.close, size: 16),
                         onPressed: () => widget.onDelete(filter),

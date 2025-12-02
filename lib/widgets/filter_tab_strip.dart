@@ -111,6 +111,47 @@ class _FilterTabStripState extends State<FilterTabStrip> {
           Navigator.of(context).pop();
           _showEditFilterDialog(filter);
         },
+        onPin: (filter) {
+          // No need to pop, just toggle pin and let dialog rebuild if needed
+          // But since dialog is stateful and might not listen to provider changes directly for the list...
+          // Actually HierarchyDialog takes `allFilters` as a list. If provider updates, parent rebuilds, but dialog is pushed.
+          // We might need to close and reopen, or better, make HierarchyDialog listen to provider?
+          // For now, let's toggle. The dialog might not update immediately if it doesn't watch provider.
+          // Wait, HierarchyDialog is built with `widget.customFilters`.
+          // If we toggle pin, `widget.customFilters` in parent updates.
+          // But `HierarchyDialog` is already pushed. It won't receive new props unless we use a Stream or ValueNotifier or Consumer inside it.
+          // Let's check HierarchyDialog implementation again. It uses `widget.allFilters` in `build`.
+          // It does NOT use Consumer.
+          // So we should probably close the dialog or use a state management solution.
+          // Given the current architecture, let's close it like edit/delete, or just toggle and hope for the best (it won't update).
+          // User didn't ask for it to stay open, but "pin" usually implies quick action.
+          // Let's try to toggle and see. If it doesn't update, we might need to wrap HierarchyDialog in Consumer.
+          // Actually, let's wrap HierarchyDialog content in Consumer<AppProvider> in the dialog itself?
+          // No, let's just toggle. If it doesn't refresh, we can improve later.
+          // Actually, looking at `_showHierarchyDialog`, it passes `widget.customFilters`.
+          // If I toggle pin, `AppProvider` notifies listeners. `FilterTabStrip` rebuilds.
+          // But the Dialog is a separate route. It won't rebuild unless it listens to something.
+          // I should probably close the dialog to be safe and consistent with Edit/Delete, OR make it live.
+          // Making it live is better UX.
+          // But for now, let's just implement the callback.
+          // Wait, `HierarchyDialog` is NOT using `Consumer`.
+          // I will just call `appProvider.toggleFilterPin(filter.id)` and maybe `setState` in dialog?
+          // But `HierarchyDialog` doesn't know about `AppProvider`.
+          // I'll pass a callback that does the work.
+          // To make the UI update, `HierarchyDialog` needs to know the data changed.
+          // Since `allFilters` is passed as a list, it's static for the dialog's lifetime.
+          // I should probably modify `HierarchyDialog` to take a `Stream` or use `Provider` inside it?
+          // Or simpler: The callback returns void.
+          // If I want the icon to update, I need to update the local state of `HierarchyDialog` or rebuild it.
+          // Let's just close it for now, similar to Edit/Delete, to ensure state consistency.
+          // User said "add a pin there".
+          // If I close it, it's annoying if they want to pin multiple.
+          // Let's try to keep it open.
+          // I will update `HierarchyDialog` to use `Consumer` in a separate step if needed.
+          // For now, let's just pass the callback.
+          context.read<AppProvider>().toggleFilterPin(filter.id);
+          Navigator.of(context).pop();
+        },
         onDelete: (filter) {
           Navigator.of(context).pop();
           _showDeleteConfirmation(filter);
@@ -253,16 +294,20 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     final appProvider = context.watch<AppProvider>();
     final isHierarchyEnabled = appProvider.isHierarchyEnabled;
 
-    List<Filter> visibleFilters = widget.customFilters;
+    // Sort filters: Pinned first, then by hierarchy/creation
+    List<Filter> visibleFilters = List.from(widget.customFilters);
+
+    // Separate pinned and unpinned
+    final pinnedFilters = visibleFilters.where((f) => f.isPinned).toList();
+    final unpinnedFilters = visibleFilters.where((f) => !f.isPinned).toList();
+
+    List<Filter> hierarchyFilteredUnpinned = unpinnedFilters;
     if (isHierarchyEnabled) {
-      visibleFilters = widget.customFilters.where((f) {
-        // Show if it is NOT a child of any other filter in the list
-        // If two filters are mutually children (identical), use ID to break tie
-        return !widget.customFilters.any((other) {
+      hierarchyFilteredUnpinned = unpinnedFilters.where((f) {
+        // Show if it is NOT a child of any other filter in the unpinned list
+        return !unpinnedFilters.any((other) {
           if (f == other) return false;
           if (!f.isChildOf(other)) return false;
-          // f is child of other.
-          // If other is ALSO child of f (identical), only hide if f.id > other.id
           if (other.isChildOf(f)) {
             return f.id.compareTo(other.id) > 0;
           }
@@ -270,6 +315,9 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         });
       }).toList();
     }
+
+    // Combine: Pinned first, then hierarchy-filtered unpinned
+    visibleFilters = [...pinnedFilters, ...hierarchyFilteredUnpinned];
 
     final hasActiveFilters =
         widget.selectedFilterIds.any((id) => id != 'default') ||
@@ -300,17 +348,12 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             ),
             const SizedBox(width: 8),
           ],
-          // Default Filter Tab
-          _buildTab('default', l10n.defaultNotes, Icons.note),
-          const SizedBox(width: 8),
-          _buildTab('pinned', l10n.pinnedNotes, Icons.push_pin),
-          const SizedBox(width: 8),
-          _buildTab('archived', l10n.archivedNotes, Icons.archive),
-          const SizedBox(width: 8),
-          _buildTab('all', l10n.allNotes, Icons.list),
+          // Action Group
+          _buildActionGroup(l10n),
+
           for (final filter in visibleFilters) ...[
             const SizedBox(width: 8),
-            _buildCustomFilterTab(filter, isHierarchyEnabled),
+            _buildCustomFilterTab(filter, isHierarchyEnabled, appProvider),
           ],
           const SizedBox(width: 16), // Extra space at the end
         ],
@@ -318,51 +361,11 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
-  Widget _buildTab(String id, String label, IconData icon) {
-    final isSelected = widget.selectedFilterIds.contains(id);
-
-    return GestureDetector(
-      onTap: () => widget.onFilterSelected({id}),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Theme.of(context).colorScheme.onSurface,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : Theme.of(context).colorScheme.onSurface,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCustomFilterTab(Filter filter, bool isHierarchyEnabled) {
+  Widget _buildCustomFilterTab(
+    Filter filter,
+    bool isHierarchyEnabled,
+    AppProvider appProvider,
+  ) {
     final isSelected = widget.selectedFilterIds.contains(filter.id);
     final hasChildren = widget.customFilters.any(
       (other) => other != filter && other.isChildOf(filter),
@@ -386,6 +389,16 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (filter.isPinned) ...[
+              Icon(
+                Icons.push_pin,
+                size: 14,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.onSecondary
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 4),
+            ],
             Text(
               filter.name,
               style: TextStyle(
@@ -419,6 +432,15 @@ class _FilterTabStripState extends State<FilterTabStrip> {
                 ),
               ),
               const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => appProvider.toggleFilterPin(filter.id),
+                child: Icon(
+                  filter.isPinned ? Icons.push_pin_outlined : Icons.push_pin,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(width: 4),
             ],
             GestureDetector(
               onTap: () => _showDeleteConfirmation(filter),
@@ -431,6 +453,52 @@ class _FilterTabStripState extends State<FilterTabStrip> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionGroup(AppLocalizations l10n) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildActionIcon('default', Icons.note, l10n.defaultNotes),
+          _buildActionIcon('pinned', Icons.push_pin, l10n.pinnedNotes),
+          _buildActionIcon('archived', Icons.archive, l10n.archivedNotes),
+          _buildActionIcon('all', Icons.list, l10n.allNotes),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionIcon(String id, IconData icon, String tooltip) {
+    final isSelected = widget.selectedFilterIds.contains(id);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onFilterSelected({id}),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: isSelected
+              ? BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                )
+              : null,
+          child: Icon(
+            icon,
+            size: 20,
+            color: isSelected
+                ? Theme.of(context).colorScheme.onPrimary
+                : Theme.of(context).colorScheme.onSurface,
+          ),
         ),
       ),
     );

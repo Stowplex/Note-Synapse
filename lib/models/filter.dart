@@ -9,6 +9,7 @@ class Filter {
   final String? includeText;
   final List<String> includeTags;
   final bool includeArchived;
+  final bool isPinned;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -18,6 +19,7 @@ class Filter {
     this.includeText,
     this.includeTags = const [],
     this.includeArchived = false,
+    this.isPinned = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -31,6 +33,7 @@ class Filter {
     String? includeText,
     List<String>? includeTags,
     bool? includeArchived,
+    bool? isPinned,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -40,6 +43,7 @@ class Filter {
       includeText: includeText ?? this.includeText,
       includeTags: includeTags ?? this.includeTags,
       includeArchived: includeArchived ?? this.includeArchived,
+      isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

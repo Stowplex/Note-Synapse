@@ -111,6 +111,9 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
         onEdit: (filter) {
           // No-op
         },
+        onPin: (filter) {
+          // No-op
+        },
         onDelete: (filter) {
           // No-op
         },

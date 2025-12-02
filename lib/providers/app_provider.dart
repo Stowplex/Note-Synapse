@@ -1413,4 +1413,24 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> toggleFilterPin(String filterId) async {
+    try {
+      final filterIndex = _filters.indexWhere((f) => f.id == filterId);
+      if (filterIndex == -1) return;
+
+      final filter = _filters[filterIndex];
+      final updatedFilter = filter.copyWith(
+        isPinned: !filter.isPinned,
+        updatedAt: DateTime.now(),
+      );
+
+      await _databaseService.updateFilter(updatedFilter);
+      _filters[filterIndex] = updatedFilter;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }

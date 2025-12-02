@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 26;
+  static const int DATABASE_VERSION = 27;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -138,6 +138,7 @@ class DatabaseService {
         includeText TEXT,
         includeTags TEXT NOT NULL,
         includeArchived INTEGER NOT NULL DEFAULT 0,
+        isPinned INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
@@ -442,6 +443,10 @@ class DatabaseService {
     26: MigrationStep(
       description: 'Create multi_function_apps table',
       execute: _migrateToVersion26,
+    ),
+    27: MigrationStep(
+      description: 'Add isPinned column to filters table',
+      execute: _migrateToVersion27,
     ),
   };
 
@@ -3848,5 +3853,29 @@ class DatabaseService {
       return maps.first['appId'] as String;
     }
     return null;
+  }
+
+  static Future<void> _migrateToVersion27(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 27: Adding isPinned column to filters table',
+    );
+
+    try {
+      // Check if column already exists
+      final columns = await db.rawQuery('PRAGMA table_info(filters)');
+      final hasIsPinned = columns.any((col) => col['name'] == 'isPinned');
+
+      if (!hasIsPinned) {
+        await db.execute(
+          'ALTER TABLE filters ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error adding isPinned column: $e', error: e);
+      rethrow;
+    }
   }
 }
