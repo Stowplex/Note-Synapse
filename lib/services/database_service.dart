@@ -2127,6 +2127,7 @@ class DatabaseService {
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
+      'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };
@@ -2154,6 +2155,7 @@ class DatabaseService {
         includeText: maps[i]['includeText'],
         includeTags: includeTags,
         includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
+        isPinned: (maps[i]['isPinned'] ?? 0) == 1,
         createdAt: _validateTimestamp(
           maps[i]['createdAt'],
           'createdAt',
@@ -2190,6 +2192,7 @@ class DatabaseService {
       includeText: map['includeText'],
       includeTags: includeTags,
       includeArchived: (map['includeArchived'] ?? 0) == 1,
+      isPinned: (map['isPinned'] ?? 0) == 1,
       createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
       updatedAt: _validateTimestamp(map['updatedAt'], 'updatedAt', map['id']),
     );
@@ -2205,6 +2208,7 @@ class DatabaseService {
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
+      'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };

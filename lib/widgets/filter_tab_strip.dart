@@ -328,31 +328,41 @@ class _FilterTabStripState extends State<FilterTabStrip> {
       child: Row(
         children: [
           _buildHierarchyToggle(appProvider),
-          const SizedBox(width: 8),
+          const SizedBox(width: 2),
           // Add Filter Button
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _showCreateFilterDialog,
             tooltip: 'Add Filter',
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 2),
           // Filter Icon
           if (hasActiveFilters) ...[
-            IconButton(
-              icon: Icon(
-                Icons.filter_list,
-                color: Theme.of(context).colorScheme.primary,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _showActiveFiltersDialog,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  child: Icon(
+                    Icons.filter_list,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
               ),
-              tooltip: 'Active Filters',
-              onPressed: _showActiveFiltersDialog,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 2),
           ],
           // Action Group
           _buildActionGroup(l10n),
 
           for (final filter in visibleFilters) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 2),
             _buildCustomFilterTab(filter, isHierarchyEnabled, appProvider),
           ],
           const SizedBox(width: 16), // Extra space at the end
@@ -485,7 +495,7 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         onTap: () => widget.onFilterSelected({id}),
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
           decoration: isSelected
               ? BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,

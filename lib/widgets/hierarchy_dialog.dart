@@ -331,39 +331,22 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
                 // Edit/Delete Buttons
                 Visibility(
                   visible: isSelected,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 16),
-                        onPressed: () => widget.onEdit(filter),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        splashRadius: 20,
+                      _buildActionButton(
+                        icon: Icons.edit,
+                        onTap: () => widget.onEdit(filter),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(
-                          filter.isPinned
-                              ? Icons.push_pin
-                              : Icons.push_pin_outlined,
-                          size: 16,
-                        ),
-                        onPressed: () => widget.onPin(filter),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        splashRadius: 20,
+                      _buildActionButton(
+                        icon: filter.isPinned
+                            ? Icons.push_pin
+                            : Icons.push_pin_outlined,
+                        onTap: () => widget.onPin(filter),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        onPressed: () => widget.onDelete(filter),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        splashRadius: 20,
+                      _buildActionButton(
+                        icon: Icons.close,
+                        onTap: () => widget.onDelete(filter),
                       ),
                       const SizedBox(width: 8),
                     ],
@@ -380,6 +363,23 @@ class _HierarchyDialogState extends State<HierarchyDialog> {
                 .toList(),
           ),
       ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, size: 16, color: Theme.of(context).iconTheme.color),
+        ),
+      ),
     );
   }
 }
