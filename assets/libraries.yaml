@@ -9,8 +9,22 @@ libraries:
       <script src="synapse://chart.min.js"></script>
       <script src="synapse://chartjs-adapter-date-fns.bundle.min.js"></script>
       ```
-      IMPORTANT: You must include both chart.min.js and chartjs-adapter-date-fns.bundle.min.js for
-                 charts to work properly.
+      IMPORTANT: 
+        1. You must include both chart.min.js and chartjs-adapter-date-fns.bundle.min.js for
+           charts to work properly.
+        2. Use d and dd to represent the day of the month; and use yy and yyyy to represent the
+           calendar year.
+
+           <example>
+             // ❌ Wrong!
+             format(new Date(), "YYYY-MM-DD"); // DD represent the day of the year and is forbidden.
+             //=> 2018-10-283
+
+             // ✅ Correct
+             format(new Date(), "yyyy-MM-dd"); // dd represent the day of the month
+             //=> 2018-10-10
+           </example>
+
     assets:
       - path: assets/scripts/chart.min.js
         type: script
@@ -91,5 +105,19 @@ libraries:
       ```
     assets:
       - path: assets/scripts/svg.pan-zoom.min.js
+        type: script
+
+  - id: d3
+    name: d3
+    version: "7.9.0"
+    description: Data driven document to enable spectacular visualizations.
+    usage: |
+      You are provided with the D3 library (version 7.9.0). You can import it with:
+
+      ```html
+      <script src="synapse://d3.min.js"></script>
+      ```
+    assets:
+      - path: assets/scripts/d3.min.js
         type: script
 
