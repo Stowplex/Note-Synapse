@@ -1186,10 +1186,14 @@ class DatabaseService {
   Future<List<Note>> getAllNotes() async {
     final db = await database;
     LoggerService.info('Querying notes table...');
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      orderBy: 'pinned DESC, createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      ORDER BY pinned DESC, createdAt DESC
+    ''');
     LoggerService.info('Found ${maps.length} notes in database');
 
     final List<Note> notes = [];
@@ -1251,16 +1255,19 @@ class DatabaseService {
     List<dynamic> whereArgs = [];
 
     if (isArchived != null) {
-      whereClause = 'isArchived = ?';
+      whereClause = 'WHERE isArchived = ?';
       whereArgs.add(isArchived ? 1 : 0);
     }
 
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: whereClause.isEmpty ? null : whereClause,
-      whereArgs: whereArgs.isEmpty ? null : whereArgs,
-      orderBy: 'pinned DESC, createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      $whereClause
+      ORDER BY pinned DESC, createdAt DESC
+      ''', whereArgs);
 
     final List<Note> notes = [];
     for (final map in maps) {
@@ -1281,12 +1288,15 @@ class DatabaseService {
 
   Future<List<Note>> getPinnedNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'pinned = ? AND isArchived = ?',
-      whereArgs: [1, 0],
-      orderBy: 'createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE pinned = 1 AND isArchived = 0
+      ORDER BY createdAt DESC
+    ''');
 
     final List<Note> notes = [];
     for (final map in maps) {
@@ -1307,12 +1317,15 @@ class DatabaseService {
 
   Future<List<Note>> getArchivedNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'isArchived = ?',
-      whereArgs: [1],
-      orderBy: 'createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE isArchived = 1
+      ORDER BY createdAt DESC
+    ''');
 
     final List<Note> notes = [];
     for (final map in maps) {
@@ -1333,10 +1346,16 @@ class DatabaseService {
 
   Future<Note?> getNote(String id) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'id = ?',
-      whereArgs: [id],
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE id = ?
+      ''',
+      [id],
     );
 
     if (maps.isEmpty) return null;
@@ -1350,11 +1369,14 @@ class DatabaseService {
     final db = await database;
     // Use WHERE IN clause for efficient batch retrieval
     final placeholders = List.filled(noteIds.length, '?').join(',');
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'id IN ($placeholders)',
-      whereArgs: noteIds,
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE id IN ($placeholders)
+      ''', noteIds);
 
     final List<Note> notes = [];
     for (final map in maps) {
@@ -1483,22 +1505,42 @@ class DatabaseService {
 
   Future<List<SubNote>> getSubNotes(String noteId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'subnotes',
-      where: 'noteId = ?',
-      whereArgs: [noteId],
-      orderBy: 'createdAt ASC',
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, noteId, name, createdAt, isCompleted,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM subnotes
+      WHERE noteId = ?
+      ORDER BY createdAt ASC
+      ''',
+      [noteId],
     );
 
-    return List.generate(maps.length, (i) {
-      return SubNote(
-        id: maps[i]['id'],
-        name: maps[i]['name'],
-        content: maps[i]['content'],
-        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        isCompleted: maps[i]['isCompleted'] == 1,
+    final List<SubNote> subNotes = [];
+    for (final map in maps) {
+      String content = map['content'] as String? ?? '';
+      if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+        content = await _readLargeString(
+          db,
+          'subnotes',
+          'content',
+          map['id'] as String,
+        );
+      }
+
+      subNotes.add(
+        SubNote(
+          id: map['id'],
+          name: map['name'],
+          content: content,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
+          isCompleted: map['isCompleted'] == 1,
+        ),
       );
-    });
+    }
+    return subNotes;
   }
 
   // Tags CRUD
@@ -1811,10 +1853,22 @@ class DatabaseService {
     final tags = await _getNoteTags(map['id']);
     final attachments = await _getNoteAttachments(map['id']);
 
+    String content = map['content'] as String? ?? '';
+    if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+      // Content was too large and skipped in initial query, fetch it now in chunks
+      final db = await database;
+      content = await _readLargeString(
+        db,
+        'notes',
+        'content',
+        map['id'] as String,
+      );
+    }
+
     return Note(
       id: map['id'],
       title: map['title'],
-      content: map['content'],
+      content: content,
       type: NoteType.values.firstWhere(
         (e) => e.toString().split('.').last == map['type'],
         orElse: () => NoteType.note,
@@ -2367,7 +2421,7 @@ class DatabaseService {
 
     // Read TEXT data in chunks to avoid cursor window issues
     try {
-      final textData = await _readTextInChunks(db, id);
+      final textData = await _readLargeString(db, 'user_apps', 'appState', id);
       if (textData.isEmpty) {
         return null;
       }
@@ -2445,11 +2499,17 @@ class DatabaseService {
 
   Future<List<AppRevision>> getAppRevisions(String appId) async {
     final db = await database;
-    final maps = await db.query(
-      'app_revisions',
-      where: 'appId = ?',
-      whereArgs: [appId],
-      orderBy: 'revisionNumber ASC',
+    final maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions
+      WHERE appId = ?
+      ORDER BY revisionNumber ASC
+      ''',
+      [appId],
     );
     LoggerService.debug(
       'DatabaseService.getAppRevisions: Found ${maps.length} revisions for app $appId',
@@ -2457,7 +2517,12 @@ class DatabaseService {
     if (maps.isNotEmpty) {
       LoggerService.debug('First revision data: ${maps.first}');
     }
-    final revisions = maps.map((map) => _appRevisionFromMap(map)).toList();
+
+    final List<AppRevision> revisions = [];
+    for (final map in maps) {
+      revisions.add(await _appRevisionFromMap(map));
+    }
+
     if (revisions.isNotEmpty) {
       LoggerService.debug(
         'First revision appCode length: ${revisions.first.appCode.length}',
@@ -2468,13 +2533,19 @@ class DatabaseService {
 
   Future<AppRevision?> getAppRevision(String id) async {
     final db = await database;
-    final maps = await db.query(
-      'app_revisions',
-      where: 'id = ?',
-      whereArgs: [id],
+    final maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions
+      WHERE id = ?
+      ''',
+      [id],
     );
     if (maps.isNotEmpty) {
-      return _appRevisionFromMap(maps.first);
+      return await _appRevisionFromMap(maps.first);
     }
     return null;
   }
@@ -2542,16 +2613,36 @@ class DatabaseService {
   Future<AppRevision?> getLatestAppRevision(String appId) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT * FROM app_revisions WHERE appId = ? ORDER BY revisionNumber DESC LIMIT 1',
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions 
+      WHERE appId = ? 
+      ORDER BY revisionNumber DESC 
+      LIMIT 1
+      ''',
       [appId],
     );
     if (result.isNotEmpty) {
-      return _appRevisionFromMap(result.first);
+      return await _appRevisionFromMap(result.first);
     }
     return null;
   }
 
-  AppRevision _appRevisionFromMap(Map<String, dynamic> map) {
+  Future<AppRevision> _appRevisionFromMap(Map<String, dynamic> map) async {
+    String appCode = map['appCode'] as String? ?? '';
+    if (appCode.isEmpty && (map['_appCodeLength'] as int? ?? 0) > 0) {
+      final db = await database;
+      appCode = await _readLargeString(
+        db,
+        'app_revisions',
+        'appCode',
+        map['id'] as String,
+      );
+    }
+
     final revision = AppRevision(
       id: map['id'] as String,
       appId: map['appId'] as String,
@@ -2561,7 +2652,7 @@ class DatabaseService {
       ),
       userPrompt: map['userPrompt'] as String,
       aiResponse: map['aiResponse'] as String,
-      appCode: map['appCode'] as String,
+      appCode: appCode,
       attachmentPaths: map['attachmentPaths'] != null
           ? (map['attachmentPaths'] as String)
                 .split('|')
@@ -2665,7 +2756,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (map['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, map['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            map['id'] as int,
+          );
           newMap['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2709,7 +2805,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (result['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            result['id'] as int,
+          );
           result['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2763,7 +2864,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (result['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            result['id'] as int,
+          );
           result['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2781,70 +2887,22 @@ class DatabaseService {
     return null;
   }
 
-  // Helper method to read BLOB data in chunks to avoid cursor window issues
-  Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
-    const int chunkSize = 1024 * 1024; // 1MB chunks
-    final List<int> allBytes = [];
-
-    try {
-      // Get the total size of the BLOB
-      final sizeResult = await db.rawQuery(
-        '''
-        SELECT length(bytes) as blob_size 
-        FROM user_app_library_dependencies 
-        WHERE id = ?
-      ''',
-        [dependencyId],
-      );
-
-      if (sizeResult.isEmpty) {
-        return <int>[];
-      }
-
-      final int totalSize = sizeResult.first['blob_size'] as int;
-
-      // Read BLOB in chunks
-      for (int offset = 0; offset < totalSize; offset += chunkSize) {
-        final int currentChunkSize = (offset + chunkSize > totalSize)
-            ? totalSize - offset
-            : chunkSize;
-
-        final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr(bytes, ?, ?) as chunk
-          FROM user_app_library_dependencies 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, dependencyId],
-        );
-
-        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
-          final chunk = chunkResult.first['chunk'] as Uint8List;
-          allBytes.addAll(chunk);
-        }
-      }
-
-      return allBytes;
-    } catch (e) {
-      LoggerService.error('Error reading BLOB in chunks: $e', error: e);
-      return <int>[];
-    }
-  }
-
   // Helper method to read TEXT data in chunks to avoid cursor window issues
-  Future<String> _readTextInChunks(Database db, String appId) async {
-    const int chunkSize = 1024 * 1024; // 1MB chunks
+  Future<String> _readLargeString(
+    Database db,
+    String table,
+    String column,
+    String id, {
+    String idColumn = 'id',
+    int chunkSize = 1024 * 1024, // 1MB
+  }) async {
     final StringBuffer allText = StringBuffer();
 
     try {
       // Get the total size of the TEXT
       final sizeResult = await db.rawQuery(
-        '''
-        SELECT length(appState) as text_size 
-        FROM user_apps 
-        WHERE id = ?
-      ''',
-        [appId],
+        'SELECT length($column) as text_size FROM $table WHERE $idColumn = ?',
+        [id],
       );
 
       if (sizeResult.isEmpty) {
@@ -2863,12 +2921,8 @@ class DatabaseService {
             : chunkSize;
 
         final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr(appState, ?, ?) as chunk
-          FROM user_apps 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, appId],
+          'SELECT substr($column, ?, ?) as chunk FROM $table WHERE $idColumn = ?',
+          [offset + 1, currentChunkSize, id],
         );
 
         if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
@@ -2879,8 +2933,61 @@ class DatabaseService {
 
       return allText.toString();
     } catch (e) {
-      LoggerService.error('Error reading TEXT in chunks: $e', error: e);
+      LoggerService.error(
+        'Error reading large string from $table.$column: $e',
+        error: e,
+      );
       return '';
+    }
+  }
+
+  Future<List<int>> _readLargeBlob(
+    Database db,
+    String table,
+    String column,
+    int id, {
+    String idColumn = 'id',
+    int chunkSize = 1024 * 1024, // 1MB
+  }) async {
+    final List<int> allBytes = [];
+
+    try {
+      // Get the total size of the BLOB
+      final sizeResult = await db.rawQuery(
+        'SELECT length($column) as blob_size FROM $table WHERE $idColumn = ?',
+        [id],
+      );
+
+      if (sizeResult.isEmpty) {
+        return <int>[];
+      }
+
+      final int totalSize = sizeResult.first['blob_size'] as int;
+
+      // Read BLOB in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize)
+            ? totalSize - offset
+            : chunkSize;
+
+        final chunkResult = await db.rawQuery(
+          'SELECT substr($column, ?, ?) as chunk FROM $table WHERE $idColumn = ?',
+          [offset + 1, currentChunkSize, id],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as Uint8List;
+          allBytes.addAll(chunk);
+        }
+      }
+
+      return allBytes;
+    } catch (e) {
+      LoggerService.error(
+        'Error reading large blob from $table.$column: $e',
+        error: e,
+      );
+      return <int>[];
     }
   }
 
