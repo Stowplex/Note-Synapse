@@ -1362,6 +1362,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _previewAttachedFile(PlatformFile file) async {
+    if (file.path != null &&
+        (file.path!.startsWith('http://') ||
+            file.path!.startsWith('https://'))) {
+      final uri = Uri.tryParse(file.path!);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
     await FileUtils.openPlatformFile(file, context);
   }
 
@@ -2695,7 +2704,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       spacing: 6,
       runSpacing: 6,
       children: message.attachmentPaths.map((path) {
-        final label = path.split(Platform.pathSeparator).last;
+        String label;
+        final isUri =
+            path.startsWith('http://') ||
+            path.startsWith('https://') ||
+            path.startsWith('gs://');
+
+        if (isUri) {
+          try {
+            final uriObj = Uri.parse(path);
+            if (uriObj.pathSegments.isNotEmpty) {
+              label = uriObj.pathSegments.last;
+            } else {
+              label = path;
+            }
+          } catch (_) {
+            label = path.split('/').last;
+          }
+        } else {
+          label = path.split(Platform.pathSeparator).last;
+        }
+
         final extension = label.contains('.')
             ? label.split('.').last.toLowerCase()
             : null;
@@ -2709,6 +2738,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _openAttachment(String path) async {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      final uri = Uri.tryParse(path);
+      if (uri != null) {
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+      }
+    }
     await FileUtils.openFile(path, context);
   }
 
