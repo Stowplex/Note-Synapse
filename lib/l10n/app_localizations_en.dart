@@ -2426,6 +2426,167 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noToolsAvailable => 'No tools available';
 
   @override
+  String get multiFunction => 'Multi-function';
+
+  @override
+  String get addToMultiFunction => 'Add to multi-function tab';
+
+  @override
+  String get removeFromMultiFunction => 'Remove from multi-function view';
+
+  @override
+  String get setAsDefaultView => 'Set as default view';
+
+  @override
+  String get defaultView => 'Default View';
+
+  @override
+  String get appAddedToMultiFunction => 'App added to multi-function tab';
+
+  @override
+  String get appRemovedFromMultiFunction =>
+      'App removed from multi-function tab';
+
+  @override
+  String get defaultViewUpdated => 'Default view updated';
+
+  @override
+  String get selectView => 'Select View';
+
+  @override
+  String get switchToCalendar => 'Switch to Calendar';
+
+  @override
+  String get rawDataManager => 'Raw Data Manager';
+
+  @override
+  String get rawDataManagerSubtitle =>
+      'Advanced tools for file and database management';
+
+  @override
+  String get files => 'Files';
+
+  @override
+  String get database => 'Database';
+
+  @override
+  String get tables => 'Tables';
+
+  @override
+  String get query => 'Query';
+
+  @override
+  String get executeQuery => 'Execute Query';
+
+  @override
+  String get noData => 'No data';
+
+  @override
+  String rowsAffected(Object count) {
+    return '$count rows affected';
+  }
+
+  @override
+  String errorExecutingQuery(Object error) {
+    return 'Error executing query: $error';
+  }
+
+  @override
+  String get tableSchema => 'Table Schema';
+
+  @override
+  String get columns => 'Columns';
+
+  @override
+  String get indexes => 'Indexes';
+
+  @override
+  String get foreignKeys => 'Foreign Keys';
+
+  @override
+  String get browseTable => 'Browse Table';
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get download => 'Download';
+
+  @override
+  String get deleteFile => 'Delete File';
+
+  @override
+  String confirmDeleteFile(Object fileName) {
+    return 'Are you sure you want to delete \"$fileName\"?';
+  }
+
+  @override
+  String get fileDeletedSuccessfully => 'File deleted successfully';
+
+  @override
+  String errorDeletingFile(Object error) {
+    return 'Error deleting file: $error';
+  }
+
+  @override
+  String get uploadFile => 'Upload File';
+
+  @override
+  String get fileUploadedSuccessfully => 'File uploaded successfully';
+
+  @override
+  String errorUploadingFile(Object error) {
+    return 'Error uploading file: $error';
+  }
+
+  @override
+  String get createDirectory => 'Create Directory';
+
+  @override
+  String get directoryName => 'Directory Name';
+
+  @override
+  String get directoryCreatedSuccessfully => 'Directory created successfully';
+
+  @override
+  String errorCreatingDirectory(Object error) {
+    return 'Error creating directory: $error';
+  }
+
+  @override
+  String get path => 'Path';
+
+  @override
+  String get size => 'Size';
+
+  @override
+  String get modified => 'Modified';
+
+  @override
+  String get chat => 'Chat';
+
+  @override
+  String get chatWithDatabase => 'Chat with Database';
+
+  @override
+  String get askQuestionAboutDatabase =>
+      'Ask a question about your database...';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get aiResponse => 'AI Response';
+
+  @override
+  String errorSendingMessage(Object error) {
+    return 'Error sending message: $error';
+  }
+
+  @override
+  String get thinking => 'Thinking...';
+
+  @override
   String noToolsCachedFor(Object name) {
     return 'No tools cached for $name. Click refresh to fetch tools.';
   }
@@ -2609,9 +2770,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get askAiHint => 'Ask AI about DB schema or errors...';
-
-  @override
-  String get send => 'Send';
 
   @override
   String get startConversationHint => 'Start by asking the AI about your note.';
@@ -3593,10 +3751,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rawDataManagerTitle => 'Raw Data Manager';
-
-  @override
-  String get rawDataManagerSubtitle =>
-      'Advanced tools for file and database management';
 
   @override
   String get advancedToolTitle => 'Advanced Tool';

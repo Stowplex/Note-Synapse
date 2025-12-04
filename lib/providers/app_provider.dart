@@ -15,6 +15,7 @@ import '../services/user_app_service.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
+import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
@@ -32,6 +33,9 @@ class AppProvider extends ChangeNotifier {
   Locale _locale = const Locale('en', '');
   ModelConfig? _modelConfig;
   bool newNoteFromShare = false;
+  List<String> _multiFunctionApps = [];
+  String? _currentMultiFunctionAppId;
+  bool _isHierarchyEnabled = false;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -43,6 +47,9 @@ class AppProvider extends ChangeNotifier {
   bool get isDarkMode => _isDarkMode;
   Locale get locale => _locale;
   ModelConfig? get modelConfig => _modelConfig;
+  List<String> get multiFunctionApps => _multiFunctionApps;
+  String? get currentMultiFunctionAppId => _currentMultiFunctionAppId;
+  bool get isHierarchyEnabled => _isHierarchyEnabled;
 
   Future<void> loadData() async {
     _setLoading(true);
@@ -61,6 +68,12 @@ class AppProvider extends ChangeNotifier {
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
       _modelConfig = await ModelStorageService.getActiveModel();
+
+      await _refreshMultiFunctionApps();
+      _currentMultiFunctionAppId = await _databaseService
+          .getMultiFunctionDefaultAppId();
+
+      await _loadHierarchyPreference();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
@@ -288,12 +301,14 @@ class AppProvider extends ChangeNotifier {
     Note note,
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
   }) async {
     try {
       final response = await AIService.transformNote(
         note,
         transformationPrompt,
         attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
 
       return response;
@@ -309,12 +324,14 @@ class AppProvider extends ChangeNotifier {
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
     bool persist = true,
+    GenerationContext? generationContext,
   }) async {
     try {
       final newNotes = await AIService.createNewNotes(
         prompt,
         contextNotes,
         attachedFiles: attachedFiles,
+        generationContext: generationContext,
       );
 
       if (!persist) {
@@ -356,30 +373,6 @@ class AppProvider extends ChangeNotifier {
       if (note.tags.contains(tagName)) return; // Tag already exists
 
       final updatedTags = List<String>.from(note.tags)..add(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
-
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
-
-  Future<void> removeTagFromNote(String noteId, String tagName) async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
-
-      final note = _notes[noteIndex];
-      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
-
-      final updatedTags = List<String>.from(note.tags)..remove(tagName);
       final updatedNote = note.copyWith(
         tags: updatedTags,
         updatedAt: DateTime.now(),
@@ -585,6 +578,31 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  void toggleHierarchy() {
+    _isHierarchyEnabled = !_isHierarchyEnabled;
+    _saveHierarchyPreference();
+    notifyListeners();
+  }
+
+  Future<void> _saveHierarchyPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_hierarchy_enabled', _isHierarchyEnabled);
+    } catch (e) {
+      LoggerService.error('Error saving hierarchy preference: $e', error: e);
+    }
+  }
+
+  Future<void> _loadHierarchyPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isHierarchyEnabled = prefs.getBool('is_hierarchy_enabled') ?? false;
+    } catch (e) {
+      LoggerService.error('Error loading hierarchy preference: $e', error: e);
+      _isHierarchyEnabled = false;
+    }
+  }
+
   Future<void> clearAllData() async {
     _setLoading(true);
     try {
@@ -704,6 +722,82 @@ class AppProvider extends ChangeNotifier {
       await _databaseService.updateNote(updatedNote);
       _notes[noteIndex] = updatedNote;
       notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeTagFromNote(String noteId, String tagName) async {
+    try {
+      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+      if (noteIndex == -1) return;
+
+      final note = _notes[noteIndex];
+      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
+
+      final updatedTags = List<String>.from(note.tags)..remove(tagName);
+      final updatedNote = note.copyWith(
+        tags: updatedTags,
+        updatedAt: DateTime.now(),
+      );
+
+      await _databaseService.updateNote(updatedNote);
+      _notes[noteIndex] = updatedNote;
+      _tags = await _databaseService.getAllTags();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> batchUpdateTags(
+    List<String> noteIds,
+    List<String> tagsToAdd,
+    List<String> tagsToRemove,
+  ) async {
+    try {
+      bool hasChanges = false;
+
+      for (final noteId in noteIds) {
+        final noteIndex = _notes.indexWhere((n) => n.id == noteId);
+        if (noteIndex == -1) continue;
+
+        final note = _notes[noteIndex];
+        final currentTags = Set<String>.from(note.tags);
+        bool noteChanged = false;
+
+        // Add tags
+        for (final tag in tagsToAdd) {
+          if (currentTags.add(tag)) {
+            noteChanged = true;
+          }
+        }
+
+        // Remove tags
+        for (final tag in tagsToRemove) {
+          if (currentTags.remove(tag)) {
+            noteChanged = true;
+          }
+        }
+
+        if (noteChanged) {
+          final updatedNote = note.copyWith(
+            tags: currentTags.toList(),
+            updatedAt: DateTime.now(),
+          );
+
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        _tags = await _databaseService.getAllTags();
+        notifyListeners();
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -969,6 +1063,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       // Construct user prompt from the provided information
@@ -993,6 +1088,7 @@ class AppProvider extends ChangeNotifier {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
       _userApps.add(app);
       notifyListeners();
@@ -1011,6 +1107,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
     List<Note>? contextNotes,
     List<UserAppLibraryInfo>? libraries,
+    GenerationContext? generationContext,
   }) async {
     try {
       final revision = await UserAppService.editUserApp(
@@ -1019,6 +1116,7 @@ class AppProvider extends ChangeNotifier {
         attachmentPaths: attachmentPaths,
         contextNotes: contextNotes,
         libraries: libraries,
+        generationContext: generationContext,
       );
 
       // Update the app in our local list
@@ -1242,6 +1340,97 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
       rethrow;
+    }
+  }
+
+  // Multi-function Apps Methods
+
+  Future<void> _refreshMultiFunctionApps() async {
+    _multiFunctionApps = await _databaseService.getMultiFunctionApps();
+  }
+
+  Future<void> addAppToMultiFunction(String appId) async {
+    try {
+      await _databaseService.addAppToMultiFunction(appId);
+      await _refreshMultiFunctionApps();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeAppFromMultiFunction(String appId) async {
+    try {
+      await _databaseService.removeAppFromMultiFunction(appId);
+      await _refreshMultiFunctionApps();
+
+      // If the removed app was the current default, clear it
+      if (_currentMultiFunctionAppId == appId) {
+        _currentMultiFunctionAppId = null;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setMultiFunctionDefaultApp(String appId) async {
+    try {
+      await _databaseService.setMultiFunctionDefaultApp(appId);
+      _currentMultiFunctionAppId = appId;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearMultiFunctionDefaultApp() async {
+    try {
+      await _databaseService.clearMultiFunctionDefaultApp();
+      _currentMultiFunctionAppId = null;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setCurrentMultiFunctionApp(String? appId) async {
+    try {
+      if (appId == null) {
+        await _databaseService.clearMultiFunctionDefaultApp();
+      } else {
+        await _databaseService.setMultiFunctionDefaultApp(appId);
+      }
+      _currentMultiFunctionAppId = appId;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleFilterPin(String filterId) async {
+    try {
+      final filterIndex = _filters.indexWhere((f) => f.id == filterId);
+      if (filterIndex == -1) return;
+
+      final filter = _filters[filterIndex];
+      final updatedFilter = filter.copyWith(
+        isPinned: !filter.isPinned,
+        updatedAt: DateTime.now(),
+      );
+
+      await _databaseService.updateFilter(updatedFilter);
+      _filters[filterIndex] = updatedFilter;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
     }
   }
 }

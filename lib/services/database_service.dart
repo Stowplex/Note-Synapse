@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 25;
+  static const int DATABASE_VERSION = 27;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -138,6 +138,7 @@ class DatabaseService {
         includeText TEXT,
         includeTags TEXT NOT NULL,
         includeArchived INTEGER NOT NULL DEFAULT 0,
+        isPinned INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
@@ -267,6 +268,14 @@ class DatabaseService {
         UNIQUE(conversationId, noteId)
       )
   ''';
+  static const String _createMultiFunctionAppsTable = '''
+      CREATE TABLE multi_function_apps(
+        appId TEXT PRIMARY KEY,
+        isDefault INTEGER NOT NULL DEFAULT 0,
+        addedAt INTEGER NOT NULL,
+        FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
+      )
+  ''';
 
   // Index creation constants
   static const List<String> _createIndexes = [
@@ -325,6 +334,7 @@ class DatabaseService {
       _createConversationMessageMappingTable,
       _createMessageParentsTable,
       _createConversationNoteMappingTable,
+      _createMultiFunctionAppsTable,
       ..._createIndexes,
     ];
   }
@@ -381,6 +391,7 @@ class DatabaseService {
     await db.execute(_createMessageParentsTable);
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
+    await db.execute(_createMultiFunctionAppsTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -428,6 +439,14 @@ class DatabaseService {
     25: MigrationStep(
       description: 'Add includeInAIContext column to attachments table',
       execute: _migrateToVersion24,
+    ),
+    26: MigrationStep(
+      description: 'Create multi_function_apps table',
+      execute: _migrateToVersion26,
+    ),
+    27: MigrationStep(
+      description: 'Add isPinned column to filters table',
+      execute: _migrateToVersion27,
     ),
   };
 
@@ -563,6 +582,17 @@ class DatabaseService {
           'Recreating notes tables due to attachments table modification failure',
         );
         await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
+        break;
+
+      case 26:
+        // Multi-function apps table creation failed - recreate the table
+        LoggerService.error(
+          'Recreating multi_function_apps table due to creation failure',
+        );
+        await _recreateMultiFunctionAppsTable(
+          db,
+          isBackupMigration: isBackupMigration,
+        );
         break;
 
       default:
@@ -708,6 +738,14 @@ class DatabaseService {
     );
   }
 
+  Future<void> _recreateMultiFunctionAppsTable(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
+    await db.execute(_createMultiFunctionAppsTable);
+  }
+
   // Recreate main database tables
   Future<void> _recreateMainDatabase(Database db, int newVersion) async {
     // Drop all tables
@@ -722,6 +760,7 @@ class DatabaseService {
     await db.execute('DROP TABLE IF EXISTS app_revisions');
     await db.execute('DROP TABLE IF EXISTS user_app_libraries');
     await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
+    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
 
     // Recreate all tables using schema constants
     await _onCreate(db, newVersion);
@@ -1061,6 +1100,13 @@ class DatabaseService {
       LoggerService.error('Error in migration to version 24: $e', error: e);
       rethrow;
     }
+  }
+
+  static Future<void> _migrateToVersion26(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createMultiFunctionAppsTable);
   }
 
   // Migrate existing conversation data to new structure
@@ -2081,6 +2127,7 @@ class DatabaseService {
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
+      'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };
@@ -2108,6 +2155,7 @@ class DatabaseService {
         includeText: maps[i]['includeText'],
         includeTags: includeTags,
         includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
+        isPinned: (maps[i]['isPinned'] ?? 0) == 1,
         createdAt: _validateTimestamp(
           maps[i]['createdAt'],
           'createdAt',
@@ -2144,6 +2192,7 @@ class DatabaseService {
       includeText: map['includeText'],
       includeTags: includeTags,
       includeArchived: (map['includeArchived'] ?? 0) == 1,
+      isPinned: (map['isPinned'] ?? 0) == 1,
       createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
       updatedAt: _validateTimestamp(map['updatedAt'], 'updatedAt', map['id']),
     );
@@ -2159,6 +2208,7 @@ class DatabaseService {
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
+      'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };
@@ -2962,9 +3012,10 @@ class DatabaseService {
   ) async {
     final db = await database;
     // Join with conversation_message_mapping to get messages for this conversation
+    // EXCLUDE metadata from the main query to avoid CursorWindow size limits
     final List<Map<String, dynamic>> maps = await db.rawQuery(
       '''
-      SELECT cm.* 
+      SELECT cm.id, cm.type, cm.content, cm.timestamp, cm.modelUsed
       FROM conversation_messages cm
       INNER JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
       WHERE cmm.conversationId = ?
@@ -2973,16 +3024,86 @@ class DatabaseService {
       [conversationId],
     );
 
-    return maps
-        .map((map) => _mapToConversationMessage(map, conversationId))
-        .toList()
-        .cast<ConversationMessage>();
+    final messages = <ConversationMessage>[];
+
+    for (final map in maps) {
+      // Create a mutable copy of the map
+      final messageMap = Map<String, dynamic>.from(map);
+
+      // Fetch metadata separately
+      try {
+        final metadataResult = await db.query(
+          'conversation_messages',
+          columns: ['metadata'],
+          where: 'id = ?',
+          whereArgs: [messageMap['id']],
+        );
+
+        if (metadataResult.isNotEmpty) {
+          messageMap['metadata'] = metadataResult.first['metadata'];
+        }
+      } catch (e) {
+        // Fallback: If fetching full metadata fails (e.g. single row too big),
+        // try to read it in chunks using substr.
+        // Note: This is a last resort and might be slow.
+        LoggerService.error(
+          'Error fetching metadata for message ${messageMap['id']}: $e. Attempting chunked read.',
+        );
+        try {
+          messageMap['metadata'] = await _readLargeMetadata(
+            db,
+            messageMap['id'] as String,
+          );
+        } catch (e2) {
+          LoggerService.error('Failed to read large metadata: $e2');
+          // Proceed without metadata rather than crashing the whole view
+        }
+      }
+
+      messages.add(_mapToConversationMessage(messageMap, conversationId));
+    }
+
+    return messages;
+  }
+
+  // Helper to read potentially huge metadata in chunks
+  Future<String?> _readLargeMetadata(Database db, String messageId) async {
+    final sb = StringBuffer();
+    int offset = 1; // SQLite substr is 1-based
+    const chunkSize = 1000000; // 1MB chunks
+
+    while (true) {
+      final List<Map<String, dynamic>> result = await db.rawQuery(
+        'SELECT substr(metadata, ?, ?) as chunk FROM conversation_messages WHERE id = ?',
+        [offset, chunkSize, messageId],
+      );
+
+      if (result.isEmpty || result.first['chunk'] == null) break;
+
+      final chunk = result.first['chunk'] as String;
+      if (chunk.isEmpty) break;
+
+      sb.write(chunk);
+      offset += chunkSize;
+
+      // If chunk is smaller than requested, we reached the end
+      if (chunk.length < chunkSize) break;
+    }
+
+    return sb.isNotEmpty ? sb.toString() : null;
   }
 
   Future<ConversationMessage?> getConversationMessage(String id) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'conversation_messages',
+      columns: [
+        'id',
+        'type',
+        'content',
+        'timestamp',
+        'modelUsed',
+      ], // Exclude metadata
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -3001,7 +3122,32 @@ class DatabaseService {
         ? mappingResult.first['conversationId'] as String
         : '';
 
-    return _mapToConversationMessage(maps.first, conversationId);
+    final messageMap = Map<String, dynamic>.from(maps.first);
+
+    // Fetch metadata separately
+    try {
+      final metadataResult = await db.query(
+        'conversation_messages',
+        columns: ['metadata'],
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (metadataResult.isNotEmpty) {
+        messageMap['metadata'] = metadataResult.first['metadata'];
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Error fetching metadata for message $id: $e. Attempting chunked read.',
+      );
+      try {
+        messageMap['metadata'] = await _readLargeMetadata(db, id);
+      } catch (e2) {
+        LoggerService.error('Failed to read large metadata: $e2');
+      }
+    }
+
+    return _mapToConversationMessage(messageMap, conversationId);
   }
 
   Future<void> updateConversationMessage(ConversationMessage message) async {
@@ -3648,5 +3794,92 @@ class DatabaseService {
   Future<List<String>> getConversationTagNames(String conversationId) async {
     final tags = await getConversationTags(conversationId);
     return tags.map((tag) => tag.name).toList();
+  }
+
+  // Multi-function Apps Methods
+
+  Future<void> addAppToMultiFunction(String appId) async {
+    final db = await database;
+    await db.insert('multi_function_apps', {
+      'appId': appId,
+      'isDefault': 0,
+      'addedAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> removeAppFromMultiFunction(String appId) async {
+    final db = await database;
+    await db.delete(
+      'multi_function_apps',
+      where: 'appId = ?',
+      whereArgs: [appId],
+    );
+  }
+
+  Future<void> setMultiFunctionDefaultApp(String appId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Reset all to not default
+      await txn.update('multi_function_apps', {'isDefault': 0});
+      // Set the specific app to default
+      await txn.update(
+        'multi_function_apps',
+        {'isDefault': 1},
+        where: 'appId = ?',
+        whereArgs: [appId],
+      );
+    });
+  }
+
+  Future<void> clearMultiFunctionDefaultApp() async {
+    final db = await database;
+    await db.update('multi_function_apps', {'isDefault': 0});
+  }
+
+  Future<List<String>> getMultiFunctionApps() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'multi_function_apps',
+      orderBy: 'addedAt DESC',
+    );
+    return maps.map((map) => map['appId'] as String).toList();
+  }
+
+  Future<String?> getMultiFunctionDefaultAppId() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'multi_function_apps',
+      where: 'isDefault = ?',
+      whereArgs: [1],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['appId'] as String;
+    }
+    return null;
+  }
+
+  static Future<void> _migrateToVersion27(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 27: Adding isPinned column to filters table',
+    );
+
+    try {
+      // Check if column already exists
+      final columns = await db.rawQuery('PRAGMA table_info(filters)');
+      final hasIsPinned = columns.any((col) => col['name'] == 'isPinned');
+
+      if (!hasIsPinned) {
+        await db.execute(
+          'ALTER TABLE filters ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error adding isPinned column: $e', error: e);
+      rethrow;
+    }
   }
 }

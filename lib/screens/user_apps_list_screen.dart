@@ -79,15 +79,15 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       final app = appProvider.userApps.firstWhere((a) => a.id == _editingAppId);
-      
+
       if (app.name != newName) {
         final updatedApp = app.copyWith(
           name: newName,
           updatedAt: DateTime.now(),
         );
-        
+
         await appProvider.updateUserApp(updatedApp);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -101,7 +101,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.errorUpdatingAppName(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.errorUpdatingAppName(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -121,7 +123,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
         // Check if WebView is supported
@@ -138,7 +140,10 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
               SizedBox(
                 width: 200,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8.0,
+                    vertical: 8.0,
+                  ),
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
@@ -152,13 +157,18 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                               },
                             )
                           : null,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.surface.withOpacity(0.7),
                       isDense: true,
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -168,7 +178,11 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             ],
           ),
           body: filteredApps.isEmpty
-              ? _buildEmptyState(context, appProvider.userApps.isEmpty, _searchQuery.isNotEmpty)
+              ? _buildEmptyState(
+                  context,
+                  appProvider.userApps.isEmpty,
+                  _searchQuery.isNotEmpty,
+                )
               : _buildAppsList(context, appProvider, filteredApps),
           floatingActionButton: FloatingActionButton(
             onPressed: () => _showAddAppMenu(context),
@@ -202,11 +216,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   Widget _buildWebViewNotSupportedScreen(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.myApps),
-        ),
+      appBar: AppBar(title: Text(l10n.myApps)),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -237,9 +249,13 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, bool isNoApps, bool isSearchResult) {
+  Widget _buildEmptyState(
+    BuildContext context,
+    bool isNoApps,
+    bool isSearchResult,
+  ) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -259,7 +275,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              isSearchResult 
+              isSearchResult
                   ? l10n.tryAdjustingSearchTerms
                   : l10n.createFirstApp,
               style: Theme.of(context).textTheme.bodyMedium,
@@ -285,12 +301,18 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     }
     return apps.where((app) {
       final nameMatch = app.name.toLowerCase().contains(_searchQuery);
-      final descriptionMatch = app.description.toLowerCase().contains(_searchQuery);
+      final descriptionMatch = app.description.toLowerCase().contains(
+        _searchQuery,
+      );
       return nameMatch || descriptionMatch;
     }).toList();
   }
 
-  Widget _buildAppsList(BuildContext context, AppProvider appProvider, List<UserApp> apps) {
+  Widget _buildAppsList(
+    BuildContext context,
+    AppProvider appProvider,
+    List<UserApp> apps,
+  ) {
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: apps.length,
@@ -301,10 +323,14 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
-  Widget _buildAppCard(BuildContext context, UserApp app, AppProvider appProvider) {
+  Widget _buildAppCard(
+    BuildContext context,
+    UserApp app,
+    AppProvider appProvider,
+  ) {
     final l10n = AppLocalizations.of(context)!;
     final isEditing = _editingAppId == app.id;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
@@ -342,8 +368,8 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             Text(
               _getAppTypeLabel(l10n, app.type),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                  ),
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -369,59 +395,83 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
                 ],
               )
             : PopupMenuButton<String>(
-                onSelected: (value) => _handleMenuAction(context, value, app, appProvider),
-                itemBuilder: (context) => [
-                  PopupMenuItem<String>(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit),
-                        const SizedBox(width: 8),
-                        Text(l10n.editApp),
-                      ],
+                onSelected: (value) =>
+                    _handleMenuAction(context, value, app, appProvider),
+                itemBuilder: (context) {
+                  final isMultiFunction = appProvider.multiFunctionApps
+                      .contains(app.id);
+                  return [
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit),
+                          const SizedBox(width: 8),
+                          Text(l10n.editApp),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'clone',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.copy),
-                        const SizedBox(width: 8),
-                        Text(l10n.cloneApp),
-                      ],
+                    if (app.type == UserAppType.normal)
+                      PopupMenuItem<String>(
+                        value: 'toggleMultiFunction',
+                        child: Row(
+                          children: [
+                            Icon(
+                              isMultiFunction
+                                  ? Icons.remove_circle_outline
+                                  : Icons.add_circle_outline,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isMultiFunction
+                                  ? l10n.removeFromMultiFunction
+                                  : l10n.addToMultiFunction,
+                            ),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem<String>(
+                      value: 'clone',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.copy),
+                          const SizedBox(width: 8),
+                          Text(l10n.cloneApp),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'export',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.file_download),
-                        const SizedBox(width: 8),
-                        Text(l10n.exportApp),
-                      ],
+                    PopupMenuItem<String>(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.file_download),
+                          const SizedBox(width: 8),
+                          Text(l10n.exportApp),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'manageState',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.storage),
-                        const SizedBox(width: 8),
-                        Text(l10n.manageAppState),
-                      ],
+                    PopupMenuItem<String>(
+                      value: 'manageState',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.storage),
+                          const SizedBox(width: 8),
+                          Text(l10n.manageAppState),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.delete),
-                        const SizedBox(width: 8),
-                        Text(l10n.deleteApp),
-                      ],
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete),
+                          const SizedBox(width: 8),
+                          Text(l10n.deleteApp),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ];
+                },
                 icon: const Icon(Icons.more_vert),
               ),
         onTap: isEditing ? null : () => _navigateToViewApp(context, app),
@@ -462,29 +512,29 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   void _navigateToCreateApp(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const UserAppCreationScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const UserAppCreationScreen()),
     );
   }
 
   Future<void> _importApp(BuildContext context) async {
     try {
       LoggerService.debug('Starting file picker...');
-      
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
       );
 
       LoggerService.debug('File picker result: $result');
-      
+
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        
+
         if (file.path != null) {
-          LoggerService.debug('Selected file: ${file.name}, path: ${file.path}');
-          
+          LoggerService.debug(
+            'Selected file: ${file.name}, path: ${file.path}',
+          );
+
           // Store the file path and trigger navigation in the next frame
           _selectedYamlFile = file.path!;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -514,15 +564,15 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
 
   void _navigateToImportScreen() {
     if (_selectedYamlFile != null) {
-      LoggerService.debug('Navigating to ImportAppScreen with file: $_selectedYamlFile');
+      LoggerService.debug(
+        'Navigating to ImportAppScreen with file: $_selectedYamlFile',
+      );
       final filePath = _selectedYamlFile!; // Store the path before clearing
       _selectedYamlFile = null; // Clear before navigation
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ImportAppScreen(
-            yamlFilePath: filePath,
-          ),
+          builder: (context) => ImportAppScreen(yamlFilePath: filePath),
         ),
       );
     }
@@ -537,7 +587,8 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => UserAppViewScreen(app: app, selectedNotes: null),
+          builder: (context) =>
+              UserAppViewScreen(app: app, selectedNotes: null),
         ),
       );
     }
@@ -546,45 +597,43 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   void _navigateToEditApp(BuildContext context, UserApp app) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => UserAppEditScreen(app: app),
-      ),
+      MaterialPageRoute(builder: (context) => UserAppEditScreen(app: app)),
     );
   }
 
   void _navigateToExportApp(BuildContext context, UserApp app) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ExportAppScreen(app: app),
-      ),
+      MaterialPageRoute(builder: (context) => ExportAppScreen(app: app)),
     );
   }
 
-  Future<void> _cloneApp(BuildContext context, UserApp app, AppProvider appProvider) async {
+  Future<void> _cloneApp(
+    BuildContext context,
+    UserApp app,
+    AppProvider appProvider,
+  ) async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     try {
       // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
-      
+
       // Clone the app
       await UserAppService.cloneUserApp(app);
-      
+
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       // Refresh the app list
       await appProvider.refreshUserApps();
-      
+
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -599,7 +648,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -609,12 +658,17 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           ),
         );
       }
-      
+
       LoggerService.error('Error cloning app: $e', error: e);
     }
   }
 
-  void _handleMenuAction(BuildContext context, String action, UserApp app, AppProvider appProvider) {
+  void _handleMenuAction(
+    BuildContext context,
+    String action,
+    UserApp app,
+    AppProvider appProvider,
+  ) {
     switch (action) {
       case 'edit':
         _navigateToEditApp(context, app);
@@ -631,6 +685,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       case 'delete':
         _showDeleteDialog(context, app, appProvider);
         break;
+      case 'toggleMultiFunction':
+        _toggleMultiFunction(context, app, appProvider);
+        break;
     }
   }
 
@@ -643,10 +700,8 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => UserAppViewScreen(
-                app: app, 
-                selectedNotes: selectedNotes,
-              ),
+              builder: (context) =>
+                  UserAppViewScreen(app: app, selectedNotes: selectedNotes),
             ),
           );
         },
@@ -654,19 +709,25 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
-  void _showAppStateDialog(BuildContext context, UserApp app, AppProvider appProvider) {
+  void _showAppStateDialog(
+    BuildContext context,
+    UserApp app,
+    AppProvider appProvider,
+  ) {
     showDialog(
       context: context,
-      builder: (dialogContext) => _AppStateDialog(
-        app: app,
-        appProvider: appProvider,
-      ),
+      builder: (dialogContext) =>
+          _AppStateDialog(app: app, appProvider: appProvider),
     );
   }
 
-  void _showDeleteDialog(BuildContext context, UserApp app, AppProvider appProvider) {
+  void _showDeleteDialog(
+    BuildContext context,
+    UserApp app,
+    AppProvider appProvider,
+  ) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -708,6 +769,42 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
+  Future<void> _toggleMultiFunction(
+    BuildContext context,
+    UserApp app,
+    AppProvider appProvider,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final isMultiFunction = appProvider.multiFunctionApps.contains(app.id);
+
+    try {
+      if (isMultiFunction) {
+        await appProvider.removeAppFromMultiFunction(app.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.appRemovedFromMultiFunction)),
+          );
+        }
+      } else {
+        await appProvider.addAppToMultiFunction(app.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.appAddedToMultiFunction)));
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating multi-function status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   IconData _getAppIcon(UserAppType type) {
     switch (type) {
       case UserAppType.noteAction:
@@ -739,10 +836,7 @@ class _AppStateDialog extends StatefulWidget {
   final UserApp app;
   final AppProvider appProvider;
 
-  const _AppStateDialog({
-    required this.app,
-    required this.appProvider,
-  });
+  const _AppStateDialog({required this.app, required this.appProvider});
 
   @override
   State<_AppStateDialog> createState() => _AppStateDialogState();
@@ -800,14 +894,14 @@ class _AppStateDialogState extends State<_AppStateDialog> {
     try {
       final stateText = _stateController.text.trim();
       Map<String, dynamic> state;
-      
+
       if (stateText.isEmpty) {
         state = <String, dynamic>{};
       } else {
         // Try to parse JSON
         state = jsonDecode(stateText) as Map<String, dynamic>;
       }
-      
+
       await widget.appProvider.saveAppState(widget.app.id, state);
       if (mounted) {
         Navigator.pop(context);
@@ -877,9 +971,11 @@ class _AppStateDialogState extends State<_AppStateDialog> {
                       child: Text(
                         l10n.noState,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontStyle: FontStyle.italic,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                          fontStyle: FontStyle.italic,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
+                        ),
                       ),
                     ),
                   TextField(
@@ -904,14 +1000,8 @@ class _AppStateDialogState extends State<_AppStateDialog> {
           child: Text(l10n.cancel),
         ),
         if (_hasState)
-          TextButton(
-            onPressed: _clearState,
-            child: Text(l10n.clearState),
-          ),
-        TextButton(
-          onPressed: _saveState,
-          child: Text(l10n.save),
-        ),
+          TextButton(onPressed: _clearState, child: Text(l10n.clearState)),
+        TextButton(onPressed: _saveState, child: Text(l10n.save)),
       ],
     );
   }

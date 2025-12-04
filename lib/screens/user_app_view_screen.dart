@@ -13,6 +13,7 @@ import '../models/note.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../services/global_library_service.dart';
 import '../utils/file_utils.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
@@ -23,18 +24,29 @@ import 'ai_action_screen.dart';
 class UserAppViewScreen extends StatefulWidget {
   final UserApp app;
   final List<Note>? selectedNotes;
+  final bool isEmbedded;
+
+  final bool showDeleteAction;
+  final bool showEditAction;
+  final bool showRevisionHistory;
+  final List<Widget>? extraActions;
 
   const UserAppViewScreen({
     super.key,
     required this.app,
     this.selectedNotes,
+    this.isEmbedded = false,
+    this.showDeleteAction = true,
+    this.showEditAction = true,
+    this.showRevisionHistory = true,
+    this.extraActions,
   });
 
   @override
-  State<UserAppViewScreen> createState() => _UserAppViewScreenState();
+  State<UserAppViewScreen> createState() => UserAppViewScreenState();
 }
 
-class _UserAppViewScreenState extends State<UserAppViewScreen> {
+class UserAppViewScreenState extends State<UserAppViewScreen> {
   final List<String> _consoleOutput = [];
   bool _isLoading = true;
   AppRevision? _selectedRevision;
@@ -57,9 +69,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       orElse: () => widget.app,
     );
     final revisions = appProvider.appRevisions[widget.app.id] ?? [];
-    
+
     // If the provider's selected revision is different from our local state, update it
-    if (currentApp.selectedRevisionId != null && 
+    if (currentApp.selectedRevisionId != null &&
         _selectedRevision?.id != currentApp.selectedRevisionId) {
       try {
         final newSelectedRevision = revisions.firstWhere(
@@ -68,9 +80,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         setState(() {
           _selectedRevision = newSelectedRevision;
         });
-        LoggerService.debug('Updated selected revision from provider: ${newSelectedRevision.id}');
+        LoggerService.debug(
+          'Updated selected revision from provider: ${newSelectedRevision.id}',
+        );
       } catch (e) {
-        LoggerService.warning('Selected revision not found in provider data: ${currentApp.selectedRevisionId}');
+        LoggerService.warning(
+          'Selected revision not found in provider data: ${currentApp.selectedRevisionId}',
+        );
       }
     }
   }
@@ -79,16 +95,16 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     try {
       final appProvider = context.read<AppProvider>();
       await appProvider.getAppRevisions(widget.app.id);
-      
+
       // Get the current app from provider (it will be updated after editing)
       final currentApp = appProvider.userApps.firstWhere(
         (app) => app.id == widget.app.id,
         orElse: () => widget.app,
       );
-      
+
       // Get revisions from provider (already sorted consistently)
       final revisions = appProvider.appRevisions[widget.app.id] ?? [];
-      
+
       setState(() {
         if (currentApp.selectedRevisionId != null) {
           try {
@@ -97,10 +113,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
             );
           } catch (e) {
             LoggerService.warning('Selected revision not found, using latest');
-            _selectedRevision = revisions.isNotEmpty ? revisions.last : null; // Use last (highest revision number)
+            _selectedRevision = revisions.isNotEmpty
+                ? revisions.last
+                : null; // Use last (highest revision number)
           }
         } else if (revisions.isNotEmpty) {
-          _selectedRevision = revisions.last; // Use last (highest revision number)
+          _selectedRevision =
+              revisions.last; // Use last (highest revision number)
         } else {
           _selectedRevision = null;
         }
@@ -157,7 +176,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       _selectedRevision = revision;
       _showRevisionDetails = false;
     });
-    LoggerService.debug('Selected revision: ${revision.id} (revision ${revision.revisionNumber})');
+    LoggerService.debug(
+      'Selected revision: ${revision.id} (revision ${revision.revisionNumber})',
+    );
   }
 
   void _toggleRevisionDetails(AppRevision revision) {
@@ -167,12 +188,11 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     });
   }
 
-
   Future<void> _pinRevision(AppRevision revision) async {
     try {
       final appProvider = context.read<AppProvider>();
       await appProvider.setSelectedRevision(widget.app.id, revision.id);
-      
+
       // The provider will notify listeners and the UI will update automatically
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -199,7 +219,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Revision'),
-        content: Text('Are you sure you want to delete revision ${revision.revisionNumber}?'),
+        content: Text(
+          'Are you sure you want to delete revision ${revision.revisionNumber}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -217,9 +239,9 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       try {
         final appProvider = context.read<AppProvider>();
         await appProvider.deleteAppRevision(revision.id);
-        
+
         // The provider will notify listeners and the UI will update automatically
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -231,15 +253,15 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       } catch (e) {
         if (mounted) {
           String errorMessage = 'Error deleting revision: $e';
-          if (e.toString().contains('Cannot delete the only remaining revision')) {
-            errorMessage = 'Cannot delete the only remaining revision. At least one revision must exist.';
+          if (e.toString().contains(
+            'Cannot delete the only remaining revision',
+          )) {
+            errorMessage =
+                'Cannot delete the only remaining revision. At least one revision must exist.';
           }
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
           );
         }
       }
@@ -250,56 +272,62 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final appProvider = context.watch<AppProvider>();
-    
+
     // Get current app and revisions from provider
     final currentApp = appProvider.userApps.firstWhere(
       (app) => app.id == widget.app.id,
       orElse: () => widget.app,
     );
     final revisions = appProvider.appRevisions[widget.app.id] ?? [];
-    
+
     // Check if WebView is supported
     if (!UserAppService.isWebViewSupported()) {
       return _buildWebViewNotSupportedScreen(context, l10n);
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.app.name),
-            if (widget.app.type == UserAppType.noteAction && widget.selectedNotes != null)
-              Text(
-                '${widget.selectedNotes!.length} notes selected',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white70,
-                ),
+      appBar: widget.isEmbedded
+          ? null
+          : AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.app.name),
+                  if (widget.app.type == UserAppType.noteAction &&
+                      widget.selectedNotes != null)
+                    Text(
+                      '${widget.selectedNotes!.length} notes selected',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                    ),
+                ],
               ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.code),
-            onPressed: () => _showConsole(context),
-            tooltip: l10n.console,
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _navigateToEdit(context),
-            tooltip: l10n.edit,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => _showDeleteDialog(context, l10n),
-            tooltip: l10n.delete,
-          ),
-        ],
-      ),
+              actions: [
+                if (widget.extraActions != null) ...widget.extraActions!,
+                IconButton(
+                  icon: const Icon(Icons.code),
+                  onPressed: () => showConsole(context),
+                  tooltip: l10n.console,
+                ),
+                if (widget.showEditAction)
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _navigateToEdit(context),
+                    tooltip: l10n.edit,
+                  ),
+                if (widget.showDeleteAction)
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => _showDeleteDialog(context, l10n),
+                    tooltip: l10n.delete,
+                  ),
+              ],
+            ),
       body: Column(
         children: [
           // Revision tabs
-          if (revisions.isNotEmpty)
+          if (widget.showRevisionHistory && revisions.isNotEmpty)
             Container(
               height: 60,
               decoration: BoxDecoration(
@@ -322,21 +350,28 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       itemBuilder: (context, index) {
                         final revision = revisions[index];
                         final isSelected = _selectedRevision?.id == revision.id;
-                        final isPinned = currentApp.selectedRevisionId == revision.id;
-                        
+                        final isPinned =
+                            currentApp.selectedRevisionId == revision.id;
+
                         return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 4.0,
+                            vertical: 8.0,
+                          ),
                           child: GestureDetector(
                             onTap: () => _selectRevision(revision),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12.0,
+                                vertical: 8.0,
+                              ),
                               decoration: BoxDecoration(
-                                color: isSelected 
+                                color: isSelected
                                     ? Theme.of(context).colorScheme.primary
                                     : Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(8.0),
                                 border: Border.all(
-                                  color: isSelected 
+                                  color: isSelected
                                       ? Theme.of(context).colorScheme.primary
                                       : Theme.of(context).dividerColor,
                                 ),
@@ -347,10 +382,16 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                                   Text(
                                     '${revision.revisionNumber}',
                                     style: TextStyle(
-                                      color: isSelected 
-                                          ? Theme.of(context).colorScheme.onPrimary
-                                          : Theme.of(context).colorScheme.onSurface,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                      color: isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
                                     ),
                                   ),
                                   if (isPinned) ...[
@@ -358,9 +399,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                                     Icon(
                                       Icons.push_pin,
                                       size: 12,
-                                      color: isSelected 
-                                          ? Theme.of(context).colorScheme.onPrimary
-                                          : Theme.of(context).colorScheme.primary,
+                                      color: isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
                                     ),
                                   ],
                                 ],
@@ -378,12 +423,15 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       children: [
                         // AI Response button
                         IconButton(
-                          onPressed: () => _toggleRevisionDetails(_selectedRevision!),
+                          onPressed: () =>
+                              _toggleRevisionDetails(_selectedRevision!),
                           icon: Icon(
                             _showRevisionDetails ? Icons.web : Icons.chat,
                             size: 16,
                           ),
-                          tooltip: _showRevisionDetails ? 'Show App' : 'Show AI Response',
+                          tooltip: _showRevisionDetails
+                              ? 'Show App'
+                              : 'Show AI Response',
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(
                             minWidth: 32,
@@ -394,13 +442,16 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                         IconButton(
                           onPressed: () => _pinRevision(_selectedRevision!),
                           icon: Icon(
-                            currentApp.selectedRevisionId == _selectedRevision!.id 
-                                ? Icons.push_pin 
+                            currentApp.selectedRevisionId ==
+                                    _selectedRevision!.id
+                                ? Icons.push_pin
                                 : Icons.push_pin_outlined,
                             size: 16,
                           ),
-                          tooltip: currentApp.selectedRevisionId == _selectedRevision!.id 
-                              ? 'Unpin Revision' 
+                          tooltip:
+                              currentApp.selectedRevisionId ==
+                                  _selectedRevision!.id
+                              ? 'Unpin Revision'
                               : 'Pin Revision',
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(
@@ -438,9 +489,15 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
   Widget _buildWebView(UserApp currentApp) {
     final htmlData = _selectedRevision?.appCode ?? '';
     LoggerService.debug('WebView loading data: ${htmlData.length} characters');
-    LoggerService.debug('Using revision: ${_selectedRevision?.id ?? 'none'} (revision ${_selectedRevision?.revisionNumber ?? 'N/A'})');
-    LoggerService.debug('Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...');
-    LoggerService.debug('WebView key: ${_selectedRevision?.id ?? 'app_${widget.app.id}'}');
+    LoggerService.debug(
+      'Using revision: ${_selectedRevision?.id ?? 'none'} (revision ${_selectedRevision?.revisionNumber ?? 'N/A'})',
+    );
+    LoggerService.debug(
+      'Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...',
+    );
+    LoggerService.debug(
+      'WebView key: ${_selectedRevision?.id ?? 'app_${widget.app.id}'}',
+    );
 
     final bridge = UserAppRuntimeBridge(
       app: currentApp,
@@ -475,9 +532,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
           }
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => ImmersiveNoteScreen(
-                notes: notes,
-              ),
+              builder: (context) => ImmersiveNoteScreen(notes: notes),
             ),
           );
         } else {
@@ -499,61 +554,114 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         );
       },
     );
-    
+
     return Stack(
-        children: [
-          InAppWebView(
-            key: ValueKey(_selectedRevision?.id ?? 'app_${widget.app.id}'), // Force rebuild when revision changes
-            initialData: InAppWebViewInitialData(
+      children: [
+        InAppWebView(
+          key: ValueKey(
+            _selectedRevision?.id ?? 'app_${widget.app.id}',
+          ), // Force rebuild when revision changes
+          initialData: InAppWebViewInitialData(
             data: htmlData,
-              mimeType: 'text/html',
-              encoding: 'utf8',
-            ),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              domStorageEnabled: true,
-              databaseEnabled: true,
-              clearCache: true,
-              cacheEnabled: true,
-              supportZoom: true,
-              builtInZoomControls: true,
-              displayZoomControls: false,
-              resourceCustomSchemes: ['synapse', 'synapseuser', 'synapsetemp'],
-            ),
-            onLoadResourceWithCustomScheme: (controller, request) async {
-              LoggerService.debug('onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}');
-              if (request.url.scheme.toLowerCase() == 'synapse') {
-                final data = await rootBundle.loadString("assets/scripts/${request.url.host}");
+            mimeType: 'text/html',
+            encoding: 'utf8',
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            domStorageEnabled: true,
+            databaseEnabled: true,
+            clearCache: true,
+            cacheEnabled: true,
+            supportZoom: true,
+            builtInZoomControls: true,
+            displayZoomControls: false,
+            resourceCustomSchemes: ['synapse', 'synapseuser', 'synapsetemp'],
+          ),
+          onLoadResourceWithCustomScheme: (controller, request) async {
+            LoggerService.debug(
+              'onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}',
+            );
+            if (request.url.scheme.toLowerCase() == 'synapse') {
+              final fileName = request.url.host;
+              final service = GlobalLibraryService();
+
+              // Check if it's a custom library first (or built-in that we want to serve from file)
+              final customPath = await service.resolveLibraryPath(fileName);
+
+              if (customPath != null) {
+                // Serve from file system
+                final file = File(customPath);
+                if (await file.exists()) {
+                  final data = await file.readAsBytes();
+                  // Determine content type based on extension
+                  final contentType = fileName.endsWith('.css')
+                      ? 'text/css'
+                      : 'application/javascript';
+                  return CustomSchemeResponse(
+                    contentType: contentType,
+                    data: data,
+                  );
+                }
+              }
+
+              // Fallback to assets/scripts for built-ins if not found via service or if service returns null
+              // (This maintains backward compatibility and handles built-ins if they are not fully migrated to file paths yet,
+              // though our service should handle them if we mapped them correctly.
+              // However, built-ins in YAML point to assets/scripts/..., so resolveLibraryPath might return that relative path?
+              // Wait, resolveLibraryPath implementation:
+              // For custom libs, it returns full path.
+              // For built-ins, I didn't implement logic to return asset path in resolveLibraryPath yet.
+              // Let's check GlobalLibraryService.resolveLibraryPath implementation again.
+
+              // Actually, I should probably update resolveLibraryPath to handle built-ins too or handle it here.
+              // In GlobalLibraryService, I only checked custom libs.
+              // Let's stick to the plan: built-ins are in assets/scripts.
+
+              try {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/$fileName",
+                );
                 return CustomSchemeResponse(
                   contentType: 'text/plain',
                   data: Uint8List.fromList(utf8.encode(data)),
                 );
-              } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
-                return await bridge.handleSynapseUserScheme(request.url);
-              } else if (request.url.scheme.toLowerCase() == 'synapsetemp') {
-                return await bridge.handleSynapseTempScheme(request.url);
+              } catch (e) {
+                LoggerService.warning(
+                  'Failed to load asset: assets/scripts/$fileName',
+                );
+                return CustomSchemeResponse(
+                  contentType: 'text/plain',
+                  data: Uint8List.fromList(
+                    utf8.encode('/* Asset not found: $fileName */'),
+                  ),
+                );
               }
-              return null;            
-            },
-            initialUserScripts: UnmodifiableListView<UserScript>([
-              bridge.buildBootstrapScript(),
-            ]),
-            onWebViewCreated: (controller) {
-              bridge.registerJavaScriptHandlers(controller);
-            },
-            onLoadStart: (controller, url) {
-              setState(() {
-                _isLoading = true;
-              });
-            },
-            onLoadStop: (controller, url) {
-              setState(() {
-                _isLoading = false;
-              });
-              
-              // Override navigator.clipboard.writeText for Android clipboard fix
-              controller.evaluateJavascript(
-                source: '''
+            } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
+              return await bridge.handleSynapseUserScheme(request.url);
+            } else if (request.url.scheme.toLowerCase() == 'synapsetemp') {
+              return await bridge.handleSynapseTempScheme(request.url);
+            }
+            return null;
+          },
+          initialUserScripts: UnmodifiableListView<UserScript>([
+            bridge.buildBootstrapScript(),
+          ]),
+          onWebViewCreated: (controller) {
+            bridge.registerJavaScriptHandlers(controller);
+          },
+          onLoadStart: (controller, url) {
+            setState(() {
+              _isLoading = true;
+            });
+          },
+          onLoadStop: (controller, url) {
+            setState(() {
+              _isLoading = false;
+            });
+
+            // Override navigator.clipboard.writeText for Android clipboard fix
+            controller.evaluateJavascript(
+              source: '''
                   if (!navigator.clipboard) {
                     navigator.clipboard = {
                       writeText: (msg) => {
@@ -582,24 +690,23 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       return originalExecCommand.call(this, command, showUI, value);
                     };
                   }
-                '''
+                ''',
+            );
+          },
+          onConsoleMessage: (controller, consoleMessage) {
+            setState(() {
+              _consoleOutput.add(
+                '${consoleMessage.messageLevel}: ${consoleMessage.message}',
               );
-            },
-            onConsoleMessage: (controller, consoleMessage) {
-              setState(() {
-                _consoleOutput.add('${consoleMessage.messageLevel}: ${consoleMessage.message}');
-              });
-            },
-            onReceivedError: (controller, request, error) {
-              setState(() {
-                _consoleOutput.add('ERROR: ${error.description}');
-              });
-            },
-          ),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
+            });
+          },
+          onReceivedError: (controller, request, error) {
+            setState(() {
+              _consoleOutput.add('ERROR: ${error.description}');
+            });
+          },
+        ),
+        if (_isLoading) const Center(child: CircularProgressIndicator()),
       ],
     );
   }
@@ -652,10 +759,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       child: SingleChildScrollView(
                         child: Text(
                           _selectedRevision!.userPrompt,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontFamily: 'monospace', fontSize: 12),
                         ),
                       ),
                     ),
@@ -725,10 +830,8 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
                       child: SingleChildScrollView(
                         child: Text(
                           _selectedRevision!.aiResponse,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontFamily: 'monospace', fontSize: 12),
                         ),
                       ),
                     ),
@@ -742,11 +845,104 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     );
   }
 
-  Widget _buildWebViewNotSupportedScreen(BuildContext context, AppLocalizations l10n) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.app.name),
+  void showConsole(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.4,
+        minChildSize: 0.2,
+        maxChildSize: 0.8,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Console Logs',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Row(
+                      children: [
+                        if (_consoleOutput.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () {
+                              final text = _consoleOutput.join('\n');
+                              Clipboard.setData(ClipboardData(text: text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    )!.consoleOutputCopied,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy, size: 16),
+                            label: const Text('Copy'),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SelectionArea(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _consoleOutput.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          _consoleOutput[index],
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildWebViewNotSupportedScreen(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.app.name)),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -777,100 +973,10 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
     );
   }
 
-  void _showConsole(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  l10n.consoleOutput,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Row(
-                  children: [
-                    if (_consoleOutput.isNotEmpty)
-                      IconButton(
-                        onPressed: () => _copyConsoleToClipboard(context),
-                        icon: const Icon(Icons.copy),
-                        tooltip: l10n.copyToClipboard,
-                      ),
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _consoleOutput.clear();
-                        });
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.clear),
-                      tooltip: l10n.clearConsole,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _consoleOutput.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.noConsoleOutput,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _consoleOutput.length,
-                      itemBuilder: (context, index) {
-                        final message = _consoleOutput[index];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: Text(
-                            message,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _copyConsoleToClipboard(BuildContext context) {
-    if (_consoleOutput.isEmpty) return;
-    
-    final consoleText = _consoleOutput.join('\n');
-    Clipboard.setData(ClipboardData(text: consoleText));
-    
-    final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.consoleOutputCopied),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-
   void _navigateToEdit(BuildContext context) async {
     final appProvider = context.read<AppProvider>();
     final revisions = appProvider.appRevisions[widget.app.id] ?? [];
-    
+
     // If no revisions exist, create an initial revision first
     if (revisions.isEmpty) {
       try {
@@ -887,13 +993,13 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         return;
       }
     }
-    
+
     // Get the current app from the provider
     final currentApp = appProvider.userApps.firstWhere(
       (app) => app.id == widget.app.id,
       orElse: () => widget.app,
     );
-    
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -903,7 +1009,7 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
         ),
       ),
     );
-    
+
     // If we returned from edit screen, refresh the data to show latest changes
     if (result == true && mounted) {
       await _refreshAppData();
@@ -953,5 +1059,4 @@ class _UserAppViewScreenState extends State<UserAppViewScreen> {
       ),
     );
   }
-
 }

@@ -75,9 +75,12 @@ class AIService {
     Note note,
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final requestId = context.ensureRequestId();
+
     return await _withErrorHandling('note transformation', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
         'Starting note transformation request',
         error: {
@@ -106,9 +109,9 @@ class AIService {
 
       return await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
-    });
+    }, requestId: requestId);
   }
 
   /// New note creation
@@ -116,9 +119,12 @@ class AIService {
     String prompt,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final requestId = context.ensureRequestId();
+
     return await _withErrorHandling('new note creation', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
         'Starting new note creation request',
         error: {
@@ -146,10 +152,10 @@ class AIService {
 
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
       return _parseNewNotesResponse(response);
-    });
+    }, requestId: requestId);
   }
 
   /// Audio transcription
@@ -422,36 +428,17 @@ class AIService {
   }
 
   /// Generate user app HTML
-  static Future<String> generateApp(String prompt) async {
+  static Future<String> generateApp(
+    String prompt, {
+    List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    final requestId = context.ensureRequestId();
+
     return await _withErrorHandling('app generation', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
         'Starting app generation request',
-        error: {'prompt': prompt, 'requestId': requestId},
-      );
-
-      final request = _singleTurnRequest(
-        taskContext:
-            'Create a self-contained HTML/CSS/JS application that satisfies the user specification.',
-        userInstruction: prompt,
-      );
-
-      return await ModelSelector.instance.generateFromPrompt(
-        request,
-        generationContext: _contextFromRequestId(requestId),
-      );
-    });
-  }
-
-  /// Generate user app HTML with attachments
-  static Future<String> generateAppWithAttachments(
-    String prompt,
-    List<PlatformFile>? attachedFiles,
-  ) async {
-    return await _withErrorHandling('app generation with attachments', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
-      LoggerService.debug(
-        'Starting app generation request with attachments',
         error: {
           'prompt': prompt,
           'attachedFilesCount': attachedFiles?.length ?? 0,
@@ -468,9 +455,18 @@ class AIService {
 
       return await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
-    });
+    }, requestId: requestId);
+  }
+
+  /// Deprecated: Use generateApp with attachedFiles parameter instead
+  @Deprecated('Use generateApp with attachedFiles parameter instead')
+  static Future<String> generateAppWithAttachments(
+    String prompt,
+    List<PlatformFile>? attachedFiles,
+  ) async {
+    return generateApp(prompt, attachedFiles: attachedFiles);
   }
 
   /// Chat AI with configurable parameters
@@ -480,9 +476,12 @@ class AIService {
     int? topK,
     double? topP,
     List<PlatformFile>? attachedFiles,
+    GenerationContext? generationContext,
   }) async {
+    final context = generationContext ?? GenerationContext();
+    final requestId = context.ensureRequestId();
+
     return await _withErrorHandling('chat AI', () async {
-      final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
         'Starting chat AI request',
         error: {
@@ -513,9 +512,9 @@ class AIService {
         temperature: temperature,
         topK: topK,
         topP: topP,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
-    });
+    }, requestId: requestId);
   }
 
   // Helper methods (copied from original GeminiApiService)

@@ -16,6 +16,7 @@ Filter _$FilterFromJson(Map<String, dynamic> json) => Filter(
           .toList() ??
       const [],
   includeArchived: json['includeArchived'] as bool? ?? false,
+  isPinned: json['isPinned'] as bool? ?? false,
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
 );
@@ -26,6 +27,7 @@ Map<String, dynamic> _$FilterToJson(Filter instance) => <String, dynamic>{
   'includeText': instance.includeText,
   'includeTags': instance.includeTags,
   'includeArchived': instance.includeArchived,
+  'isPinned': instance.isPinned,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
 };

@@ -116,15 +116,41 @@ class ModelSelector {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    if (_currentModel == null) {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    // If override is provided, create a temporary model instance
+    if (modelOverride != null) {
+      LoggerService.debug(
+        'ModelSelector: Using model override: ${modelOverride.displayName} (${modelOverride.id})',
+      );
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        } else {
+          LoggerService.warning(
+            'ModelSelector: Override model ${modelOverride.displayName} is not ready. Falling back to current model.',
+          );
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e. Falling back to current model.',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
       throw Exception(
         'No model is currently selected. Please select a model first.',
       );
     }
 
-    final context = generationContext ?? GenerationContext();
     // Model will handle capability limitations gracefully through limitation notes
-    return await _currentModel!.generateWithAttachments(
+    return await modelToUse.generateWithAttachments(
       prompt,
       attachedFiles,
       temperature: temperature,
@@ -144,14 +170,32 @@ class ModelSelector {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    if (_currentModel == null) {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    if (modelOverride != null) {
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
       throw Exception(
         'No model is currently selected. Please select a model first.',
       );
     }
 
-    final context = generationContext ?? GenerationContext();
-    return await _currentModel!.generateWithMessages(
+    return await modelToUse.generateWithMessages(
       messages,
       temperature: temperature,
       topK: topK,
@@ -169,14 +213,32 @@ class ModelSelector {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    if (_currentModel == null) {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    if (modelOverride != null) {
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
       throw Exception(
         'No model is currently selected. Please select a model first.',
       );
     }
 
-    final context = generationContext ?? GenerationContext();
-    return await _currentModel!.generateFromPrompt(
+    return await modelToUse.generateFromPrompt(
       request,
       temperature: temperature,
       topK: topK,
@@ -196,14 +258,32 @@ class ModelSelector {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    if (_currentModel == null) {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    if (modelOverride != null) {
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
       throw Exception(
         'No model is currently selected. Please select a model first.',
       );
     }
 
-    final context = generationContext ?? GenerationContext();
-    return await _currentModel!.generateWithTools(
+    return await modelToUse.generateWithTools(
       prompt,
       attachedFiles,
       tools,
@@ -224,14 +304,32 @@ class ModelSelector {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    if (_currentModel == null) {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    if (modelOverride != null) {
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
       throw Exception(
         'No model is currently selected. Please select a model first.',
       );
     }
 
-    final context = generationContext ?? GenerationContext();
-    return await _currentModel!.generateWithToolsAndMessages(
+    return await modelToUse.generateWithToolsAndMessages(
       messages,
       tools,
       temperature: temperature,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_debug_overlay/flutter_debug_overlay.dart';
+
 import 'l10n/app_localizations.dart';
 import 'providers/app_provider.dart';
 import 'screens/setup_screen.dart';
@@ -12,6 +12,7 @@ import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
+import 'services/global_library_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ void main() async {
   // Initialize secure storage
   await SecureStorageService.initialize();
   await PromptConfigurationBootstrapper.initialize();
+  await GlobalLibraryService().init();
 
   runApp(const NoteSynapseApp());
 }
@@ -75,11 +77,7 @@ class NoteSynapseApp extends StatelessWidget {
               },
             },
             builder: (context, child) {
-              return DebugOverlay(
-                visible: false, // Disable the default two finger tap trigger
-                detectorBuilder: (onDetect, overlayChild) => overlayChild,
-                child: child ?? const SizedBox.shrink(),
-              );
+              return child ?? const SizedBox.shrink();
             },
           );
         },

@@ -1,6 +1,8 @@
+import 'model_config.dart';
+
 class GenerationContext {
   GenerationContext({Map<String, dynamic>? values})
-      : _values = values != null ? Map<String, dynamic>.from(values) : {};
+    : _values = values != null ? Map<String, dynamic>.from(values) : {};
 
   final Map<String, dynamic> _values;
 
@@ -36,4 +38,8 @@ class GenerationContext {
 
   /// Creates a shallow copy of the current context map.
   GenerationContext fork() => GenerationContext(values: _values);
+
+  /// Optional model configuration override for this specific request.
+  ModelConfig? get modelOverride => _values['modelOverride'] as ModelConfig?;
+  set modelOverride(ModelConfig? value) => setValue('modelOverride', value);
 }

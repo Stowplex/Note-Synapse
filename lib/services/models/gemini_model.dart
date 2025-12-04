@@ -360,11 +360,85 @@ class GeminiModel implements AIModel {
             });
           } else {
             // Regular user message with optional attachments
-            final parts = <Map<String, dynamic>>[
-              {'text': message.content},
-            ];
+            final parts = <Map<String, dynamic>>[];
+            final partsHistory = message.metadata?['parts_history'] as List?;
 
-            if (message.attachments.isNotEmpty) {
+            if (partsHistory != null) {
+              // Reconstruct from parts history
+              for (final part in partsHistory) {
+                if (part is! Map) continue;
+                // Check if included
+                if (part['is_included'] == false) continue;
+
+                final type = part['type'];
+                final thoughtSignature = part['thought_signature'];
+
+                // Strict model matching: Only use signature if model matches
+                final modelUsed = message.metadata?['modelUsed'];
+                final configId = _config?.id ?? '';
+                final configName = _config?.modelName ?? '';
+                final isModelMatch =
+                    modelUsed == configId ||
+                    modelUsed == configName ||
+                    (modelUsed != null &&
+                        (modelUsed.endsWith('/$configId') ||
+                            configId.endsWith('/$modelUsed')));
+
+                if (type == 'text') {
+                  // Text is always safe to send as text, but include thoughtSignature if available
+                  if (isModelMatch && thoughtSignature != null) {
+                    parts.add({
+                      'text': part['text'],
+                      'thoughtSignature': thoughtSignature,
+                    });
+                  } else {
+                    parts.add({'text': part['text']});
+                  }
+                } else if (type == 'image') {
+                  if (isModelMatch && thoughtSignature != null) {
+                    // Fallback for now: If we have inline data, use it.
+                    if (part['file_data'] != null) {
+                      parts.add({'inline_data': part['file_data']});
+                    } else {
+                      // Placeholder if we can't reconstruct
+                      parts.add({'text': '[Image]'});
+                    }
+                  } else {
+                    parts.add({'text': '[Image]'});
+                  }
+                } else if (type == 'tool_call') {
+                  if (isModelMatch && thoughtSignature != null) {
+                    final functionCall = Map<String, dynamic>.from(
+                      part['function_call'],
+                    );
+                    // Ensure thoughtSignature is NOT in functionCall
+                    functionCall.remove('thoughtSignature');
+                    functionCall.remove('thought_signature');
+
+                    final partMap = <String, dynamic>{
+                      'functionCall': functionCall,
+                    };
+                    partMap['thoughtSignature'] = thoughtSignature;
+                    parts.add(partMap);
+                  } else {
+                    // Fallback to text
+                    final name = part['function_call']?['name'] ?? 'unknown';
+                    final args = part['function_call']?['args'] ?? {};
+                    parts.add({'text': 'Tool Call $name: $args'});
+                  }
+                } else if (type == 'tool_result') {
+                  if (type == 'text') {
+                    parts.add({'text': part['text']});
+                  }
+                }
+              }
+            } else {
+              // Legacy fallback
+              parts.add({'text': message.content});
+            }
+
+            // Append current attachments if any
+            if (partsHistory == null && message.attachments.isNotEmpty) {
               for (final file in message.attachments) {
                 final bytes = _readPlatformFileBytes(file);
                 if (bytes == null) continue;
@@ -388,30 +462,88 @@ class GeminiModel implements AIModel {
           }
           break;
         case PromptRole.assistant:
-          final parts = <Map<String, dynamic>>[];
-
-          // Add text content if present
-          if (message.content.trim().isNotEmpty) {
-            parts.add({'text': message.content});
+          // Filter out client-generated error messages
+          // Filter out client-generated error messages
+          if (message.metadata?['is_client_synthetic'] == true) {
+            continue;
           }
 
-          // Add function calls if present in metadata
-          if (message.metadata != null &&
-              message.metadata!['function_calls'] != null) {
-            final functionCalls = message.metadata!['function_calls'] as List;
-            for (final functionCall in functionCalls) {
-              if (functionCall is Map<String, dynamic>) {
-                final callData = Map<String, dynamic>.from(functionCall);
-                final thoughtSignature =
-                    callData.remove('thoughtSignature') ??
-                    callData.remove('thought_signature');
-                final part = <String, dynamic>{'functionCall': callData};
-                if (thoughtSignature != null) {
-                  part['thoughtSignature'] = thoughtSignature;
+          final parts = <Map<String, dynamic>>[];
+          final partsHistory = message.metadata?['parts_history'] as List?;
+
+          if (partsHistory != null) {
+            for (final part in partsHistory) {
+              if (part is! Map) continue;
+              if (part['is_included'] == false) continue;
+
+              final type = part['type'];
+              final thoughtSignature = part['thought_signature'];
+
+              // Strict model matching
+              final modelUsed = message.metadata?['modelUsed'];
+              final configId = _config?.id ?? '';
+              final configName = _config?.modelName ?? '';
+              final isModelMatch =
+                  modelUsed == configId ||
+                  modelUsed == configName ||
+                  (modelUsed != null &&
+                      (modelUsed.endsWith('/$configId') ||
+                          configId.endsWith('/$modelUsed')));
+
+              if (type == 'text') {
+                if (isModelMatch && thoughtSignature != null) {
+                  parts.add({
+                    'text': part['text'],
+                    'thoughtSignature': thoughtSignature,
+                  });
+                } else {
+                  parts.add({'text': part['text']});
                 }
-                parts.add(part);
-              } else {
-                parts.add({'functionCall': functionCall});
+              } else if (type == 'tool_call') {
+                if (isModelMatch && thoughtSignature != null) {
+                  final functionCall = Map<String, dynamic>.from(
+                    part['function_call'],
+                  );
+                  // Ensure thoughtSignature is NOT in functionCall
+                  functionCall.remove('thoughtSignature');
+                  functionCall.remove('thought_signature');
+
+                  final partMap = <String, dynamic>{
+                    'functionCall': functionCall,
+                  };
+                  partMap['thoughtSignature'] = thoughtSignature;
+                  parts.add(partMap);
+                  LoggerService.debug(
+                    'Added tool call with thoughtSignature: ${thoughtSignature.substring(0, 10)}...',
+                  );
+                } else {
+                  LoggerService.debug(
+                    'Skipping thoughtSignature. Match: $isModelMatch, Sig: ${thoughtSignature != null}',
+                  );
+                  // Fallback to text
+                  final name = part['function_call']?['name'] ?? 'unknown';
+                  final args = part['function_call']?['args'] ?? {};
+                  parts.add({'text': 'Tool Call $name: $args'});
+                }
+              }
+            }
+          } else {
+            // Legacy fallback logic
+            // Add text content if present
+            if (message.content.trim().isNotEmpty) {
+              parts.add({'text': message.content});
+            }
+
+            // Add function calls if present in metadata
+            if (message.metadata != null &&
+                message.metadata!['function_calls'] != null) {
+              final functionCalls = message.metadata!['function_calls'] as List;
+              for (final functionCall in functionCalls) {
+                if (functionCall is Map<String, dynamic>) {
+                  final name = functionCall['name'];
+                  final args = functionCall['args'];
+                  parts.add({'text': 'Tool Call $name: $args'});
+                }
               }
             }
           }
@@ -888,6 +1020,7 @@ class GeminiModel implements AIModel {
         if (content is Map<String, dynamic>) {
           final parts = content['parts'];
           if (parts is List && parts.isNotEmpty) {
+            final partsList = <Map<String, dynamic>>[];
             final functionCalls = <Map<String, dynamic>>[];
             final textBuffer = StringBuffer();
 
@@ -899,9 +1032,20 @@ class GeminiModel implements AIModel {
                     final fnCall = Map<String, dynamic>.from(fnCallRaw);
                     final thoughtSignature =
                         part['thoughtSignature'] ?? part['thought_signature'];
+
+                    // Add to parts list
+                    final partObj = <String, dynamic>{
+                      'type': 'tool_call',
+                      'function_call': fnCall,
+                      'is_included': true,
+                    };
                     if (thoughtSignature != null) {
+                      partObj['thought_signature'] = thoughtSignature;
+                      // Also keep it in fnCall for legacy compatibility if needed
                       fnCall['thoughtSignature'] = thoughtSignature;
                     }
+                    partsList.add(partObj);
+
                     functionCalls.add(fnCall);
                   }
                   continue;
@@ -910,9 +1054,55 @@ class GeminiModel implements AIModel {
                 final text = part['text'];
                 if (text is String && text.isNotEmpty) {
                   textBuffer.write(text);
+                  partsList.add({
+                    'type': 'text',
+                    'text': text,
+                    'is_included': true,
+                    // Text parts might also have thoughtSignature in Gemini 2.0?
+                    if (part.containsKey('thoughtSignature'))
+                      'thought_signature': part['thoughtSignature'],
+                  });
+                }
+
+                // Handle inline_data (images)
+                if (part.containsKey('inlineData')) {
+                  final inlineData = part['inlineData'];
+                  if (inlineData is Map<String, dynamic>) {
+                    final mimeType = inlineData['mimeType'] as String?;
+                    final data = inlineData['data'] as String?;
+
+                    if (mimeType != null && data != null) {
+                      String? fileUri;
+                      try {
+                        // Save to temp file
+                        final result = await SynapseTempUtils.saveTempData(
+                          mimeType: mimeType,
+                          base64Data: data,
+                        );
+                        fileUri = result.uri.toString();
+                        textBuffer.writeln('\n![Generated Image]($fileUri)\n');
+                      } catch (e) {
+                        LoggerService.error('Failed to save inline image: $e');
+                        textBuffer.writeln('\n[Image generation failed]\n');
+                      }
+
+                      partsList.add({
+                        'type': 'image',
+                        'file_uri': fileUri,
+                        'is_included': true,
+                        if (part.containsKey('thoughtSignature'))
+                          'thought_signature': part['thoughtSignature'],
+                      });
+                    }
+                  }
                 }
               } else if (part is String && part.isNotEmpty) {
                 textBuffer.write(part);
+                partsList.add({
+                  'type': 'text',
+                  'text': part,
+                  'is_included': true,
+                });
               }
             }
 
@@ -923,6 +1113,7 @@ class GeminiModel implements AIModel {
               error: {
                 'hasFunctionCalls': functionCalls.isNotEmpty,
                 'hasText': textResponse.isNotEmpty,
+                'partsCount': partsList.length,
                 'requestId': actualRequestId,
                 'duration': '${duration.inMilliseconds}ms',
               },
@@ -931,6 +1122,7 @@ class GeminiModel implements AIModel {
             return {
               'text': textResponse.isEmpty ? null : textResponse,
               'function_calls': functionCalls.isEmpty ? null : functionCalls,
+              'parts_history': partsList,
               'raw_data': data,
             };
           }
