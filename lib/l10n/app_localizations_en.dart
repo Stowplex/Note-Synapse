@@ -543,6 +543,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachFiles => 'Attach files';
 
   @override
+  String get attachFile => 'Attach File';
+
+  @override
+  String get selectFromDevice => 'Select from Device';
+
+  @override
+  String get enterUri => 'Enter URI';
+
+  @override
   String get answerOnlyFromNotes => 'Answer only from selected notes';
 
   @override
@@ -574,6 +583,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFiles => 'Add Files';
+
+  @override
+  String get add => 'Add';
 
   @override
   String get processingRequest => 'Processing your request...';

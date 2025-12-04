@@ -441,20 +441,28 @@ class GeminiModel implements AIModel {
             if (partsHistory == null && message.attachments.isNotEmpty) {
               for (final file in message.attachments) {
                 final bytes = _readPlatformFileBytes(file);
-                if (bytes == null) continue;
 
-                final extension = FileTypeUtils.getFileExtension(file.name);
-                final mimeType = FileTypeUtils.getMimeTypeForBytes(
-                  bytes,
-                  extension: extension.isEmpty ? null : extension,
-                );
+                if (bytes != null) {
+                  final extension = FileTypeUtils.getFileExtension(file.name);
+                  final mimeType = FileTypeUtils.getMimeTypeForBytes(
+                    bytes,
+                    extension: extension.isEmpty ? null : extension,
+                  );
 
-                parts.add({
-                  'inline_data': {
-                    'mime_type': mimeType,
-                    'data': base64Encode(bytes),
-                  },
-                });
+                  parts.add({
+                    'inline_data': {
+                      'mime_type': mimeType,
+                      'data': base64Encode(bytes),
+                    },
+                  });
+                } else if (file.path != null &&
+                    (file.path!.startsWith('http') ||
+                        file.path!.startsWith('gs://'))) {
+                  // Handle URI attachments
+                  parts.add({
+                    'file_data': {'file_uri': file.path},
+                  });
+                }
               }
             }
 
@@ -631,6 +639,13 @@ class GeminiModel implements AIModel {
     }
 
     if (file.path != null) {
+      // Don't try to read if it's a URI
+      if (file.path!.startsWith('http://') ||
+          file.path!.startsWith('https://') ||
+          file.path!.startsWith('gs://')) {
+        return null;
+      }
+
       try {
         final bytes = File(file.path!).readAsBytesSync();
         return Uint8List.fromList(bytes);
@@ -743,6 +758,12 @@ class GeminiModel implements AIModel {
 
           parts.add({
             'inline_data': {'mime_type': mimeType, 'data': base64Data},
+          });
+        } else if (file.path != null &&
+            (file.path!.startsWith('http') || file.path!.startsWith('gs://'))) {
+          // Handle URI attachments
+          parts.add({
+            'file_data': {'file_uri': file.path},
           });
         }
       }

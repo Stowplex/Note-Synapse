@@ -1070,6 +1070,24 @@ abstract class AppLocalizations {
   /// **'Attach files'**
   String get attachFiles;
 
+  /// No description provided for @attachFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach File'**
+  String get attachFile;
+
+  /// No description provided for @selectFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Select from Device'**
+  String get selectFromDevice;
+
+  /// No description provided for @enterUri.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter URI'**
+  String get enterUri;
+
   /// No description provided for @answerOnlyFromNotes.
   ///
   /// In en, this message translates to:
@@ -1135,6 +1153,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add Files'**
   String get addFiles;
+
+  /// No description provided for @add.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get add;
 
   /// No description provided for @processingRequest.
   ///

@@ -1062,6 +1062,24 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final files = <PlatformFile>[];
     for (final path in message.attachmentPaths) {
       try {
+        // Check if it's a URI
+        final isUri =
+            path.startsWith('http://') ||
+            path.startsWith('https://') ||
+            path.startsWith('gs://');
+
+        if (isUri) {
+          files.add(
+            PlatformFile(
+              name: path.split('/').last,
+              path: path,
+              size: 0,
+              bytes: null,
+            ),
+          );
+          continue;
+        }
+
         final file = File(path);
         if (!file.existsSync()) {
           continue;
@@ -1091,6 +1109,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
 
     if (file.path != null) {
+      // Check if it's a URI
+      final isUri =
+          file.path!.startsWith('http://') ||
+          file.path!.startsWith('https://') ||
+          file.path!.startsWith('gs://');
+
+      if (isUri) {
+        return file;
+      }
+
       try {
         final bytes = await File(file.path!).readAsBytes();
         return PlatformFile(
@@ -1110,6 +1138,46 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _attachFiles() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    // Show dialog to choose between file and URI
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l10n.attachFile),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'file'),
+            child: Row(
+              children: [
+                const Icon(Icons.upload_file),
+                const SizedBox(width: 12),
+                Text(l10n.selectFromDevice),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'uri'),
+            child: Row(
+              children: [
+                const Icon(Icons.link),
+                const SizedBox(width: 12),
+                Text(l10n.enterUri),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (source == 'file') {
+      await _pickFilesFromDevice();
+    } else if (source == 'uri') {
+      await _showUriInputDialog();
+    }
+  }
+
+  Future<void> _pickFilesFromDevice() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -1131,6 +1199,78 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _showUriInputDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+
+    final uri = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.enterUri),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: 'URI',
+            hintText: 'https://example.com/file.pdf',
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.pop(context, text);
+              }
+            },
+            child: Text(l10n.add),
+          ),
+        ],
+      ),
+    );
+
+    if (uri != null && uri.isNotEmpty) {
+      // Create a PlatformFile that represents a URI
+      // We use a special convention where bytes is null and path is the URI
+      // The name is extracted from the URI
+      String name;
+      try {
+        final uriObj = Uri.parse(uri);
+        if (uriObj.pathSegments.isNotEmpty) {
+          name = uriObj.pathSegments.last;
+        } else {
+          name = 'attachment_${DateTime.now().millisecondsSinceEpoch}';
+        }
+      } catch (e) {
+        name = uri.split('/').last;
+      }
+
+      if (name.isEmpty || !name.contains('.')) {
+        // If no extension found, try to guess from common patterns or leave as is
+        // But for now, just ensure it has a name
+        if (name.isEmpty) {
+          name = 'attachment_${DateTime.now().millisecondsSinceEpoch}';
+        }
+      }
+
+      final file = PlatformFile(
+        name: name,
+        size: 0, // Unknown size
+        path: uri,
+        bytes: null,
+      );
+
+      setState(() {
+        _attachedFiles.add(file);
+      });
     }
   }
 

@@ -532,6 +532,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get attachFiles => '附加文件';
 
   @override
+  String get attachFile => 'Attach File';
+
+  @override
+  String get selectFromDevice => 'Select from Device';
+
+  @override
+  String get enterUri => 'Enter URI';
+
+  @override
   String get answerOnlyFromNotes => '仅从选中的笔记中回答';
 
   @override
@@ -563,6 +572,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addFiles => '添加文件';
+
+  @override
+  String get add => 'Add';
 
   @override
   String get processingRequest => '正在处理您的请求...';

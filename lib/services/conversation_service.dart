@@ -295,6 +295,12 @@ class ConversationService {
       final fileName = attachmentPath.split('/').last;
       final fileType = fileName.split('.').last;
 
+      // Check if it's a URI
+      final isUri =
+          attachmentPath.startsWith('http://') ||
+          attachmentPath.startsWith('https://') ||
+          attachmentPath.startsWith('gs://');
+
       final attachment = ConversationAttachment(
         id: _uuid.v4(),
         messageId: message.id,
@@ -302,6 +308,7 @@ class ConversationService {
         fileName: fileName,
         fileType: fileType,
         createdAt: DateTime.now(),
+        isRelativePath: !isUri, // URIs are absolute paths
       );
       await _databaseService.insertConversationAttachment(attachment);
     }

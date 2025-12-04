@@ -517,6 +517,28 @@ class OpenAIModel implements AIModel {
             },
           );
         }
+      } else if (file.path != null &&
+          (file.path!.startsWith('http') || file.path!.startsWith('gs://'))) {
+        // Handle URI attachments
+        final extension = FileTypeUtils.getFileExtension(file.name);
+        final category = FileTypeUtils.getFileCategory(extension);
+
+        supportedFiles.add(fileName);
+
+        if (category == 'image') {
+          contentParts.add({
+            'type': 'image_url',
+            'image_url': {'url': file.path},
+          });
+        } else {
+          // For non-image files, use input_file with file_url
+          contentParts.add({'type': 'input_file', 'file_url': file.path});
+        }
+
+        LoggerService.debug(
+          'URI attachment added',
+          error: {'fileName': fileName, 'category': category, 'uri': file.path},
+        );
       } else {
         unsupportedFiles.add(fileName);
         unsupportedByType.putIfAbsent(category, () => []).add(fileName);

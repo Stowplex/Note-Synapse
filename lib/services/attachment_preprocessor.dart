@@ -30,12 +30,12 @@ class UnsupportedAttachmentLogEntry {
   final String? reason;
 
   Map<String, String?> toJson() => {
-        'fileName': fileName,
-        'path': path,
-        'mime': mimeType,
-        'reason': reason,
-        'previewBase64': previewBase64,
-      };
+    'fileName': fileName,
+    'path': path,
+    'mime': mimeType,
+    'reason': reason,
+    'previewBase64': previewBase64,
+  };
 }
 
 class AttachmentFilterOutcome {
@@ -67,10 +67,7 @@ class AttachmentPreprocessor {
     required ModelConfig? config,
   }) async {
     if (attachments.isEmpty) {
-      return const AttachmentFilterOutcome(
-        attachments: [],
-        ignored: [],
-      );
+      return const AttachmentFilterOutcome(attachments: [], ignored: []);
     }
 
     final allowedMimeSet = _normalizedMimeSet(
@@ -97,10 +94,7 @@ class AttachmentPreprocessor {
       }
     }
 
-    return AttachmentFilterOutcome(
-      attachments: sanitized,
-      ignored: ignored,
-    );
+    return AttachmentFilterOutcome(attachments: sanitized, ignored: ignored);
   }
 
   static Future<MessageSanitizationOutcome> sanitizeMessages(
@@ -125,9 +119,7 @@ class AttachmentPreprocessor {
         config: config,
       );
 
-      sanitizedMessages.add(
-        message.copyWith(attachments: outcome.attachments),
-      );
+      sanitizedMessages.add(message.copyWith(attachments: outcome.attachments));
       ignored.addAll(outcome.ignored);
     }
 
@@ -166,12 +158,20 @@ class AttachmentPreprocessor {
   }
 
   static Future<(PlatformFile?, UnsupportedAttachmentLogEntry?)>
-      _processSingleAttachment(
+  _processSingleAttachment(
     PlatformFile file, {
     required Set<String> allowedMimeSet,
     required bool enforceMimeSet,
     required ModelCapabilities? capabilities,
   }) async {
+    // Check if it's a URI attachment - bypass filtering
+    if (file.path != null &&
+        (file.path!.startsWith('http://') ||
+            file.path!.startsWith('https://') ||
+            file.path!.startsWith('gs://'))) {
+      return (file, null);
+    }
+
     final bytes = await _readBytes(file);
     if (bytes == null || bytes.isEmpty) {
       return (
@@ -181,7 +181,7 @@ class AttachmentPreprocessor {
           mimeType: 'unknown',
           reason: 'unreadable',
           previewBytes: Uint8List(0),
-        )
+        ),
       );
     }
 
@@ -248,9 +248,7 @@ class AttachmentPreprocessor {
         return (null, await reject('gif decode failed'));
       }
 
-      processedBytes = Uint8List.fromList(
-        img.encodeJpg(decoded, quality: 90),
-      );
+      processedBytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 90));
       currentMime = 'image/jpeg';
       processedName = _replaceExtension(processedName, 'jpg');
       pathToKeep = null;
@@ -318,26 +316,21 @@ class AttachmentPreprocessor {
 
     String? detectedMime;
     try {
-      detectedMime = lookupMimeType(
-        file.name,
-        headerBytes: headerBytes,
-      );
+      detectedMime = lookupMimeType(file.name, headerBytes: headerBytes);
     } catch (_) {}
 
     if (detectedMime == null && file.path != null) {
       try {
-        detectedMime = lookupMimeType(
-          file.path!,
-          headerBytes: headerBytes,
-        );
+        detectedMime = lookupMimeType(file.path!, headerBytes: headerBytes);
       } catch (_) {}
     }
 
-    final resolvedMime = detectedMime ??
+    final resolvedMime =
+        detectedMime ??
         FileTypeUtils.getMimeTypeForBytes(
-      bytes,
-      extension: ext.isEmpty ? null : ext,
-    );
+          bytes,
+          extension: ext.isEmpty ? null : ext,
+        );
 
     return resolvedMime.toLowerCase();
   }
@@ -374,4 +367,3 @@ class AttachmentPreprocessor {
     return '${segments.join('.')}.${newExt}';
   }
 }
-
