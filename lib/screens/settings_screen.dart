@@ -1165,6 +1165,46 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
   Widget _buildDataSection(String title, dynamic data) {
     final theme = Theme.of(context);
 
+    final jsonViewTheme = JsonViewTheme(
+      backgroundColor: Colors.transparent,
+      keyStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: theme.colorScheme.primary,
+      ),
+      stringStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.textTheme.bodyMedium?.color,
+      ),
+      intStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.secondary,
+      ),
+      doubleStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.secondary,
+      ),
+      boolStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.tertiary,
+      ),
+      openIcon: Icon(
+        Icons.arrow_drop_down,
+        size: 20,
+        color: theme.iconTheme.color,
+      ),
+      closeIcon: Icon(
+        Icons.arrow_right,
+        size: 20,
+        color: theme.iconTheme.color,
+      ),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -1190,87 +1230,10 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
             child: data is Map
                 ? JsonView.map(
                     Map<String, dynamic>.from(data),
-                    theme: JsonViewTheme(
-                      keyStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
-                      stringStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color,
-                      ),
-                      intStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      doubleStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      boolStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.tertiary,
-                      ),
-                      openIcon: Icon(
-                        Icons.arrow_drop_down,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                      closeIcon: Icon(
-                        Icons.arrow_right,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                    ),
+                    theme: jsonViewTheme,
                   )
                 : data is List
-                ? JsonView.map(
-                    {'items': data},
-                    theme: JsonViewTheme(
-                      keyStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
-                      stringStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color,
-                      ),
-                      intStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      doubleStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      boolStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.tertiary,
-                      ),
-                      openIcon: Icon(
-                        Icons.arrow_drop_down,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                      closeIcon: Icon(
-                        Icons.arrow_right,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                    ),
-                  )
+                ? JsonView.map({'items': data}, theme: jsonViewTheme)
                 : SelectableText(
                     data.toString(),
                     style: TextStyle(
