@@ -369,9 +369,14 @@ The response shall be in markdown format.
                                         constraints: const BoxConstraints(
                                           maxWidth: 200,
                                         ),
-                                        child: Text(
-                                          v.toString(),
-                                          overflow: TextOverflow.ellipsis,
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: SelectableText(
+                                            v.toString(),
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodyMedium,
+                                          ),
                                         ),
                                       ),
                                     ),
