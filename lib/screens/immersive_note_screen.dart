@@ -3223,6 +3223,34 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
 
     final messages = <PromptMessage>[];
+
+    // Inject scratchpad content if enabled
+    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
+      final buffer = StringBuffer();
+      buffer.writeln('Scratchpad content (user notes/drawings):');
+      final scratchpadAttachments = <PlatformFile>[];
+
+      for (final item in _scratchpadItems) {
+        buffer.writeln('- ${item.content}');
+        if (item.attachmentPaths.isNotEmpty) {
+          final itemAttachments = await _loadConversationAttachments(
+            item,
+            latestAttachments, // Pass latest attachments to resolve if needed, though usually for user message
+          );
+          scratchpadAttachments.addAll(itemAttachments);
+        }
+      }
+
+      messages.add(
+        PromptMessage(
+          role: PromptRole.user,
+          content: buffer.toString(),
+          attachments: scratchpadAttachments,
+          isContext: true,
+        ),
+      );
+    }
+
     for (final message in _messages) {
       final role = message.type == MessageType.user
           ? PromptRole.user
@@ -3282,22 +3310,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           }
         }
       }
-    }
-
-    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
-      final buffer = StringBuffer();
-      buffer.writeln('Context from Scratchpad:');
-      for (final item in _scratchpadItems) {
-        buffer.writeln('- ${item.content}');
-      }
-      messages.add(
-        PromptMessage(
-          role: PromptRole.user,
-          content: buffer.toString(),
-          // We could also attach scratchpad attachments here if needed,
-          // but for now let's just include text context.
-        ),
-      );
     }
 
     messages.add(
