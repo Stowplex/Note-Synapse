@@ -24,10 +24,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appearanceSubtitle => 'Theme and display settings';
 
   @override
-  String get aiApi => 'AI API';
+  String get aiApi => 'AI Settings';
 
   @override
-  String get aiApiSubtitle => 'Configure your AI API key';
+  String get aiApiSubtitle => 'Configure AI models and settings';
 
   @override
   String get aiPrompts => 'Prompts';
@@ -1634,7 +1634,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteApp => 'Delete App';
 
   @override
-  String get aiDebugOverlay => 'AI Debug Overlay';
+  String get aiDebugOverlay => 'AI Debug Log';
 
   @override
   String get aiDebugOverlaySubtitle => 'View AI request/response logs';
@@ -1855,7 +1855,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get aiModelSettings => 'AI Model Settings';
+  String get aiModelSettings => 'AI Settings';
 
   @override
   String get currentModel => 'Current Model';

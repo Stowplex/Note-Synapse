@@ -12,7 +12,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => '笔记突触';
 
   @override
-  String get untitled => 'Untitled';
+  String get untitled => '无标题';
 
   @override
   String get settings => '设置';
@@ -532,13 +532,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get attachFiles => '附加文件';
 
   @override
-  String get attachFile => 'Attach File';
+  String get attachFile => '附加文件';
 
   @override
-  String get selectFromDevice => 'Select from Device';
+  String get selectFromDevice => '从设备选择';
 
   @override
-  String get enterUri => 'Enter URI';
+  String get enterUri => '输入 URI';
 
   @override
   String get answerOnlyFromNotes => '仅从选中的笔记中回答';
@@ -574,7 +574,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addFiles => '添加文件';
 
   @override
-  String get add => 'Add';
+  String get add => '添加';
 
   @override
   String get processingRequest => '正在处理您的请求...';
@@ -2366,164 +2366,162 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noToolsAvailable => '没有可用工具';
 
   @override
-  String get multiFunction => 'Multi-function';
+  String get multiFunction => '多功能';
 
   @override
-  String get addToMultiFunction => 'Add to multi-function tab';
+  String get addToMultiFunction => '添加到多功能标签页';
 
   @override
-  String get removeFromMultiFunction => 'Remove from multi-function view';
+  String get removeFromMultiFunction => '从多功能视图移除';
 
   @override
-  String get setAsDefaultView => 'Set as default view';
+  String get setAsDefaultView => '设为默认视图';
 
   @override
-  String get defaultView => 'Default View';
+  String get defaultView => '默认视图';
 
   @override
-  String get appAddedToMultiFunction => 'App added to multi-function tab';
+  String get appAddedToMultiFunction => '应用已添加到多功能标签页';
 
   @override
-  String get appRemovedFromMultiFunction =>
-      'App removed from multi-function tab';
+  String get appRemovedFromMultiFunction => '应用已从多功能标签页移除';
 
   @override
-  String get defaultViewUpdated => 'Default view updated';
+  String get defaultViewUpdated => '默认视图已更新';
 
   @override
-  String get selectView => 'Select View';
+  String get selectView => '选择视图';
 
   @override
-  String get switchToCalendar => 'Switch to Calendar';
+  String get switchToCalendar => '切换到日历';
 
   @override
-  String get rawDataManager => 'Raw Data Manager';
+  String get rawDataManager => '原始数据管理';
 
   @override
   String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
 
   @override
-  String get files => 'Files';
+  String get files => '文件';
 
   @override
-  String get database => 'Database';
+  String get database => '数据库';
 
   @override
-  String get tables => 'Tables';
+  String get tables => '表';
 
   @override
-  String get query => 'Query';
+  String get query => '查询';
 
   @override
-  String get executeQuery => 'Execute Query';
+  String get executeQuery => '执行查询';
 
   @override
-  String get noData => 'No data';
+  String get noData => '无数据';
 
   @override
   String rowsAffected(Object count) {
-    return '$count rows affected';
+    return '$count 行受影响';
   }
 
   @override
   String errorExecutingQuery(Object error) {
-    return 'Error executing query: $error';
+    return '执行查询时出错：$error';
   }
 
   @override
-  String get tableSchema => 'Table Schema';
+  String get tableSchema => '表结构';
 
   @override
-  String get columns => 'Columns';
+  String get columns => '列';
 
   @override
-  String get indexes => 'Indexes';
+  String get indexes => '索引';
 
   @override
-  String get foreignKeys => 'Foreign Keys';
+  String get foreignKeys => '外键';
 
   @override
-  String get browseTable => 'Browse Table';
+  String get browseTable => '浏览表';
 
   @override
-  String get refresh => 'Refresh';
+  String get refresh => '刷新';
 
   @override
-  String get download => 'Download';
+  String get download => '下载';
 
   @override
-  String get deleteFile => 'Delete File';
+  String get deleteFile => '删除文件';
 
   @override
   String confirmDeleteFile(Object fileName) {
-    return 'Are you sure you want to delete \"$fileName\"?';
+    return '您确定要删除 \"$fileName\" 吗？';
   }
 
   @override
-  String get fileDeletedSuccessfully => 'File deleted successfully';
+  String get fileDeletedSuccessfully => '文件删除成功';
 
   @override
   String errorDeletingFile(Object error) {
-    return 'Error deleting file: $error';
+    return '删除文件时出错：$error';
   }
 
   @override
-  String get uploadFile => 'Upload File';
+  String get uploadFile => '上传文件';
 
   @override
-  String get fileUploadedSuccessfully => 'File uploaded successfully';
+  String get fileUploadedSuccessfully => '文件上传成功';
 
   @override
   String errorUploadingFile(Object error) {
-    return 'Error uploading file: $error';
+    return '上传文件时出错：$error';
   }
 
   @override
-  String get createDirectory => 'Create Directory';
+  String get createDirectory => '创建目录';
 
   @override
-  String get directoryName => 'Directory Name';
+  String get directoryName => '目录名称';
 
   @override
-  String get directoryCreatedSuccessfully => 'Directory created successfully';
+  String get directoryCreatedSuccessfully => '目录创建成功';
 
   @override
   String errorCreatingDirectory(Object error) {
-    return 'Error creating directory: $error';
+    return '创建目录时出错：$error';
   }
 
   @override
-  String get path => 'Path';
+  String get path => '路径';
 
   @override
-  String get size => 'Size';
+  String get size => '大小';
 
   @override
-  String get modified => 'Modified';
+  String get modified => '修改时间';
 
   @override
-  String get chat => 'Chat';
+  String get chat => '聊天';
 
   @override
-  String get chatWithDatabase => 'Chat with Database';
+  String get chatWithDatabase => '与数据库聊天';
 
   @override
-  String get askQuestionAboutDatabase =>
-      'Ask a question about your database...';
+  String get askQuestionAboutDatabase => '询问关于数据库的问题...';
 
   @override
   String get send => '发送';
 
   @override
-  String get aiResponse => 'AI Response';
+  String get aiResponse => 'AI 响应';
 
   @override
   String errorSendingMessage(Object error) {
-    return 'Error sending message: $error';
+    return '发送消息时出错：$error';
   }
 
   @override
-  String get thinking => 'Thinking...';
+  String get thinking => '思考中...';
 
   @override
   String noToolsCachedFor(Object name) {
@@ -2606,16 +2604,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiTools => 'AI 工具';
 
   @override
-  String get modelFeatures => 'Model Features';
+  String get modelFeatures => '模型功能';
 
   @override
-  String get featureGoogleSearch => 'Google Search';
+  String get featureGoogleSearch => 'Google 搜索';
 
   @override
-  String get featureCodeExecution => 'Code Execution';
+  String get featureCodeExecution => '代码执行';
 
   @override
-  String get featureWebSearch => 'Web Search';
+  String get featureWebSearch => '网页搜索';
 
   @override
   String aiToolStartError(String appName, String error) {

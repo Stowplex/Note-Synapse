@@ -97,6 +97,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
+              leading: const Icon(Icons.apps),
+              title: const Text('User App'),
+              subtitle: const Text('Manage user app settings and libraries'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const UserAppSettingsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.bug_report),
               title: Text(l10n.aiDebugOverlay),
               subtitle: Text(l10n.aiDebugOverlaySubtitle),
@@ -112,21 +127,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.repeat),
-              title: Text(l10n.aiConversationSettings),
-              subtitle: Text(l10n.aiConversationSettingsSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AiConversationSettingsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
               leading: const Icon(Icons.backup),
               title: Text(l10n.recovery),
               subtitle: Text(l10n.recoverySubtitle),
@@ -134,21 +134,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const RecoveryScreen()),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.apps),
-              title: const Text('User App'),
-              subtitle: const Text('Manage user app settings and libraries'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const UserAppSettingsScreen(),
-                ),
               ),
             ),
           ),
@@ -429,6 +414,22 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const McpSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.repeat),
+                    title: Text(l10n.aiConversationSettings),
+                    subtitle: Text(l10n.aiConversationSettingsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const AiConversationSettingsScreen(),
                       ),
                     ),
                   ),

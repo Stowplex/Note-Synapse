@@ -131,13 +131,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiApi.
   ///
   /// In en, this message translates to:
-  /// **'AI API'**
+  /// **'AI Settings'**
   String get aiApi;
 
   /// No description provided for @aiApiSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Configure your AI API key'**
+  /// **'Configure AI models and settings'**
   String get aiApiSubtitle;
 
   /// No description provided for @aiPrompts.
@@ -2999,7 +2999,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDebugOverlay.
   ///
   /// In en, this message translates to:
-  /// **'AI Debug Overlay'**
+  /// **'AI Debug Log'**
   String get aiDebugOverlay;
 
   /// No description provided for @aiDebugOverlaySubtitle.
@@ -3389,7 +3389,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiModelSettings.
   ///
   /// In en, this message translates to:
-  /// **'AI Model Settings'**
+  /// **'AI Settings'**
   String get aiModelSettings;
 
   /// No description provided for @currentModel.
