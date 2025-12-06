@@ -143,6 +143,7 @@ class ConversationAiEngine {
           return const ConversationAiResponse(
             content:
                 'I was unable to complete the request with the available tools. Please try again later.',
+            metadata: {'isSynthesized': true},
           );
         }
 
