@@ -8,7 +8,7 @@ import 'package:gpt_markdown/custom_widgets/custom_divider.dart';
 class SafeHTag extends BlockMd {
   @override
   String get expString => (r"(?<hash>#{1,6})\ (?<data>[^\n]+?)$");
-  
+
   @override
   Widget build(
     BuildContext context,
@@ -18,52 +18,31 @@ class SafeHTag extends BlockMd {
     var theme = GptMarkdownTheme.of(context);
     var match = exp.firstMatch(text.trim());
     if (match == null) {
-      return config.getRich(
-        TextSpan(
-          text: text,
-          style: config.style,
-        ),
-      );
+      return config.getRich(TextSpan(text: text, style: config.style));
     }
     var hashGroup = match.namedGroup('hash');
     var dataGroup = match.namedGroup('data');
     if (hashGroup == null || dataGroup == null) {
-      return config.getRich(
-        TextSpan(
-          text: text,
-          style: config.style,
-        ),
-      );
+      return config.getRich(TextSpan(text: text, style: config.style));
     }
     var hashLength = hashGroup.length;
     if (hashLength < 1 || hashLength > 6) {
-      return config.getRich(
-        TextSpan(
-          text: text,
-          style: config.style,
-        ),
-      );
+      return config.getRich(TextSpan(text: text, style: config.style));
     }
     var conf = config.copyWith(
-      style:
-          [
-            theme.h1,
-            theme.h2,
-            theme.h3,
-            theme.h4,
-            theme.h5,
-            theme.h6,
-          ][hashLength - 1],
+      style: [
+        theme.h1,
+        theme.h2,
+        theme.h3,
+        theme.h4,
+        theme.h5,
+        theme.h6,
+      ][hashLength - 1],
     );
     return config.getRich(
       TextSpan(
         children: [
-          ...(MarkdownComponent.generate(
-            context,
-            dataGroup,
-            conf,
-            false,
-          )),
+          ...(MarkdownComponent.generate(context, dataGroup, conf, false)),
           if (hashLength == 1) ...[
             const TextSpan(
               text: "\n ",
@@ -86,7 +65,8 @@ class SafeHTag extends BlockMd {
 
 /// Custom checkbox component that extends BlockMd and provides interactive behavior
 class InteractiveCheckboxMd extends BlockMd {
-  final void Function(String checkboxLine, String checkboxText, bool newValue) onToggle;
+  final void Function(String checkboxLine, String checkboxText, bool newValue)
+  onToggle;
 
   InteractiveCheckboxMd({required this.onToggle});
 
@@ -103,7 +83,7 @@ class InteractiveCheckboxMd extends BlockMd {
     final checkboxState = "${match?[1]}" == "x";
     final checkboxText = "${match?[2]}";
     final originalLine = text.trim();
-    
+
     return InteractiveCustomCb(
       value: checkboxState,
       textDirection: config.textDirection,
@@ -126,7 +106,7 @@ class InteractiveCustomCb extends StatelessWidget {
     required this.value,
     required this.onChanged,
   });
-  
+
   final Widget child;
   final bool value;
   final double spacing;
@@ -150,14 +130,16 @@ class InteractiveCustomCb extends StatelessWidget {
                   start: spacing,
                   end: spacing,
                 ),
-                child: Checkbox(
-                  value: value,
-                  onChanged: (newValue) {
-                    if (newValue != null) {
-                      onChanged(newValue);
-                    }
-                  },
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                child: SelectionContainer.disabled(
+                  child: Checkbox(
+                    value: value,
+                    onChanged: (newValue) {
+                      if (newValue != null) {
+                        onChanged(newValue);
+                      }
+                    },
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
             ),
@@ -168,4 +150,3 @@ class InteractiveCustomCb extends StatelessWidget {
     );
   }
 }
-

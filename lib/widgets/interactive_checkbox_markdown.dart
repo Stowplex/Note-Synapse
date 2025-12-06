@@ -815,12 +815,14 @@ class _EmbeddedWebViewMd extends InlineMd {
       baseline: TextBaseline.alphabetic,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: _MarkdownEmbeddedWebView(
-          url: url,
-          width: resolvedWidth,
-          height: resolvedHeight,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          noteId: noteId,
+        child: SelectionContainer.disabled(
+          child: _MarkdownEmbeddedWebView(
+            url: url,
+            width: resolvedWidth,
+            height: resolvedHeight,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            noteId: noteId,
+          ),
         ),
       ),
     );
@@ -1323,52 +1325,54 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     final webViewHeight =
         widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) {},
-      onHorizontalDragStart: (_) {},
-      child: SizedBox(
-        width: widget.width,
-        height: webViewHeight,
-        child: InAppWebView(
-          initialData: InAppWebViewInitialData(
-            data: htmlContent,
-            mimeType: 'text/html',
-            encoding: 'utf8',
+    return SelectionContainer.disabled(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: (_) {},
+        onHorizontalDragStart: (_) {},
+        child: SizedBox(
+          width: widget.width,
+          height: webViewHeight,
+          child: InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: htmlContent,
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              supportZoom: true,
+              transparentBackground: true,
+              disableContextMenu: false,
+              horizontalScrollBarEnabled: false,
+              verticalScrollBarEnabled: false,
+              resourceCustomSchemes: ['synapse'],
+              useHybridComposition: true,
+              disableVerticalScroll: false,
+              disableHorizontalScroll: false,
+            ),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+            },
+            onWebViewCreated: (controller) {
+              _webViewController = controller;
+            },
+            onLoadStop: (controller, url) {
+              _webViewController = controller;
+            },
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              if (request.url.scheme.toLowerCase() == 'synapse') {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/${request.url.host}",
+                );
+                return CustomSchemeResponse(
+                  contentType: 'application/javascript',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              }
+              return null;
+            },
           ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            supportZoom: true,
-            transparentBackground: true,
-            disableContextMenu: false,
-            horizontalScrollBarEnabled: false,
-            verticalScrollBarEnabled: false,
-            resourceCustomSchemes: ['synapse'],
-            useHybridComposition: true,
-            disableVerticalScroll: false,
-            disableHorizontalScroll: false,
-          ),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-          onWebViewCreated: (controller) {
-            _webViewController = controller;
-          },
-          onLoadStop: (controller, url) {
-            _webViewController = controller;
-          },
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'application/javascript',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
-            }
-            return null;
-          },
         ),
       ),
     );
@@ -1536,37 +1540,39 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
       future: _determineImageSourceType(widget.imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
-              ),
-              child: _SvgWebViewWidget(
-                key: _svgWebViewKey,
-                svgContent: widget.svgContent,
-                width: widget.width,
-                height: widget.height,
-              ),
-            ),
-            _ImageInfoBar(
-              sourceType: sourceType,
-              isSvg: true,
-              onBackgroundToggle: () {
-                _svgWebViewKey.currentState?.toggleBackground();
-              },
-              onFullscreen: () {
-                _FullscreenViewer.show(
-                  context,
+        return IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(4),
+                ),
+                child: _SvgWebViewWidget(
+                  key: _svgWebViewKey,
                   svgContent: widget.svgContent,
-                  title: 'SVG',
-                );
-              },
-            ),
-          ],
+                  width: widget.width,
+                  height: widget.height,
+                ),
+              ),
+              _ImageInfoBar(
+                sourceType: sourceType,
+                isSvg: true,
+                onBackgroundToggle: () {
+                  _svgWebViewKey.currentState?.toggleBackground();
+                },
+                onFullscreen: () {
+                  _FullscreenViewer.show(
+                    context,
+                    svgContent: widget.svgContent,
+                    title: 'SVG',
+                  );
+                },
+              ),
+            ],
+          ),
         );
       },
     );
@@ -1593,48 +1599,52 @@ class _ImageInfoBar extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark
-            ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
-            : colorScheme.surfaceContainerHighest.withOpacity(0.15),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(4),
-          bottomRight: Radius.circular(4),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            sourceType == _ImageSourceType.local ? Icons.storage : Icons.cloud,
-            size: 22,
-            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+    return SelectionContainer.disabled(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark
+              ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
+              : colorScheme.surfaceContainerHighest.withOpacity(0.15),
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(4),
           ),
-          if (onBackgroundToggle != null) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onBackgroundToggle,
-              child: Icon(
-                Icons.contrast,
-                size: 22,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-              ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              sourceType == _ImageSourceType.local
+                  ? Icons.storage
+                  : Icons.cloud,
+              size: 22,
+              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
             ),
-          ],
-          if (onFullscreen != null) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onFullscreen,
-              child: Icon(
-                Icons.fullscreen,
-                size: 22,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+            if (onBackgroundToggle != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onBackgroundToggle,
+                child: Icon(
+                  Icons.contrast,
+                  size: 22,
+                  color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                ),
               ),
-            ),
+            ],
+            if (onFullscreen != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onFullscreen,
+                child: Icon(
+                  Icons.fullscreen,
+                  size: 22,
+                  color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1672,39 +1682,41 @@ class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
 
     final showLocalToggle = !widget.isSvg;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(4),
-            topRight: Radius.circular(4),
+    return IntrinsicWidth(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(4),
+            ),
+            child: Container(
+              color: showLocalToggle
+                  ? (_isDarkBackground
+                        ? const Color(0xFF1E1E1E)
+                        : const Color(0xFFFFFFFF))
+                  : null,
+              child: widget.image,
+            ),
           ),
-          child: Container(
-            color: showLocalToggle
-                ? (_isDarkBackground
-                      ? const Color(0xFF1E1E1E)
-                      : const Color(0xFFFFFFFF))
-                : null,
-            child: widget.image,
+          _ImageInfoBar(
+            sourceType: widget.sourceType,
+            isSvg: widget.isSvg,
+            onBackgroundToggle:
+                widget.onBackgroundToggle ??
+                (showLocalToggle
+                    ? () {
+                        setState(() {
+                          _isDarkBackground = !_isDarkBackground;
+                        });
+                      }
+                    : null),
+            onFullscreen: widget.onFullscreen,
           ),
-        ),
-        _ImageInfoBar(
-          sourceType: widget.sourceType,
-          isSvg: widget.isSvg,
-          onBackgroundToggle:
-              widget.onBackgroundToggle ??
-              (showLocalToggle
-                  ? () {
-                      setState(() {
-                        _isDarkBackground = !_isDarkBackground;
-                      });
-                    }
-                  : null),
-          onFullscreen: widget.onFullscreen,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
