@@ -2279,11 +2279,7 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> executeRawQuery(String sql) async {
     final db = await database;
     try {
-      // Basic security check - only allow SELECT queries
       final trimmedSql = sql.trim().toLowerCase();
-      if (!trimmedSql.startsWith('select')) {
-        throw Exception('Only SELECT queries are allowed');
-      }
 
       // Execute the query
       final result = await db.rawQuery(sql);
