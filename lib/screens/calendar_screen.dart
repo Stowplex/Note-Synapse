@@ -1036,6 +1036,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (note.isTask)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: _TaskProgressBar(
+                              note: note,
+                              appProvider: appProvider,
+                            ),
+                          ),
+                        if (note.isTask)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: _TaskProgressBar(
+                              note: note,
+                              appProvider: appProvider,
+                            ),
+                          ),
                         if (note.tags.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Wrap(
@@ -1301,5 +1317,100 @@ class _CalendarScreenState extends State<CalendarScreen> {
         );
       }
     }
+  }
+}
+
+// Helper widget for task progress
+class _TaskProgressBar extends StatelessWidget {
+  final Note note;
+  final AppProvider appProvider;
+
+  const _TaskProgressBar({required this.note, required this.appProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Calculate subnote progress immediately
+    final subNotes = note.subNotes;
+    final subNoteCount = subNotes.length;
+    final subNoteCompleted = subNotes.where((s) => s.isCompleted).length;
+
+    // 2. Fetch linked tasks asynchronously
+    return FutureBuilder<List<Note>>(
+      future: _getLinkedChildTasks(),
+      builder: (context, snapshot) {
+        final childTasks = snapshot.data ?? [];
+        final childTaskCount = childTasks.length;
+        final childTaskCompleted = childTasks
+            .where((t) => t.isCompleted)
+            .length;
+
+        final totalCount = subNoteCount + childTaskCount;
+        final totalCompleted = subNoteCompleted + childTaskCompleted;
+
+        if (totalCount == 0) {
+          return const SizedBox.shrink();
+        }
+
+        final progress = totalCompleted / totalCount;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      _getProgressColor(progress),
+                    ),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$totalCompleted/$totalCount',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<List<Note>> _getLinkedChildTasks() async {
+    try {
+      final relationships = await appProvider.getNoteRelationships(note.id);
+      // Filter for 'subnote' type where this note is the 'from' (parent)
+      final childRelIds = relationships
+          .where((r) => r.type == 'subnote' && r.fromNoteId == note.id)
+          .map((r) => r.toNoteId)
+          .toSet();
+
+      if (childRelIds.isEmpty) return [];
+
+      // Find the actual Task objects from the provider's in-memory list
+      // We only care about Tasks for progress
+      return appProvider.notes
+          .where((n) => childRelIds.contains(n.id) && n.isTask)
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Color _getProgressColor(double progress) {
+    if (progress >= 1.0) return Colors.green;
+    if (progress > 0.5) return Colors.lightGreen;
+    if (progress > 0.0) return Colors.orangeAccent;
+    return Colors.grey;
   }
 }
