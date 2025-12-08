@@ -82,16 +82,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ],
                 ),
               ),
-              PopupMenuItem(
-                value: 'todo',
-                child: Row(
-                  children: [
-                    Icon(Icons.checklist, size: 20),
-                    const SizedBox(width: 8),
-                    Text(l10n.todo),
-                  ],
-                ),
-              ),
             ],
             icon: const Icon(Icons.view_module),
           ),
@@ -135,8 +125,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
           if (_selectedView == 'timeline') {
             return _buildTimelineView(appProvider, l10n);
-          } else if (_selectedView == 'todo') {
-            return _buildTodoView(appProvider, l10n);
           } else {
             return SingleChildScrollView(
               child: Column(
@@ -568,8 +556,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     switch (_selectedView) {
       case 'timeline':
         return l10n.timeline;
-      case 'todo':
-        return l10n.todo;
       case 'calendar':
       default:
         return l10n.calendar;
@@ -582,8 +568,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     final notes = _filterNotes(appProvider.notes);
-    final groupedNotes = _groupNotesByDate(notes);
-
     if (notes.isEmpty) {
       return Center(
         child: Column(
@@ -612,328 +596,432 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: groupedNotes.length,
-      itemBuilder: (context, index) {
-        final entry = groupedNotes.entries.elementAt(index);
-        final date = entry.key;
-        final dayNotes = entry.value;
+    // Group notes by date
+    final groupedNotes = _groupNotesByDate(notes);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                _formatDate(date, l10n),
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+    // Split into Future, Today, Past
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final futureMap = <DateTime, List<Note>>{};
+    final todayMap = <DateTime, List<Note>>{};
+    final pastMap = <DateTime, List<Note>>{};
+
+    for (final entry in groupedNotes.entries) {
+      final date = entry.key;
+      final compareDate = DateTime(date.year, date.month, date.day);
+
+      if (compareDate.isAfter(today)) {
+        futureMap[date] = entry.value;
+      } else if (compareDate.isBefore(today)) {
+        pastMap[date] = entry.value;
+      } else {
+        todayMap[date] = entry.value;
+      }
+    }
+
+    // Future: Ascending (Near -> Far) for Reverse Growth list
+    final sortedFutureEntries = futureMap.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    // Past: Descending (Recent -> Old)
+    final sortedPastEntries = pastMap.entries.toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+
+    // Flatten lists with headers
+    final futureWidgets = _buildFlattenedTimeline(
+      sortedFutureEntries,
+      l10n,
+      appProvider,
+      isFuture: true,
+      reverseHeader:
+          true, // Future grows upwards, so headers must be *after* items
+    );
+
+    final pastWidgets = _buildFlattenedTimeline(
+      sortedPastEntries,
+      l10n,
+      appProvider,
+      isPast: true,
+      startingMonth: today, // Past starts checking against Today's month
+    );
+
+    return CustomScrollView(
+      center: const ValueKey('today-section'),
+      slivers: [
+        // Future Section
+        if (futureWidgets.isNotEmpty)
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => futureWidgets[index],
+              childCount: futureWidgets.length,
+            ),
+          ),
+
+        // Today Section (Center)
+        SliverPadding(
+          padding: EdgeInsets.zero,
+          key: const ValueKey('today-section'),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (todayMap.isNotEmpty)
+                ...todayMap.entries.map(
+                  (entry) => _buildTimelineDateGroup(
+                    entry.key,
+                    entry.value,
+                    l10n,
+                    appProvider,
+                    isToday: true,
+                  ),
+                )
+              else
+                _buildEmptyTodayPlaceholder(l10n),
+            ]),
+          ),
+        ),
+
+        // Past Section
+        if (pastWidgets.isNotEmpty)
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => pastWidgets[index],
+              childCount: pastWidgets.length,
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Helper to build list with headers
+  List<Widget> _buildFlattenedTimeline(
+    List<MapEntry<DateTime, List<Note>>> entries,
+    AppLocalizations l10n,
+    AppProvider appProvider, {
+    bool isFuture = false,
+    bool isPast = false,
+    DateTime? startingMonth,
+    bool reverseHeader = false,
+  }) {
+    if (entries.isEmpty) return [];
+
+    final widgets = <Widget>[];
+
+    // Logic split based on growth direction
+    if (reverseHeader) {
+      // Future / Reverse Growth: [Item, Header] visual order means [Item, Header] in list (index 0 is bottom).
+      // We process Near -> Far.
+      // List: [Near Item, Header(Near)?, Far Item, Header(Far)?]
+
+      int? currentMonth;
+      int? currentYear;
+      DateTime?
+      previousDateForHeader; // Stores a date from the month group that just finished
+
+      for (final entry in entries) {
+        final date = entry.key;
+
+        if (currentMonth == null) {
+          // First item, initialize tracking
+          currentMonth = date.month;
+          currentYear = date.year;
+          previousDateForHeader = date;
+        } else if (currentMonth != date.month || currentYear != date.year) {
+          // Month changed, add header for the *previous* month group
+          widgets.add(_buildMonthHeader(previousDateForHeader!, l10n));
+          // Update tracking for the new month group
+          currentMonth = date.month;
+          currentYear = date.year;
+          previousDateForHeader = date;
+        }
+
+        widgets.add(
+          _buildTimelineDateGroup(
+            date,
+            entry.value,
+            l10n,
+            appProvider,
+            isFuture: isFuture,
+            isPast: isPast,
+          ),
+        );
+      }
+
+      // Add final header for the last processed group
+      if (previousDateForHeader != null) {
+        widgets.add(_buildMonthHeader(previousDateForHeader, l10n));
+      }
+    } else {
+      // Past / Normal Growth: [Header, Item] visual order.
+      // Past starts checking against startingMonth (Today).
+
+      int? currentMonth = startingMonth?.month;
+      int? currentYear = startingMonth?.year;
+
+      for (final entry in entries) {
+        final date = entry.key;
+
+        if (currentMonth != date.month || currentYear != date.year) {
+          widgets.add(_buildMonthHeader(date, l10n));
+          currentMonth = date.month;
+          currentYear = date.year;
+        }
+
+        widgets.add(
+          _buildTimelineDateGroup(
+            date,
+            entry.value,
+            l10n,
+            appProvider,
+            isFuture: isFuture,
+            isPast: isPast,
+          ),
+        );
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildMonthHeader(DateTime date, AppLocalizations l10n) {
+    // Format: "MMMM yyyy"
+    final months = [
+      l10n.january,
+      l10n.february,
+      l10n.march,
+      l10n.april,
+      l10n.may,
+      l10n.june,
+      l10n.july,
+      l10n.august,
+      l10n.september,
+      l10n.october,
+      l10n.november,
+      l10n.december,
+    ];
+    final title = '${months[date.month - 1]} ${date.year}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Theme.of(context).disabledColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).disabledColor,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyTodayPlaceholder(AppLocalizations l10n) {
+    return Container(
+      color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              l10n.today,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
               ),
             ),
-            const SizedBox(height: 12),
-            ...dayNotes.map(
-              (note) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: InkWell(
-                    onTap: () => _openNoteDetail(note),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (note.isTask) ...[
-                                _buildStatusIcon(note),
-                                const SizedBox(width: 8),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  note.title,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        decoration: note.isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                      ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (note.isTask)
-                                _buildStatusDropdown(note, appProvider),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.noNotesForToday,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontStyle: FontStyle.italic,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineDateGroup(
+    DateTime date,
+    List<Note> notes,
+    AppLocalizations l10n,
+    AppProvider appProvider, {
+    bool isFuture = false,
+    bool isToday = false,
+    bool isPast = false,
+  }) {
+    Color backgroundColor;
+    Color headerColor;
+
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    if (isToday) {
+      backgroundColor = isDark
+          ? Colors.teal.shade900.withOpacity(0.3)
+          : Colors.teal.shade50.withOpacity(0.7);
+      headerColor = Colors.teal;
+    } else if (isFuture) {
+      // Subtle Future Color
+      backgroundColor = isDark
+          ? Colors.blueGrey.shade900.withOpacity(0.2) // Subtle Dark
+          : Colors.blueGrey.shade50.withOpacity(0.5); // Subtle Light
+      headerColor = isDark ? Colors.blueGrey.shade300 : Colors.blueGrey;
+    } else {
+      // Past
+      backgroundColor = Theme.of(context).colorScheme.surface;
+      headerColor = Colors.grey;
+    }
+
+    return Container(
+      color: backgroundColor,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: isToday ? headerColor : headerColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: headerColor.withOpacity(0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  _formatDate(date, l10n),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isToday ? Colors.white : headerColor,
+                  ),
+                ),
+              ),
+              if (isToday) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    "NOW",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...notes.map(
+            (note) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                elevation: isToday ? 2 : 1,
+                child: InkWell(
+                  onTap: () => _openNoteDetail(note),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (note.isTask) ...[
+                              _buildStatusIcon(note),
+                              const SizedBox(width: 8),
                             ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            note.content,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.grey[600]),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (note.tags.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 4,
-                              runSpacing: 4,
-                              children: note.tags
-                                  .take(3)
-                                  .map(
-                                    (tag) => Chip(
-                                      label: Text(
-                                        tag,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      backgroundColor: Theme.of(
-                                        context,
-                                      ).colorScheme.primary.withOpacity(0.1),
-                                      labelStyle: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                      ),
+                            Expanded(
+                              child: Text(
+                                note.title,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      decoration: note.isCompleted
+                                          ? TextDecoration.lineThrough
+                                          : null,
                                     ),
-                                  )
-                                  .toList(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
+                            if (note.isTask)
+                              _buildStatusDropdown(note, appProvider),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          note.content,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (note.tags.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: note.tags
+                                .take(3)
+                                .map(
+                                  (tag) => Chip(
+                                    label: Text(
+                                      tag,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withOpacity(0.1),
+                                    labelStyle: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildTodoView(AppProvider appProvider, AppLocalizations l10n) {
-    if (appProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final tasks = _filterTasks(appProvider.notes);
-
-    if (tasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.checklist, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              _selectedTags.isEmpty
-                  ? l10n.createFirstTask
-                  : l10n.noTasksWithSelectedTags,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _selectedTags.isEmpty
-                  ? l10n.createFirstTask
-                  : l10n.trySelectingDifferentTags,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        final completionPercentage = appProvider
-            .calculateTaskCompletionPercentage(task);
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Card(
-            child: InkWell(
-              onTap: () => _openNoteDetail(task),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _buildStatusIcon(task),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            task.title,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  decoration: task.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        _buildStatusDropdown(task, appProvider),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      task.content,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (task.scheduledAt != null ||
-                        task.completeBy != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          if (task.scheduledAt != null)
-                            Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green[100],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${l10n.start}: ${AppDateUtils.formatDateForDisplay(task.scheduledAt)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[700],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          if (task.completeBy != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppDateUtils.isOverdue(task.completeBy)
-                                    ? Colors.red[100]
-                                    : Colors.blue[100],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${l10n.due}: ${AppDateUtils.formatDateForDisplay(task.completeBy)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppDateUtils.isOverdue(task.completeBy)
-                                      ? Colors.red[700]
-                                      : Colors.blue[700],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                    if (task.subNotes.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      LinearProgressIndicator(
-                        value: completionPercentage,
-                        backgroundColor: Colors.grey[300],
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          completionPercentage == 1.0
-                              ? Colors.green
-                              : Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.list, size: 16, color: Colors.grey[500]),
-                          const SizedBox(width: 4),
-                          Text(
-                            l10n.subtasksCompleted(
-                              task.subNotes
-                                  .where((sn) => sn.isCompleted)
-                                  .length,
-                              task.subNotes.length,
-                            ),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[500]),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${(completionPercentage * 100).toInt()}%',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (task.tags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: task.tags
-                            .take(3)
-                            .map(
-                              (tag) => Chip(
-                                label: Text(
-                                  tag,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withOpacity(0.2),
-                                labelStyle: TextStyle(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white
-                                      : Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -954,21 +1042,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }).toList();
   }
 
-  List<Note> _filterTasks(List<Note> notes) {
-    final tasks = notes
-        .where((note) => note.isTask && !note.isArchived)
-        .toList();
-
-    if (_selectedTags.isEmpty) {
-      return tasks;
-    }
-
-    return tasks.where((task) {
-      return _selectedTags.any(
-        (selectedTag) => task.tags.contains(selectedTag),
-      );
-    }).toList();
-  }
+  // Removed _buildTodoView and _filterTasks as per instruction
 
   Map<DateTime, List<Note>> _groupNotesByDate(List<Note> notes) {
     final Map<DateTime, List<Note>> grouped = {};
