@@ -223,14 +223,68 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         return note.isTask && _isTaskActiveOnDay(note, day);
                       }).toList();
                     },
-                    calendarStyle: CalendarStyle(
-                      outsideDaysVisible: true,
-                      markersMaxCount: 3,
-                      markerDecoration: BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
+                    calendarBuilders: CalendarBuilders(
+                      markerBuilder: (context, day, events) {
+                        final tasks = events
+                            .where((n) => !n.isArchived)
+                            .toList();
+
+                        if (tasks.isEmpty) return const SizedBox();
+
+                        final total = tasks.length;
+                        final completed = tasks
+                            .where((t) => t.status == TaskStatus.complete)
+                            .length;
+                        final inProgress = tasks
+                            .where((t) => t.status == TaskStatus.inProgress)
+                            .length;
+                        final cancelled = tasks
+                            .where((t) => t.status == TaskStatus.abandoned)
+                            .length;
+                        final todo = total - completed - inProgress - cancelled;
+
+                        return Positioned(
+                          bottom: 1,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Container(
+                              width: 30, // Adjust width as needed
+                              height: 4,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Row(
+                                children: [
+                                  if (todo > 0)
+                                    Expanded(
+                                      flex: todo,
+                                      child: Container(color: Colors.red),
+                                    ),
+                                  if (inProgress > 0)
+                                    Expanded(
+                                      flex: inProgress,
+                                      child: Container(color: Colors.amber),
+                                    ),
+                                  if (completed > 0)
+                                    Expanded(
+                                      flex: completed,
+                                      child: Container(color: Colors.green),
+                                    ),
+                                  if (cancelled > 0)
+                                    Expanded(
+                                      flex: cancelled,
+                                      child: Container(color: Colors.grey),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
+                    calendarStyle: CalendarStyle(outsideDaysVisible: true),
                     headerStyle: HeaderStyle(
                       formatButtonVisible: true,
                       titleCentered: true,
