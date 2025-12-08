@@ -220,8 +220,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         appProvider,
                       );
                       return filteredNotes.where((note) {
-                        return note.isTask &&
-                            isSameDay(_getNoteDate(note), day);
+                        return note.isTask && _isTaskActiveOnDay(note, day);
                       }).toList();
                     },
                     calendarStyle: CalendarStyle(
@@ -277,7 +276,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final filteredNotes = _filterNotes(appProvider.notes, appProvider);
 
     final tasks = filteredNotes
-        .where((n) => n.isTask && isSameDay(_getNoteDate(n), selectedDate))
+        .where((n) => n.isTask && _isTaskActiveOnDay(n, selectedDate))
         .toList();
     final notes = filteredNotes
         .where((n) => !n.isTask && isSameDay(_getNoteDate(n), selectedDate))
@@ -740,6 +739,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
     }
     return note.createdAt;
+  }
+
+  bool _isTaskActiveOnDay(Note note, DateTime day) {
+    if (!note.isTask) return false;
+
+    DateTime start = _getNoteDate(note);
+    DateTime? end;
+
+    if (note.completeBy != null && note.completeBy!.isNotEmpty) {
+      try {
+        end = DateTime.parse(note.completeBy!);
+      } catch (e) {
+        // invalid completeBy, ignore it
+      }
+    }
+
+    // Normalize dates to remove time components for comparison
+    final dayDate = DateTime(day.year, day.month, day.day);
+    final startDate = DateTime(start.year, start.month, start.day);
+
+    if (end != null) {
+      final endDate = DateTime(end.year, end.month, end.day);
+      return (dayDate.isAtSameMomentAs(startDate) ||
+              dayDate.isAfter(startDate)) &&
+          (dayDate.isAtSameMomentAs(endDate) || dayDate.isBefore(endDate));
+    }
+
+    return isSameDay(start, day);
   }
 
   List<Widget> _buildFlattenedTimeline(

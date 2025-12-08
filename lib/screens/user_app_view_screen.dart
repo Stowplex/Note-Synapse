@@ -60,6 +60,24 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   }
 
   @override
+  void didUpdateWidget(UserAppViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.app.id != oldWidget.app.id) {
+      LoggerService.debug(
+        'UserAppViewScreen: App ID changed from ${oldWidget.app.id} to ${widget.app.id}',
+      );
+      setState(() {
+        _consoleOutput.clear();
+        _isLoading = true;
+        _selectedRevision = null;
+        _showRevisionDetails = false;
+      });
+      _validateNoteActionApp();
+      _loadRevisions();
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Update selected revision when provider data changes
