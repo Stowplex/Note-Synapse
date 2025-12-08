@@ -48,47 +48,47 @@ class DatabaseService {
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
       CREATE TABLE notes(
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        type TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        scheduledAt TEXT,
-        completeBy TEXT,
-        status TEXT,
-        completionPercentage REAL,
-        pinned INTEGER NOT NULL DEFAULT 0,
-        isArchived INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        title TEXT NOT NULL, -- Note title
+        content TEXT NOT NULL, -- Note content
+        type TEXT NOT NULL, -- 'note' or 'task'
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        scheduledAt TEXT, -- Scheduled date (for tasks)
+        completeBy TEXT, -- Due date (for tasks)
+        status TEXT, -- Task status: 'todo', 'inProgress', 'completed', 'cancelled'
+        completionPercentage REAL, -- Task completion percentage
+        pinned INTEGER NOT NULL DEFAULT 0, -- Whether note is pinned
+        isArchived INTEGER NOT NULL DEFAULT 0 -- Whether note is archived
       )
   ''';
 
   static const String _createSubNotesTable = '''
       CREATE TABLE subnotes(
-        id TEXT PRIMARY KEY,
-        noteId TEXT NOT NULL,
-        name TEXT NOT NULL,
-        content TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        isCompleted INTEGER NOT NULL DEFAULT 0,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        noteId TEXT NOT NULL, -- Parent note ID
+        name TEXT NOT NULL, -- Subnote name (task item)
+        content TEXT NOT NULL, -- Subnote content
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        isCompleted INTEGER NOT NULL DEFAULT 0, -- Completion status
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createTagsTable = '''
       CREATE TABLE tags(
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        color TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        usageCount INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        name TEXT NOT NULL UNIQUE, -- Tag name
+        color TEXT NOT NULL, -- Tag color
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        usageCount INTEGER NOT NULL DEFAULT 0 -- Usage count
       )
   ''';
 
   static const String _createNoteTagsTable = '''
       CREATE TABLE note_tags(
-        noteId TEXT NOT NULL,
-        tagId TEXT NOT NULL,
+        noteId TEXT NOT NULL, -- Note ID
+        tagId TEXT NOT NULL, -- Tag ID
         PRIMARY KEY (noteId, tagId),
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
@@ -97,8 +97,8 @@ class DatabaseService {
 
   static const String _createConversationTagsTable = '''
       CREATE TABLE conversation_tags(
-        conversationId TEXT NOT NULL,
-        tagId TEXT NOT NULL,
+        conversationId TEXT NOT NULL, -- Conversation ID
+        tagId TEXT NOT NULL, -- Tag ID
         PRIMARY KEY (conversationId, tagId),
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
@@ -107,25 +107,25 @@ class DatabaseService {
 
   static const String _createAttachmentsTable = '''
       CREATE TABLE attachments(
-        id TEXT PRIMARY KEY,
-        noteId TEXT NOT NULL,
-        filePath TEXT NOT NULL,
-        fileName TEXT NOT NULL,
-        fileType TEXT NOT NULL,
-        isRelativePath INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
-        includeInAIContext INTEGER NOT NULL DEFAULT 1,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        noteId TEXT NOT NULL, -- Parent note ID
+        filePath TEXT NOT NULL, -- Path to file
+        fileName TEXT NOT NULL, -- Original file name
+        fileType TEXT NOT NULL, -- MIME type or extension
+        isRelativePath INTEGER NOT NULL DEFAULT 0, -- Whether path is relative to app dir
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        includeInAIContext INTEGER NOT NULL DEFAULT 1, -- Whether to include in AI context
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createRelationshipsTable = '''
       CREATE TABLE relationships(
-        id TEXT PRIMARY KEY,
-        fromNoteId TEXT NOT NULL,
-        toNoteId TEXT NOT NULL,
-        type TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        fromNoteId TEXT NOT NULL, -- Source note ID
+        toNoteId TEXT NOT NULL, -- Target note ID
+        type TEXT NOT NULL, -- Relationship type (e.g., 'linked', 'parent', 'child')
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (fromNoteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (toNoteId) REFERENCES notes (id) ON DELETE CASCADE
       )
@@ -133,114 +133,114 @@ class DatabaseService {
 
   static const String _createFiltersTable = '''
       CREATE TABLE filters(
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        includeText TEXT,
-        includeTags TEXT NOT NULL,
-        excludeTags TEXT NOT NULL DEFAULT '',
-        noteTypes TEXT NOT NULL DEFAULT '',
-        includeArchived INTEGER NOT NULL DEFAULT 0,
-        isPinned INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, -- Unique identifier
+        name TEXT NOT NULL, -- Filter name
+        includeText TEXT, -- Text to search for
+        includeTags TEXT NOT NULL, -- JSON array of tags to include
+        excludeTags TEXT NOT NULL DEFAULT '', -- JSON array of tags to exclude
+        noteTypes TEXT NOT NULL DEFAULT '', -- JSON array of note types
+        includeArchived INTEGER NOT NULL DEFAULT 0, -- Whether to include archived notes
+        isPinned INTEGER NOT NULL DEFAULT 0, -- Whether filter is pinned to top
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL -- Last update timestamp
       )
   ''';
 
   static const String _createUserAppsTable = '''
       CREATE TABLE user_apps(
-        id TEXT PRIMARY KEY,
-        uuid TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL,
-        steps TEXT NOT NULL,
-        htmlContent TEXT NOT NULL,
-        appState TEXT,
-        type TEXT NOT NULL DEFAULT 'normal',
-        selectedRevisionId TEXT,
-      author TEXT DEFAULT "",
-      license TEXT DEFAULT "",
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, -- Unique identifier
+        uuid TEXT NOT NULL UNIQUE, -- Stable UUID across imports/exports
+        name TEXT NOT NULL, -- App name
+        description TEXT NOT NULL, -- App description
+        steps TEXT NOT NULL, -- JSON array of steps/requirements
+        htmlContent TEXT NOT NULL, -- Current HTML content (legacy, use revisions)
+        appState TEXT, -- JSON object storage for app persistence
+        type TEXT NOT NULL DEFAULT 'normal', -- App type: 'normal', 'noteAction', 'aiTool', etc.
+        selectedRevisionId TEXT, -- Currently active revision ID
+        author TEXT DEFAULT "", -- Author name
+        license TEXT DEFAULT "", -- License text
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL -- Last update timestamp
       )
   ''';
 
   static const String _createAppRevisionsTable = '''
       CREATE TABLE app_revisions(
-        id TEXT PRIMARY KEY,
-        appId TEXT NOT NULL,
-        revisionNumber INTEGER NOT NULL,
-        revisionTimestamp INTEGER NOT NULL,
-        userPrompt TEXT NOT NULL,
-        aiResponse TEXT NOT NULL,
-        appCode TEXT NOT NULL,
-        attachmentPaths TEXT,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        appId TEXT NOT NULL, -- Parent app ID
+        revisionNumber INTEGER NOT NULL, -- Revision number
+        revisionTimestamp INTEGER NOT NULL, -- Timestamp
+        userPrompt TEXT NOT NULL, -- User instructions causing revision
+        aiResponse TEXT NOT NULL, -- AI explanation/response
+        appCode TEXT NOT NULL, -- Full HTML code of the app
+        attachmentPaths TEXT, -- JSON array of attachment paths
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createUserAppLibrariesTable = '''
       CREATE TABLE user_app_libraries(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        app_uuid TEXT NOT NULL,
-        revision_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        usage_instructions TEXT,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        app_uuid TEXT NOT NULL, -- App UUID this library belongs to
+        revision_id INTEGER NOT NULL, -- Revision number this library belongs to
+        name TEXT NOT NULL, -- Library name
+        usage_instructions TEXT, -- Instructions for using the library
         FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
       )
   ''';
 
   static const String _createUserAppLibraryDependenciesTable = '''
       CREATE TABLE user_app_library_dependencies(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        original_url TEXT,
-        local_path TEXT NOT NULL,
-        bytes BLOB NOT NULL,
-        library_id INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        original_url TEXT, -- Original URL of the library
+        local_path TEXT NOT NULL, -- Local storage path
+        bytes BLOB NOT NULL, -- Raw file content
+        library_id INTEGER NOT NULL, -- Parent library ID
         FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createConversationsTable = '''
       CREATE TABLE conversations(
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        noteIds TEXT NOT NULL DEFAULT '[]',
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        isArchived INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        title TEXT NOT NULL, -- Conversation title
+        noteIds TEXT NOT NULL DEFAULT '[]', -- JSON array of linked note IDs
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        isArchived INTEGER NOT NULL DEFAULT 0 -- Whether archived
       )
   ''';
 
   static const String _createConversationMessagesTable = '''
       CREATE TABLE conversation_messages(
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        content TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        modelUsed TEXT,
-        metadata TEXT
+        id TEXT PRIMARY KEY, -- Unique identifier
+        type TEXT NOT NULL, -- Message type: 'user', 'ai'
+        content TEXT NOT NULL, -- Message content
+        timestamp INTEGER NOT NULL, -- Timestamp
+        modelUsed TEXT, -- AI model identifier if applicable
+        metadata TEXT -- JSON string for extra metadata
       )
   ''';
 
   static const String _createConversationAttachmentsTable = '''
       CREATE TABLE conversation_attachments(
-        id TEXT PRIMARY KEY,
-        messageId TEXT NOT NULL,
-        filePath TEXT NOT NULL,
-        fileName TEXT NOT NULL,
-        fileType TEXT NOT NULL,
-        isRelativePath INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        messageId TEXT NOT NULL, -- Parent message ID
+        filePath TEXT NOT NULL, -- Path to file
+        fileName TEXT NOT NULL, -- File name
+        fileType TEXT NOT NULL, -- MIME type or extension
+        isRelativePath INTEGER NOT NULL DEFAULT 0, -- Whether path is relative
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createConversationMessageMappingTable = '''
       CREATE TABLE conversation_message_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversationId TEXT NOT NULL,
-        messageId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        conversationId TEXT NOT NULL, -- Conversation ID
+        messageId TEXT NOT NULL, -- Message ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         UNIQUE(conversationId, messageId)
@@ -249,10 +249,10 @@ class DatabaseService {
 
   static const String _createMessageParentsTable = '''
       CREATE TABLE message_parents(
-        id TEXT PRIMARY KEY,
-        messageId TEXT NOT NULL,
-        parentMessageId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        messageId TEXT NOT NULL, -- Child message ID
+        parentMessageId TEXT NOT NULL, -- Parent message ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         FOREIGN KEY (parentMessageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         UNIQUE(messageId, parentMessageId)
@@ -261,10 +261,10 @@ class DatabaseService {
 
   static const String _createConversationNoteMappingTable = '''
       CREATE TABLE conversation_note_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversationId TEXT NOT NULL,
-        noteId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        conversationId TEXT NOT NULL, -- Conversation ID
+        noteId TEXT NOT NULL, -- Note ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
         UNIQUE(conversationId, noteId)
@@ -272,9 +272,9 @@ class DatabaseService {
   ''';
   static const String _createMultiFunctionAppsTable = '''
       CREATE TABLE multi_function_apps(
-        appId TEXT PRIMARY KEY,
-        isDefault INTEGER NOT NULL DEFAULT 0,
-        addedAt INTEGER NOT NULL,
+        appId TEXT PRIMARY KEY, -- App ID
+        isDefault INTEGER NOT NULL DEFAULT 0, -- Whether it is the default app
+        addedAt INTEGER NOT NULL, -- Timestamp added
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
   ''';

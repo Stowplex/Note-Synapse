@@ -778,156 +778,19 @@ Here's the complete HTML application:
 
   // Build database schema section for prompts
   static String _buildDatabaseSchemaSection() {
+    final schema = DatabaseService.getSchema();
+    final formattedSchema = schema.join('\n\n');
+
     return '''
 Database Schema:
 The app has access to the following database tables:
 
-1. NOTES table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - title (TEXT NOT NULL) - Note title
-   - content (TEXT NOT NULL) - Note content
-   - type (TEXT NOT NULL) - 'note' or 'task'
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - updatedAt (INTEGER NOT NULL) - Last update timestamp
-   - scheduledAt (TEXT) - Scheduled date (for tasks)
-   - completeBy (TEXT) - Due date (for tasks)
-   - status (TEXT) - Task status: 'todo', 'inProgress', 'completed', 'cancelled'
-   - completionPercentage (REAL) - Task completion percentage
-   - pinned (INTEGER NOT NULL DEFAULT 0) - Whether note is pinned
-   - isArchived (INTEGER NOT NULL DEFAULT 0) - Whether note is archived
+$formattedSchema
 
-2. SUBNOTES table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - noteId (TEXT NOT NULL) - Parent note ID
-   - name (TEXT NOT NULL) - Sub-note name
-   - content (TEXT NOT NULL) - Sub-note content
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - isCompleted (INTEGER NOT NULL DEFAULT 0) - Completion status
-
-3. TAGS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - name (TEXT NOT NULL UNIQUE) - Tag name
-   - color (TEXT NOT NULL) - Tag color
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - usageCount (INTEGER NOT NULL DEFAULT 0) - Usage count
-
-4. NOTE_TAGS table (many-to-many relationship):
-   - noteId (TEXT NOT NULL) - Note ID
-   - tagId (TEXT NOT NULL) - Tag ID
-   - PRIMARY KEY (noteId, tagId)
-
-5. ATTACHMENTS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - noteId (TEXT NOT NULL) - Parent note ID
-   - filePath (TEXT NOT NULL) - File path
-   - fileName (TEXT NOT NULL) - File name
-   - fileType (TEXT NOT NULL) - File type
-   - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-
-6. RELATIONSHIPS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - fromNoteId (TEXT NOT NULL) - Source note ID
-   - toNoteId (TEXT NOT NULL) - Target note ID
-   - type (TEXT NOT NULL) - Relationship type
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-
-7. FILTERS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - name (TEXT NOT NULL) - Filter name
-   - includeText (TEXT) - Text to search for
-   - includeTags (TEXT NOT NULL) - JSON array of tag names
-   - includeArchived (INTEGER NOT NULL DEFAULT 0) - Include archived notes
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - updatedAt (INTEGER NOT NULL) - Last update timestamp
-
-8. USER_APPS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - uuid (TEXT NOT NULL) - App UUID
-   - name (TEXT NOT NULL) - App name
-   - description (TEXT NOT NULL) - App description
-   - steps (TEXT NOT NULL) - App steps
-   - htmlContent (TEXT NOT NULL) - HTML content
-   - appState (TEXT) - App state JSON
-   - type (TEXT NOT NULL DEFAULT 'normal') - App type
-   - selectedRevisionId (TEXT) - Selected revision ID
-   - author (TEXT DEFAULT "") - App author
-   - license (TEXT DEFAULT "") - App license
-   - createdAt (INTEGER NOT NULL) - Creation timestamp
-   - updatedAt (INTEGER NOT NULL) - Last update timestamp
-
-9. APP_REVISIONS table:
-   - id (TEXT PRIMARY KEY) - Unique identifier
-   - appId (TEXT NOT NULL) - Parent app ID
-   - revisionNumber (INTEGER NOT NULL) - Revision number
-   - revisionTimestamp (INTEGER NOT NULL) - Revision timestamp
-   - userPrompt (TEXT NOT NULL) - User prompt
-   - aiResponse (TEXT NOT NULL) - AI response
-   - appCode (TEXT NOT NULL) - App code
-   - attachmentPaths (TEXT) - Attachment paths JSON
-
-10. USER_APP_LIBRARIES table:
-    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
-    - app_uuid (TEXT NOT NULL) - App UUID
-    - revision_id (INTEGER NOT NULL) - Revision ID
-    - name (TEXT NOT NULL) - Library name
-    - usage_instructions (TEXT) - Usage instructions
-
-11. USER_APP_LIBRARY_DEPENDENCIES table:
-    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
-    - original_url (TEXT) - Original URL
-    - local_path (TEXT NOT NULL) - Local path
-    - bytes (BLOB NOT NULL) - File bytes
-    - library_id (INTEGER NOT NULL) - Library ID
-
-12. CONVERSATIONS table:
-    - id (TEXT PRIMARY KEY) - Unique identifier
-    - title (TEXT NOT NULL) - Conversation title
-    - noteIds (TEXT NOT NULL DEFAULT '[]') - Associated note IDs JSON
-    - createdAt (INTEGER NOT NULL) - Creation timestamp
-    - updatedAt (INTEGER NOT NULL) - Last update timestamp
-    - isArchived (INTEGER NOT NULL DEFAULT 0) - Whether archived
-
-13. CONVERSATION_MESSAGES table:
-    - id (TEXT PRIMARY KEY) - Unique identifier
-    - type (TEXT NOT NULL) - Message type
-    - content (TEXT NOT NULL) - Message content
-    - timestamp (INTEGER NOT NULL) - Message timestamp
-    - modelUsed (TEXT) - AI model used
-    - metadata (TEXT) - Additional metadata JSON
-
-14. CONVERSATION_ATTACHMENTS table:
-    - id (TEXT PRIMARY KEY) - Unique identifier
-    - messageId (TEXT NOT NULL) - Parent message ID
-    - filePath (TEXT NOT NULL) - File path
-    - fileName (TEXT NOT NULL) - File name
-    - fileType (TEXT NOT NULL) - File type
-    - isRelativePath (INTEGER NOT NULL DEFAULT 0) - Whether path is relative
-    - createdAt (INTEGER NOT NULL) - Creation timestamp
-
-15. CONVERSATION_TREE table:
-    - id (TEXT PRIMARY KEY) - Unique identifier
-    - treeData (TEXT NOT NULL) - Tree data JSON
-    - createdAt (INTEGER NOT NULL) - Creation timestamp
-    - updatedAt (INTEGER NOT NULL) - Last update timestamp
-
-16. CONVERSATION_MESSAGE_MAPPING table:
-    - id (INTEGER PRIMARY KEY AUTOINCREMENT) - Unique identifier
-    - conversationId (TEXT NOT NULL) - Conversation ID
-    - messageId (TEXT NOT NULL) - Message ID
-    - createdAt (INTEGER NOT NULL) - Creation timestamp
-
-17. MESSAGE_PARENTS table:
-    - id (TEXT PRIMARY KEY) - Unique identifier
-    - messageId (TEXT NOT NULL) - Message ID
-    - parentMessageId (TEXT NOT NULL) - Parent message ID
-    - createdAt (INTEGER NOT NULL) - Creation timestamp
-
-Example SQL queries you can use:
-- SELECT * FROM notes WHERE type = 'task' AND status = 'todo'
-- SELECT n.*, GROUP_CONCAT(t.name) as tags FROM notes n LEFT JOIN note_tags nt ON n.id = nt.noteId LEFT JOIN tags t ON nt.tagId = t.id GROUP BY n.id
-- SELECT * FROM notes WHERE pinned = 1 ORDER BY createdAt DESC
-- SELECT * FROM subnotes WHERE noteId = 'some-note-id' AND isCompleted = 0
+IMPORTANT: 
+- Use the schema above to understand the database structure.
+- The comments in the schema describe the purpose of each column.
+- Use this schema when writing SQL queries or interacting with the database.
 ''';
   }
 
