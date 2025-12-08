@@ -882,24 +882,34 @@ IMPORTANT:
        - content: string (required) - Note content
        - type: string (required) - 'note' or 'task'
        - subNotes: array (optional) - Array of subnote objects with:
-         * name: string (required) - Subnote name
-         * content: string (optional) - Subnote content
-         * isCompleted: boolean (optional, default: false) - Completion status
-       - attachments: array (optional) - Array of attachment objects:
-         * File URI: string - Path to existing file (e.g., '/path/to/file.jpg')
-        * synapsetemp URI: string - URI returned by Synapse.saveTemp (e.g., 'synapsetemp:///image.png')
-         * Base64: object with:
-           - type: 'base64' (required)
-           - data: string (required) - Base64 encoded data (e.g., 'data:image/jpeg;base64,/9j/4AAQ...')
-           - fileName: string (required) - Original filename (e.g., 'image.jpg')
-       - For tasks only:
-         * scheduledAt: string (optional) - ISO date string when task is scheduled to start
-         * completeBy: string (optional) - ISO date string when task needs to be completed
-         * status: string (optional, default: 'todo') - 'todo', 'in_progress', 'complete', 'abandoned'
-         * completionPercentage: number (optional, default: 0.0) - 0.0 to 1.0
+   - Synapse.saveNotes(notes: array) - Create or save new notes to the database
+      Param format: array of objects. Each object represents a note.
+      Properties for note object:
+         * title: string (required) - Title of the note
+         * content: string (required, can be empty) - Content of the note
+         * type: string (required) - 'note' or 'task'
+         * subNotes: array of objects (optional) - List of sub-notes/checklist items
+             - name: string (required)
+             - content: string (required)
+             - isCompleted: boolean (optional, default: false)
+         * attachments: array of strings (optional) - List of file paths or URIs
+         * scheduledAt: string (optional, YYYY-MM-DD) - For tasks only
+         * completeBy: string (optional, YYYY-MM-DD) - For tasks only
+         * status: string (optional) - 'todo', 'inProgress', 'completed', 'abandoned'
+         * completionPercentage: number (optional, 0.0-1.0)
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
-     Response format: {success: boolean, savedCount?: number, error?: string}
+      Response format: {success: boolean, savedCount?: number, error?: string}
+    - Synapse.updateNotes(notes: array) - Update existing notes in the database
+      Param format: array of objects. Each object MUST contain an 'id' field and fields to update.
+      Properties:
+         * id: string (required) - ID of the note to update
+         * ... any other properties from saveNotes can be included to replace existing values
+      Behavior:
+         * Fields present in the object will replace existing values.
+         * Fields omitted will remain unchanged.
+         * Lists (subNotes, tags, attachments) are replaced entirely if provided.
+      Response format: {success: boolean, updatedCount?: number, error?: string}
    - Synapse.deleteNotes(noteIds: array) - Delete notes from the database by their IDs
      Param format: array of note IDs (strings) - List of UUID strings identifying notes to delete
      Response format: {success: boolean, deletedCount?: number, error?: string}

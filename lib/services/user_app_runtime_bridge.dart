@@ -19,7 +19,8 @@ import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
-typedef OpenConversationsCallback = Future<void> Function(List<Note> notes, bool immersiveMode);
+typedef OpenConversationsCallback =
+    Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
@@ -180,6 +181,10 @@ class UserAppRuntimeBridge {
           openNote: async (noteId, replaceWindow = false) => {
             const result = await window.flutter_inappwebview.callHandler('openNote', noteId, replaceWindow === true);
             return result;
+          },
+          updateNotes: async (notes) => {
+             const result = await window.flutter_inappwebview.callHandler('updateNotes', notes ?? []);
+             return result;
           },
           openConversations: async (notes = [], immersiveMode = false) => {
             const result = await window.flutter_inappwebview.callHandler('openConversations', notes ?? [], immersiveMode === true);
@@ -745,6 +750,33 @@ class UserAppRuntimeBridge {
     );
 
     controller.addJavaScriptHandler(
+      handlerName: 'updateNotes',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Called with ${notesData.length} note updates',
+          );
+          final updatedCount = await _updateNotesFromJavaScript(notesData);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.updateNotes] Success - Updated $updatedCount notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'updatedCount': updatedCount};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.updateNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
       handlerName: 'openConversations',
       callback: (args) async {
         final startTime = DateTime.now();
@@ -756,7 +788,8 @@ class UserAppRuntimeBridge {
             };
           }
 
-          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
           final immersiveMode = args.length > 1
               ? (args[1] as bool? ?? false)
               : false;
@@ -829,7 +862,8 @@ class UserAppRuntimeBridge {
             };
           }
 
-          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
           LoggerService.debug(
             '[Synapse.openAIActions] Called with ${notesData.length} notes',
           );
@@ -1220,9 +1254,7 @@ class UserAppRuntimeBridge {
         final noteId = noteIdData.trim();
         await appProvider.deleteNote(noteId);
         deletedCount++;
-        LoggerService.debug(
-          '[Synapse.deleteNotes] Deleted note: $noteId',
-        );
+        LoggerService.debug('[Synapse.deleteNotes] Deleted note: $noteId');
       } catch (e) {
         LoggerService.error(
           '[Synapse.deleteNotes] Error deleting note $noteIdData: $e',
@@ -1481,6 +1513,135 @@ class UserAppRuntimeBridge {
       default:
         return 'application/octet-stream';
     }
+  }
+
+  Future<int> _updateNotesFromJavaScript(List<dynamic> notesData) async {
+    var updatedCount = 0;
+    for (final noteData in notesData) {
+      if (noteData is! Map<String, dynamic>) continue;
+
+      final id = noteData['id']?.toString();
+      if (id == null || id.isEmpty) {
+        LoggerService.warning(
+          '[Synapse.updateNotes] Skipping update for note without ID',
+        );
+        continue;
+      }
+
+      try {
+        final existingNote = await _databaseService.getNote(id);
+        if (existingNote == null) {
+          LoggerService.warning('[Synapse.updateNotes] Note not found: $id');
+          continue;
+        }
+
+        final updatedNote = await _mergeNoteData(existingNote, noteData);
+        await appProvider.updateNote(updatedNote);
+        updatedCount++;
+        LoggerService.debug(
+          '[Synapse.updateNotes] Updated note: ${updatedNote.id} - ${updatedNote.title}',
+        );
+      } catch (e) {
+        LoggerService.error(
+          '[Synapse.updateNotes] Error updating note $id: $e',
+          error: e,
+        );
+      }
+    }
+    return updatedCount;
+  }
+
+  Future<Note> _mergeNoteData(
+    Note existing,
+    Map<String, dynamic> changes,
+  ) async {
+    String? title = existing.title;
+    if (changes.containsKey('title')) {
+      title = changes['title']?.toString().trim() ?? '';
+      if (title.isEmpty) title = existing.title;
+    }
+
+    String? content = existing.content;
+    if (changes.containsKey('content')) {
+      content = changes['content']?.toString().trim() ?? existing.content;
+    }
+
+    NoteType type = existing.type;
+    if (changes.containsKey('type')) {
+      type = _parseNoteType(changes['type'].toString());
+    }
+
+    // Subnotes: replace entire list if present
+    List<SubNote> subNotes = existing.subNotes;
+    if (changes.containsKey('subNotes') && changes['subNotes'] is List) {
+      subNotes = [];
+      for (final subNoteData in (changes['subNotes'] as List)) {
+        if (subNoteData is Map<String, dynamic>) {
+          subNotes.add(_createSubNoteFromJavaScriptData(subNoteData));
+        }
+      }
+    }
+
+    // Tags: replace entire list if present
+    List<String> tags = existing.tags;
+    if (changes.containsKey('tags') && changes['tags'] is List) {
+      tags = (changes['tags'] as List).map((e) => e.toString()).toList();
+    }
+
+    // Attachments: replace entire list if present
+    List<String> attachmentPaths = existing.attachmentPaths;
+    if (changes.containsKey('attachments') && changes['attachments'] is List) {
+      attachmentPaths = [];
+      for (final attachment in (changes['attachments'] as List)) {
+        attachmentPaths.add(await _processAttachmentFromJavaScript(attachment));
+      }
+    }
+
+    // Task fields
+    String? scheduledAt = existing.scheduledAt;
+    if (changes.containsKey('scheduledAt'))
+      scheduledAt = changes['scheduledAt']?.toString();
+
+    String? completeBy = existing.completeBy;
+    if (changes.containsKey('completeBy'))
+      completeBy = changes['completeBy']?.toString();
+
+    TaskStatus? status = existing.status;
+    if (changes.containsKey('status')) {
+      status = _parseTaskStatus(changes['status'].toString());
+    }
+
+    double? completionPercentage = existing.completionPercentage;
+    if (changes.containsKey('completionPercentage')) {
+      completionPercentage =
+          (changes['completionPercentage'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    bool pinned = existing.pinned;
+    if (changes.containsKey('pinned')) {
+      pinned = changes['pinned'] == true;
+    }
+
+    bool isArchived = existing.isArchived;
+    if (changes.containsKey('isArchived')) {
+      isArchived = changes['isArchived'] == true;
+    }
+
+    return existing.copyWith(
+      title: title,
+      content: content,
+      type: type,
+      subNotes: subNotes,
+      tags: tags,
+      attachmentPaths: attachmentPaths,
+      scheduledAt: scheduledAt,
+      completeBy: completeBy,
+      status: status,
+      completionPercentage: completionPercentage,
+      pinned: pinned,
+      isArchived: isArchived,
+      updatedAt: DateTime.now(),
+    );
   }
 }
 
