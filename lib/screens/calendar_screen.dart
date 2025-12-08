@@ -1044,14 +1044,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               appProvider: appProvider,
                             ),
                           ),
-                        if (note.isTask)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: _TaskProgressBar(
-                              note: note,
-                              appProvider: appProvider,
-                            ),
-                          ),
+
                         if (note.tags.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Wrap(
