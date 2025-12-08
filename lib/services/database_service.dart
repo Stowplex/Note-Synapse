@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 27;
+  static const int DATABASE_VERSION = 28;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -137,6 +137,8 @@ class DatabaseService {
         name TEXT NOT NULL,
         includeText TEXT,
         includeTags TEXT NOT NULL,
+        excludeTags TEXT NOT NULL DEFAULT '',
+        noteTypes TEXT NOT NULL DEFAULT '',
         includeArchived INTEGER NOT NULL DEFAULT 0,
         isPinned INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL,
@@ -448,6 +450,10 @@ class DatabaseService {
       description: 'Add isPinned column to filters table',
       execute: _migrateToVersion27,
     ),
+    28: MigrationStep(
+      description: 'Add excludeTags and noteTypes columns to filters table',
+      execute: _migrateToVersion28,
+    ),
   };
 
   // Main migration execution method
@@ -744,6 +750,19 @@ class DatabaseService {
   }) async {
     await db.execute('DROP TABLE IF EXISTS multi_function_apps');
     await db.execute(_createMultiFunctionAppsTable);
+  }
+
+  static Future<void> _migrateToVersion28(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // Add new columns to filters table
+    await db.execute(
+      "ALTER TABLE filters ADD COLUMN excludeTags TEXT NOT NULL DEFAULT ''",
+    );
+    await db.execute(
+      "ALTER TABLE filters ADD COLUMN noteTypes TEXT NOT NULL DEFAULT ''",
+    );
   }
 
   // Recreate main database tables
@@ -2180,6 +2199,10 @@ class DatabaseService {
       'name': filter.name,
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
+      'excludeTags': filter.excludeTags.join(','),
+      'noteTypes': filter.noteTypes
+          .map((t) => t.toString().split('.').last)
+          .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
@@ -2203,11 +2226,29 @@ class DatabaseService {
           ? <String>[]
           : includeTagsString.split(',');
 
+      final excludeTagsString = maps[i]['excludeTags'] as String? ?? '';
+      final excludeTags = excludeTagsString.isEmpty
+          ? <String>[]
+          : excludeTagsString.split(',');
+
+      final noteTypesString = maps[i]['noteTypes'] as String? ?? '';
+      final noteTypes = noteTypesString.isEmpty
+          ? NoteType
+                .values // Default to all types if empty (backward compatibility)
+          : noteTypesString.split(',').map((e) {
+              return NoteType.values.firstWhere(
+                (type) => type.toString().split('.').last == e,
+                orElse: () => NoteType.note,
+              );
+            }).toList();
+
       return Filter(
         id: maps[i]['id'],
         name: maps[i]['name'],
         includeText: maps[i]['includeText'],
         includeTags: includeTags,
+        excludeTags: excludeTags,
+        noteTypes: noteTypes,
         includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
         isPinned: (maps[i]['isPinned'] ?? 0) == 1,
         createdAt: _validateTimestamp(
@@ -2240,11 +2281,29 @@ class DatabaseService {
         ? <String>[]
         : includeTagsString.split(',');
 
+    final excludeTagsString = map['excludeTags'] as String? ?? '';
+    final excludeTags = excludeTagsString.isEmpty
+        ? <String>[]
+        : excludeTagsString.split(',');
+
+    final noteTypesString = map['noteTypes'] as String? ?? '';
+    final noteTypes = noteTypesString.isEmpty
+        ? NoteType
+              .values // Default to all types
+        : noteTypesString.split(',').map((e) {
+            return NoteType.values.firstWhere(
+              (type) => type.toString().split('.').last == e,
+              orElse: () => NoteType.note,
+            );
+          }).toList();
+
     return Filter(
       id: map['id'],
       name: map['name'],
       includeText: map['includeText'],
       includeTags: includeTags,
+      excludeTags: excludeTags,
+      noteTypes: noteTypes,
       includeArchived: (map['includeArchived'] ?? 0) == 1,
       isPinned: (map['isPinned'] ?? 0) == 1,
       createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
@@ -2261,6 +2320,10 @@ class DatabaseService {
       'name': filter.name,
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
+      'excludeTags': filter.excludeTags.join(','),
+      'noteTypes': filter.noteTypes
+          .map((t) => t.toString().split('.').last)
+          .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
