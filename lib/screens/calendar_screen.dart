@@ -603,7 +603,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final notes = _filterNotes(appProvider.notes, appProvider);
+    final notes = _filterNotes(
+      appProvider.notes,
+      appProvider,
+    ).where((n) => n.isTask).toList();
     if (notes.isEmpty) {
       return Center(
         child: Column(
