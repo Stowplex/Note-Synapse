@@ -956,6 +956,20 @@ class AppProvider extends ChangeNotifier {
       }).toList();
     }
 
+    // Filter by exclude tags (note must NOT have ANY of the excluded tags)
+    if (filter.excludeTags.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return !note.tags.any((tag) => filter.excludeTags.contains(tag));
+      }).toList();
+    }
+
+    // Filter by note types
+    if (filter.noteTypes.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return filter.noteTypes.contains(note.type);
+      }).toList();
+    }
+
     // Sort by pinned status first, then by creation date
     filteredNotes.sort((a, b) {
       if (a.pinned && !b.pinned) return -1;

@@ -2350,6 +2350,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tools => '工具';
 
   @override
+  String get noteType => 'Note Type';
+
+  @override
+  String get excludeTags => 'Exclude Tags';
+
+  @override
+  String get excludeTagsHint => 'Select tags to exclude';
+
+  @override
+  String get selectTagsToExclude => 'Select Tags to Exclude';
+
+  @override
   String toolsFor(Object name) {
     return '工具 - $name';
   }

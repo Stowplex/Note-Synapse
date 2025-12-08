@@ -4328,6 +4328,30 @@ abstract class AppLocalizations {
   /// **'Tools'**
   String get tools;
 
+  /// No description provided for @noteType.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Type'**
+  String get noteType;
+
+  /// No description provided for @excludeTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude Tags'**
+  String get excludeTags;
+
+  /// No description provided for @excludeTagsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select tags to exclude'**
+  String get excludeTagsHint;
+
+  /// No description provided for @selectTagsToExclude.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Tags to Exclude'**
+  String get selectTagsToExclude;
+
   /// No description provided for @toolsFor.
   ///
   /// In en, this message translates to:

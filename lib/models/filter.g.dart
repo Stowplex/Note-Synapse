@@ -15,6 +15,16 @@ Filter _$FilterFromJson(Map<String, dynamic> json) => Filter(
           ?.map((e) => e as String)
           .toList() ??
       const [],
+  excludeTags:
+      (json['excludeTags'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  noteTypes:
+      (json['noteTypes'] as List<dynamic>?)
+          ?.map((e) => $enumDecode(_$NoteTypeEnumMap, e))
+          .toList() ??
+      const [NoteType.note, NoteType.task],
   includeArchived: json['includeArchived'] as bool? ?? false,
   isPinned: json['isPinned'] as bool? ?? false,
   createdAt: DateTime.parse(json['createdAt'] as String),
@@ -26,8 +36,12 @@ Map<String, dynamic> _$FilterToJson(Filter instance) => <String, dynamic>{
   'name': instance.name,
   'includeText': instance.includeText,
   'includeTags': instance.includeTags,
+  'excludeTags': instance.excludeTags,
+  'noteTypes': instance.noteTypes.map((e) => _$NoteTypeEnumMap[e]!).toList(),
   'includeArchived': instance.includeArchived,
   'isPinned': instance.isPinned,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
 };
+
+const _$NoteTypeEnumMap = {NoteType.note: 'note', NoteType.task: 'task'};

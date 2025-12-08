@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/filter.dart';
+import '../models/note.dart';
+import '../l10n/app_localizations.dart';
 
 class ActiveFiltersDialog extends StatelessWidget {
   final List<Filter> selectedFilters;
@@ -76,6 +78,7 @@ class ActiveFiltersDialog extends StatelessWidget {
   }
 
   Widget _buildFilterSection(BuildContext context, Filter filter) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -111,7 +114,10 @@ class ActiveFiltersDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (filter.includeTags.isNotEmpty) ...[
-            Text('Include Tags:', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              l10n.includeTags,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             Wrap(
               spacing: 4,
               runSpacing: 4,
@@ -126,8 +132,50 @@ class ActiveFiltersDialog extends StatelessWidget {
             ),
             const SizedBox(height: 4),
           ],
+          if (filter.excludeTags.isNotEmpty) ...[
+            Text(
+              l10n.excludeTags,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: filter.excludeTags.map((tag) {
+                return Chip(
+                  label: Text(tag),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  labelStyle: const TextStyle(fontSize: 12),
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withOpacity(0.5),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (filter.noteTypes.isNotEmpty &&
+              filter.noteTypes.length < NoteType.values.length) ...[
+            Text(l10n.noteType, style: Theme.of(context).textTheme.bodySmall),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: filter.noteTypes.map((type) {
+                return Chip(
+                  label: Text(type == NoteType.note ? l10n.note : l10n.task),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  labelStyle: const TextStyle(fontSize: 12),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 4),
+          ],
           if (filter.includeText != null && filter.includeText!.isNotEmpty) ...[
-            Text('Include Text:', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              l10n.includeText,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             Chip(
               label: Text(filter.includeText!),
               visualDensity: VisualDensity.compact,
@@ -136,6 +184,8 @@ class ActiveFiltersDialog extends StatelessWidget {
             ),
           ],
           if (filter.includeTags.isEmpty &&
+              filter.excludeTags.isEmpty &&
+              filter.noteTypes.length == NoteType.values.length &&
               (filter.includeText == null || filter.includeText!.isEmpty))
             Text(
               'No specific criteria (matches all notes)',
