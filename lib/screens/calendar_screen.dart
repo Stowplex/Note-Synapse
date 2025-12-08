@@ -9,6 +9,7 @@ import '../widgets/multi_select_tag_filter.dart';
 import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../widgets/filter_tab_strip.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -25,6 +26,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Set<String> _selectedTags = {};
   List<String> _availableTags = [];
   String _selectedView = 'calendar'; // 'calendar', 'timeline', 'todo'
+  Set<String> _selectedFilterIds = {'default'};
 
   @override
   void initState() {
@@ -124,11 +126,56 @@ class _CalendarScreenState extends State<CalendarScreen> {
           }
 
           if (_selectedView == 'timeline') {
-            return _buildTimelineView(appProvider, l10n);
+            return Column(
+              children: [
+                FilterTabStrip(
+                  selectedFilterIds: _selectedFilterIds,
+                  additionalSelectedTags: _selectedTags,
+                  customFilters: appProvider.filters,
+                  availableTags: _availableTags,
+                  onFilterSelected: (ids) {
+                    setState(() {
+                      _selectedFilterIds = ids;
+                    });
+                  },
+                  onFilterCreated: (filter) => appProvider.addFilter(filter),
+                  onFilterUpdated: (filter) => appProvider.updateFilter(filter),
+                  onFilterDeleted: (id) => appProvider.deleteFilter(id),
+                  onTagsUpdated: (tags) {
+                    setState(() {
+                      _selectedTags = tags;
+                    });
+                  },
+                ),
+                Expanded(child: _buildTimelineView(appProvider, l10n)),
+              ],
+            );
           } else {
             return SingleChildScrollView(
               child: Column(
                 children: [
+                  FilterTabStrip(
+                    selectedFilterIds: _selectedFilterIds,
+                    additionalSelectedTags: _selectedTags,
+                    customFilters: appProvider.filters,
+                    availableTags: _availableTags,
+                    onFilterSelected: (ids) {
+                      setState(() {
+                        _selectedFilterIds = ids;
+                        _calendarKey++; // Force calendar rebuild
+                      });
+                    },
+                    onFilterCreated: (filter) => appProvider.addFilter(filter),
+                    onFilterUpdated: (filter) =>
+                        appProvider.updateFilter(filter),
+                    onFilterDeleted: (id) => appProvider.deleteFilter(id),
+                    onTagsUpdated: (tags) {
+                      setState(() {
+                        _selectedTags = tags;
+                        _calendarKey++;
+                      });
+                    },
+                  ),
                   TableCalendar<Note>(
                     key: ValueKey(_calendarKey),
                     firstDay: DateTime.utc(2020, 1, 1),
@@ -168,14 +215,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       });
                     },
                     eventLoader: (day) {
-                      final tasks = appProvider.getTasksForDate(day);
-                      if (_selectedTags.isEmpty) {
-                        return tasks;
-                      }
-                      return tasks.where((task) {
-                        return _selectedTags.any(
-                          (selectedTag) => task.tags.contains(selectedTag),
-                        );
+                      final filteredNotes = _filterNotes(
+                        appProvider.notes,
+                        appProvider,
+                      );
+                      return filteredNotes.where((note) {
+                        return note.isTask &&
+                            isSameDay(_getNoteDate(note), day);
                       }).toList();
                     },
                     calendarStyle: CalendarStyle(
@@ -228,24 +274,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     AppLocalizations l10n,
   ) {
     final selectedDate = _selectedDay!;
-    final allTasks = appProvider.getTasksForDate(selectedDate);
-    final allNotes = appProvider.getNotesForDate(selectedDate);
+    final filteredNotes = _filterNotes(appProvider.notes, appProvider);
 
-    // Filter by selected tags (OR logic)
-    final tasks = _selectedTags.isEmpty
-        ? allTasks
-        : allTasks.where((task) {
-            return _selectedTags.any(
-              (selectedTag) => task.tags.contains(selectedTag),
-            );
-          }).toList();
-    final notes = _selectedTags.isEmpty
-        ? allNotes
-        : allNotes.where((note) {
-            return _selectedTags.any(
-              (selectedTag) => note.tags.contains(selectedTag),
-            );
-          }).toList();
+    final tasks = filteredNotes
+        .where((n) => n.isTask && isSameDay(_getNoteDate(n), selectedDate))
+        .toList();
+    final notes = filteredNotes
+        .where((n) => !n.isTask && isSameDay(_getNoteDate(n), selectedDate))
+        .toList();
 
     return DefaultTabController(
       length: 2,
@@ -567,7 +603,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final notes = _filterNotes(appProvider.notes);
+    final notes = _filterNotes(appProvider.notes, appProvider);
     if (notes.isEmpty) {
       return Center(
         child: Column(
@@ -692,7 +728,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // Helper to build list with headers
+  DateTime _getNoteDate(Note note) {
+    if (note.scheduledAt != null && note.scheduledAt!.isNotEmpty) {
+      try {
+        return DateTime.parse(note.scheduledAt!);
+      } catch (e) {
+        return note.createdAt;
+      }
+    }
+    return note.createdAt;
+  }
+
   List<Widget> _buildFlattenedTimeline(
     List<MapEntry<DateTime, List<Note>>> entries,
     AppLocalizations l10n,
@@ -1025,21 +1071,100 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  List<Note> _filterNotes(List<Note> notes) {
-    // Filter to only show tasks that are not archived
-    final tasks = notes
-        .where((note) => note.isTask && !note.isArchived)
-        .toList();
+  List<Note> _filterNotes(List<Note> notes, AppProvider appProvider) {
+    List<Note> filteredNotes = notes;
 
-    if (_selectedTags.isEmpty) {
-      return tasks;
+    // Combine notes from all selected filters (Union)
+    Set<String> noteIds = {};
+    List<Note> unionNotes = [];
+
+    // If 'all' is selected, it overrides everything else
+    if (_selectedFilterIds.contains('all')) {
+      filteredNotes = notes;
+    } else {
+      for (final filterId in _selectedFilterIds) {
+        List<Note> subset = [];
+        if (filterId == 'default') {
+          subset = notes.where((note) => !note.isArchived).toList();
+        } else if (filterId == 'pinned') {
+          subset = notes
+              .where((note) => note.pinned && !note.isArchived)
+              .toList();
+        } else if (filterId == 'archived') {
+          subset = notes.where((note) => note.isArchived).toList();
+        } else {
+          // Custom filter
+          try {
+            final customFilter = appProvider.filters.firstWhere(
+              (filter) => filter.id == filterId,
+            );
+            subset = appProvider.getFilteredNotes(customFilter);
+          } catch (e) {
+            continue;
+          }
+        }
+
+        for (final note in subset) {
+          if (noteIds.add(note.id)) {
+            unionNotes.add(note);
+          }
+        }
+      }
+      filteredNotes = unionNotes;
     }
 
-    return tasks.where((task) {
-      return _selectedTags.any(
-        (selectedTag) => task.tags.contains(selectedTag),
-      );
-    }).toList();
+    // Filter by tasks only? No, Timeline shows Notes and Tasks.
+    // And Calendar shows both (in separate tabs).
+    // Original _filterNotes logic: "Filter to only show tasks that are not archived"
+    // Wait, the original method was named `_filterNotes` but it did:
+    // final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
+    // It filtered out non-tasks AND archived notes hardcoded!
+    // But `_buildTabbedDayContent` used `getNotesForDate` which includes notes.
+    // The previous `_buildTimelineView` called `_filterNotes` which seemingly ONLY returned TASKS?
+    // Let's check the original code again.
+    // Line 1028: List<Note> _filterNotes(List<Note> notes) {
+    // Line 1030:   final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
+    // So previously, Timeline View ONLY showed unarchived TASKS?
+    // And Tag filtering.
+    //
+    // NOW, with FilterStrip, we support "Archived" and "All".
+    // AND we probably want to support Notes in Timeline if they have dates?
+    // `_groupNotesByDate` uses `scheduledAt` or `createdAt`. So Notes are valid in Timeline.
+    //
+    // If we want to maintain "Tasks Only" for Timeline... the user didn't explicitly ask to change that behavior,
+    // but they asked for "Calendar Screen" filtering which implies the whole screen.
+    // However, `_buildTimelineView` called `_filterNotes` which returned `tasks`.
+    // If I change this to return Notes too, Timeline will show Notes.
+    // Is this desired?
+    // "Timeline view should clearly render 'TODAY', 'Things in the future'..."
+    // "Tasks" usually have dates. Notes have created dates.
+    //
+    // The previous implementation of `_filterNotes` was:
+    // final tasks = notes.where((note) => note.isTask && !note.isArchived).toList();
+    //
+    // If I switch to general filtering, `Timeline` might show regular notes.
+    // Given the previous code explicitly filtered for `note.isTask`, I should probably respect that for now?
+    // OR, since we are adding "Filter Strip", maybe the user WANTS to see notes?
+    // "It will work the same way as the main screen."
+    // Main screen shows Notes AND Tasks.
+    // So safe bet: Show everything that matches the filter.
+    //
+    // However, for correct integration:
+    // 1. `_filterNotes` (new) returns ALL matching notes (Tasks + Notes).
+    // 2. `_buildTimelineView` uses this. If we want only Tasks, we should filter `isTask` there.
+    //    But Timeline usually implies a history/schedule. Notes fit in history (createdAt).
+    //    Let's allow Notes.
+    //
+    // Tag Filtering (Intersection)
+    if (_selectedTags.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return _selectedTags.any(
+          (selectedTag) => note.tags.contains(selectedTag),
+        );
+      }).toList();
+    }
+
+    return filteredNotes;
   }
 
   // Removed _buildTodoView and _filterTasks as per instruction
