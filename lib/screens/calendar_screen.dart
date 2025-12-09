@@ -29,6 +29,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   int _dragDurationDays = 1;
   double _lastPinchScale = 1.0;
   DateTime? _dragStartDate;
+
+  // Raw Pointer Tracking for custom pinch
+  final Map<int, Offset> _activePointers = {};
+  double? _lastPinchDistance;
   CalendarFormat _calendarFormat = CalendarFormat.month;
   int _calendarKey = 0; // Add a key to force rebuild
   Set<String> _selectedTags = {};
@@ -368,370 +372,370 @@ class _CalendarScreenState extends State<CalendarScreen> {
             );
           } else {
             return SingleChildScrollView(
-              child: Column(
-                children: [
-                  FilterTabStrip(
-                    selectedFilterIds: _selectedFilterIds,
-                    additionalSelectedTags: _selectedTags,
-                    customFilters: appProvider.filters,
-                    availableTags: _availableTags,
-                    onFilterSelected: (ids) {
-                      setState(() {
-                        _selectedFilterIds = ids;
-                        _calendarKey++; // Force calendar rebuild
-                      });
-                    },
-                    onFilterCreated: (filter) => appProvider.addFilter(filter),
-                    onFilterUpdated: (filter) =>
-                        appProvider.updateFilter(filter),
-                    onFilterDeleted: (id) => appProvider.deleteFilter(id),
-                    onTagsUpdated: (tags) {
-                      setState(() {
-                        _selectedTags = tags;
-                        _calendarKey++;
-                      });
-                    },
-                  ),
-                  Listener(
-                    onPointerMove: (event) {
-                      // Only handle if dragging task
-                      if (_draggingTask == null) return;
-                      // Logic handled via GestureDetector below if possible, or raw pointers?
-                      // Actually GestureDetector's onScaleUpdate is better for pinch.
-                    },
-                    child: GestureDetector(
-                      onScaleStart: (details) {
-                        if (_draggingTask != null) {
-                          _lastPinchScale = 1.0;
-                        }
-                      },
-                      onScaleUpdate: (details) {
-                        if (_draggingTask != null) {
-                          // Sensitivity: Scale > 1.0 (grow), < 1.0 (shrink)
-                          // Accumulate changes or use thresholds?
-                          // Let's use simple threshold on scale
-                          double scale = details.scale;
+              child: Listener(
+                onPointerDown: (event) {
+                  _activePointers[event.pointer] = event.position;
+                },
+                onPointerMove: (event) {
+                  _activePointers[event.pointer] = event.position;
 
-                          // Damping to prevent too fast changes
-                          if ((scale - _lastPinchScale).abs() > 0.1) {
-                            if (scale > _lastPinchScale) {
-                              // Growing
-                              setState(() {
-                                _dragDurationDays++;
-                                _lastPinchScale = scale;
-                              });
-                            } else {
-                              // Shrinking
-                              if (_dragDurationDays > 1) {
-                                setState(() {
-                                  _dragDurationDays--;
-                                  _lastPinchScale = scale;
-                                });
-                              }
-                            }
+                  if (_draggingTask != null && _activePointers.length >= 2) {
+                    // Get two pointers
+                    final pointers = _activePointers.values.take(2).toList();
+                    final distance = (pointers[0] - pointers[1]).distance;
+
+                    if (_lastPinchDistance == null) {
+                      _lastPinchDistance = distance;
+                    } else {
+                      // Simple distance delta logic
+                      final delta = distance - _lastPinchDistance!;
+
+                      // Threshold to trigger change (e.g. 50 logical pixels)
+                      if (delta.abs() > 30) {
+                        if (delta > 0) {
+                          // Growing
+                          setState(() {
+                            _dragDurationDays++;
+                            _lastPinchDistance = distance;
+                          });
+                        } else {
+                          // Shrinking
+                          if (_dragDurationDays > 1) {
+                            setState(() {
+                              _dragDurationDays--;
+                              _lastPinchDistance = distance;
+                            });
                           }
                         }
+                      }
+                    }
+                  }
+                },
+                onPointerUp: (event) {
+                  _activePointers.remove(event.pointer);
+                  if (_activePointers.length < 2) {
+                    _lastPinchDistance = null;
+                  }
+                },
+                onPointerCancel: (event) {
+                  _activePointers.remove(event.pointer);
+                  _lastPinchDistance = null;
+                },
+                child: Column(
+                  children: [
+                    FilterTabStrip(
+                      selectedFilterIds: _selectedFilterIds,
+                      additionalSelectedTags: _selectedTags,
+                      customFilters: appProvider.filters,
+                      availableTags: _availableTags,
+                      onFilterSelected: (ids) {
+                        setState(() {
+                          _selectedFilterIds = ids;
+                          _calendarKey++; // Force calendar rebuild
+                        });
                       },
-                      child: TableCalendar<Note>(
-                        key: ValueKey(_calendarKey),
-                        firstDay: DateTime.utc(2020, 1, 1),
-                        lastDay: DateTime.utc(2030, 12, 31),
-                        focusedDay: _focusedDay,
-                        calendarFormat: _calendarFormat,
-                        availableCalendarFormats: {
-                          CalendarFormat.month: l10n.month,
-                          CalendarFormat.twoWeeks: l10n.twoWeeks,
-                          CalendarFormat.week: l10n.week,
-                        },
-                        selectedDayPredicate: (day) {
-                          return isSameDay(_selectedDay, day);
-                        },
-                        onDaySelected: (selectedDay, focusedDay) {
-                          setState(() {
-                            _selectedDay = selectedDay;
-                            _focusedDay = focusedDay;
-                          });
-                        },
-                        onFormatChanged: (format) {
-                          setState(() {
-                            _calendarFormat = format;
-                            // Force a complete rebuild by updating the key
-                            _calendarKey++;
-                            // Ensure focused day is properly set when format changes
-                            if (_selectedDay != null) {
-                              _focusedDay = _selectedDay!;
-                            } else {
-                              _focusedDay = DateTime.now();
-                            }
-                          });
-                        },
-                        onPageChanged: (focusedDay) {
-                          setState(() {
-                            _focusedDay = focusedDay;
-                          });
-                        },
-                        eventLoader: (day) {
-                          final filteredNotes = _filterNotes(
-                            appProvider.notes,
-                            appProvider,
-                          );
-                          return filteredNotes.where((note) {
-                            return note.isTask && _isTaskActiveOnDay(note, day);
-                          }).toList();
-                        },
-                        calendarBuilders: CalendarBuilders(
-                          markerBuilder: (context, day, events) {
-                            return Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: DragTarget<Note>(
-                                    onWillAccept: (data) {
-                                      if (data == null) return false;
-                                      if (_hoverDate != day) {
-                                        setState(() {
-                                          _hoverDate = day;
-                                          _dragStartDate = day;
-                                        });
-                                      }
-                                      return true;
-                                    },
-                                    onLeave: (data) {
-                                      if (_hoverDate == day) {
-                                        setState(() {
-                                          _hoverDate = null;
-                                          _dragStartDate = null;
-                                        });
-                                      }
-                                    },
-                                    onAccept: (data) =>
-                                        _onTaskDropped(data, day),
-                                    builder: (context, candidateData, rejectedData) {
-                                      // Determine if this day should be highlighted
-                                      Color? highlightColor;
+                      onFilterCreated: (filter) =>
+                          appProvider.addFilter(filter),
+                      onFilterUpdated: (filter) =>
+                          appProvider.updateFilter(filter),
+                      onFilterDeleted: (id) => appProvider.deleteFilter(id),
+                      onTagsUpdated: (tags) {
+                        setState(() {
+                          _selectedTags = tags;
+                          _calendarKey++;
+                        });
+                      },
+                    ),
+                    TableCalendar<Note>(
+                      key: ValueKey(_calendarKey),
+                      firstDay: DateTime.utc(2020, 1, 1),
+                      lastDay: DateTime.utc(2030, 12, 31),
+                      focusedDay: _focusedDay,
+                      calendarFormat: _calendarFormat,
+                      availableCalendarFormats: {
+                        CalendarFormat.month: l10n.month,
+                        CalendarFormat.twoWeeks: l10n.twoWeeks,
+                        CalendarFormat.week: l10n.week,
+                      },
+                      selectedDayPredicate: (day) {
+                        return isSameDay(_selectedDay, day);
+                      },
+                      onDaySelected: (selectedDay, focusedDay) {
+                        setState(() {
+                          _selectedDay = selectedDay;
+                          _focusedDay = focusedDay;
+                        });
+                      },
+                      onFormatChanged: (format) {
+                        setState(() {
+                          _calendarFormat = format;
+                          // Force a complete rebuild by updating the key
+                          _calendarKey++;
+                          // Ensure focused day is properly set when format changes
+                          if (_selectedDay != null) {
+                            _focusedDay = _selectedDay!;
+                          } else {
+                            _focusedDay = DateTime.now();
+                          }
+                        });
+                      },
+                      onPageChanged: (focusedDay) {
+                        setState(() {
+                          _focusedDay = focusedDay;
+                        });
+                      },
+                      eventLoader: (day) {
+                        final filteredNotes = _filterNotes(
+                          appProvider.notes,
+                          appProvider,
+                        );
+                        return filteredNotes.where((note) {
+                          return note.isTask && _isTaskActiveOnDay(note, day);
+                        }).toList();
+                      },
+                      calendarBuilders: CalendarBuilders(
+                        markerBuilder: (context, day, events) {
+                          return Stack(
+                            children: [
+                              Positioned.fill(
+                                child: DragTarget<Note>(
+                                  onWillAccept: (data) {
+                                    if (data == null) return false;
+                                    if (_hoverDate != day) {
+                                      setState(() {
+                                        _hoverDate = day;
+                                        _dragStartDate = day;
+                                      });
+                                    }
+                                    return true;
+                                  },
+                                  onLeave: (data) {
+                                    if (_hoverDate == day) {
+                                      setState(() {
+                                        _hoverDate = null;
+                                        _dragStartDate = null;
+                                      });
+                                    }
+                                  },
+                                  onAccept: (data) => _onTaskDropped(data, day),
+                                  builder: (context, candidateData, rejectedData) {
+                                    // Determine if this day should be highlighted
+                                    Color? highlightColor;
 
-                                      // 1. Target Preview (Hover)
-                                      if (_hoverDate != null) {
-                                        final end = _hoverDate!.add(
-                                          Duration(days: _dragDurationDays - 1),
-                                        );
-                                        // Check if 'day' is within hover start and end
-                                        final isWithinHover =
-                                            !day.isBefore(_hoverDate!) &&
-                                            !day.isAfter(end);
-                                        if (isWithinHover) {
-                                          highlightColor = Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withOpacity(0.3);
-                                        }
-                                      }
-
-                                      // 2. Source Highlight (Drag Start) - only if no target highlight yet
-                                      if (highlightColor == null &&
-                                          _draggingTask != null &&
-                                          _draggingTask!.scheduledAt != null) {
-                                        final start = DateTime.parse(
-                                          _draggingTask!.scheduledAt!,
-                                        );
-                                        // Use original duration for source highlight, or we could track original end date
-                                        final endStr =
-                                            _draggingTask!.completeBy;
-                                        final end = endStr != null
-                                            ? DateTime.parse(endStr)
-                                            : start;
-
-                                        // Normalize dates to midnight for comparison
-                                        final dayDate = DateTime(
-                                          day.year,
-                                          day.month,
-                                          day.day,
-                                        );
-                                        final startDate = DateTime(
-                                          start.year,
-                                          start.month,
-                                          start.day,
-                                        );
-                                        final endDate = DateTime(
-                                          end.year,
-                                          end.month,
-                                          end.day,
-                                        );
-
-                                        final isWithinSource =
-                                            !dayDate.isBefore(startDate) &&
-                                            !dayDate.isAfter(endDate);
-                                        if (isWithinSource) {
-                                          highlightColor = Theme.of(context)
-                                              .colorScheme
-                                              .secondary
-                                              .withOpacity(0.2);
-                                        }
-                                      }
-
-                                      return Container(
-                                        decoration: BoxDecoration(
-                                          color: highlightColor,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: highlightColor != null
-                                              ? Border.all(
-                                                  color: highlightColor
-                                                      .withOpacity(0.5),
-                                                  width: 1,
-                                                )
-                                              : null,
-                                        ),
+                                    // 1. Target Preview (Hover)
+                                    if (_hoverDate != null) {
+                                      final end = _hoverDate!.add(
+                                        Duration(days: _dragDurationDays - 1),
                                       );
-                                    },
-                                  ),
+                                      // Check if 'day' is within hover start and end
+                                      final isWithinHover =
+                                          !day.isBefore(_hoverDate!) &&
+                                          !day.isAfter(end);
+                                      if (isWithinHover) {
+                                        highlightColor = Theme.of(
+                                          context,
+                                        ).colorScheme.primary.withOpacity(0.3);
+                                      }
+                                    }
+
+                                    // 2. Source Highlight (Drag Start) - only if no target highlight yet
+                                    if (highlightColor == null &&
+                                        _draggingTask != null &&
+                                        _draggingTask!.scheduledAt != null) {
+                                      final start = DateTime.parse(
+                                        _draggingTask!.scheduledAt!,
+                                      );
+                                      // Use original duration for source highlight, or we could track original end date
+                                      final endStr = _draggingTask!.completeBy;
+                                      final end = endStr != null
+                                          ? DateTime.parse(endStr)
+                                          : start;
+
+                                      // Normalize dates to midnight for comparison
+                                      final dayDate = DateTime(
+                                        day.year,
+                                        day.month,
+                                        day.day,
+                                      );
+                                      final startDate = DateTime(
+                                        start.year,
+                                        start.month,
+                                        start.day,
+                                      );
+                                      final endDate = DateTime(
+                                        end.year,
+                                        end.month,
+                                        end.day,
+                                      );
+
+                                      final isWithinSource =
+                                          !dayDate.isBefore(startDate) &&
+                                          !dayDate.isAfter(endDate);
+                                      if (isWithinSource) {
+                                        highlightColor = Theme.of(context)
+                                            .colorScheme
+                                            .secondary
+                                            .withOpacity(0.2);
+                                      }
+                                    }
+
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        color: highlightColor,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: highlightColor != null
+                                            ? Border.all(
+                                                color: highlightColor
+                                                    .withOpacity(0.5),
+                                                width: 1,
+                                              )
+                                            : null,
+                                      ),
+                                    );
+                                  },
                                 ),
-                                // Existing markers
-                                if (events.isNotEmpty)
-                                  Positioned(
-                                    bottom: 1,
-                                    left: 0,
-                                    right: 0,
-                                    child: Center(
-                                      child: Container(
-                                        width: 30,
-                                        height: 4,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            2,
-                                          ),
-                                        ),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: Row(
-                                          children: [
-                                            if (events
-                                                .where(
-                                                  (n) =>
-                                                      !n.isArchived &&
-                                                      n.status ==
-                                                          TaskStatus.todo,
-                                                )
-                                                .isNotEmpty)
-                                              Expanded(
-                                                flex: events
-                                                    .where(
-                                                      (n) =>
-                                                          !n.isArchived &&
-                                                          n.status ==
-                                                              TaskStatus.todo,
-                                                    )
-                                                    .length,
-                                                child: Container(
-                                                  color: Colors.red,
-                                                ),
+                              ),
+                              // Existing markers
+                              if (events.isNotEmpty)
+                                Positioned(
+                                  bottom: 1,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(
+                                    child: Container(
+                                      width: 30,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Row(
+                                        children: [
+                                          if (events
+                                              .where(
+                                                (n) =>
+                                                    !n.isArchived &&
+                                                    n.status == TaskStatus.todo,
+                                              )
+                                              .isNotEmpty)
+                                            Expanded(
+                                              flex: events
+                                                  .where(
+                                                    (n) =>
+                                                        !n.isArchived &&
+                                                        n.status ==
+                                                            TaskStatus.todo,
+                                                  )
+                                                  .length,
+                                              child: Container(
+                                                color: Colors.red,
                                               ),
-                                            if (events
-                                                .where(
-                                                  (n) =>
-                                                      !n.isArchived &&
-                                                      n.status ==
-                                                          TaskStatus.inProgress,
-                                                )
-                                                .isNotEmpty)
-                                              Expanded(
-                                                flex: events
-                                                    .where(
-                                                      (n) =>
-                                                          !n.isArchived &&
-                                                          n.status ==
-                                                              TaskStatus
-                                                                  .inProgress,
-                                                    )
-                                                    .length,
-                                                child: Container(
-                                                  color: Colors.amber,
-                                                ),
+                                            ),
+                                          if (events
+                                              .where(
+                                                (n) =>
+                                                    !n.isArchived &&
+                                                    n.status ==
+                                                        TaskStatus.inProgress,
+                                              )
+                                              .isNotEmpty)
+                                            Expanded(
+                                              flex: events
+                                                  .where(
+                                                    (n) =>
+                                                        !n.isArchived &&
+                                                        n.status ==
+                                                            TaskStatus
+                                                                .inProgress,
+                                                  )
+                                                  .length,
+                                              child: Container(
+                                                color: Colors.amber,
                                               ),
-                                            if (events
-                                                .where(
-                                                  (n) =>
-                                                      !n.isArchived &&
-                                                      n.status ==
-                                                          TaskStatus.complete,
-                                                )
-                                                .isNotEmpty)
-                                              Expanded(
-                                                flex: events
-                                                    .where(
-                                                      (n) =>
-                                                          !n.isArchived &&
-                                                          n.status ==
-                                                              TaskStatus
-                                                                  .complete,
-                                                    )
-                                                    .length,
-                                                child: Container(
-                                                  color: Colors.green,
-                                                ),
+                                            ),
+                                          if (events
+                                              .where(
+                                                (n) =>
+                                                    !n.isArchived &&
+                                                    n.status ==
+                                                        TaskStatus.complete,
+                                              )
+                                              .isNotEmpty)
+                                            Expanded(
+                                              flex: events
+                                                  .where(
+                                                    (n) =>
+                                                        !n.isArchived &&
+                                                        n.status ==
+                                                            TaskStatus.complete,
+                                                  )
+                                                  .length,
+                                              child: Container(
+                                                color: Colors.green,
                                               ),
-                                            if (events
-                                                .where(
-                                                  (n) =>
-                                                      !n.isArchived &&
-                                                      n.status ==
-                                                          TaskStatus.abandoned,
-                                                )
-                                                .isNotEmpty)
-                                              Expanded(
-                                                flex: events
-                                                    .where(
-                                                      (n) =>
-                                                          !n.isArchived &&
-                                                          n.status ==
-                                                              TaskStatus
-                                                                  .abandoned,
-                                                    )
-                                                    .length,
-                                                child: Container(
-                                                  color: Colors.grey,
-                                                ),
+                                            ),
+                                          if (events
+                                              .where(
+                                                (n) =>
+                                                    !n.isArchived &&
+                                                    n.status ==
+                                                        TaskStatus.abandoned,
+                                              )
+                                              .isNotEmpty)
+                                            Expanded(
+                                              flex: events
+                                                  .where(
+                                                    (n) =>
+                                                        !n.isArchived &&
+                                                        n.status ==
+                                                            TaskStatus
+                                                                .abandoned,
+                                                  )
+                                                  .length,
+                                              child: Container(
+                                                color: Colors.grey,
                                               ),
-                                          ],
-                                        ),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                              ],
-                            );
-                          },
-                        ),
-                        calendarStyle: CalendarStyle(outsideDaysVisible: true),
-                        headerStyle: HeaderStyle(
-                          formatButtonVisible: true,
-                          titleCentered: true,
-                          formatButtonShowsNext: false,
-                        ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      calendarStyle: CalendarStyle(outsideDaysVisible: true),
+                      headerStyle: HeaderStyle(
+                        formatButtonVisible: true,
+                        titleCentered: true,
+                        formatButtonShowsNext: false,
                       ),
                     ),
-                  ),
-                  const Divider(),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      // Calculate a reasonable height for content area
-                      final screenHeight = MediaQuery.of(context).size.height;
-                      final contentHeight = (screenHeight * 0.4).clamp(
-                        300.0,
-                        500.0,
-                      );
+                    const Divider(),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Calculate a reasonable height for content area
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        final contentHeight = (screenHeight * 0.4).clamp(
+                          300.0,
+                          500.0,
+                        );
 
-                      return SizedBox(
-                        height: contentHeight,
-                        child: _selectedDay == null
-                            ? const Center(
-                                child: Text(
-                                  'Select a day to view notes and tasks',
-                                ),
-                              )
-                            : _buildTabbedDayContent(appProvider, l10n),
-                      );
-                    },
-                  ),
-                ],
+                        return SizedBox(
+                          height: contentHeight,
+                          child: _selectedDay == null
+                              ? const Center(
+                                  child: Text(
+                                    'Select a day to view notes and tasks',
+                                  ),
+                                )
+                              : _buildTabbedDayContent(appProvider, l10n),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -808,6 +812,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           // Tab content - use Expanded to fill remaining space
           Expanded(
             child: TabBarView(
+              physics: _draggingTask != null
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
               children: [
                 _buildTasksTab(tasks, appProvider, l10n),
                 _buildNotesTab(notes, l10n),
