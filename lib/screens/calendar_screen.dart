@@ -10,6 +10,7 @@ import '../utils/date_utils.dart';
 import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/filter_tab_strip.dart';
+import 'package:uuid/uuid.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -961,7 +962,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   onLinkTap: _handleLinkTap,
                 ),
               ),
-              trailing: _buildStatusDropdown(task, appProvider),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildStatusDropdown(task, appProvider),
+                  IconButton(
+                    icon: const Icon(Icons.add_task, size: 20),
+                    onPressed: () => _showCheckInDialog(task),
+                    tooltip: l10n.checkIn,
+                  ),
+                ],
+              ),
               onTap: () => _openNoteDetail(task),
             ),
           ),
@@ -1652,9 +1663,48 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         if (note.isTask)
                           Padding(
                             padding: const EdgeInsets.only(top: 8.0),
-                            child: _TaskProgressBar(
-                              note: note,
-                              appProvider: appProvider,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _TaskProgressBar(
+                                  note: note,
+                                  appProvider: appProvider,
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${l10n.updated}: ${AppDateUtils.formatDateNumeric(note.updatedAt, context)}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Colors.grey[500],
+                                            fontSize: 10,
+                                          ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => _showCheckInDialog(note),
+                                      icon: const Icon(
+                                        Icons.add_task,
+                                        size: 16,
+                                      ),
+                                      label: Text(l10n.checkIn),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
 
@@ -1798,26 +1848,47 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final Map<DateTime, List<Note>> grouped = {};
 
     for (final note in notes) {
-      DateTime dateToUse;
+      DateTime start;
+      DateTime? end;
 
-      // Use scheduledAt if available, otherwise fall back to createdAt
+      // Determine start date
       if (note.scheduledAt != null && note.scheduledAt!.isNotEmpty) {
         try {
-          dateToUse = DateTime.parse(note.scheduledAt!);
+          start = DateTime.parse(note.scheduledAt!);
         } catch (e) {
-          // If parsing fails, use createdAt
-          dateToUse = note.createdAt;
+          start = note.createdAt;
         }
       } else {
-        // If no scheduledAt, use createdAt
-        dateToUse = note.createdAt;
+        start = note.createdAt;
       }
 
-      final date = DateTime(dateToUse.year, dateToUse.month, dateToUse.day);
-      if (grouped[date] == null) {
-        grouped[date] = [];
+      // Determine end date
+      if (note.isTask &&
+          note.completeBy != null &&
+          note.completeBy!.isNotEmpty) {
+        try {
+          end = DateTime.parse(note.completeBy!);
+        } catch (e) {
+          // invalid completeBy, ignore it
+        }
       }
-      grouped[date]!.add(note);
+
+      // Normalize start/end to dates only
+      final startDate = DateTime(start.year, start.month, start.day);
+      final endDate = end != null
+          ? DateTime(end.year, end.month, end.day)
+          : startDate;
+
+      // Add note to all dates in range [startDate, endDate]
+      // Loop: curr <= endDate
+      DateTime curr = startDate;
+      while (curr.isBefore(endDate) || curr.isAtSameMomentAs(endDate)) {
+        if (grouped[curr] == null) {
+          grouped[curr] = [];
+        }
+        grouped[curr]!.add(note);
+        curr = curr.add(const Duration(days: 1));
+      }
     }
 
     // Sort by date (most recent first)
@@ -1825,6 +1896,76 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ..sort((a, b) => b.key.compareTo(a.key));
 
     return Map.fromEntries(sortedEntries);
+  }
+
+  Future<void> _showCheckInDialog(Note task) async {
+    final controller = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context)!.checkIn),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.enterCheckInNote,
+            border: const OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(AppLocalizations.of(context)!.cancel),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                final now = DateTime.now();
+                // Create subnote
+                // NOTE: Creating a subnote as a separate Note type, but logically linked via parent logic if needed.
+                // However, the Note model definition viewer showed 'subNotes' field but not 'parentNoteId' in constructor.
+                // We should check how SubNotes are handled.
+                // Based on Note definition: final List<SubNote> subNotes;
+                // It seems we should add this to the parent's subNotes list instead of creating a standalone linked Note?
+                // OR if we want it to be a standalone Note, we need to verify if 'parentNoteId' exists.
+                // The view of note.dart showed lines 1-50, and I don't see 'parentNoteId' field in the class fields list (lines 24-40).
+                // Let's assume we maintain the behavior requested: "save a subnote to the task".
+
+                // Let's try to add it to the task's subNotes list.
+                final newSubNote = SubNote(
+                  id: const Uuid().v4(),
+                  name: AppDateUtils.formatDateNumeric(now, context),
+                  content: controller.text,
+                  createdAt: now,
+                  isCompleted: false,
+                );
+
+                final updatedSubNotes = List<SubNote>.from(task.subNotes)
+                  ..add(newSubNote);
+
+                // Update task's updatedAt and subNotes
+                final updatedTask = task.copyWith(
+                  updatedAt: now,
+                  subNotes: updatedSubNotes,
+                );
+
+                final appProvider = Provider.of<AppProvider>(
+                  context,
+                  listen: false,
+                );
+                await appProvider.updateNote(updatedTask);
+
+                if (mounted) {
+                  Navigator.of(context).pop();
+                }
+              }
+            },
+            child: Text(AppLocalizations.of(context)!.save),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDate(DateTime date, AppLocalizations l10n) {

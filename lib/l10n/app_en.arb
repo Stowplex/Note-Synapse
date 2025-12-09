@@ -38,6 +38,8 @@
   "apiKeyLabel": "API Key",
   "apiKeyHint": "Enter your API key here",
   "cancel": "Cancel",
+  "checkIn": "Check-in",
+  "enterCheckInNote": "Enter check-in note",
   "update": "Update",
   "reset": "Reset",
   "resetApiKeyConfirmation": "This will clear your current API key and return you to the setup screen. Are you sure?",

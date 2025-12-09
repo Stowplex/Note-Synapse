@@ -141,6 +141,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancel => 'Cancel';
 
   @override
+  String get checkIn => 'Check-in';
+
+  @override
+  String get enterCheckInNote => 'Enter check-in note';
+
+  @override
   String get update => 'Update';
 
   @override

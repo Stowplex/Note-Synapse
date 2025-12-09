@@ -139,6 +139,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancel => '取消';
 
   @override
+  String get checkIn => '签到';
+
+  @override
+  String get enterCheckInNote => '输入签到备注';
+
+  @override
   String get update => '更新';
 
   @override

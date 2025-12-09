@@ -332,6 +332,18 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get cancel;
 
+  /// No description provided for @checkIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Check-in'**
+  String get checkIn;
+
+  /// No description provided for @enterCheckInNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter check-in note'**
+  String get enterCheckInNote;
+
   /// No description provided for @update.
   ///
   /// In en, this message translates to:
