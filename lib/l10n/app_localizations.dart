@@ -4328,6 +4328,36 @@ abstract class AppLocalizations {
   /// **'Tools'**
   String get tools;
 
+  /// No description provided for @markAllAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all as'**
+  String get markAllAs;
+
+  /// No description provided for @archiveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive All'**
+  String get archiveAll;
+
+  /// No description provided for @unarchiveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive All'**
+  String get unarchiveAll;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
   /// No description provided for @noteType.
   ///
   /// In en, this message translates to:
@@ -6278,12 +6308,6 @@ abstract class AppLocalizations {
   /// **'Choose which images to download locally for offline use.'**
   String get mediaDownloadsDescription;
 
-  /// No description provided for @selectAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Select all'**
-  String get selectAll;
-
   /// No description provided for @clearAll.
   ///
   /// In en, this message translates to:
@@ -6505,12 +6529,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} {count, plural, one {app} other {apps}} selected'**
   String appsSelected(int count);
-
-  /// No description provided for @deselectAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Deselect All'**
-  String get deselectAll;
 
   /// No description provided for @proceedWithInstallation.
   ///

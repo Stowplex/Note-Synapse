@@ -2350,6 +2350,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tools => '工具';
 
   @override
+  String get markAllAs => '全部标记为';
+
+  @override
+  String get archiveAll => '全部归档';
+
+  @override
+  String get unarchiveAll => '全部取消归档';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
   String get noteType => 'Note Type';
 
   @override
@@ -3413,9 +3428,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mediaDownloadsDescription => '选择要下载到本地的图片，以便离线使用。';
 
   @override
-  String get selectAll => '全选';
-
-  @override
   String get clearAll => '全不选';
 
   @override
@@ -3564,9 +3576,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String appsSelected(int count) {
     return '已选择$count个应用';
   }
-
-  @override
-  String get deselectAll => '取消全选';
 
   @override
   String get proceedWithInstallation => '安装选中的应用';

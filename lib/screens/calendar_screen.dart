@@ -27,6 +27,126 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<String> _availableTags = [];
   String _selectedView = 'calendar'; // 'calendar', 'timeline', 'todo'
   Set<String> _selectedFilterIds = {'default'};
+  Set<Note> _selectedNotes = {}; // For multi-select
+
+  bool get _isMultiSelectMode => _selectedNotes.isNotEmpty;
+
+  void _enterMultiSelectMode(Note note) {
+    setState(() {
+      _selectedNotes.add(note);
+    });
+  }
+
+  void _exitMultiSelectMode() {
+    setState(() {
+      _selectedNotes.clear();
+    });
+  }
+
+  void _toggleNoteSelection(Note note) {
+    setState(() {
+      if (_selectedNotes.contains(note)) {
+        _selectedNotes.remove(note);
+        // If the last item is deselected, we could exit mode,
+        // but typically standard behavior might be to stay in mode until explicit exit or back.
+        // However user request "When it's multi-selected", implies mode active.
+        // Let's keep mode active even if empty if that's standard, OR exit if empty.
+        // Let's match NotesScreen logic or user expectation.
+        // NotesScreen logic: "switch (value) { case 'deselectAll': ... }"
+        // If we deselect all, does it exit?
+        // Let's implement auto-exit if empty for now for smoother UX on mobile.
+      } else {
+        _selectedNotes.add(note);
+      }
+    });
+  }
+
+  Future<void> _archiveAllSelected() async {
+    final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.archiveAll),
+        content: Text(
+          'Are you sure you want to archive ${_selectedNotes.length} selected items?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.yes),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      for (final note in _selectedNotes) {
+        final updatedNote = note.copyWith(
+          isArchived: true,
+          pinned: false,
+          updatedAt: DateTime.now(),
+        );
+        appProvider.updateNote(updatedNote);
+      }
+      _exitMultiSelectMode();
+    }
+  }
+
+  Future<void> _showMarkAllAsDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final status = await showDialog<TaskStatus>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l10n.markAllAs),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, TaskStatus.todo),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(l10n.toDo),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, TaskStatus.inProgress),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(l10n.inProgress),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, TaskStatus.complete),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(l10n.completed),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, TaskStatus.abandoned),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(l10n.cancelled),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (status != null) {
+      final appProvider = context.read<AppProvider>();
+      for (final note in _selectedNotes) {
+        if (note.isTask) {
+          appProvider.updateTaskStatus(note.id, status);
+        }
+      }
+      _exitMultiSelectMode();
+    }
+  }
 
   @override
   void initState() {
@@ -54,64 +174,97 @@ class _CalendarScreenState extends State<CalendarScreen> {
       appBar: AppBar(
         title: Text(_getViewTitle(l10n)),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              setState(() {
-                _selectedView = value;
-                if (value == 'calendar') {
-                  _calendarKey++; // Force calendar rebuild
+          if (_isMultiSelectMode) ...[
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                switch (value) {
+                  case 'markAllAs':
+                    await _showMarkAllAsDialog();
+                    break;
+                  case 'archiveAll':
+                    await _archiveAllSelected();
+                    break;
+                  case 'selectAll':
+                    // We need to implement selectAll.
+                    // This is tricky as we need the list of currently visible/filtered notes.
+                    // We'll handle this by passing the current list to the action or keeping track of it.
+                    // For now, let's just use the current timeline notes.
+                    break;
                 }
-              });
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'calendar',
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today, size: 20),
-                    const SizedBox(width: 8),
-                    Text(l10n.calendar),
-                  ],
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'markAllAs', child: Text(l10n.markAllAs)),
+                PopupMenuItem(
+                  value: 'archiveAll',
+                  child: Text(l10n.archiveAll),
                 ),
-              ),
-              PopupMenuItem(
-                value: 'timeline',
-                child: Row(
-                  children: [
-                    Icon(Icons.timeline, size: 20),
-                    const SizedBox(width: 8),
-                    Text(l10n.timeline),
-                  ],
-                ),
-              ),
-            ],
-            icon: const Icon(Icons.view_module),
-          ),
-          MultiSelectTagFilter(
-            availableTags: _availableTags,
-            selectedTags: _selectedTags,
-            onSelectionChanged: (selectedTags) {
-              setState(() {
-                _selectedTags = selectedTags;
-                if (_selectedView == 'calendar') {
-                  _calendarKey++; // Force calendar rebuild
-                }
-              });
-            },
-            allNotesLabel: l10n.allNotes,
-            filterLabel: l10n.filter,
-          ),
-          if (_selectedView == 'calendar')
+              ],
+            ),
             IconButton(
-              icon: const Icon(Icons.today),
-              onPressed: () {
+              icon: const Icon(Icons.close),
+              onPressed: _exitMultiSelectMode,
+            ),
+          ] else ...[
+            PopupMenuButton<String>(
+              onSelected: (value) {
                 setState(() {
-                  final now = DateTime.now();
-                  _focusedDay = now;
-                  _selectedDay = now;
+                  _selectedView = value;
+                  if (value == 'calendar') {
+                    _calendarKey++; // Force calendar rebuild
+                  }
                 });
               },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'calendar',
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.calendar),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'timeline',
+                  child: Row(
+                    children: [
+                      Icon(Icons.timeline, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.timeline),
+                    ],
+                  ),
+                ),
+              ],
+              icon: const Icon(Icons.view_module),
             ),
+            MultiSelectTagFilter(
+              availableTags: _availableTags,
+              selectedTags: _selectedTags,
+              onSelectionChanged: (selectedTags) {
+                setState(() {
+                  _selectedTags = selectedTags;
+                  if (_selectedView == 'calendar') {
+                    _calendarKey++; // Force calendar rebuild
+                  }
+                });
+              },
+              allNotesLabel: l10n.allNotes,
+              filterLabel: l10n.filter,
+            ),
+            if (_selectedView == 'calendar')
+              IconButton(
+                icon: const Icon(Icons.today),
+                onPressed: () {
+                  setState(() {
+                    final now = DateTime.now();
+                    _focusedDay = now;
+                    _selectedDay = now;
+                  });
+                },
+              ),
+          ],
         ],
       ),
       body: Consumer<AppProvider>(
@@ -1072,13 +1225,45 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          ...notes.map(
-            (note) => Padding(
+          ...notes.map((note) {
+            final isSelected = _selectedNotes.contains(note);
+            return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Card(
-                elevation: isToday ? 2 : 1,
+                elevation: isSelected ? 4 : (isToday ? 2 : 1),
+                color: isSelected
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withOpacity(0.3)
+                    : null,
+                shape: isSelected
+                    ? RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      )
+                    : null,
                 child: InkWell(
-                  onTap: () => _openNoteDetail(note),
+                  onTap: () {
+                    if (_isMultiSelectMode) {
+                      _toggleNoteSelection(note);
+                    } else {
+                      _openNoteDetail(note);
+                    }
+                  },
+                  onLongPress: () {
+                    // Enter multi-select mode only for tasks in timeline view if needed,
+                    // but the user requirement implies "timeline view in calendar screen".
+                    // Assuming all notes here are eligible.
+                    if (!_isMultiSelectMode) {
+                      _enterMultiSelectMode(note);
+                    } else {
+                      // Already in mode, toggle
+                      _toggleNoteSelection(note);
+                    }
+                  },
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -1087,6 +1272,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       children: [
                         Row(
                           children: [
+                            // In multi-select mode, maybe show checkbox? user didn't specificially ask for it but it's good UX.
+                            // But let's stick to the highlighting for now as requested.
                             if (note.isTask) ...[
                               _buildStatusIcon(note),
                               const SizedBox(width: 8),
@@ -1157,8 +1344,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );

@@ -67,6 +67,9 @@ class _NotesScreenState extends State<NotesScreen> {
         notes.every((note) => _selectedNotes.contains(note));
     final noneSelected =
         notes.isNotEmpty && !notes.any((note) => _selectedNotes.contains(note));
+    final allArchived =
+        _selectedNotes.isNotEmpty &&
+        _selectedNotes.every((note) => note.isArchived);
 
     return Scaffold(
       appBar: AppBar(
@@ -119,6 +122,16 @@ class _NotesScreenState extends State<NotesScreen> {
                   case 'delete':
                     if (_selectedNotes.isNotEmpty) {
                       _deleteSelectedNotes();
+                    }
+                    break;
+                  case 'archive_all':
+                    if (_selectedNotes.isNotEmpty) {
+                      _toggleArchiveSelected(archive: true);
+                    }
+                    break;
+                  case 'unarchive_all':
+                    if (_selectedNotes.isNotEmpty) {
+                      _toggleArchiveSelected(archive: false);
                     }
                     break;
                 }
@@ -185,6 +198,20 @@ class _NotesScreenState extends State<NotesScreen> {
                           color: Theme.of(context).colorScheme.error,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: allArchived ? 'unarchive_all' : 'archive_all',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      Icon(
+                        allArchived ? Icons.unarchive : Icons.archive,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(allArchived ? l10n.unarchiveAll : l10n.archiveAll),
                     ],
                   ),
                 ),
@@ -789,6 +816,69 @@ class _NotesScreenState extends State<NotesScreen> {
     );
 
     _exitMultiSelectMode();
+  }
+
+  void _toggleArchiveSelected({required bool archive}) {
+    final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    // Check for pinned notes if archiving
+    if (archive) {
+      final pinnedNotes = _selectedNotes.where((n) => n.pinned).toList();
+      if (pinnedNotes.isNotEmpty) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cannot Archive Pinned Notes'),
+            content: Text(
+              'There are ${pinnedNotes.length} pinned notes selected. Please unpin them first before archiving.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.yes),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(archive ? l10n.archiveAll : l10n.unarchiveAll),
+        content: Text(
+          archive
+              ? 'Are you sure you want to archive ${_selectedNotes.length} notes?'
+              : 'Are you sure you want to unarchive ${_selectedNotes.length} notes?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              for (final note in _selectedNotes) {
+                // If archiving: set isArchived=true, pinned=false (done by check above but safe to enforce)
+                // If unarchiving: set isArchived=false.
+                final updatedNote = note.copyWith(
+                  isArchived: archive,
+                  pinned: archive ? false : note.pinned,
+                  updatedAt: DateTime.now(),
+                );
+                appProvider.updateNote(updatedNote);
+              }
+              _exitMultiSelectMode();
+            },
+            child: Text(archive ? l10n.archiveAll : l10n.unarchiveAll),
+          ),
+        ],
+      ),
+    );
   }
 }
 

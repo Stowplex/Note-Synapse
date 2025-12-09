@@ -2422,6 +2422,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tools => 'Tools';
 
   @override
+  String get markAllAs => 'Mark all as';
+
+  @override
+  String get archiveAll => 'Archive All';
+
+  @override
+  String get unarchiveAll => 'Unarchive All';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
   String get noteType => 'Note Type';
 
   @override
@@ -3558,9 +3573,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose which images to download locally for offline use.';
 
   @override
-  String get selectAll => 'Select all';
-
-  @override
   String get clearAll => 'Clear all';
 
   @override
@@ -3722,9 +3734,6 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$count $_temp0 selected';
   }
-
-  @override
-  String get deselectAll => 'Deselect All';
 
   @override
   String get proceedWithInstallation => 'Install Selected Apps';
