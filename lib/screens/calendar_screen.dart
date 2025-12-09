@@ -166,6 +166,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
+  void _onTaskDropped(Note task, DateTime targetDate) {
+    if (task.scheduledAt == null) return;
+
+    final appProvider = context.read<AppProvider>();
+    final currentScheduledDate = DateTime.parse(task.scheduledAt!);
+    final duration = targetDate.difference(
+      DateTime(
+        currentScheduledDate.year,
+        currentScheduledDate.month,
+        currentScheduledDate.day,
+      ),
+    );
+
+    // Calculate new scheduled date
+    final newScheduledDate = currentScheduledDate.add(duration);
+
+    // Calculate new complete by date if it exists
+    String? newCompleteBy;
+    if (task.completeBy != null) {
+      final currentCompleteBy = DateTime.parse(task.completeBy!);
+      newCompleteBy = currentCompleteBy.add(duration).toIso8601String();
+    }
+
+    final updatedTask = task.copyWith(
+      scheduledAt: newScheduledDate.toIso8601String(),
+      completeBy: newCompleteBy,
+      updatedAt: DateTime.now(),
+    );
+
+    appProvider.updateNote(updatedTask);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.taskRescheduled),
+        action: SnackBarAction(
+          label: AppLocalizations.of(context)!.undo,
+          onPressed: () {
+            appProvider.updateNote(task);
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -378,62 +422,133 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     },
                     calendarBuilders: CalendarBuilders(
                       markerBuilder: (context, day, events) {
-                        final tasks = events
-                            .where((n) => !n.isArchived)
-                            .toList();
-
-                        if (tasks.isEmpty) return const SizedBox();
-
-                        final total = tasks.length;
-                        final completed = tasks
-                            .where((t) => t.status == TaskStatus.complete)
-                            .length;
-                        final inProgress = tasks
-                            .where((t) => t.status == TaskStatus.inProgress)
-                            .length;
-                        final cancelled = tasks
-                            .where((t) => t.status == TaskStatus.abandoned)
-                            .length;
-                        final todo = total - completed - inProgress - cancelled;
-
-                        return Positioned(
-                          bottom: 1,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              width: 30, // Adjust width as needed
-                              height: 4,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: Row(
-                                children: [
-                                  if (todo > 0)
-                                    Expanded(
-                                      flex: todo,
-                                      child: Container(color: Colors.red),
-                                    ),
-                                  if (inProgress > 0)
-                                    Expanded(
-                                      flex: inProgress,
-                                      child: Container(color: Colors.amber),
-                                    ),
-                                  if (completed > 0)
-                                    Expanded(
-                                      flex: completed,
-                                      child: Container(color: Colors.green),
-                                    ),
-                                  if (cancelled > 0)
-                                    Expanded(
-                                      flex: cancelled,
-                                      child: Container(color: Colors.grey),
-                                    ),
-                                ],
+                        return Stack(
+                          children: [
+                            Positioned.fill(
+                              child: DragTarget<Note>(
+                                onWillAccept: (data) => data != null,
+                                onAccept: (data) => _onTaskDropped(data, day),
+                                builder:
+                                    (context, candidateData, rejectedData) {
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          color: candidateData.isNotEmpty
+                                              ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .withOpacity(0.2)
+                                              : null,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                      );
+                                    },
                               ),
                             ),
-                          ),
+                            // Existing markers
+                            if (events.isNotEmpty)
+                              Positioned(
+                                bottom: 1,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: Container(
+                                    width: 30,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Row(
+                                      children: [
+                                        if (events
+                                            .where(
+                                              (n) =>
+                                                  !n.isArchived &&
+                                                  n.status == TaskStatus.todo,
+                                            )
+                                            .isNotEmpty)
+                                          Expanded(
+                                            flex: events
+                                                .where(
+                                                  (n) =>
+                                                      !n.isArchived &&
+                                                      n.status ==
+                                                          TaskStatus.todo,
+                                                )
+                                                .length,
+                                            child: Container(color: Colors.red),
+                                          ),
+                                        if (events
+                                            .where(
+                                              (n) =>
+                                                  !n.isArchived &&
+                                                  n.status ==
+                                                      TaskStatus.inProgress,
+                                            )
+                                            .isNotEmpty)
+                                          Expanded(
+                                            flex: events
+                                                .where(
+                                                  (n) =>
+                                                      !n.isArchived &&
+                                                      n.status ==
+                                                          TaskStatus.inProgress,
+                                                )
+                                                .length,
+                                            child: Container(
+                                              color: Colors.amber,
+                                            ),
+                                          ),
+                                        if (events
+                                            .where(
+                                              (n) =>
+                                                  !n.isArchived &&
+                                                  n.status ==
+                                                      TaskStatus.complete,
+                                            )
+                                            .isNotEmpty)
+                                          Expanded(
+                                            flex: events
+                                                .where(
+                                                  (n) =>
+                                                      !n.isArchived &&
+                                                      n.status ==
+                                                          TaskStatus.complete,
+                                                )
+                                                .length,
+                                            child: Container(
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                        if (events
+                                            .where(
+                                              (n) =>
+                                                  !n.isArchived &&
+                                                  n.status ==
+                                                      TaskStatus.abandoned,
+                                            )
+                                            .isNotEmpty)
+                                          Expanded(
+                                            flex: events
+                                                .where(
+                                                  (n) =>
+                                                      !n.isArchived &&
+                                                      n.status ==
+                                                          TaskStatus.abandoned,
+                                                )
+                                                .length,
+                                            child: Container(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         );
                       },
                     ),
@@ -593,32 +708,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         final task = tasks[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: _buildStatusIcon(task),
-            title: Text(
-              task.title,
-              style: TextStyle(
-                decoration: task.isCompleted
-                    ? TextDecoration.lineThrough
-                    : null,
+        return LongPressDraggable<Note>(
+          data: task,
+          feedback: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.8,
+            child: Card(
+              elevation: 4,
+              child: ListTile(
+                leading: _buildStatusIcon(task),
+                title: Text(task.title),
+                subtitle: Text(
+                  AppDateUtils.formatDateNumeric(
+                    DateTime.parse(task.scheduledAt!),
+                    context,
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-            subtitle: SelectionArea(
-              child: InteractiveCheckboxMarkdown(
-                noteId: task.id,
-                originalContent: task.content,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 3,
+          ),
+          childWhenDragging: Opacity(
+            opacity: 0.5,
+            child: Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: _buildStatusIcon(task),
+                title: Text(
+                  task.title,
+                  style: TextStyle(
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: SelectionArea(
+                  child: InteractiveCheckboxMarkdown(
+                    noteId: task.id,
+                    originalContent: task.content,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    onLinkTap: _handleLinkTap,
+                  ),
+                ),
+                trailing: _buildStatusDropdown(task, appProvider),
+                onTap: () => _openNoteDetail(task),
+              ),
+            ),
+          ),
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: _buildStatusIcon(task),
+              title: Text(
+                task.title,
+                style: TextStyle(
+                  decoration: task.isCompleted
+                      ? TextDecoration.lineThrough
+                      : null,
+                ),
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                onLinkTap: _handleLinkTap,
               ),
+
+              subtitle: SelectionArea(
+                child: InteractiveCheckboxMarkdown(
+                  noteId: task.id,
+                  originalContent: task.content,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  onLinkTap: _handleLinkTap,
+                ),
+              ),
+              trailing: _buildStatusDropdown(task, appProvider),
+              onTap: () => _openNoteDetail(task),
             ),
-            trailing: _buildStatusDropdown(task, appProvider),
-            onTap: () => _openNoteDetail(task),
           ),
         );
       },

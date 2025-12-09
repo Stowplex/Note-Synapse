@@ -3928,4 +3928,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exportDbTooltip => 'Export DB';
+
+  @override
+  String get undo => 'Undo';
+
+  @override
+  String get taskRescheduled => 'Task rescheduled';
 }

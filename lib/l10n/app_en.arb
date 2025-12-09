@@ -1564,5 +1564,7 @@
   "askAiAboutNoteHint": "Ask AI about this note...",
   "openDbFileTooltip": "Open DB File",
   "resetToDefaultDbTooltip": "Reset to Default DB",
-  "exportDbTooltip": "Export DB"
+  "exportDbTooltip": "Export DB",
+  "undo": "Undo",
+  "taskRescheduled": "Task rescheduled"
 }

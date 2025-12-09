@@ -6805,6 +6805,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export DB'**
   String get exportDbTooltip;
+
+  /// No description provided for @undo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get undo;
+
+  /// No description provided for @taskRescheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Task rescheduled'**
+  String get taskRescheduled;
 }
 
 class _AppLocalizationsDelegate

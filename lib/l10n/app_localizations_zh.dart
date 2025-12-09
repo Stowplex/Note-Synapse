@@ -3745,4 +3745,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get exportDbTooltip => '导出数据库';
+
+  @override
+  String get undo => '撤销';
+
+  @override
+  String get taskRescheduled => '任务已重新安排';
 }

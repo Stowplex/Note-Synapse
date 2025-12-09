@@ -1561,5 +1561,7 @@
   "askAiAboutNoteHint": "向 AI 询问这条笔记...",
   "openDbFileTooltip": "打开数据库文件",
   "resetToDefaultDbTooltip": "重置为默认数据库",
-  "exportDbTooltip": "导出数据库"
+  "exportDbTooltip": "导出数据库",
+  "undo": "撤销",
+  "taskRescheduled": "任务已重新安排"
 }
