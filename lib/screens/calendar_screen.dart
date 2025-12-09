@@ -952,15 +952,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
 
-              subtitle: SelectionArea(
-                child: InteractiveCheckboxMarkdown(
-                  noteId: task.id,
-                  originalContent: task.content,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  onLinkTap: _handleLinkTap,
-                ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectionArea(
+                    child: InteractiveCheckboxMarkdown(
+                      noteId: task.id,
+                      originalContent: task.content,
+                      style: Theme.of(context).textTheme.bodySmall,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      onLinkTap: _handleLinkTap,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${l10n.updated}: ${AppDateUtils.formatDateTimeNumeric(task.updatedAt, context)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[500],
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1676,7 +1689,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      '${l10n.updated}: ${AppDateUtils.formatDateNumeric(note.updatedAt, context)}',
+                                      '${l10n.updated}: ${AppDateUtils.formatDateTimeNumeric(note.updatedAt, context)}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall
