@@ -171,7 +171,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     final appProvider = context.read<AppProvider>();
     final currentScheduledDate = DateTime.parse(task.scheduledAt!);
-    final duration = targetDate.difference(
+    // Convert targetDate (which might be UTC from TableCalendar) to local time midnight
+    // to ensure day difference calculation is exact days, not affected by timezone offsets
+    final targetDateLocal = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+    );
+
+    final duration = targetDateLocal.difference(
       DateTime(
         currentScheduledDate.year,
         currentScheduledDate.month,
