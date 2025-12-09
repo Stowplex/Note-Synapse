@@ -546,10 +546,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                         _draggingTask!.scheduledAt!,
                                       );
                                       // Use original duration for source highlight, or we could track original end date
-                                      final endStr = _draggingTask!.completeBy;
-                                      final end = endStr != null
-                                          ? DateTime.parse(endStr)
-                                          : start;
+                                      // final endStr = _draggingTask!.completeBy;
+                                      // final end = endStr != null
+                                      //    ? DateTime.parse(endStr)
+                                      //    : start;
 
                                       // Normalize dates to midnight for comparison
                                       final dayDate = DateTime(
@@ -562,10 +562,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                         start.month,
                                         start.day,
                                       );
-                                      final endDate = DateTime(
-                                        end.year,
-                                        end.month,
-                                        end.day,
+
+                                      // Use _dragDurationDays to calculate current visual end date
+                                      final endDate = startDate.add(
+                                        Duration(days: _dragDurationDays - 1),
                                       );
 
                                       final isWithinSource =
