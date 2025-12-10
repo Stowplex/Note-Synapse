@@ -216,6 +216,85 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  Widget _buildGenericSynapseTempImage(
+    BuildContext context,
+    String url,
+    double? width,
+    double? height,
+  ) {
+    return FutureBuilder<SynapseTempFile>(
+      future: SynapseTempUtils.loadFile(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _buildLoadingPlaceholder(width, height);
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          if (snapshot.hasError && kDebugMode) {
+            debugPrint('SynapseTemp image load error: ${snapshot.error}');
+          }
+          return _buildPlaceholder(
+            width,
+            height,
+            'Unable to load temporary image',
+          );
+        }
+
+        final tempFile = snapshot.data!;
+        final mime = tempFile.mimeType.toLowerCase();
+        final isSvg = mime == 'image/svg+xml';
+
+        if (isSvg) {
+          // Render SVG using InAppWebView for better compatibility and edge case handling
+          try {
+            final svgContent = utf8.decode(tempFile.bytes);
+            widget.hasWebViewNotifier?.value = true;
+            return _SvgWebViewWithInfoBar(
+              svgContent: svgContent,
+              imageUrl: url,
+              width: width,
+              height: height,
+              noteId: widget.noteId,
+            );
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('Error decoding SVG content: $e');
+            }
+            return _buildPlaceholder(width, height, 'Failed to decode SVG');
+          }
+        }
+
+        if (mime.startsWith('image/')) {
+          final imageWidget = Image.memory(
+            tempFile.bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder(width, height, 'Failed to render image');
+            },
+          );
+          return _wrapImageWithInfoBar(
+            image: SizedBox(width: width, height: height, child: imageWidget),
+            imageUrl: url,
+            isSvg: false,
+            onFullscreen: () {
+              _FullscreenViewer.show(
+                context,
+                imageWidget: Image.memory(tempFile.bytes, fit: BoxFit.contain),
+                title: 'Image',
+              );
+            },
+          );
+        }
+
+        return _buildPlaceholder(
+          width,
+          height,
+          'Unsupported image type: ${tempFile.mimeType}',
+        );
+      },
+    );
+  }
+
   /// Custom image builder that handles data URLs and synapsetemp:/// URIs.
   ///
   /// - synapsetemp:/// URIs load files from the app's cache directory
@@ -227,87 +306,6 @@ class _InteractiveCheckboxMarkdownState
     double? width,
     double? height,
   }) {
-    if (SynapseTempUtils.isSynapseTempUri(url)) {
-      return FutureBuilder<SynapseTempFile>(
-        future: SynapseTempUtils.loadFile(url),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return _buildLoadingPlaceholder(width, height);
-          }
-
-          if (snapshot.hasError || !snapshot.hasData) {
-            if (snapshot.hasError && kDebugMode) {
-              debugPrint('SynapseTemp image load error: ${snapshot.error}');
-            }
-            return _buildPlaceholder(
-              width,
-              height,
-              'Unable to load temporary image',
-            );
-          }
-
-          final tempFile = snapshot.data!;
-          final mime = tempFile.mimeType.toLowerCase();
-          final isSvg = mime == 'image/svg+xml';
-
-          if (isSvg) {
-            // Render SVG using InAppWebView for better compatibility and edge case handling
-            try {
-              final svgContent = utf8.decode(tempFile.bytes);
-              widget.hasWebViewNotifier?.value = true;
-              return _SvgWebViewWithInfoBar(
-                svgContent: svgContent,
-                imageUrl: url,
-                width: width,
-                height: height,
-                noteId: widget.noteId,
-              );
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('Error decoding SVG content: $e');
-              }
-              return _buildPlaceholder(width, height, 'Failed to decode SVG');
-            }
-          }
-
-          if (mime.startsWith('image/')) {
-            final imageWidget = Image.memory(
-              tempFile.bytes,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return _buildPlaceholder(
-                  width,
-                  height,
-                  'Failed to render image',
-                );
-              },
-            );
-            return _wrapImageWithInfoBar(
-              image: SizedBox(width: width, height: height, child: imageWidget),
-              imageUrl: url,
-              isSvg: false,
-              onFullscreen: () {
-                _FullscreenViewer.show(
-                  context,
-                  imageWidget: Image.memory(
-                    tempFile.bytes,
-                    fit: BoxFit.contain,
-                  ),
-                  title: 'Image',
-                );
-              },
-            );
-          }
-
-          return _buildPlaceholder(
-            width,
-            height,
-            'Unsupported image type: ${tempFile.mimeType}',
-          );
-        },
-      );
-    }
-
     if (url.startsWith('data:')) {
       try {
         final uri = Uri.parse(url);
@@ -397,7 +395,8 @@ class _InteractiveCheckboxMarkdownState
     }
 
     if (widget.noteId != null &&
-        (_isHttpUrl(url) ||
+        (SynapseTempUtils.isSynapseTempUri(url) ||
+            _isHttpUrl(url) ||
             (!url.contains(':') &&
                 !url.contains('/') &&
                 !url.contains('\\')))) {
@@ -407,7 +406,11 @@ class _InteractiveCheckboxMarkdownState
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildLoadingPlaceholder(width, height);
           }
-          if (snapshot.hasError) {
+
+          Widget buildFallback() {
+            if (SynapseTempUtils.isSynapseTempUri(url)) {
+              return _buildGenericSynapseTempImage(context, url, width, height);
+            }
             return _wrapImageWithInfoBar(
               image: _buildNetworkImage(url, width, height),
               imageUrl: url,
@@ -421,6 +424,11 @@ class _InteractiveCheckboxMarkdownState
               },
             );
           }
+
+          if (snapshot.hasError) {
+            return buildFallback();
+          }
+
           final source = snapshot.data;
           if (source != null) {
             if (source.svgContent != null) {
@@ -461,20 +469,13 @@ class _InteractiveCheckboxMarkdownState
               },
             );
           }
-          return _wrapImageWithInfoBar(
-            image: _buildNetworkImage(url, width, height),
-            imageUrl: url,
-            isSvg: false,
-            onFullscreen: () {
-              _FullscreenViewer.show(
-                context,
-                imageWidget: Image.network(url, fit: BoxFit.contain),
-                title: 'Image',
-              );
-            },
-          );
+          return buildFallback();
         },
       );
+    }
+
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return _buildGenericSynapseTempImage(context, url, width, height);
     }
 
     return _wrapImageWithInfoBar(
