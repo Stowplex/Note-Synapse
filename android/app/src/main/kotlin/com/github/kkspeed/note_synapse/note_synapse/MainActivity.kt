@@ -14,6 +14,10 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.github.kkspeed/share"
     private val NATIVE_CAPTURE_CHANNEL = "note_synapse/native_capture"
 
+    private val SAVE_FILE_REQUEST_CODE = 1001
+    private var pendingResult: MethodChannel.Result? = null
+    private var sourceFilePath: String? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
@@ -22,11 +26,70 @@ class MainActivity : FlutterActivity() {
                     val sharedData = getSharedContent()
                     result.success(sharedData)
                 }
+                "saveFileToExternalStorage" -> {
+                    val filePath = call.argument<String>("filePath")
+                    val fileName = call.argument<String>("fileName")
+                    val mimeType = call.argument<String>("mimeType")
+
+                    if (filePath != null && fileName != null && mimeType != null) {
+                        saveFileToExternalStorage(filePath, fileName, mimeType, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "Missing arguments", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
         val nativeCaptureChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_CAPTURE_CHANNEL)
         NativeCaptureUtils(this, nativeCaptureChannel)
+    }
+
+    private fun saveFileToExternalStorage(filePath: String, fileName: String, mimeType: String, result: MethodChannel.Result) {
+        if (pendingResult != null) {
+            result.error("OPERATION_IN_PROGRESS", "Another operation is in progress", null)
+            return
+        }
+
+        sourceFilePath = filePath
+        pendingResult = result
+
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_TITLE, fileName)
+        }
+        startActivityForResult(intent, SAVE_FILE_REQUEST_CODE)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == SAVE_FILE_REQUEST_CODE) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val uri = data.data
+                val sourcePath = sourceFilePath
+                
+                if (uri != null && sourcePath != null) {
+                    try {
+                        contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            File(sourcePath).inputStream().use { inputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                        pendingResult?.success(true)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        pendingResult?.error("SAVE_FAILED", "Failed to save file: ${e.message}", null)
+                    }
+                } else {
+                    pendingResult?.error("SAVE_FAILED", "Invalid URI or source path", null)
+                }
+            } else {
+                pendingResult?.error("CANCELLED", "User cancelled operation", null)
+            }
+            pendingResult = null
+            sourceFilePath = null
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

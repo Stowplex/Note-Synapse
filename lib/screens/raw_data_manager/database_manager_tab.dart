@@ -108,7 +108,7 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
       await FileSaver.instance.saveAs(
         name: name,
         bytes: bytes,
-        ext: 'db',
+        fileExtension: 'db',
         mimeType: MimeType.other,
       );
 

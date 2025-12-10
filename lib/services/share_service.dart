@@ -205,10 +205,10 @@ class ShareService {
       }
 
       if (kIsWeb) {
-        await FileSaver.instance.saveFile(
+        await FileSaver.instance.saveAs(
           name: fileName,
           bytes: Uint8List.fromList(pdfBytes),
-          ext: 'pdf',
+          fileExtension: 'pdf',
           mimeType: MimeType.pdf,
         );
       } else if (Platform.isAndroid) {

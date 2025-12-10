@@ -28,7 +28,9 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.app.name);
-    _descriptionController = TextEditingController(text: widget.app.description);
+    _descriptionController = TextEditingController(
+      text: widget.app.description,
+    );
     _authorController = TextEditingController(text: widget.app.author);
     _licenseController = TextEditingController(text: widget.app.license);
   }
@@ -90,7 +92,9 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.appExportedSuccessfully),
+            content: Text(
+              AppLocalizations.of(context)!.appExportedSuccessfully,
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -100,7 +104,9 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.errorExportingApp(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.errorExportingApp(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -116,30 +122,40 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
 
   Future<String> _generateYamlContent(UserApp app) async {
     final databaseService = DatabaseService();
-    
+
     // Get the pinned revision
-    final pinnedRevision = await databaseService.getAppRevision(app.selectedRevisionId!);
+    final pinnedRevision = await databaseService.getAppRevision(
+      app.selectedRevisionId!,
+    );
     if (pinnedRevision == null) {
       throw Exception('Pinned revision not found');
     }
 
     // Get libraries for the pinned revision
-    final libraries = await databaseService.getUserAppLibraries(app.uuid, pinnedRevision.revisionNumber);
-    
+    final libraries = await databaseService.getUserAppLibraries(
+      app.uuid,
+      pinnedRevision.revisionNumber,
+    );
+
     // Build libraries section
     final librariesYaml = <String>[];
     for (final library in libraries) {
-      final dependencies = await databaseService.getUserAppLibraryDependencies(library['id'] as int);
+      final dependencies = await databaseService.getUserAppLibraryDependencies(
+        library['id'] as int,
+      );
       final dependenciesYaml = <String>[];
-      
+
       for (final dependency in dependencies) {
         dependenciesYaml.add('      - link: ${dependency['original_url']}');
       }
-      
+
       librariesYaml.add('  - name: ${library['name']}');
-      if (library['usage_instructions'] != null && library['usage_instructions'].toString().isNotEmpty) {
+      if (library['usage_instructions'] != null &&
+          library['usage_instructions'].toString().isNotEmpty) {
         librariesYaml.add('    instructions: |');
-        final instructions = library['usage_instructions'].toString().split('\n');
+        final instructions = library['usage_instructions'].toString().split(
+          '\n',
+        );
         for (final instruction in instructions) {
           librariesYaml.add('      $instruction');
         }
@@ -191,12 +207,14 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
 
   Future<void> _saveYamlFile(String content, String appName) async {
     final bytes = utf8.encode(content);
-    final fileName = appName.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    
+    final fileName = appName
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(' ', '_');
+
     await FileSaver.instance.saveAs(
       name: fileName,
       bytes: Uint8List.fromList(bytes),
-      ext: 'yaml',
+      fileExtension: 'yaml',
       mimeType: MimeType.text,
     );
   }
@@ -206,9 +224,7 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.exportApp),
-      ),
+      appBar: AppBar(title: Text(l10n.exportApp)),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -257,7 +273,9 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _isExporting ? null : () => Navigator.pop(context),
+                    onPressed: _isExporting
+                        ? null
+                        : () => Navigator.pop(context),
                     child: Text(l10n.cancel),
                   ),
                 ),

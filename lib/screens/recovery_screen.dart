@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -302,19 +303,29 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
+  static const platform = MethodChannel('com.github.kkspeed/share');
+
   Future<void> _saveToExternalStorage(File zipFile) async {
     try {
-      final bytes = await zipFile.readAsBytes();
       final fileName = zipFile.path.split('/').last;
 
-      await FileSaver.instance.saveAs(
-        name: fileName,
-        bytes: bytes,
-        ext: 'zip',
-        mimeType: MimeType.zip,
-      );
-
-      _addLog('File saved to external storage: $fileName');
+      if (Platform.isAndroid || Platform.isIOS) {
+        await platform.invokeMethod('saveFileToExternalStorage', {
+          'filePath': zipFile.path,
+          'fileName': fileName,
+          'mimeType': 'application/zip',
+        });
+        _addLog('File save initiated: $fileName');
+      } else {
+        // Fallback for other platforms (e.g. desktop debug)
+        await FileSaver.instance.saveAs(
+          name: fileName.replaceAll('.zip', ''),
+          filePath: zipFile.path,
+          fileExtension: 'zip',
+          mimeType: MimeType.zip,
+        );
+        _addLog('File saved via fallback: $fileName');
+      }
     } catch (e) {
       _addLog('Error saving to external storage: $e');
     }

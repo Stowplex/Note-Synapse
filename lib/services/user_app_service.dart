@@ -1307,29 +1307,34 @@ ${libraries.map((lib) => '''
  This application must expose reusable tools that the AI can call headlessly and that users can try in an interactive playground.
 
  REQUIRED STRUCTURE:
- 1. Prepend the HTML with a CDATA block that starts with `<![CDATA[tool_spec` and ends with `]]>`. Place the YAML array that describes every tool inside this block so that any characters (even `-->` or backticks) are preserved verbatim.
+ 1. Put as the first <script></script> element of the <head> tag, a CDATA block that starts with `<![CDATA[tool_spec` and ends with `]]>`. Place the YAML array that describes every tool inside this block so that any characters (even `-->` or backticks) are preserved verbatim.
 
     Example:
-    <![CDATA[tool_spec
-    - name: example_tool
-      description: |
-        Describe what the tool does succinctly
-      input_params:
-        - query:
-            type: string
-            description: |
-              The search text
-      output_params:
-        - results:
-            type: array
-            items: string
-    ]]>
     <!DOCTYPE HTML>
     <html>
-      <!-- The HTML, css and JavaScript goes there -->
+      <head>
+        <script type='text/javascript'>
+        <![CDATA[tool_spec
+        - name: example_tool
+          description: |
+            Describe what the tool does succinctly
+          input_params:
+            - query:
+                type: string
+                description: |
+                  The search text
+          output_params:
+            - results:
+                type: array
+                items: string
+        ]]>
+	</script>
+        <!-- The HTML, css and JavaScript in <head> tag goes there -->
+      </head>
+      <!-- body tag -->
     </html>
 
-    IMPORTANT: the <![CDATA[tool_spec ]]> block MUST come before the <!DOCTYPE html> marker.
+    IMPORTANT: the <![CDATA[tool_spec ]]> block MUST inside the first <script> tag.
 
  2. For every tool include:
     - name: Tool identifier (string, snake_case recommended)
