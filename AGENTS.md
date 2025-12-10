@@ -11,3 +11,5 @@
 ## Testing
 - Run `flutter test` and ensure tests all pass
 
+# Notes
+- Multi functions table is deliberately left out during recovery
