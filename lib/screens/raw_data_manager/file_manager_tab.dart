@@ -23,11 +23,18 @@ class _FileManagerTabState extends State<FileManagerTab> {
   String _rootAttachmentsPath = '';
   String _rootCachePath = '';
   bool _isAttachmentsDir = true; // Toggle between Attachments and Cache
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _initPaths();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _initPaths() async {
@@ -278,6 +285,12 @@ class _FileManagerTabState extends State<FileManagerTab> {
     final root = _isAttachmentsDir ? _rootAttachmentsPath : _rootCachePath;
     final isAtRoot = _currentPath == root;
 
+    final displayedFiles = _files.where((entity) {
+      final searchText = _searchController.text.toLowerCase();
+      if (searchText.isEmpty) return true;
+      return path.basename(entity.path).toLowerCase().contains(searchText);
+    }).toList();
+
     return Column(
       children: [
         Padding(
@@ -329,6 +342,23 @@ class _FileManagerTabState extends State<FileManagerTab> {
             ],
           ),
         ),
+        // Search Bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              labelText: 'Search',
+              hintText: 'Search files...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            onChanged: (value) {
+              setState(() {});
+            },
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
@@ -368,9 +398,9 @@ class _FileManagerTabState extends State<FileManagerTab> {
         else
           Expanded(
             child: ListView.builder(
-              itemCount: _files.length,
+              itemCount: displayedFiles.length,
               itemBuilder: (context, index) {
-                final entity = _files[index];
+                final entity = displayedFiles[index];
                 final name = path.basename(entity.path);
                 final isDir = entity is Directory;
                 final isSelected = _selectedFiles.contains(entity.path);

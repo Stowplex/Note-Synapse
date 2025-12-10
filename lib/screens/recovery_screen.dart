@@ -1150,6 +1150,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           'attachments',
           newAttachment,
         );
+        filteredAttachment.remove('id');
         await stagingDb.insert('attachments', filteredAttachment);
       }
     }
@@ -1771,7 +1772,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                         itemBuilder: (context, index) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
+                            child: SelectableText(
                               _backupLogs[index],
                               style: TextStyle(
                                 fontFamily: 'monospace',
@@ -1823,7 +1824,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                         itemBuilder: (context, index) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
+                            child: SelectableText(
                               _importLogs[index],
                               style: TextStyle(
                                 fontFamily: 'monospace',
