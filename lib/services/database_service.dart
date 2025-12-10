@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 28;
+  static const int DATABASE_VERSION = 29;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -453,6 +453,10 @@ class DatabaseService {
     28: MigrationStep(
       description: 'Add excludeTags and noteTypes columns to filters table',
       execute: _migrateToVersion28,
+    ),
+    29: MigrationStep(
+      description: 'Ensure multi_function_apps table exists',
+      execute: _migrateToVersion29,
     ),
   };
 
@@ -1126,6 +1130,26 @@ class DatabaseService {
     required bool isBackupMigration,
   }) async {
     await db.execute(_createMultiFunctionAppsTable);
+  }
+
+  static Future<void> _migrateToVersion29(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // Ensure multi_function_apps table exists
+    // We use a safe creation check
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='multi_function_apps'",
+    );
+
+    if (tables.isEmpty) {
+      LoggerService.info('Creating multi_function_apps table (migration v29)');
+      await db.execute(_createMultiFunctionAppsTable);
+    } else {
+      LoggerService.info(
+        'multi_function_apps table already exists (migration v29)',
+      );
+    }
   }
 
   // Migrate existing conversation data to new structure

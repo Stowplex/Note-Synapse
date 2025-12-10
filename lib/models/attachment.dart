@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 /// Represents an attachment with proper path handling
 class Attachment {
@@ -12,8 +13,8 @@ class Attachment {
   final bool isRelativePath; // Always true for new attachments
   final bool includeInAIContext;
 
-  const Attachment({
-    required this.id,
+  Attachment({
+    String? id,
     required this.noteId,
     required this.filePath,
     required this.fileName,
@@ -21,7 +22,7 @@ class Attachment {
     required this.createdAt,
     this.isRelativePath = true,
     this.includeInAIContext = true,
-  });
+  }) : id = id ?? const Uuid().v4();
 
   /// Creates an Attachment from database data
   factory Attachment.fromDatabase(Map<String, dynamic> data) {

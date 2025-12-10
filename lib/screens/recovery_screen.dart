@@ -857,24 +857,36 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final backupFilters = await backupDb.query('filters');
 
     for (final filter in backupFilters) {
-      // Handle nulls - convert to appropriate defaults for whereArgs
-      // SQLite doesn't accept null in whereArgs directly
-      final name = filter['name'] as String? ?? '';
-      final includeText = filter['includeText'] as String? ?? '';
-      final includeTags = filter['includeTags'] as String? ?? '';
-      final includeArchived = filter['includeArchived'] as int? ?? 0;
+      final id = filter['id'] as String;
+      final backupUpdatedAt = filter['updatedAt'] as int;
 
-      // Check if filter exists in staging (unique on name, includeText, includeTags, includeArchived)
-      // Use COALESCE for nullable fields to handle null comparisons properly
+      // Check if filter exists in staging by ID
       final existingFilters = await stagingDb.query(
         'filters',
-        where:
-            'name = ? AND COALESCE(includeText, \'\') = ? AND includeTags = ? AND includeArchived = ?',
-        whereArgs: [name, includeText, includeTags, includeArchived],
+        where: 'id = ?',
+        whereArgs: [id],
       );
 
-      if (existingFilters.isEmpty) {
-        // Insert new filter - filter to only existing columns
+      if (existingFilters.isNotEmpty) {
+        final existingFilter = existingFilters.first;
+        final existingUpdatedAt = existingFilter['updatedAt'] as int;
+
+        // If backup is newer, update the existing filter
+        if (backupUpdatedAt > existingUpdatedAt) {
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'filters',
+            filter,
+          );
+          await stagingDb.update(
+            'filters',
+            filteredData,
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      } else {
+        // Insert new filter
         final filteredData = await _filterDataForTable(
           stagingDb,
           'filters',

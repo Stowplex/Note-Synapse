@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'package:uuid/uuid.dart';
 import 'note.dart';
 
 part 'filter.g.dart';
@@ -17,7 +18,7 @@ class Filter {
   final DateTime updatedAt;
 
   Filter({
-    required this.id,
+    String? id,
     required this.name,
     this.includeText,
     this.includeTags = const [],
@@ -27,7 +28,7 @@ class Filter {
     this.isPinned = false,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : id = id ?? const Uuid().v4();
 
   factory Filter.fromJson(Map<String, dynamic> json) => _$FilterFromJson(json);
   Map<String, dynamic> toJson() => _$FilterToJson(this);
