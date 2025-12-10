@@ -1210,25 +1210,111 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     Database stagingDb,
     Database backupDb,
   ) async {
-    final backupMessages = await backupDb.query('conversation_messages');
+    // Process messages in batches to avoid CursorWindow size limits
+    int offset = 0;
+    const int limit = 50;
+    bool hasMore = true;
 
-    for (final message in backupMessages) {
-      // Check if message exists in staging by id
-      final existingMessages = await stagingDb.query(
-        'conversation_messages',
-        where: 'id = ?',
-        whereArgs: [message['id']],
+    while (hasMore) {
+      // Select all columns except 'content' and 'metadata', which can be huge
+      final batch = await backupDb.rawQuery(
+        '''
+        SELECT id, type, timestamp, modelUsed, length(content) as content_length, length(metadata) as metadata_length
+        FROM conversation_messages
+        LIMIT ? OFFSET ?
+        ''',
+        [limit, offset],
       );
 
-      if (existingMessages.isEmpty) {
-        // Insert new message - filter to only existing columns (removes conversationId if present)
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_messages',
-          message,
-        );
-        await stagingDb.insert('conversation_messages', filteredData);
+      if (batch.isEmpty) {
+        hasMore = false;
+        break;
       }
+
+      for (final row in batch) {
+        final messageId = row['id'] as String;
+        final contentLength = (row['content_length'] as int?) ?? 0;
+        final metadataLength = (row['metadata_length'] as int?) ?? 0;
+
+        // Check if message exists in staging by id
+        final existingMessages = await stagingDb.query(
+          'conversation_messages',
+          where: 'id = ?',
+          whereArgs: [messageId],
+        );
+
+        if (existingMessages.isEmpty) {
+          String content = '';
+          String?
+          metadata; // metadata is nullable in schema, treating as String?
+
+          // --- Handle Content ---
+          // If content is small (< 1MB), read it normally
+          // Otherwise read in chunks
+          if (contentLength < 1024 * 1024) {
+            final contentResult = await backupDb.query(
+              'conversation_messages',
+              columns: ['content'],
+              where: 'id = ?',
+              whereArgs: [messageId],
+            );
+            if (contentResult.isNotEmpty) {
+              content = contentResult.first['content'] as String;
+            }
+          } else {
+            // Large content, read in chunks
+            content = await _readStringInChunks(
+              backupDb,
+              messageId,
+              'content',
+              contentLength,
+            );
+          }
+
+          // --- Handle Metadata ---
+          // Metadata can be null or empty string in DB, usually stored as text
+          if (metadataLength > 0) {
+            if (metadataLength < 1024 * 1024) {
+              final metaResult = await backupDb.query(
+                'conversation_messages',
+                columns: ['metadata'],
+                where: 'id = ?',
+                whereArgs: [messageId],
+              );
+              if (metaResult.isNotEmpty) {
+                metadata = metaResult.first['metadata'] as String?;
+              }
+            } else {
+              // Large metadata, read in chunks
+              metadata = await _readStringInChunks(
+                backupDb,
+                messageId,
+                'metadata',
+                metadataLength,
+              );
+            }
+          }
+
+          // Construct full message map
+          final message = Map<String, dynamic>.from(row);
+          message['content'] = content;
+          message['metadata'] = metadata;
+          message.remove('content_length'); // Remove the helper column
+          message.remove('metadata_length'); // Remove the helper column
+
+          // Insert new message - filter to only existing columns
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'conversation_messages',
+            message,
+          );
+          await stagingDb.insert('conversation_messages', filteredData);
+        }
+      }
+
+      offset += limit;
+      // Yield to event loop to prevent UI freeze during large imports
+      await Future.delayed(Duration.zero);
     }
   }
 
@@ -1949,6 +2035,53 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     } catch (e) {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);
       return <int>[];
+    }
+  }
+
+  // Helper method to read String data in chunks to avoid cursor window issues
+  Future<String> _readStringInChunks(
+    Database db,
+    String messageId,
+    String columnName,
+    int totalSize,
+  ) async {
+    // const int chunkSize = 1024 * 1024; // 1MB chunks (unused)
+    final StringBuffer buffer = StringBuffer();
+
+    try {
+      // Read String in chunks using substr
+      // SQLite substr is 1-based, and operates on characters/codepoints.
+      // Note: If the text contains multi-byte characters, 'length' is in characters (usually).
+      // However, CursorWindow limit is in BYTES (2MB).
+      // So reading 1 million CHARACTERS might exceed 2MB bytes if they are multi-byte.
+      // But for safety locally, we can read smaller chunks if needed.
+      // 500k chars is safer for UTF-8 (max 4 bytes per char = 2MB).
+      const int safeCharChunkSize = 500 * 1024;
+
+      for (int offset = 0; offset < totalSize; offset += safeCharChunkSize) {
+        final int currentChunkSize = (offset + safeCharChunkSize > totalSize)
+            ? totalSize - offset
+            : safeCharChunkSize;
+
+        final chunkResult = await db.rawQuery(
+          '''
+          SELECT substr($columnName, ?, ?) as chunk
+          FROM conversation_messages 
+          WHERE id = ?
+        ''',
+          [offset + 1, currentChunkSize, messageId],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as String;
+          buffer.write(chunk);
+        }
+      }
+
+      return buffer.toString();
+    } catch (e) {
+      LoggerService.error('Error reading String in chunks: $e', error: e);
+      return '';
     }
   }
 }
