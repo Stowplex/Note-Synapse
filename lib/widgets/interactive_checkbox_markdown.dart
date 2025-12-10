@@ -738,8 +738,10 @@ class _InteractiveCheckboxMarkdownState
     ];
 
     final inlineComponents = [
-      ...MarkdownComponent.inlineComponents,
-      ...MarkdownComponent.inlineComponents,
+      CustomATagMd(),
+      ...MarkdownComponent.inlineComponents.where(
+        (e) => e.runtimeType != ATagMd,
+      ),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
         noteId: widget.noteId,
@@ -829,19 +831,20 @@ class _EmbeddedWebViewMd extends InlineMd {
   }
 
   int _findUrlEnd(String text, int startIndex) {
-    var depth = 0;
-    for (var i = startIndex; i < text.length; i++) {
-      final char = text[i];
-      if (char == '(') {
-        depth++;
-      } else if (char == ')') {
-        if (depth == 0) {
-          return i;
-        }
-        depth--;
+    int parenDepth = 0;
+    for (int i = startIndex; i < text.length; i++) {
+      if (text[i] == '(') {
+        parenDepth++;
+      } else if (text[i] == ')') {
+        if (parenDepth == 0) return i;
+        parenDepth--;
+      } else if (text[i] == ' ' && parenDepth == 0) {
+        // Stop at space if not inside parens (though URL usually doesn't have spaces unless encoded)
+        // Standard markdown allows title after URL in quotes, but here we just want the URL
+        return i;
       }
     }
-    return startIndex;
+    return -1;
   }
 }
 
@@ -2468,5 +2471,124 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
         ),
       ],
     );
+  }
+}
+
+class CustomATagMd extends ATagMd {
+  @override
+  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]*\]\([^\s]*\)");
+
+  @override
+  InlineSpan span(
+    BuildContext context,
+    String text,
+    final GptMarkdownConfig config,
+  ) {
+    var bracketCount = 0;
+    var start = 1;
+    var end = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] == '[') {
+        bracketCount++;
+      } else if (text[i] == ']') {
+        bracketCount--;
+        if (bracketCount == 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+
+    if (end + 1 >= text.length || text[end + 1] != '(') {
+      return const TextSpan();
+    }
+
+    // First try to find the basic pattern
+    // final basicMatch = RegExp(r'(?<!\!)\[(.*)\]\(').firstMatch(text.trim());
+    // if (basicMatch == null) {
+    //   return const TextSpan();
+    // }
+
+    final linkText = text.substring(start, end);
+    final urlStart = end + 2;
+
+    // Now find the balanced closing parenthesis
+    int parenCount = 0;
+    int urlEnd = urlStart;
+
+    for (int i = urlStart; i < text.length; i++) {
+      final char = text[i];
+
+      if (char == '(') {
+        parenCount++;
+      } else if (char == ')') {
+        if (parenCount == 0) {
+          // This is the closing parenthesis of the link
+          urlEnd = i;
+          break;
+        } else {
+          parenCount--;
+        }
+      }
+    }
+
+    if (urlEnd == urlStart) {
+      // No closing parenthesis found
+      return const TextSpan();
+    }
+
+    final url = text.substring(urlStart, urlEnd).trim();
+
+    var builder = config.linkBuilder;
+
+    var ending = text.substring(urlEnd + 1);
+
+    var endingSpans = MarkdownComponent.generate(
+      context,
+      ending,
+      config,
+      false,
+    );
+    var theme = GptMarkdownTheme.of(context);
+    var linkTextSpan = TextSpan(
+      children: MarkdownComponent.generate(context, linkText, config, false),
+      style: config.style?.copyWith(
+        color: theme.linkColor,
+        decorationColor: theme.linkColor,
+      ),
+    );
+
+    // Use custom builder if provided
+    WidgetSpan? child;
+    if (builder != null) {
+      child = WidgetSpan(
+        baseline: TextBaseline.alphabetic,
+        alignment: PlaceholderAlignment.baseline,
+        child: GestureDetector(
+          onTap: () => config.onLinkTap?.call(url, linkText),
+          child: builder(
+            context,
+            linkTextSpan,
+            url,
+            config.style ?? const TextStyle(),
+          ),
+        ),
+      );
+    }
+
+    // Default rendering
+    child ??= WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        hoverColor: theme.linkHoverColor,
+        onTap: () {
+          config.onLinkTap?.call(url, linkText);
+        },
+        child: config.getRich(linkTextSpan),
+      ),
+    );
+    var textSpan = TextSpan(children: [child, ...endingSpans]);
+    return textSpan;
   }
 }
