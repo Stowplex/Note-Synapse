@@ -317,18 +317,23 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
   }
 
   void _toggleLinePrefix(int lineIndex, String prefix) {
+    // Capture selection BEFORE modifying text to avoid reading reset state
+    final currentSelection = widget.controller.selection;
     final codeLines = widget.controller.value.codeLines;
     if (lineIndex < 0 || lineIndex >= codeLines.length) return;
 
     final line = codeLines[lineIndex].text;
     String newLine;
+    int cursorChange = 0;
 
     if (line.startsWith(prefix)) {
       // Remove prefix
       newLine = line.substring(prefix.length);
+      cursorChange = -prefix.length;
     } else {
       // Add prefix
       newLine = prefix + line;
+      cursorChange = prefix.length;
     }
 
     // Calculate offset for this line
@@ -342,6 +347,18 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
     final afterLine = text.substring(lineStartOffset + line.length);
 
     widget.controller.text = beforeLine + newLine + afterLine;
+
+    // Update cursor ensuring it stays on the same line and relative position
+    // Only update cursor if it was on the modified line
+    if (currentSelection.start.index == lineIndex) {
+      int newColumn = currentSelection.start.offset + cursorChange;
+      if (newColumn < 0) newColumn = 0;
+
+      widget.controller.selection = CodeLineSelection.collapsed(
+        index: lineIndex,
+        offset: newColumn,
+      );
+    }
   }
 
   Future<void> _showHeadingMenu(BuildContext context) async {
