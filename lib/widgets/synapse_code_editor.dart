@@ -82,6 +82,84 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
     widget.controller.redo();
   }
 
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data != null && data.text != null) {
+      final text = data.text!;
+      // First delete any selection
+      if (!widget.controller.selection.isCollapsed) {
+        final codeLines = widget.controller.value.codeLines;
+        _deleteSelection(codeLines, widget.controller.selection);
+      }
+
+      // Now insert at cursor
+      final selection = widget.controller.selection;
+      // We must get the updated codelines after deletion
+      final codeLines = widget.controller.value.codeLines;
+
+      final insertionIndex = selection.startIndex;
+      final insertionOffset = selection.startOffset;
+
+      // If paste contains newlines
+      final newLines = text.split('\n');
+
+      // Construct the new list of lines
+      final List<String> lines = [];
+      for (int i = 0; i < codeLines.length; i++) {
+        lines.add(codeLines[i].text);
+      }
+
+      // If lineIndex is out of bounds (empty file?), handle it
+      if (lines.isEmpty) {
+        widget.controller.text = text;
+        return;
+      }
+
+      if (insertionIndex < lines.length) {
+        final lineContent = lines[insertionIndex];
+        final prefix = lineContent.substring(0, insertionOffset);
+        final suffix = lineContent.substring(insertionOffset);
+
+        if (newLines.length == 1) {
+          lines[insertionIndex] = prefix + newLines[0] + suffix;
+        } else {
+          lines[insertionIndex] = prefix + newLines.first;
+          for (int i = 1; i < newLines.length - 1; i++) {
+            lines.insert(insertionIndex + i, newLines[i]);
+          }
+          lines.insert(
+            insertionIndex + newLines.length - 1,
+            newLines.last + suffix,
+          );
+        }
+
+        widget.controller.text = lines.join('\n');
+
+        // Update cursor
+        final endLineIndex = insertionIndex + newLines.length - 1;
+
+        // Clean logic for offset:
+        // The last line becomes: prefix + newLines[0] + suffix (if 1 line)
+        // OR: newLines.last + suffix (if multiline).
+        // Wait. if multiline:
+        // Line N (insertionIndex): prefix + newLines.first
+        // Line N+M (end): newLines.last + suffix
+        // Cursor should be at end of pasted text.
+        // So cursor is at: length of newLines.last.
+        // wait. The last line content is `newLines.last + suffix`.
+        // The cursor should be BEFORE `suffix`.
+        // So offset is `newLines.last.length`.
+
+        widget.controller.selection = CodeLineSelection.collapsed(
+          index: endLineIndex,
+          offset: newLines.length == 1
+              ? insertionOffset + text.length
+              : newLines.last.length,
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -115,6 +193,11 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                       icon: const Icon(Icons.redo, size: 20),
                       onPressed: _redo,
                       tooltip: 'Redo',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.paste, size: 20),
+                      onPressed: _paste,
+                      tooltip: 'Paste',
                     ),
                     IconButton(
                       icon: Icon(
