@@ -234,6 +234,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  void _createNewTask(DateTime date) {
+    final now = DateTime.now();
+    // Normalize date to current time for creation, or just keep midnight?
+    // Usually tasks are just dates. Let's use the date passed which is usually midnight from calendar selection.
+    // But we might want createdAt to be now.
+
+    // Ensure we use the selected date at midnight (or whatever _selectedDay is) for scheduledAt
+    // But we probably want to preserve the time if it was relevant, but typically calendar returns normalized dates.
+    // _selectedDay is usually midnight.
+
+    final newTask = Note(
+      id: const Uuid().v4(),
+      title: '',
+      content: '',
+      type: NoteType.task,
+      createdAt: now,
+      updatedAt: now,
+      scheduledAt: date.toIso8601String(),
+      status: TaskStatus.todo,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(note: newTask, isNewNote: true),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -767,12 +796,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [
           // Date header
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              AppDateUtils.formatDateNumeric(selectedDate, context),
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  AppDateUtils.formatDateNumeric(selectedDate, context),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    _createNewTask(selectedDate);
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text(l10n.newTask),
+                ),
+              ],
             ),
           ),
           // Tab bar
