@@ -28,6 +28,7 @@ class AppProvider extends ChangeNotifier {
   final Map<String, List<AppRevision>> _appRevisions =
       {}; // Cache revisions by appId
   bool _isLoading = false;
+  int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
   Locale _locale = const Locale('en', '');
@@ -43,6 +44,7 @@ class AppProvider extends ChangeNotifier {
   List<UserApp> get userApps => _userApps;
   Map<String, List<AppRevision>> get appRevisions => _appRevisions;
   bool get isLoading => _isLoading;
+  int get dataVersion => _dataVersion;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
   Locale get locale => _locale;
@@ -77,6 +79,7 @@ class AppProvider extends ChangeNotifier {
 
       _error = null;
       LoggerService.info('loadData completed successfully');
+      _dataVersion++;
       notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
@@ -102,6 +105,7 @@ class AppProvider extends ChangeNotifier {
         if (fromShare) {
           newNoteFromShare = true;
         }
+        _dataVersion++;
         notifyListeners();
       }
 
@@ -123,6 +127,7 @@ class AppProvider extends ChangeNotifier {
         final noteIndex = _notes.indexWhere((n) => n.id == note.id);
         if (noteIndex != -1) {
           _notes[noteIndex] = updatedNote;
+          _dataVersion++;
           notifyListeners();
         }
       }
@@ -176,6 +181,7 @@ class AppProvider extends ChangeNotifier {
 
       // Update the local state immediately
       _notes[noteIndex] = updatedNote;
+      _dataVersion++;
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -212,6 +218,7 @@ class AppProvider extends ChangeNotifier {
 
       // Remove from local state immediately instead of reloading from database
       _notes.removeWhere((note) => note.id == noteId);
+      _dataVersion++;
       notifyListeners();
 
       _error = null; // Clear any previous errors
@@ -350,6 +357,7 @@ class AppProvider extends ChangeNotifier {
 
       // Add to local state with properly converted paths
       _notes.addAll(addedNotes);
+      _dataVersion++;
       notifyListeners();
 
       return addedNotes;
