@@ -1471,7 +1471,11 @@ ${libraries.map((lib) => '''
         );
         return NavigationActionPolicy.CANCEL;
       },
-      onLoadStop: (controller, _) async {
+      onLoadStop: (controller, url) async {
+        if (url.toString() == 'about:blank') {
+          return;
+        }
+
         if (completer.isCompleted) {
           return;
         }
@@ -1487,6 +1491,7 @@ ${libraries.map((lib) => '''
                   }
                   return document.documentElement ? document.documentElement.innerHTML : '';
                 } catch (e) {
+                  console.log(e, e.stack);
                   return '';
                 }
               })();
@@ -1515,11 +1520,13 @@ ${libraries.map((lib) => '''
             '[Synapse.fetchWebPage] Success (${markdown.length} chars) in ${duration.inMilliseconds}ms',
           );
 
-          completer.complete({
-            'url': url,
-            'title': title,
-            'markdown': markdown,
-          });
+          if (!completer.isCompleted) {
+            completer.complete({
+              'url': url.toString(),
+              'title': title,
+              'markdown': markdown,
+            });
+          }
         } catch (e, stackTrace) {
           LoggerService.error(
             '[Synapse.fetchWebPage] Extraction failed: $e',
@@ -1531,27 +1538,44 @@ ${libraries.map((lib) => '''
           }
         }
       },
-      onLoadError: (controller, url, code, message) {
+      onReceivedError: (controller, request, error) {
         if (completer.isCompleted) {
           return;
         }
 
-        final error = Exception('Failed to load page ($code): $message');
-        LoggerService.error(
-          '[Synapse.fetchWebPage] Load error for $url: $message ($code)',
-        );
-        completer.completeError(error);
+        if (request.isForMainFrame ?? false) {
+          // Correct property is mainFrame for WebResourceRequest in flutter_inappwebview
+          final exception = Exception(
+            'Failed to load page (${error.type}): ${error.description}',
+          );
+          LoggerService.error(
+            '[Synapse.fetchWebPage] Load error for ${request.url}: ${error.description} (${error.type})',
+          );
+          completer.completeError(exception);
+        } else {
+          LoggerService.warning(
+            '[Synapse.fetchWebPage] Load error for subresource ${request.url}: ${error.description} (${error.type})',
+          );
+        }
       },
-      onLoadHttpError: (controller, url, statusCode, description) {
+      onReceivedHttpError: (controller, request, errorResponse) {
         if (completer.isCompleted) {
           return;
         }
 
-        final error = Exception('HTTP $statusCode: $description');
-        LoggerService.error(
-          '[Synapse.fetchWebPage] HTTP error $statusCode for $url: $description',
-        );
-        completer.completeError(error);
+        if (request.isForMainFrame ?? false) {
+          final exception = Exception(
+            'HTTP ${errorResponse.statusCode}: ${errorResponse.reasonPhrase}',
+          );
+          LoggerService.error(
+            '[Synapse.fetchWebPage] HTTP error ${errorResponse.statusCode} for ${request.url}: ${errorResponse.reasonPhrase}',
+          );
+          completer.completeError(exception);
+        } else {
+          LoggerService.warning(
+            '[Synapse.fetchWebPage] HTTP error ${errorResponse.statusCode} for subresource ${request.url}: ${errorResponse.reasonPhrase}',
+          );
+        }
       },
     );
 
