@@ -853,10 +853,14 @@ IMPORTANT:
    - Synapse.fetchWebPage(url: string) - Fetch a webpage and extract its content as markdown. This function loads the webpage, and converts it to markdown format, while stripping off scripts, and styles tag.
      Param format: a string URL (must be HTTP or HTTPS)
      Response format:
-       {
-         url: string,              // The URL that was fetched
-         title: string,            // Page title
-         markdown: string          // Content extracted and converted to markdown
+       { 
+         success: boolean,           // Success flag
+         error?: string,             // Present when failed. The error message.
+         data?: {                    // Present when successful. The data object.
+           url: string,              // The URL that was fetched
+           title: string,            // Page title
+           markdown: string          // Content extracted and converted to markdown
+         }
        }
      Usage notes:
        * This function fetches the webpage, and converts it to markdown.
