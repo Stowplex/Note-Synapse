@@ -1226,6 +1226,16 @@ IMPORTANT:
 11. Prefer creating responsive layout with existing libraries over manual css.
 12. Use MathML to display mathematical formulas.
 13. Place adequate console logging to help tracking key steps in the code.
+    IMPORTANT: when you log error, you should use e.stack to log the stack trace for better debugging.
+               <example>
+               ```javascript
+                 try {
+                   // your code
+                 } catch (e) {
+                   console.log('Error:', e.stack);
+                 }
+               ```
+               </example>
 ''';
   }
 
