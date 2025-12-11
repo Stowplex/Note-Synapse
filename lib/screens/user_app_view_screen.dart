@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
@@ -661,6 +662,12 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
             }
             return null;
           },
+          shouldOverrideUrlLoading: (controller, request) async {
+            if (request.request.url != null) {
+              launchUrl(request.request.url!.uriValue);
+            }
+            return NavigationActionPolicy.CANCEL;
+          },
           initialUserScripts: UnmodifiableListView<UserScript>([
             bridge.buildBootstrapScript(),
           ]),
@@ -720,7 +727,7 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
           },
           onReceivedError: (controller, request, error) {
             setState(() {
-              _consoleOutput.add('ERROR: ${error.description}');
+              _consoleOutput.add('ERROR: ${error.toJson()}');
             });
           },
         ),
