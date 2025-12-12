@@ -247,6 +247,25 @@ class DatabaseService {
       )
   ''';
 
+  Future<void> insertConversationMessageMappingsBatch(
+    String conversationId,
+    List<String> messageIds,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final messageId in messageIds) {
+        batch.insert('conversation_message_mapping', {
+          'conversationId': conversationId,
+          'messageId': messageId,
+          'createdAt': now,
+        });
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   static const String _createMessageParentsTable = '''
       CREATE TABLE message_parents(
         id TEXT PRIMARY KEY, -- Unique identifier

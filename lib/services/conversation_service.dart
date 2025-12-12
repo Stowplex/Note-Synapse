@@ -99,12 +99,10 @@ class ConversationService {
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
-    for (final message in messagesToCopy) {
-      await _databaseService.insertConversationMessageMapping(
-        conversationId: forkedConversation.id,
-        messageId: message.id,
-      );
-    }
+    await _databaseService.insertConversationMessageMappingsBatch(
+      forkedConversation.id,
+      messagesToCopy.map((m) => m.id).toList(),
+    );
 
     // Parent relationships for copied messages already exist from the original conversation
     // They are inherited since we're copying message IDs, not creating new messages
@@ -112,9 +110,6 @@ class ConversationService {
     LoggerService.info(
       'Forked conversation $originalConversationId to ${forkedConversation.id} from message $forkFromMessageId',
     );
-
-    // Refresh the conversation tree to include the new forked conversation
-    await refreshConversationTree();
 
     return forkedConversation.copyWith(noteIds: copiedNoteIds);
   }
@@ -211,12 +206,10 @@ class ConversationService {
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
-    for (final message in messagesToCopy) {
-      await _databaseService.insertConversationMessageMapping(
-        conversationId: forkedConversation.id,
-        messageId: message.id,
-      );
-    }
+    await _databaseService.insertConversationMessageMappingsBatch(
+      forkedConversation.id,
+      messagesToCopy.map((m) => m.id).toList(),
+    );
 
     // Parent relationships for copied messages already exist from the original conversation
     // They are inherited since we're copying message IDs, not creating new messages
@@ -227,9 +220,6 @@ class ConversationService {
     LoggerService.info(
       'Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message $forkFromMessageId with selected context',
     );
-
-    // Refresh the conversation tree to include the new forked conversation
-    await refreshConversationTree();
 
     return forkedConversation;
   }
@@ -373,9 +363,6 @@ class ConversationService {
     }
 
     LoggerService.info('Added AI response to conversation: $conversationId');
-
-    // Refresh the conversation tree to include the new interaction
-    await refreshConversationTree();
 
     return message;
   }
@@ -683,17 +670,11 @@ class ConversationService {
   // Delete a message and its entire subtree
   Future<void> deleteMessageWithSubtree(String messageId) async {
     await _databaseService.deleteMessageWithSubtree(messageId);
-
-    // Refresh the conversation tree after deletion
-    await refreshConversationTree();
   }
 
   // Delete messages using tree node traversal (for UI efficiency)
   Future<void> deleteMessagesFromTreeNodes(List<String> messageIds) async {
     await _databaseService.deleteMessagesFromTreeNodes(messageIds);
-
-    // Refresh the conversation tree after deletion
-    await refreshConversationTree();
   }
 
   // Get all message IDs in a tree node's subtree using proper tree traversal

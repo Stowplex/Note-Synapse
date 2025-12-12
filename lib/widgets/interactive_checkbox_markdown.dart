@@ -71,12 +71,21 @@ class _InteractiveCheckboxMarkdownState
     _currentContent = widget.originalContent;
   }
 
-  @override
-  void didUpdateWidget(InteractiveCheckboxMarkdown oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.originalContent != widget.originalContent) {
-      _currentContent = widget.originalContent;
-    }
+  final Map<String, Future<_LocalImageSource?>> _localImageFutures = {};
+  final Map<String, Future<SynapseTempFile>> _synapseTempFutures = {};
+
+  Future<_LocalImageSource?> _resolveLocalImageSourceCached(String url) {
+    return _localImageFutures.putIfAbsent(
+      url,
+      () => _resolveLocalImageSource(url),
+    );
+  }
+
+  Future<SynapseTempFile> _resolveSynapseTempFileCached(String url) {
+    return _synapseTempFutures.putIfAbsent(
+      url,
+      () => SynapseTempUtils.loadFile(url),
+    );
   }
 
   void _handleCheckboxToggle(
@@ -223,7 +232,7 @@ class _InteractiveCheckboxMarkdownState
     double? height,
   ) {
     return FutureBuilder<SynapseTempFile>(
-      future: SynapseTempUtils.loadFile(url),
+      future: _resolveSynapseTempFileCached(url),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return _buildLoadingPlaceholder(width, height);
@@ -401,7 +410,7 @@ class _InteractiveCheckboxMarkdownState
                 !url.contains('/') &&
                 !url.contains('\\')))) {
       return FutureBuilder<_LocalImageSource?>(
-        future: _resolveLocalImageSource(url),
+        future: _resolveLocalImageSourceCached(url),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildLoadingPlaceholder(width, height);
@@ -568,7 +577,7 @@ class _InteractiveCheckboxMarkdownState
     VoidCallback? onFullscreen,
   }) {
     return FutureBuilder<_ImageSourceType>(
-      future: _determineImageSourceType(imageUrl),
+      future: _determineImageSourceTypeCached(imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
         return _ImageWithInfoBar(
@@ -580,6 +589,39 @@ class _InteractiveCheckboxMarkdownState
         );
       },
     );
+  }
+
+  Future<_ImageSourceType> _determineImageSourceTypeCached(String url) {
+    // We can reuse the same future logic/cache mechanism or separate map
+    // Since _determineImageSourceType calls _resolveLocalImageSource (which is cached),
+    // we should cache this top-level result too to avoid FutureBuilder loop.
+    // However, _determineImageSourceType is lightweight EXCEPT for the async part.
+    // The FutureBuilder itself is the issue.
+    // Let's assume we can cache it in a map.
+    return _imageSourceTypeFutures.putIfAbsent(
+      url,
+      () => _determineImageSourceType(url),
+    );
+  }
+
+  final Map<String, Future<_ImageSourceType>> _imageSourceTypeFutures = {};
+
+  @override
+  void didUpdateWidget(InteractiveCheckboxMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.originalContent != widget.originalContent) {
+      _currentContent = widget.originalContent;
+      // We don't strictly need to clear cache on content change as URLs are unique keys,
+      // but it helps keep memory usage low if content changes completely.
+      _localImageFutures.clear();
+      _synapseTempFutures.clear();
+      _imageSourceTypeFutures.clear();
+    }
+    if (oldWidget.noteId != widget.noteId) {
+      _localImageFutures.clear();
+      _synapseTempFutures.clear();
+      _imageSourceTypeFutures.clear();
+    }
   }
 
   Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
@@ -716,27 +758,11 @@ class _InteractiveCheckboxMarkdownState
 
   @override
   Widget build(BuildContext context) {
-    // Create custom components list with our safe HTag and optional interactive checkbox component
-    final components = [
-      CodeBlockMd(),
-      LatexMathMultiLine(),
-      NewLines(),
-      BlockQuote(),
-      TableMd(),
-      SafeHTag(), // Use our safe version instead of HTag
-      UnOrderedList(),
-      OrderedList(),
-      RadioButtonMd(),
-      if (widget.onContentChanged != null)
-        InteractiveCheckboxMd(
-          onToggle: (line, text, value) =>
-              _handleCheckboxToggle(line, text, value),
-        )
-      else
-        CheckBoxMd(), // Use regular checkbox if not interactive
-      HrLine(),
-      IndentMd(),
-    ];
+    // We need to handle _EmbeddedWebViewMd updates
+    // Let's recreate inlineComponents only if needed, or just insert the dynamic one.
+    // Actually, creating the list is cheap. The *elements* being new instances might be the issue?
+    // GptMarkdown likely iterates them.
+    // Let's stick to fixing the FutureBuilder loop first as it's the critical bug.
 
     final inlineComponents = [
       CustomATagMd(),
@@ -748,6 +774,29 @@ class _InteractiveCheckboxMarkdownState
         noteId: widget.noteId,
         hasWebViewNotifier: widget.hasWebViewNotifier,
       ),
+    ];
+
+    // For components, we can reuse the list if onContentChanged is stable?
+    // widget.onContentChanged is a callback.
+    final components = [
+      CodeBlockMd(),
+      LatexMathMultiLine(),
+      NewLines(),
+      BlockQuote(),
+      TableMd(),
+      SafeHTag(),
+      UnOrderedList(),
+      OrderedList(),
+      RadioButtonMd(),
+      if (widget.onContentChanged != null)
+        InteractiveCheckboxMd(
+          onToggle: (line, text, value) =>
+              _handleCheckboxToggle(line, text, value),
+        )
+      else
+        CheckBoxMd(),
+      HrLine(),
+      IndentMd(),
     ];
 
     return GptMarkdown(
