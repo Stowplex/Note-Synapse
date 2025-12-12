@@ -11,6 +11,7 @@ import 'note_detail_screen.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/filter_tab_strip.dart';
 import 'package:uuid/uuid.dart';
+import '../models/recurrence_rule.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -1377,6 +1378,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
     // Normalize dates to remove time components for comparison
     final dayDate = DateTime(day.year, day.month, day.day);
     final startDate = DateTime(start.year, start.month, start.day);
+
+    // Check recurrence rule
+    final recurrence = RecurrenceRule.decode(note.recurrenceRule);
+    if (recurrence != null && recurrence.type != RecurrenceType.none) {
+      // 1. Check range
+      final endDate = end != null
+          ? DateTime(end.year, end.month, end.day)
+          : null;
+
+      // Start date check (inclusive)
+      if (dayDate.isBefore(startDate)) return false;
+
+      // End date check (inclusive) if exists
+      if (endDate != null && dayDate.isAfter(endDate)) return false;
+
+      // 2. Check Rule
+      if (recurrence.type == RecurrenceType.weekly) {
+        // Monday is 1, Sunday is 7
+        return recurrence.daysOfWeek?.contains(dayDate.weekday) ?? false;
+      } else if (recurrence.type == RecurrenceType.interval) {
+        final interval = recurrence.intervalDays ?? 1;
+        if (interval < 1) return false;
+        final diff = dayDate.difference(startDate).inDays;
+        return diff % interval == 0;
+      }
+      return false;
+    }
 
     if (end != null) {
       final endDate = DateTime(end.year, end.month, end.day);

@@ -38,6 +38,7 @@ import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'conversation_chat_screen.dart';
 import '../utils/remote_image_utils.dart';
+import '../models/recurrence_rule.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -63,7 +64,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Timer? _autoSaveTimer;
   DateTime? _scheduledAt;
   DateTime? _completeBy;
+
   String? _dateValidationError;
+
+  // Recurrence state
+  RecurrenceRule? _recurrenceRule;
+  RecurrenceType _recurrenceType = RecurrenceType.none;
+  List<int> _selectedRecurrenceDays = [];
+  final TextEditingController _recurrenceIntervalController =
+      TextEditingController();
+
   List<Relationship> _relationships = [];
   List<Note> _linkedNotes = [];
   final DatabaseService _databaseService = DatabaseService();
@@ -116,6 +126,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _completeBy = widget.note.completeBy != null
           ? DateTime.tryParse(widget.note.completeBy!)
           : null;
+
+      // Initialize recurrence state
+      _recurrenceRule = RecurrenceRule.decode(widget.note.recurrenceRule);
+      if (_recurrenceRule != null) {
+        _recurrenceType = _recurrenceRule!.type;
+        _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+        _recurrenceIntervalController.text =
+            _recurrenceRule!.intervalDays?.toString() ?? '';
+      }
     }
 
     _titleController.addListener(_onTextChanged);
@@ -1024,6 +1043,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           if (widget.note.isTask) ...[
             _buildDateSelectionFields(),
             const SizedBox(height: 16),
+            _buildRecurrenceFields(),
+            const SizedBox(height: 16),
           ],
           Expanded(
             child: SynapseNoteEditor(
@@ -1178,6 +1199,96 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ],
       ],
     );
+  }
+
+  Widget _buildRecurrenceFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<RecurrenceType>(
+          value: _recurrenceType,
+          items: RecurrenceType.values.map((type) {
+            String label;
+            switch (type) {
+              case RecurrenceType.none:
+                label = 'No Recurrence'; // Todo: l10n
+                break;
+              case RecurrenceType.weekly:
+                label = 'Weekly'; // Todo: l10n
+                break;
+              case RecurrenceType.interval:
+                label = 'Repeat every X days'; // Todo: l10n
+                break;
+            }
+            return DropdownMenuItem(value: type, child: Text(label));
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _recurrenceType = value!;
+              _hasChanges = true;
+            });
+            _autoSave();
+          },
+          decoration: InputDecoration(
+            labelText: 'Recurrence', // Todo: l10n
+            border: OutlineInputBorder(),
+          ),
+        ),
+        if (_recurrenceType == RecurrenceType.weekly) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Days of week',
+            style: Theme.of(context).textTheme.titleSmall,
+          ), // Todo: l10n
+          Wrap(
+            spacing: 8,
+            children: [
+              for (int i = 1; i <= 7; i++)
+                FilterChip(
+                  label: Text(_getDayLabel(i)),
+                  selected: _selectedRecurrenceDays.contains(i),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        if (!_selectedRecurrenceDays.contains(i)) {
+                          _selectedRecurrenceDays.add(i);
+                        }
+                      } else {
+                        _selectedRecurrenceDays.remove(i);
+                      }
+                      _selectedRecurrenceDays.sort();
+                      _hasChanges = true;
+                    });
+                    _autoSave();
+                  },
+                ),
+            ],
+          ),
+        ],
+        if (_recurrenceType == RecurrenceType.interval) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _recurrenceIntervalController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Interval (Days)',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              setState(() {
+                _hasChanges = true;
+              });
+              _autoSave();
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _getDayLabel(int day) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[day - 1];
   }
 
   Widget _buildTaskStatus(Note currentNote) {
@@ -1480,6 +1591,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _completeBy = currentNote.completeBy != null
           ? DateTime.tryParse(currentNote.completeBy!)
           : null;
+
+      // Initialize recurrence state
+      _recurrenceRule = RecurrenceRule.decode(currentNote.recurrenceRule);
+      if (_recurrenceRule != null) {
+        _recurrenceType = _recurrenceRule!.type;
+        _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+        _recurrenceIntervalController.text =
+            _recurrenceRule!.intervalDays?.toString() ?? '';
+      } else {
+        _recurrenceType = RecurrenceType.none;
+        _selectedRecurrenceDays = [];
+        _recurrenceIntervalController.clear();
+      }
     }
 
     setState(() {
@@ -1510,6 +1634,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _completeBy = currentNote.completeBy != null
             ? DateTime.tryParse(currentNote.completeBy!)
             : null;
+
+        // Reset recurrence state
+        _recurrenceRule = RecurrenceRule.decode(currentNote.recurrenceRule);
+        if (_recurrenceRule != null) {
+          _recurrenceType = _recurrenceRule!.type;
+          _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+          _recurrenceIntervalController.text =
+              _recurrenceRule!.intervalDays?.toString() ?? '';
+        } else {
+          _recurrenceType = RecurrenceType.none;
+          _selectedRecurrenceDays = [];
+          _recurrenceIntervalController.clear();
+        }
       }
     });
   }
@@ -1556,6 +1693,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       completeBy: _completeBy != null
           ? AppDateUtils.formatDateOnly(_completeBy!)
           : null,
+      recurrenceRule: RecurrenceRule.encode(
+        RecurrenceRule(
+          type: _recurrenceType,
+          daysOfWeek: _recurrenceType == RecurrenceType.weekly
+              ? _selectedRecurrenceDays
+              : null,
+          intervalDays: _recurrenceType == RecurrenceType.interval
+              ? int.tryParse(_recurrenceIntervalController.text)
+              : null,
+        ),
+      ),
       attachmentPaths: _mergeAttachmentPaths(
         currentNote.attachmentPaths,
         downloadReport?.urlToRelativePath.values ?? const [],

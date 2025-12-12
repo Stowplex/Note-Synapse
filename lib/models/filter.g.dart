@@ -7,7 +7,7 @@ part of 'filter.dart';
 // **************************************************************************
 
 Filter _$FilterFromJson(Map<String, dynamic> json) => Filter(
-  id: json['id'] as String,
+  id: json['id'] as String?,
   name: json['name'] as String,
   includeText: json['includeText'] as String?,
   includeTags:

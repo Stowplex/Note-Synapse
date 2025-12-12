@@ -31,12 +31,15 @@ class Note {
   final List<SubNote> subNotes;
   final List<String> tags;
   final List<String> attachmentPaths;
-  final String? scheduledAt; // For tasks only - when the task is scheduled to start
-  final String? completeBy; // For tasks only - when the task needs to be completed
+  final String?
+  scheduledAt; // For tasks only - when the task is scheduled to start
+  final String?
+  completeBy; // For tasks only - when the task needs to be completed
   final TaskStatus? status; // For tasks only
   final double? completionPercentage; // For tasks only
   final bool pinned; // Whether the note is pinned to the top
   final bool isArchived; // Whether the note is archived
+  final String? recurrenceRule; // JSON string for recurrence rules
 
   Note({
     required this.id,
@@ -54,6 +57,7 @@ class Note {
     this.completionPercentage,
     this.pinned = false,
     this.isArchived = false,
+    this.recurrenceRule,
   });
 
   factory Note.fromJson(Map<String, dynamic> json) => _$NoteFromJson(json);
@@ -75,6 +79,7 @@ class Note {
     double? completionPercentage,
     bool? pinned,
     bool? isArchived,
+    String? recurrenceRule,
   }) {
     return Note(
       id: id ?? this.id,
@@ -92,6 +97,7 @@ class Note {
       completionPercentage: completionPercentage ?? this.completionPercentage,
       pinned: pinned ?? this.pinned,
       isArchived: isArchived ?? this.isArchived,
+      recurrenceRule: recurrenceRule ?? this.recurrenceRule,
     );
   }
 
@@ -118,7 +124,8 @@ class SubNote {
     this.isCompleted = false,
   });
 
-  factory SubNote.fromJson(Map<String, dynamic> json) => _$SubNoteFromJson(json);
+  factory SubNote.fromJson(Map<String, dynamic> json) =>
+      _$SubNoteFromJson(json);
   Map<String, dynamic> toJson() => _$SubNoteToJson(this);
 
   SubNote copyWith({

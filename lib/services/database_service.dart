@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 29;
+  static const int DATABASE_VERSION = 30;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -59,7 +59,8 @@ class DatabaseService {
         status TEXT, -- Task status: 'todo', 'inProgress', 'completed', 'cancelled'
         completionPercentage REAL, -- Task completion percentage
         pinned INTEGER NOT NULL DEFAULT 0, -- Whether note is pinned
-        isArchived INTEGER NOT NULL DEFAULT 0 -- Whether note is archived
+        isArchived INTEGER NOT NULL DEFAULT 0, -- Whether note is archived
+        recurrenceRule TEXT -- JSON string defining recurrence rules
       )
   ''';
 
@@ -477,6 +478,10 @@ class DatabaseService {
       description: 'Ensure multi_function_apps table exists',
       execute: _migrateToVersion29,
     ),
+    30: MigrationStep(
+      description: 'Add recurrenceRule column to notes table',
+      execute: _migrateToVersion30,
+    ),
   };
 
   // Main migration execution method
@@ -786,6 +791,14 @@ class DatabaseService {
     await db.execute(
       "ALTER TABLE filters ADD COLUMN noteTypes TEXT NOT NULL DEFAULT ''",
     );
+  }
+
+  static Future<void> _migrateToVersion30(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // Add recurrenceRule column to notes table
+    await db.execute("ALTER TABLE notes ADD COLUMN recurrenceRule TEXT");
   }
 
   // Recreate main database tables
@@ -1250,7 +1263,7 @@ class DatabaseService {
     LoggerService.info('Querying notes table...');
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT 
-        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
         CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
         length(content) as _contentLength
       FROM notes
@@ -1411,7 +1424,7 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.rawQuery(
       '''
       SELECT 
-        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
         CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
         length(content) as _contentLength
       FROM notes
@@ -1433,7 +1446,7 @@ class DatabaseService {
     final placeholders = List.filled(noteIds.length, '?').join(',');
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT 
-        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
         CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
         length(content) as _contentLength
       FROM notes
@@ -1946,6 +1959,7 @@ class DatabaseService {
       completionPercentage: map['completionPercentage'],
       pinned: (map['pinned'] ?? 0) == 1,
       isArchived: (map['isArchived'] ?? 0) == 1,
+      recurrenceRule: map['recurrenceRule'],
     );
   }
 
