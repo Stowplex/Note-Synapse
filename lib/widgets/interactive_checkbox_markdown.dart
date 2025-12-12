@@ -11,7 +11,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
@@ -23,6 +25,7 @@ import '../utils/remote_image_storage.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'interactive_checkbox_component.dart';
+import '../widgets/drawing_editor.dart';
 
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
@@ -487,14 +490,15 @@ class _InteractiveCheckboxMarkdownState
       return _buildGenericSynapseTempImage(context, url, width, height);
     }
 
+    final imageWidget = _buildNetworkImage(url, width, height);
     return _wrapImageWithInfoBar(
-      image: _buildNetworkImage(url, width, height),
+      image: SizedBox(width: width, height: height, child: imageWidget),
       imageUrl: url,
       isSvg: false,
       onFullscreen: () {
         _FullscreenViewer.show(
           context,
-          imageWidget: Image.network(url, fit: BoxFit.contain),
+          imageWidget: imageWidget,
           title: 'Image',
         );
       },
@@ -586,9 +590,138 @@ class _InteractiveCheckboxMarkdownState
           isSvg: isSvg,
           onBackgroundToggle: onBackgroundToggle,
           onFullscreen: onFullscreen,
+          onEdit: () async {
+            if (sourceType == _ImageSourceType.remote) {
+              await _handleNetworkImageEdit(imageUrl);
+            } else {
+              // Local handling
+              File? file;
+              if (SynapseTempUtils.isSynapseTempUri(imageUrl)) {
+                try {
+                  final synapseFile = await _resolveSynapseTempFileCached(
+                    imageUrl,
+                  );
+                  file = synapseFile.file;
+                } catch (_) {}
+              } else {
+                final source = await _resolveLocalImageSource(imageUrl);
+                if (source != null) {
+                  file = File(source.path);
+                }
+              }
+
+              if (file != null && await file.exists()) {
+                final editedFile = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        DrawingEditor(initialImagePath: file!.path),
+                  ),
+                );
+
+                if (editedFile != null && editedFile is File) {
+                  await file.writeAsBytes(await editedFile.readAsBytes());
+                  if (mounted) {
+                    _localImageFutures.remove(imageUrl);
+                    _synapseTempFutures.remove(imageUrl);
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+                    setState(() {});
+                  }
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Cannot edit this image (file not found)'),
+                    ),
+                  );
+                }
+              }
+            }
+          },
         );
       },
     );
+  }
+
+  Future<void> _handleNetworkImageEdit(String imageUrl) async {
+    final shouldDownload = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Network Image'),
+        content: const Text(
+          'To edit this image, it must be downloaded first. Do you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Download & Edit'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDownload == true) {
+      try {
+        // Download
+        final response = await http.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          final tempDir = await getTemporaryDirectory();
+          final tempFile = File(
+            '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}_edit.png',
+          );
+          await tempFile.writeAsBytes(bytes);
+
+          if (!mounted) return;
+
+          // Open Editor
+          final editedFile = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  DrawingEditor(initialImagePath: tempFile.path),
+            ),
+          );
+
+          if (editedFile != null && editedFile is File) {
+            // We have the edited file locally.
+            // We need to update the markdown content to point to this new local file.
+            // Using file:// URI Scheme
+            final newUri = Uri.file(editedFile.path).toString();
+
+            // Update Content
+            if (widget.onContentChanged != null) {
+              final newContent = _currentContent.replaceAll(imageUrl, newUri);
+              if (newContent != _currentContent) {
+                _currentContent = newContent;
+                widget.onContentChanged!(_currentContent);
+                setState(() {});
+              }
+            }
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Download failed: ${response.statusCode}'),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error downloading image: $e')),
+          );
+        }
+      }
+    }
   }
 
   Future<_ImageSourceType> _determineImageSourceTypeCached(String url) {
@@ -1623,6 +1756,7 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
                     title: 'SVG',
                   );
                 },
+                onEdit: null, // Hide edit button for SVGs
               ),
             ],
           ),
@@ -1639,12 +1773,14 @@ class _ImageInfoBar extends StatelessWidget {
     required this.isSvg,
     this.onBackgroundToggle,
     this.onFullscreen,
+    this.onEdit,
   });
 
   final _ImageSourceType sourceType;
   final bool isSvg;
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1657,22 +1793,22 @@ class _ImageInfoBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isDark
-              ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
-              : colorScheme.surfaceContainerHighest.withOpacity(0.15),
+              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
+              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.15),
           borderRadius: const BorderRadius.only(
             bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(4),
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          // Remove mainAxisSize: MainAxisSize.min to allow Spacer to work
           children: [
             Icon(
               sourceType == _ImageSourceType.local
                   ? Icons.storage
                   : Icons.cloud,
               size: 22,
-              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             if (onBackgroundToggle != null) ...[
               const SizedBox(width: 12),
@@ -1681,7 +1817,7 @@ class _ImageInfoBar extends StatelessWidget {
                 child: Icon(
                   Icons.contrast,
                   size: 22,
-                  color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
               ),
             ],
@@ -1692,7 +1828,21 @@ class _ImageInfoBar extends StatelessWidget {
                 child: Icon(
                   Icons.fullscreen,
                   size: 22,
-                  color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+            const Spacer(),
+            if (onEdit != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onEdit,
+                child: Icon(
+                  Icons.edit,
+                  size: 20,
+                  color: colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.8,
+                  ), // Slightly more opaque for visibility
                 ),
               ),
             ],
@@ -1710,6 +1860,7 @@ class _ImageWithInfoBar extends StatefulWidget {
     required this.isSvg,
     this.onBackgroundToggle,
     this.onFullscreen,
+    this.onEdit,
   });
 
   final Widget image;
@@ -1717,6 +1868,7 @@ class _ImageWithInfoBar extends StatefulWidget {
   final bool isSvg;
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
+  final VoidCallback? onEdit;
 
   @override
   State<_ImageWithInfoBar> createState() => _ImageWithInfoBarState();
@@ -1767,6 +1919,7 @@ class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
                       }
                     : null),
             onFullscreen: widget.onFullscreen,
+            onEdit: widget.onEdit,
           ),
         ],
       ),

@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
+import '../widgets/drawing_editor.dart';
 import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
@@ -1189,6 +1191,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
               ],
             ),
           ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'draw'),
+            child: Row(
+              children: [
+                const Icon(Icons.brush),
+                const SizedBox(width: 12),
+                const Text('Draw'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1197,6 +1209,39 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       await _pickFilesFromDevice();
     } else if (source == 'uri') {
       await _showUriInputDialog();
+    } else if (source == 'draw') {
+      await _openDrawingEditor();
+    }
+  }
+
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        final bytes = await drawnFile.readAsBytes();
+        final platformFile = PlatformFile(
+          name: drawnFile.path.split('/').last,
+          size: bytes.length,
+          bytes: bytes,
+          path: drawnFile.path,
+        );
+        setState(() {
+          _attachedFiles.add(platformFile);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 

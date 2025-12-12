@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -46,6 +47,7 @@ import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
+import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'note_selection_dialog.dart';
@@ -1463,6 +1465,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             tooltip: 'Pen',
             onPressed: () => setState(() => _currentTool = DrawingTool.pen),
             iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: const Icon(Icons.palette),
+            iconSize: 20,
+            onPressed: _openDrawingEditor,
+            tooltip: 'Advanced Drawing',
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.all(8),
           ),
@@ -4160,6 +4170,47 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       'bmp',
       'webp',
     }.contains(extension);
+  }
+
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        if (_conversation != null) {
+          final conversationService = ConversationService();
+
+          final userMessage = await conversationService.addUserMessage(
+            conversationId: _conversation!.id,
+            content: 'Added a drawing',
+            attachmentPaths: [drawnFile.path],
+          );
+
+          setState(() {
+            _messages.add(userMessage);
+          });
+          _scrollToBottom();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No active conversation to attach drawing to'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 

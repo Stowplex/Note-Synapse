@@ -11,6 +11,7 @@ import 'user_app_result_screen.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
+import '../widgets/drawing_editor.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
   const UserAppCreationScreen({super.key});
@@ -214,6 +215,30 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
     }
   }
 
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        setState(() {
+          _attachmentPaths.add(drawnFile.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _removeAttachment(int index) {
     setState(() {
       _attachmentPaths.removeAt(index);
@@ -282,6 +307,14 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
             },
             icon: const Icon(Icons.photo_library),
             label: const Text('Gallery'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openDrawingEditor();
+            },
+            icon: const Icon(Icons.brush),
+            label: const Text('Draw'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),

@@ -18,6 +18,7 @@ import '../widgets/synapse_code_editor.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
+import '../widgets/drawing_editor.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -475,6 +476,30 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     }
   }
 
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        setState(() {
+          _attachmentPaths.add(drawnFile.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _removeAttachment(int index) {
     setState(() {
       _attachmentPaths.removeAt(index);
@@ -537,6 +562,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
             },
             icon: const Icon(Icons.photo_library),
             label: const Text('Gallery'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openDrawingEditor();
+            },
+            icon: const Icon(Icons.brush),
+            label: const Text('Draw'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),

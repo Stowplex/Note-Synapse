@@ -9,6 +9,7 @@ import 'package:re_editor/re_editor.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import '../widgets/drawing_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -4157,6 +4158,68 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Pick'),
+        ),
+        TextButton(
+          onPressed: _isImporting
+              ? null
+              : () async {
+                  setState(() {
+                    _isImporting = true;
+                  });
+                  try {
+                    // Ensure note is saved first
+                    await widget.onSaveNote();
+
+                    final File? drawnFile = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DrawingEditor(),
+                      ),
+                    );
+
+                    if (drawnFile != null) {
+                      // Generate timestamp for filename
+                      final timestamp = DateTime.now().millisecondsSinceEpoch;
+                      final fileName = 'drawing_$timestamp.png';
+
+                      // Save attachment using callback
+                      final relativePath = await widget.onAddAttachment(
+                        drawnFile,
+                        fileName,
+                      );
+
+                      // Update UI
+                      setState(() {
+                        _selectedAttachmentPath = relativePath;
+                        _srcController.text = relativePath.replaceFirst(
+                          'attachments/',
+                          '',
+                        );
+                        _isImporting = false;
+                      });
+                    } else {
+                      setState(() {
+                        _isImporting = false;
+                      });
+                    }
+                  } catch (e) {
+                    setState(() {
+                      _isImporting = false;
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save drawing: $e')),
+                      );
+                    }
+                  }
+                },
+          child: _isImporting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Draw'),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),
