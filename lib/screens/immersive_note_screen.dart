@@ -3337,14 +3337,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
-    messages.add(
-      PromptMessage(
-        role: PromptRole.user,
-        content: userMessage,
-        attachments: latestAttachments,
-      ),
-    );
-
     final request = PromptRequest(
       systemMessage: systemMessage,
       contextMessages:
