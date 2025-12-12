@@ -53,6 +53,23 @@ import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 
+enum DrawingTool { pen, rectangle }
+
+abstract class DrawingAction {
+  final Color color;
+  DrawingAction(this.color);
+}
+
+class StrokeAction extends DrawingAction {
+  final List<Offset> points;
+  StrokeAction(this.points, Color color) : super(color);
+}
+
+class RectangleAction extends DrawingAction {
+  final Rect rect;
+  RectangleAction(this.rect, Color color) : super(color);
+}
+
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
     super.key,
@@ -138,6 +155,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
   ToolIterationPrompt? _iterationPrompt;
   final List<Offset> _penStrokePoints = [];
+
+  // Drawing State
+  List<DrawingAction> _drawingActions = [];
+  List<DrawingAction> _redoStack = [];
+  DrawingTool _currentTool = DrawingTool.pen;
+  Color _currentColor = Colors.redAccent;
+  Offset? _currentRectStart;
+  Offset? _currentRectEnd;
+
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
@@ -810,10 +836,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           onPanEnd: (_) => _handlePenPanEnd(),
                           onPanCancel: _resetPenStroke,
                           child: CustomPaint(
-                            painter: _FreeformStrokePainter(
-                              _penStrokePoints.isEmpty
-                                  ? null
-                                  : List<Offset>.from(_penStrokePoints),
+                            painter: _DrawingLayerPainter(
+                              actions: _drawingActions,
+                              activeStroke:
+                                  _currentTool == DrawingTool.pen &&
+                                      _penStrokePoints.isNotEmpty
+                                  ? List<Offset>.from(_penStrokePoints)
+                                  : null,
+                              activeRect:
+                                  _currentTool == DrawingTool.rectangle &&
+                                      _currentRectStart != null &&
+                                      _currentRectEnd != null
+                                  ? Rect.fromPoints(
+                                      _currentRectStart!,
+                                      _currentRectEnd!,
+                                    )
+                                  : null,
+                              activeColor: _currentColor,
                             ),
                             size: Size.infinite,
                           ),
@@ -1094,11 +1133,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   double _currentHandleHeight() {
-    if (_pendingAttachments.isEmpty) {
-      return _aiHandleHeight;
+    double height = _aiHandleHeight;
+    if (_pendingAttachments.isNotEmpty) {
+      final attachmentRows = (_pendingAttachments.length / 2).ceil();
+      height += attachmentRows * 32.0;
     }
-    final attachmentRows = (_pendingAttachments.length / 2).ceil();
-    return _aiHandleHeight + attachmentRows * 32.0;
+    if (_isPenMode) {
+      height += 48.0; // Toolbar height
+    }
+    return height;
   }
 
   Widget _buildAiHandle(
@@ -1324,7 +1367,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           onPressed: () {
                             setState(() {
                               _isPenMode = !_isPenMode;
-                              _penStrokePoints.clear();
+                              if (!_isPenMode) {
+                                // Reset drawing state when exiting without confirming
+                                _drawingActions.clear();
+                                _redoStack.clear();
+                                _penStrokePoints.clear();
+                              } else {
+                                // Initialize new session
+                                _drawingActions.clear();
+                                _redoStack.clear();
+                                _penStrokePoints.clear();
+                              }
                             });
                           },
                         ),
@@ -1381,12 +1434,203 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     _buildSendControl(l10n),
                   ],
                 ),
+                if (_isPenMode) ...[
+                  const Divider(height: 12),
+                  _buildDrawingToolbar(theme),
+                ],
               ],
             ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildDrawingToolbar(ThemeData theme) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Tools
+          IconButton(
+            icon: Icon(
+              Icons.edit,
+              color: _currentTool == DrawingTool.pen
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+            tooltip: 'Pen',
+            onPressed: () => setState(() => _currentTool = DrawingTool.pen),
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.crop_square,
+              color: _currentTool == DrawingTool.rectangle
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+            tooltip: 'Rectangle',
+            onPressed: () =>
+                setState(() => _currentTool = DrawingTool.rectangle),
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          const SizedBox(width: 8),
+          // Colors
+          ...[
+            Colors.redAccent,
+            Colors.blueAccent,
+            Colors.green,
+          ].map((color) => _buildColorButton(color)),
+          const SizedBox(width: 8),
+          // Undo/Redo
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo',
+            onPressed: _drawingActions.isEmpty ? null : _undoDrawing,
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: 'Redo',
+            onPressed: _redoStack.isEmpty ? null : _redoDrawing,
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          const SizedBox(width: 8),
+          // Confirm
+          IconButton(
+            onPressed: _drawingActions.isEmpty ? null : _confirmDrawing,
+            icon: Icon(
+              Icons.check_circle,
+              color: _drawingActions.isEmpty ? null : theme.colorScheme.primary,
+            ),
+            tooltip: 'Done',
+            iconSize: 24,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorButton(Color color) {
+    final isSelected = _currentColor == color;
+    return GestureDetector(
+      onTap: () => setState(() => _currentColor = color),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.4),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+      ),
+    );
+  }
+
+  void _undoDrawing() {
+    if (_drawingActions.isEmpty) return;
+    setState(() {
+      final action = _drawingActions.removeLast();
+      _redoStack.add(action);
+    });
+  }
+
+  void _redoDrawing() {
+    if (_redoStack.isEmpty) return;
+    setState(() {
+      final action = _redoStack.removeLast();
+      _drawingActions.add(action);
+    });
+  }
+
+  Future<void> _confirmDrawing() async {
+    if (_drawingActions.isEmpty) return;
+
+    // Calculate bounds of all actions
+    Rect? totalBounds;
+    for (final action in _drawingActions) {
+      Rect actionBounds;
+      if (action is StrokeAction) {
+        actionBounds = _computeStrokeBounds(action.points);
+      } else if (action is RectangleAction) {
+        actionBounds = action.rect;
+      } else {
+        continue;
+      }
+
+      if (totalBounds == null) {
+        totalBounds = actionBounds;
+      } else {
+        totalBounds = totalBounds.expandToInclude(actionBounds);
+      }
+    }
+
+    if (totalBounds == null) return;
+
+    try {
+      final imageBytes = await _captureDrawing(_drawingActions, totalBounds);
+      final result = await SynapseTempUtils.saveTempData(
+        mimeType: 'image/png',
+        bytes: imageBytes,
+      );
+
+      final platformFile = PlatformFile(
+        name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
+        path: result.file.path,
+        size: imageBytes.length,
+        bytes: imageBytes,
+      );
+
+      if (mounted) {
+        setState(() {
+          _pendingAttachments.add(platformFile);
+          _drawingActions.clear();
+          _redoStack.clear();
+          _isPenMode = false; // Optional: exit pen mode after adding?
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Annotation added to attachments.')),
+        );
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to capture drawing: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to capture drawing: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildSendControl(AppLocalizations l10n) {
@@ -3503,10 +3747,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
+
     setState(() {
-      _penStrokePoints
-        ..clear()
-        ..add(localPosition);
+      if (_currentTool == DrawingTool.pen) {
+        _penStrokePoints
+          ..clear()
+          ..add(localPosition);
+      } else if (_currentTool == DrawingTool.rectangle) {
+        _currentRectStart = localPosition;
+        _currentRectEnd = localPosition;
+      }
     });
   }
 
@@ -3514,63 +3764,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
+
     setState(() {
-      final lastPoint = _penStrokePoints.isEmpty ? null : _penStrokePoints.last;
-      if (lastPoint == null ||
-          (lastPoint - localPosition).distanceSquared > 1) {
-        _penStrokePoints.add(localPosition);
+      if (_currentTool == DrawingTool.pen) {
+        final lastPoint = _penStrokePoints.isEmpty
+            ? null
+            : _penStrokePoints.last;
+        if (lastPoint == null ||
+            (lastPoint - localPosition).distanceSquared > 1) {
+          _penStrokePoints.add(localPosition);
+        }
+      } else if (_currentTool == DrawingTool.rectangle) {
+        _currentRectEnd = localPosition;
       }
     });
   }
 
-  Future<void> _handlePenPanEnd() async {
-    if (_penStrokePoints.length < 2) {
-      _resetPenStroke();
-      return;
-    }
-
-    final strokePoints = List<Offset>.from(_penStrokePoints);
-    final bounds = _computeStrokeBounds(strokePoints);
-    _resetPenStroke();
-
-    if (bounds.width < 12 || bounds.height < 12) {
-      return;
-    }
-
-    try {
-      final croppedBytes = await _captureStroke(strokePoints, bounds);
-      final result = await SynapseTempUtils.saveTempData(
-        mimeType: 'image/png',
-        bytes: croppedBytes,
-      );
-      final file = result.file;
-      final platformFile = PlatformFile(
-        name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
-        path: file.path,
-        size: croppedBytes.length,
-        bytes: croppedBytes,
-      );
-
-      if (mounted) {
-        setState(() {
-          _pendingAttachments.add(platformFile);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Annotation added to attachments.')),
-        );
+  void _handlePenPanEnd() {
+    setState(() {
+      if (_currentTool == DrawingTool.pen) {
+        if (_penStrokePoints.length >= 2) {
+          final points = List<Offset>.from(_penStrokePoints);
+          _drawingActions.add(StrokeAction(points, _currentColor));
+          _redoStack.clear();
+        }
+        _penStrokePoints.clear();
+      } else if (_currentTool == DrawingTool.rectangle) {
+        if (_currentRectStart != null && _currentRectEnd != null) {
+          final rect = Rect.fromPoints(_currentRectStart!, _currentRectEnd!);
+          if (rect.width > 0 && rect.height > 0) {
+            _drawingActions.add(RectangleAction(rect, _currentColor));
+            _redoStack.clear();
+          }
+        }
+        _currentRectStart = null;
+        _currentRectEnd = null;
       }
-    } catch (e, stackTrace) {
-      LoggerService.error(
-        'Failed to capture annotation: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to capture annotation: $e')),
-        );
-      }
-    }
+    });
   }
 
   void _resetPenStroke() {
@@ -3717,7 +3947,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return Rect.fromLTWH(left, top, width, height);
   }
 
-  Future<Uint8List> _captureStroke(List<Offset> points, Rect bounds) async {
+  Future<Uint8List> _captureDrawing(
+    List<DrawingAction> actions,
+    Rect bounds,
+  ) async {
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderRepaintBoundary) {
       throw Exception('Note view unavailable for capture.');
@@ -3792,36 +4025,56 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
     canvas.drawImageRect(baseImage, sourceRect, targetRect, paint);
 
-    final List<Offset> scaledPoints = points
-        .map(
-          (point) => Offset(
-            (point.dx - cappedRect.left) * devicePixelRatio,
-            (point.dy - cappedRect.top) * devicePixelRatio,
-          ),
-        )
-        .toList();
+    // Scale context for drawing
+    canvas.save();
+    canvas.scale(devicePixelRatio, devicePixelRatio);
+    canvas.translate(-cappedRect.left, -cappedRect.top);
 
-    if (scaledPoints.length >= 2) {
-      final Path strokePath = _FreeformStrokePainter.buildPath(scaledPoints);
-      final double strokeWidth = max(4.0, 2.0 * devicePixelRatio);
+    for (final action in actions) {
+      if (action is StrokeAction) {
+        if (action.points.length >= 2) {
+          final Path strokePath = _DrawingLayerPainter.buildStrokePath(
+            action.points,
+          );
 
-      final Paint glowPaint = Paint()
-        ..color = Colors.redAccent.withOpacity(0.18)
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = strokeWidth * 2;
+          final Paint glowPaint = Paint()
+            ..color = action.color.withOpacity(0.18)
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..strokeWidth = 8;
 
-      final Paint strokePaint = Paint()
-        ..color = Colors.redAccent
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = strokeWidth;
+          final Paint strokePaint = Paint()
+            ..color = action.color
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..strokeWidth = 3;
 
-      canvas.drawPath(strokePath, glowPaint);
-      canvas.drawPath(strokePath, strokePaint);
+          canvas.drawPath(strokePath, glowPaint);
+          canvas.drawPath(strokePath, strokePaint);
+        }
+      } else if (action is RectangleAction) {
+        final Paint glowPaint = Paint()
+          ..color = action.color.withOpacity(0.18)
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..strokeWidth = 8;
+
+        final Paint strokePaint = Paint()
+          ..color = action.color
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..strokeWidth = 3;
+
+        canvas.drawRect(action.rect, glowPaint);
+        canvas.drawRect(action.rect, strokePaint);
+      }
     }
+
+    canvas.restore();
 
     final ui.Picture picture = recorder.endRecording();
     final ui.Image croppedImage = await picture.toImage(
@@ -4071,28 +4324,57 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
   }
 }
 
-class _FreeformStrokePainter extends CustomPainter {
-  _FreeformStrokePainter(List<Offset>? points)
-    : _points = points == null ? null : List<Offset>.unmodifiable(points);
+class _DrawingLayerPainter extends CustomPainter {
+  _DrawingLayerPainter({
+    required this.actions,
+    this.activeStroke,
+    this.activeRect,
+    this.activeColor = Colors.redAccent,
+  });
 
-  final List<Offset>? _points;
+  final List<DrawingAction> actions;
+  final List<Offset>? activeStroke;
+  final Rect? activeRect;
+  final Color activeColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final points = _points;
-    if (points == null || points.length < 2) return;
+    // Draw committed actions
+    for (final action in actions) {
+      _paintAction(canvas, action);
+    }
 
-    final path = buildPath(points);
+    // Draw active stroke
+    if (activeStroke != null && activeStroke!.length >= 2) {
+      _paintStroke(canvas, activeStroke!, activeColor);
+    }
+
+    // Draw active rect
+    if (activeRect != null) {
+      _paintRect(canvas, activeRect!, activeColor);
+    }
+  }
+
+  void _paintAction(Canvas canvas, DrawingAction action) {
+    if (action is StrokeAction) {
+      _paintStroke(canvas, action.points, action.color);
+    } else if (action is RectangleAction) {
+      _paintRect(canvas, action.rect, action.color);
+    }
+  }
+
+  void _paintStroke(Canvas canvas, List<Offset> points, Color color) {
+    final path = buildStrokePath(points);
 
     final glowPaint = Paint()
-      ..color = Colors.redAccent.withOpacity(0.18)
+      ..color = color.withOpacity(0.18)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..strokeWidth = 8;
 
     final strokePaint = Paint()
-      ..color = Colors.redAccent
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -4102,8 +4384,28 @@ class _FreeformStrokePainter extends CustomPainter {
     canvas.drawPath(path, strokePaint);
   }
 
-  static Path buildPath(List<Offset> points) {
+  void _paintRect(Canvas canvas, Rect rect, Color color) {
+    final glowPaint = Paint()
+      ..color = color.withOpacity(0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 8;
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 3;
+
+    canvas.drawRect(rect, glowPaint);
+    canvas.drawRect(rect, strokePaint);
+  }
+
+  static Path buildStrokePath(List<Offset> points) {
     final path = Path();
+    if (points.isEmpty) return path;
     path.moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       final prev = points[i - 1];
@@ -4119,8 +4421,13 @@ class _FreeformStrokePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FreeformStrokePainter oldDelegate) {
-    return !listEquals(oldDelegate._points, _points);
+  bool shouldRepaint(covariant _DrawingLayerPainter oldDelegate) {
+    // Basic optimization: if list references changed, rebuild.
+    // Deep equality check might be expensive if many strokes.
+    return oldDelegate.actions != actions ||
+        oldDelegate.activeStroke != activeStroke ||
+        oldDelegate.activeRect != activeRect ||
+        oldDelegate.activeColor != activeColor;
   }
 }
 
