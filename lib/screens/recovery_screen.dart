@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:file_picker/file_picker.dart';
@@ -285,21 +285,29 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   }
 
   Future<void> _createZipArchive(Directory sourceDir, File zipFile) async {
-    final archive = Archive();
+    final start = DateTime.now();
+    _addLog('Starting zip creation...');
 
-    await for (final entity in sourceDir.list(recursive: true)) {
-      if (entity is File) {
-        final relativePath = entity.path.substring(sourceDir.path.length + 1);
-        final fileBytes = await entity.readAsBytes();
-        archive.addFile(ArchiveFile(relativePath, fileBytes.length, fileBytes));
+    try {
+      final encoder = ZipFileEncoder();
+      encoder.create(zipFile.path);
+
+      await for (final entity in sourceDir.list(recursive: true)) {
+        if (entity is File) {
+          final relativePath = entity.path.substring(sourceDir.path.length + 1);
+          encoder.addFile(entity, relativePath);
+          await Future.delayed(Duration.zero); // Yield to UI
+        }
       }
-    }
 
-    final zipData = ZipEncoder().encode(archive);
-    if (zipData != null) {
-      await zipFile.writeAsBytes(zipData);
-    } else {
-      throw Exception('Failed to create zip archive');
+      encoder.close();
+
+      final end = DateTime.now();
+      final duration = end.difference(start);
+      _addLog('Zip creation took ${duration.inSeconds}s');
+    } catch (e) {
+      _addLog('Error creating zip: $e');
+      rethrow;
     }
   }
 
@@ -469,23 +477,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         throw Exception(l10n.invalidBackupFile);
       }
 
-      final zipBytes = await backupFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(zipBytes);
+      final inputStream = InputFileStream(backupFilePath);
+      final archive = ZipDecoder().decodeBuffer(inputStream);
 
       // Step 2: Extract the zip to a temp directory
       final extractDir = Directory('${tempDir.path}/extract_$timestamp');
       await extractDir.create(recursive: true);
 
-      for (final file in archive) {
+      for (final file in archive.files) {
         final filePath = '${extractDir.path}/${file.name}';
+        // Ensure parent directory exists
         final fileDir = Directory(path.dirname(filePath));
         await fileDir.create(recursive: true);
 
         if (file.isFile) {
-          final fileData = file.content as List<int>;
-          await File(filePath).writeAsBytes(fileData);
+          final outputStream = OutputFileStream(filePath);
+          file.writeContent(outputStream);
+          outputStream.close();
+          await Future.delayed(Duration.zero); // Yield to UI
         }
       }
+
+      inputStream.close();
 
       _addImportLog(l10n.validatingBackupDatabase);
       _updateImportProgress(0.2);
@@ -632,6 +645,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
       _addImportLog(l10n.swappingDatabases);
       _updateImportProgress(0.94);
+
+      // Force cleanup of staging DB connection before copying
+      await stagingDb.close(); // Ensure strictly closed
 
       // Step 16: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
