@@ -4180,24 +4180,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
 
       if (drawnFile != null) {
-        if (_conversation != null) {
-          final conversationService = ConversationService();
+        final bytes = await drawnFile.readAsBytes();
+        final platformFile = PlatformFile(
+          name: drawnFile.path.split('/').last,
+          size: bytes.length,
+          bytes: bytes,
+          path: drawnFile.path,
+        );
 
-          final userMessage = await conversationService.addUserMessage(
-            conversationId: _conversation!.id,
-            content: 'Added a drawing',
-            attachmentPaths: [drawnFile.path],
-          );
-
+        if (mounted) {
           setState(() {
-            _messages.add(userMessage);
+            _pendingAttachments.add(platformFile);
           });
-          _scrollToBottom();
-        } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No active conversation to attach drawing to'),
-            ),
+            const SnackBar(content: Text('Drawing added to attachments.')),
           );
         }
       }
