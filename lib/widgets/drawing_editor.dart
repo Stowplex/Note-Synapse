@@ -128,8 +128,8 @@ class _DrawingEditorState extends State<DrawingEditor> {
     // _canvasSize should be populated by _waitForCanvasSize or fallback
     final Size viewportSize = _canvasSize;
 
-    final double maxWidth = viewportSize.width * 0.9;
-    final double maxHeight = viewportSize.height * 0.8;
+    final double maxWidth = viewportSize.width;
+    final double maxHeight = viewportSize.height;
 
     double targetWidth = image.width.toDouble();
     double targetHeight = image.height.toDouble();

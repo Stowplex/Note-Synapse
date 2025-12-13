@@ -245,9 +245,6 @@ class _InteractiveCheckboxMarkdownState
         }
 
         if (snapshot.hasError || !snapshot.hasData) {
-          if (snapshot.hasError && kDebugMode) {
-            debugPrint('SynapseTemp image load error: ${snapshot.error}');
-          }
           return _buildPlaceholder(
             width,
             height,
@@ -272,9 +269,6 @@ class _InteractiveCheckboxMarkdownState
               noteId: widget.noteId,
             );
           } catch (e) {
-            if (kDebugMode) {
-              debugPrint('Error decoding SVG content: $e');
-            }
             return _buildPlaceholder(width, height, 'Failed to decode SVG');
           }
         }
@@ -425,6 +419,11 @@ class _InteractiveCheckboxMarkdownState
           }
 
           Widget buildFallback() {
+            if (kDebugMode) {
+              debugPrint(
+                'InteractiveCheckboxMarkdown: Building fallback for \$url',
+              );
+            }
             if (SynapseTempUtils.isSynapseTempUri(url)) {
               return _buildGenericSynapseTempImage(context, url, width, height);
             }
@@ -459,31 +458,54 @@ class _InteractiveCheckboxMarkdownState
               );
             }
             final imageFile = File(source.path);
-            return _wrapImageWithInfoBar(
-              image: SizedBox(
-                width: width,
-                height: height,
-                child: Image.file(
-                  imageFile,
-                  key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildPlaceholder(
-                      width,
-                      height,
-                      'Failed to render local image',
+            if (kDebugMode) {
+              debugPrint(
+                'InteractiveCheckboxMarkdown: Building local image widget for $url version ${_imageVersions[url]} (path: ${source.path})',
+              );
+            }
+
+            // Bypass FileImage cache by reading bytes directly
+            return FutureBuilder<Uint8List>(
+              future: imageFile.readAsBytes(),
+              builder: (context, byteSnapshot) {
+                if (byteSnapshot.hasData) {
+                  if (kDebugMode) {
+                    debugPrint(
+                      'InteractiveCheckboxMarkdown: Read ${byteSnapshot.data!.length} bytes from disk for $url',
                     );
-                  },
-                ),
-              ),
-              imageUrl: url,
-              isSvg: false,
-              onFullscreen: () {
-                _FullscreenViewer.show(
-                  context,
-                  imageWidget: Image.file(imageFile, fit: BoxFit.contain),
-                  title: 'Image',
-                );
+                  }
+                  return _wrapImageWithInfoBar(
+                    image: SizedBox(
+                      width: width,
+                      height: height,
+                      child: Image.memory(
+                        byteSnapshot.data!,
+                        key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildPlaceholder(
+                            width,
+                            height,
+                            'Failed to render local image bytes',
+                          );
+                        },
+                      ),
+                    ),
+                    imageUrl: url,
+                    isSvg: false,
+                    onFullscreen: () {
+                      _FullscreenViewer.show(
+                        context,
+                        imageWidget: Image.memory(
+                          byteSnapshot.data!,
+                          fit: BoxFit.contain,
+                        ),
+                        title: 'Image',
+                      );
+                    },
+                  );
+                }
+                return _buildLoadingPlaceholder(width, height);
               },
             );
           }
@@ -627,10 +649,25 @@ class _InteractiveCheckboxMarkdownState
                 );
 
                 if (editedFile != null && editedFile is File) {
-                  await file.writeAsBytes(await editedFile.readAsBytes());
+                  await file.writeAsBytes(
+                    await editedFile.readAsBytes(),
+                    flush: true,
+                  );
+                  if (kDebugMode) {
+                    debugPrint(
+                      'InteractiveCheckboxMarkdown: Overwrote local file ${file.path} with edited content (flushed)',
+                    );
+                  }
+
                   if (mounted) {
                     _localImageFutures.remove(imageUrl);
                     _synapseTempFutures.remove(imageUrl);
+                    if (kDebugMode) {
+                      debugPrint(
+                        'InteractiveCheckboxMarkdown: Cleared futures cache for $imageUrl',
+                      );
+                    }
+
                     await FileImage(file).evict();
                     await FileImage(editedFile).evict();
                     PaintingBinding.instance.imageCache.clear();
@@ -642,6 +679,11 @@ class _InteractiveCheckboxMarkdownState
                     // Increment version to force keyed rebuild
                     _imageVersions[imageUrl] =
                         (_imageVersions[imageUrl] ?? 0) + 1;
+                    if (kDebugMode) {
+                      debugPrint(
+                        'InteractiveCheckboxMarkdown: Updated version for $imageUrl to ${_imageVersions[imageUrl]}',
+                      );
+                    }
                     setState(() {});
                   }
                 }
@@ -780,7 +822,15 @@ class _InteractiveCheckboxMarkdownState
   }
 
   Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
+    if (kDebugMode) {
+      debugPrint(
+        'InteractiveCheckboxMarkdown: Resolving local image source for $url',
+      );
+    }
     if (widget.noteId == null) {
+      if (kDebugMode) {
+        debugPrint('InteractiveCheckboxMarkdown: noteId is null');
+      }
       return null;
     }
 
@@ -954,18 +1004,21 @@ class _InteractiveCheckboxMarkdownState
       IndentMd(),
     ];
 
-    return GptMarkdown(
-      _currentContent,
-      style: widget.style,
-      textDirection: widget.textDirection,
-      onLinkTap: widget.onLinkTap,
-      maxLines: widget.maxLines,
-      overflow: widget.overflow,
-      latexBuilder: _customLatexBuilder,
-      imageBuilder: _customImageBuilder,
-      codeBuilder: _buildCodeBlock,
-      components: components,
-      inlineComponents: inlineComponents,
+    return KeyedSubtree(
+      key: ValueKey('md_${_imageVersions.values.join()}'),
+      child: GptMarkdown(
+        _currentContent,
+        style: widget.style,
+        textDirection: widget.textDirection,
+        onLinkTap: widget.onLinkTap,
+        maxLines: widget.maxLines,
+        overflow: widget.overflow,
+        latexBuilder: _customLatexBuilder,
+        imageBuilder: _customImageBuilder,
+        codeBuilder: _buildCodeBlock,
+        components: components,
+        inlineComponents: inlineComponents,
+      ),
     );
   }
 }
