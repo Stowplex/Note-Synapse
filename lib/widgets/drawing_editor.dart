@@ -86,6 +86,9 @@ class _DrawingEditorState extends State<DrawingEditor> {
   }
 
   Future<void> _loadInitialImage() async {
+    // Wait for canvas size to be ready
+    await _waitForCanvasSize();
+
     ui.Image? bgImage;
     if (widget.initialImage != null) {
       final bytes = await widget.initialImage!.readAsBytes();
@@ -103,10 +106,26 @@ class _DrawingEditorState extends State<DrawingEditor> {
     }
   }
 
-  void _addImageAsDrawable(ui.Image image) {
-    if (_canvasSize.isEmpty) return; // Should allow retry if not ready?
-    // Actually Logic call is controlled by _pendingLoad which checks _canvasSize.
+  Future<void> _waitForCanvasSize() async {
+    int attempts = 0;
+    while (_canvasSize.isEmpty && attempts < 20) {
+      debugPrint(
+        'DrawingEditor: Waiting for canvas size... (attempt $attempts)',
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+      attempts++;
+    }
+    if (_canvasSize.isEmpty) {
+      debugPrint('DrawingEditor: Canvas size wait timed out. Using fallback.');
+      // Fallback to a safe default if still empty
+      _canvasSize = const Size(1080, 1920);
+    } else {
+      debugPrint('DrawingEditor: Canvas size ready: $_canvasSize');
+    }
+  }
 
+  void _addImageAsDrawable(ui.Image image) {
+    // _canvasSize should be populated by _waitForCanvasSize or fallback
     final Size viewportSize = _canvasSize;
 
     final double maxWidth = viewportSize.width * 0.9;
@@ -126,12 +145,16 @@ class _DrawingEditorState extends State<DrawingEditor> {
 
     final double scale = targetWidth / image.width.toDouble();
 
+    // Library expects Center position
+    final Offset centerPosition = viewportSize.center(Offset.zero);
+
+    debugPrint(
+      'DrawingEditor: Placing image CENTER at $centerPosition (Viewport: $viewportSize)',
+    );
+
     final drawable = ImageDrawable(
       image: image,
-      position: Offset(
-        (viewportSize.width - targetWidth) / 2,
-        (viewportSize.height - targetHeight) / 2,
-      ),
+      position: centerPosition,
       scale: scale,
     );
 

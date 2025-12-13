@@ -77,6 +77,9 @@ class _InteractiveCheckboxMarkdownState
   final Map<String, Future<_LocalImageSource?>> _localImageFutures = {};
   final Map<String, Future<SynapseTempFile>> _synapseTempFutures = {};
 
+  /// Map to track image versions and force rebuilds on edit
+  final Map<String, int> _imageVersions = {};
+
   Future<_LocalImageSource?> _resolveLocalImageSourceCached(String url) {
     return _localImageFutures.putIfAbsent(
       url,
@@ -279,6 +282,7 @@ class _InteractiveCheckboxMarkdownState
         if (mime.startsWith('image/')) {
           final imageWidget = Image.memory(
             tempFile.bytes,
+            key: ValueKey('\$url_\${_imageVersions[url] ?? 0}'),
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
               return _buildPlaceholder(width, height, 'Failed to render image');
@@ -377,6 +381,7 @@ class _InteractiveCheckboxMarkdownState
           final bytes = base64.decode(data);
           final imageWidget = Image.memory(
             bytes,
+            key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
               return _buildPlaceholder(width, height, 'Failed to render image');
@@ -460,6 +465,7 @@ class _InteractiveCheckboxMarkdownState
                 height: height,
                 child: Image.file(
                   imageFile,
+                  key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
                     return _buildPlaceholder(
@@ -545,6 +551,7 @@ class _InteractiveCheckboxMarkdownState
       width: width,
       height: height,
       child: Image(
+        key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
         image: NetworkImage(url),
         loadingBuilder:
             (
@@ -624,8 +631,17 @@ class _InteractiveCheckboxMarkdownState
                   if (mounted) {
                     _localImageFutures.remove(imageUrl);
                     _synapseTempFutures.remove(imageUrl);
+                    await FileImage(file).evict();
+                    await FileImage(editedFile).evict();
                     PaintingBinding.instance.imageCache.clear();
                     PaintingBinding.instance.imageCache.clearLiveImages();
+
+                    // Wait for navigation animation
+                    await Future.delayed(const Duration(milliseconds: 350));
+
+                    // Increment version to force keyed rebuild
+                    _imageVersions[imageUrl] =
+                        (_imageVersions[imageUrl] ?? 0) + 1;
                     setState(() {});
                   }
                 }
@@ -697,12 +713,18 @@ class _InteractiveCheckboxMarkdownState
 
             // Update Content
             if (widget.onContentChanged != null) {
+              // Evict cache for the new file
+              await FileImage(editedFile).evict();
+              // Also evict the old URL just in case
+              await NetworkImage(imageUrl).evict();
+
               final newContent = _currentContent.replaceAll(imageUrl, newUri);
-              if (newContent != _currentContent) {
-                _currentContent = newContent;
-                widget.onContentChanged!(_currentContent);
-                setState(() {});
-              }
+              _currentContent = newContent;
+              widget.onContentChanged!(_currentContent);
+              setState(() {
+                // Update version
+                _imageVersions[imageUrl] = (_imageVersions[imageUrl] ?? 0) + 1;
+              });
             }
           }
         } else {
