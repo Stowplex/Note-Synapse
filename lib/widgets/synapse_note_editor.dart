@@ -23,14 +23,6 @@ class SynapseNoteEditor extends StatefulWidget {
 }
 
 class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data != null && data.text != null) {
-      _insertText(data.text!);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return SynapseCodeEditor(
@@ -41,11 +33,6 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
       fontFamily: 'Roboto Mono',
       language: widget.language,
       actions: [
-        IconButton(
-          icon: const Icon(Icons.paste, size: 20),
-          onPressed: _paste,
-          tooltip: 'Paste',
-        ),
         IconButton(
           icon: const Icon(Icons.format_bold, size: 20),
           onPressed: _toggleBold,
