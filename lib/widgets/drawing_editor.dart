@@ -284,6 +284,13 @@ class _DrawingEditorState extends State<DrawingEditor> {
         _history.add(List.from(current));
       }
     }
+
+    // Re-apply tool settings to ensure continuous drawing for shapes
+    // We do this in a post-frame callback to ensure it overrides any internal reset
+    // that might happen in the library's gesture handlers
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyToolSettings();
+    });
   }
 
   // NOTE: Implementing the listener in initState
@@ -434,12 +441,15 @@ class _DrawingEditorState extends State<DrawingEditor> {
     setState(() {
       _currentTool = tool;
     });
+    _applyToolSettings();
+  }
 
+  void _applyToolSettings() {
     // Reset properties
     _controller.freeStyleMode = FreeStyleMode.none;
     _controller.shapeFactory = null;
 
-    switch (tool) {
+    switch (_currentTool) {
       case DrawingTool.pen:
         _controller.freeStyleMode = FreeStyleMode.draw;
         break;
