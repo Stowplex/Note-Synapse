@@ -4265,4 +4265,86 @@ class DatabaseService {
       rethrow;
     }
   }
+
+  /// Batch fetch messages for multiple conversations efficiently
+  Future<List<ConversationMessage>> getMessagesForConversations(
+    List<String> conversationIds,
+  ) async {
+    if (conversationIds.isEmpty) return [];
+
+    final db = await database;
+    // SQLite has a limit on variables, so we chunk requests if necessary
+    const chunkSize = 500;
+    final messages = <ConversationMessage>[];
+
+    for (var i = 0; i < conversationIds.length; i += chunkSize) {
+      final end = (i + chunkSize < conversationIds.length)
+          ? i + chunkSize
+          : conversationIds.length;
+      final chunk = conversationIds.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+
+      final results = await db.rawQuery('''
+        SELECT 
+          cm.id, 
+          cm.type, 
+          cm.content, 
+          cm.timestamp, 
+          cm.modelUsed, 
+          cmm.conversationId
+        FROM conversation_messages cm
+        JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+        WHERE cmm.conversationId IN ($placeholders)
+        ORDER BY cm.timestamp ASC
+        ''', chunk);
+
+      for (final map in results) {
+        messages.add(
+          _mapToConversationMessage(map, map['conversationId'] as String),
+        );
+      }
+    }
+
+    return messages;
+  }
+
+  /// Batch fetch conversation IDs for multiple messages
+  /// Returns a map of messageId -> List<conversationId>
+  Future<Map<String, List<String>>> getConversationIdsForMessages(
+    List<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) return {};
+
+    final db = await database;
+    final result = <String, List<String>>{};
+
+    // Chunking to avoid variable limit
+    const chunkSize = 500;
+
+    for (var i = 0; i < messageIds.length; i += chunkSize) {
+      final end = (i + chunkSize < messageIds.length)
+          ? i + chunkSize
+          : messageIds.length;
+      final chunk = messageIds.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+
+      final rows = await db.rawQuery('''
+        SELECT messageId, conversationId
+        FROM conversation_message_mapping
+        WHERE messageId IN ($placeholders)
+        ''', chunk);
+
+      for (final row in rows) {
+        final messageId = row['messageId'] as String;
+        final conversationId = row['conversationId'] as String;
+
+        if (!result.containsKey(messageId)) {
+          result[messageId] = [];
+        }
+        result[messageId]!.add(conversationId);
+      }
+    }
+
+    return result;
+  }
 }

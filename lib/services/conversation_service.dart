@@ -8,6 +8,7 @@ import 'database_service.dart';
 import 'logger_service.dart';
 
 class ConversationService {
+  // - [x] Batch processing in `ConversationService` <!-- id: 26 -->
   static final ConversationService _instance = ConversationService._internal();
   factory ConversationService() => _instance;
   ConversationService._internal({DatabaseService? databaseService})
@@ -492,11 +493,30 @@ class ConversationService {
     // Sort conversations by creation time
     conversations.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
+    // Batch fetch all messages for these conversations
+    final allMessages = await _databaseService.getMessagesForConversations(
+      conversations.map((c) => c.id).toList(),
+    );
+
+    // Group messages by conversation ID
+    final messagesByConversation = <String, List<ConversationMessage>>{};
+    for (final msg in allMessages) {
+      if (!messagesByConversation.containsKey(msg.conversationId)) {
+        messagesByConversation[msg.conversationId] = [];
+      }
+      messagesByConversation[msg.conversationId]!.add(msg);
+    }
+
     // Build tree nodes for each conversation
     // The parent-child relationships are automatically established
     // based on message parent relationships
     for (final conversation in conversations) {
-      await _buildConversationTreeNodes(conversation, nodes, parentMap);
+      await _buildConversationTreeNodes(
+        conversation,
+        nodes,
+        parentMap,
+        messagesByConversation[conversation.id] ?? [],
+      );
     }
 
     // Connect root-level messages to root node
@@ -553,10 +573,8 @@ class ConversationService {
     Conversation conversation,
     Map<String, ConversationTreeNode> nodes,
     Map<String, String> parentMap,
+    List<ConversationMessage> messages,
   ) async {
-    final messages = await _databaseService.getConversationMessages(
-      conversation.id,
-    );
     if (messages.isEmpty) return;
 
     // Group messages into User-AI interaction pairs for display

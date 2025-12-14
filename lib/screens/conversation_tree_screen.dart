@@ -121,12 +121,21 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   Future<void> _fetchNodeConversationIds() async {
     if (_tree == null) return;
 
+    final messageIds = _tree!.nodes.values
+        .where((node) => node.messageId != null)
+        .map((node) => node.messageId!)
+        .toList();
+
+    if (messageIds.isEmpty) return;
+
+    final conversationIdsMap = await _databaseService
+        .getConversationIdsForMessages(messageIds);
+
     final newMap = <String, List<String>>{};
     for (final node in _tree!.nodes.values) {
-      if (node.messageId != null) {
-        final conversationIds = await _databaseService
-            .getConversationsContainingMessage(node.messageId!);
-        newMap[node.id] = conversationIds;
+      if (node.messageId != null &&
+          conversationIdsMap.containsKey(node.messageId)) {
+        newMap[node.id] = conversationIdsMap[node.messageId]!;
       }
     }
 
