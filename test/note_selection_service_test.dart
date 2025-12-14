@@ -12,32 +12,32 @@ void main() {
 
     group('filterNotes', () {
       test('should return all notes when search query is empty', () {
+        final now = DateTime.now();
         final notes = [
           Note(
             id: '1',
             title: 'Test Note 1',
             content: 'Content 1',
             type: NoteType.note,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
+            createdAt: now.subtract(const Duration(hours: 1)),
+            updatedAt: now,
           ),
           Note(
             id: '2',
             title: 'Test Note 2',
             content: 'Content 2',
             type: NoteType.note,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
+            createdAt: now,
+            updatedAt: now,
           ),
         ];
 
-        final result = service.filterNotes(
-          allNotes: notes,
-          searchQuery: '',
-        );
+        final result = service.filterNotes(allNotes: notes, searchQuery: '');
 
         expect(result.length, equals(2));
-        expect(result, equals(notes));
+        // Expect newest first (Note 2 then Note 1)
+        expect(result[0].id, equals('2'));
+        expect(result[1].id, equals('1'));
       });
 
       test('should filter notes by title', () {
@@ -356,4 +356,3 @@ void main() {
     });
   });
 }
-
