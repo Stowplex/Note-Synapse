@@ -176,6 +176,7 @@ class ShareService {
     required AppProvider appProvider,
     required AppLocalizations l10n,
     required Size pageSize,
+    bool useSinglePageLayout = false,
   }) async {
     try {
       final notesToExport = await _collectNotesForExport(
@@ -193,6 +194,7 @@ class ShareService {
         includeSubNotes: includeSubNotesAndLinkedNotes,
         l10n: l10n,
         pageSize: pageSize,
+        useSinglePageLayout: useSinglePageLayout,
       );
 
       final fileName = 'notes_${DateTime.now().millisecondsSinceEpoch}.pdf';
@@ -320,10 +322,13 @@ class ShareService {
     required bool includeSubNotes,
     required AppLocalizations l10n,
     required Size pageSize,
+    required bool useSinglePageLayout,
   }) async {
     final fonts = await _PdfFontManager.instance.load();
 
-    final pageFormat = PdfPageFormat(pageSize.width, pageSize.height);
+    // If single page layout is requested, we need to calculate the height first
+    // We'll use a temporary page format for content generation
+    var pageFormat = PdfPageFormat(pageSize.width, pageSize.height);
 
     final theme = pw.ThemeData.withFont(
       base: fonts.base,
@@ -348,15 +353,87 @@ class ShareService {
     // Create the main document
     final document = pw.Document(theme: theme);
 
-    // Add the generated note content pages FIRST
-    document.addPage(
-      pw.MultiPage(
-        pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.all(24),
-        build: (context) => content,
-        maxPages: 10000, // Allow up to 10000 pages to handle large exports
-      ),
-    );
+    if (useSinglePageLayout) {
+      // Calculate estimated height for single page
+      double estimatedHeight = 100.0; // margins
+
+      // Heuristic estimation
+      // We can't verify exact height of widgets without layout, so we overestimate conservatively
+      for (final note in notes) {
+        // Title
+        estimatedHeight += 40.0;
+
+        // Metadata
+        estimatedHeight += 40.0;
+
+        // Content
+        if (note.content.isNotEmpty) {
+          // Estimate text height: approx 80 chars per line, 14pt per line
+          final lineCount = (note.content.length / 80).ceil();
+          estimatedHeight += lineCount * 14.0;
+
+          // Add extra for newlines which might be paragraphs
+          final paragraphCount = note.content.split('\n').length;
+          estimatedHeight += paragraphCount * 10.0;
+
+          // Check for markdown images in content
+          final imageMatches = RegExp(
+            r'!\[.*?\]\(.*?\)',
+          ).allMatches(note.content);
+          // Assume max height for images (e.g. 400pt)
+          estimatedHeight += imageMatches.length * 400.0;
+        }
+
+        // Subnotes
+        if (includeSubNotes) {
+          for (final subNote in note.subNotes) {
+            estimatedHeight += 30.0; // Header
+            final lineCount = (subNote.content.length / 80).ceil();
+            estimatedHeight += lineCount * 14.0;
+            final paragraphCount = subNote.content.split('\n').length;
+            estimatedHeight += paragraphCount * 10.0;
+          }
+        }
+
+        // Attachments
+        for (final path in note.attachmentPaths) {
+          // Assume each attachment takes some vertical space (image or file listing)
+          // Images/SVGs can be up to 500px wide, let's assume 400px height avg
+          estimatedHeight += 400.0;
+        }
+
+        // Spacing/Divider
+        estimatedHeight += 50.0;
+      }
+
+      // Add a safety buffer (20%) + fixed minimum
+      estimatedHeight = (estimatedHeight * 1.2) + 1000.0;
+
+      LoggerService.debug('Estimated single page PDF height: $estimatedHeight');
+
+      pageFormat = PdfPageFormat(pageSize.width, estimatedHeight);
+
+      document.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: content,
+          ),
+        ),
+      );
+    } else {
+      // Add the generated note content pages FIRST
+      document.addPage(
+        pw.MultiPage(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) => content,
+          maxPages: 10000, // Allow up to 10000 pages to handle large exports
+        ),
+      );
+    }
 
     // If there are PDF attachments, add them as image pages AFTER the note content
     if (pdfAttachments.isNotEmpty) {

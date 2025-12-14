@@ -6,21 +6,13 @@ import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../services/share_service.dart';
 
-enum _ShareAction {
-  pdf,
-  text,
-  clipboard,
-}
+enum _ShareAction { pdf, text, clipboard }
 
 class ShareDialog extends StatefulWidget {
   final List<Note> notes;
   final String title;
 
-  const ShareDialog({
-    super.key,
-    required this.notes,
-    required this.title,
-  });
+  const ShareDialog({super.key, required this.notes, required this.title});
 
   @override
   State<ShareDialog> createState() => _ShareDialogState();
@@ -28,6 +20,7 @@ class ShareDialog extends StatefulWidget {
 
 class _ShareDialogState extends State<ShareDialog> {
   bool _includeSubNotesAndLinkedNotes = false;
+  bool _useSinglePageLayout = false;
   _ShareAction? _activeAction;
 
   @override
@@ -42,10 +35,7 @@ class _ShareDialogState extends State<ShareDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.shareDialogDescription,
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text(l10n.shareDialogDescription, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,6 +53,27 @@ class _ShareDialogState extends State<ShareDialog> {
               Expanded(
                 child: Text(
                   l10n.shareSubNotesAndLinkedNotes,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Checkbox(
+                value: _useSinglePageLayout,
+                onChanged: isBusy
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _useSinglePageLayout = value ?? false;
+                        });
+                      },
+              ),
+              Expanded(
+                child: Text(
+                  'Single page layout (for digital sharing)',
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -158,11 +169,7 @@ class _ShareDialogState extends State<ShareDialog> {
                           valueColor: AlwaysStoppedAnimation<Color>(color),
                         ),
                       )
-                    : Icon(
-                        icon,
-                        size: 28,
-                        color: color,
-                      ),
+                    : Icon(icon, size: 28, color: color),
               ),
             ),
           ),
@@ -212,6 +219,7 @@ class _ShareDialogState extends State<ShareDialog> {
         appProvider: appProvider,
         l10n: l10n,
         pageSize: screenSize,
+        useSinglePageLayout: _useSinglePageLayout,
       );
 
       if (!mounted) {
