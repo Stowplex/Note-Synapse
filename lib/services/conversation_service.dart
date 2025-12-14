@@ -378,11 +378,22 @@ class ConversationService {
     Duration? maxAge,
     List<String>? tagNames,
     List<String>? conversationIds,
+    bool includeEmpty = true,
   }) async {
     return await _databaseService.getAllConversations(
       maxAge: maxAge,
       tagNames: tagNames,
       conversationIds: conversationIds,
+      includeEmpty: includeEmpty,
+    );
+  }
+
+  // Get preview messages (first and last) for a conversation efficiently
+  Future<List<ConversationMessage>> getConversationPreviewMessages(
+    String conversationId,
+  ) async {
+    return await _databaseService.getConversationPreviewMessages(
+      conversationId,
     );
   }
 

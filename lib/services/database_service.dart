@@ -3210,6 +3210,7 @@ class DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    bool includeEmpty = true,
   }) async {
     final db = await database;
 
@@ -3232,6 +3233,15 @@ class DatabaseService {
       final whereSegments = <String>['t.name IN ($tagPlaceholders)'];
       whereSegments.addAll(filters);
 
+      if (!includeEmpty) {
+        whereSegments.add('''
+          EXISTS (
+            SELECT 1 FROM conversation_message_mapping cmm
+            WHERE cmm.conversationId = c.id
+          )
+        ''');
+      }
+
       final query =
           '''
         SELECT c.*
@@ -3250,8 +3260,21 @@ class DatabaseService {
       return maps.map((map) => _mapToConversation(map)).toList();
     }
 
-    final whereClause = filters.isNotEmpty
-        ? filters.map((clause) => clause.replaceAll('c.', '')).join(' AND ')
+    // Prepare simple query filters
+    var queryFilters = List<String>.from(filters);
+    if (!includeEmpty) {
+      queryFilters.add('''
+        EXISTS (
+          SELECT 1 FROM conversation_message_mapping cmm
+          WHERE cmm.conversationId = conversations.id
+        )
+      ''');
+    }
+
+    final whereClause = queryFilters.isNotEmpty
+        ? queryFilters
+              .map((clause) => clause.replaceAll('c.', ''))
+              .join(' AND ')
         : null;
 
     final List<Map<String, dynamic>> maps = await db.query(
@@ -3262,6 +3285,58 @@ class DatabaseService {
     );
 
     return maps.map((map) => _mapToConversation(map)).toList();
+  }
+
+  /// Gets the first and last message of a conversation for preview purposes
+  /// efficiently using LIMIT 1 queries.
+  Future<List<ConversationMessage>> getConversationPreviewMessages(
+    String conversationId,
+  ) async {
+    final db = await database;
+
+    // Get the first message
+    final firstMsgMaps = await db.rawQuery(
+      '''
+      SELECT cm.*
+      FROM conversation_messages cm
+      JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp ASC
+      LIMIT 1
+      ''',
+      [conversationId],
+    );
+
+    if (firstMsgMaps.isEmpty) return [];
+
+    // Get the last message
+    final lastMsgMaps = await db.rawQuery(
+      '''
+      SELECT cm.*
+      FROM conversation_messages cm
+      JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp DESC
+      LIMIT 1
+      ''',
+      [conversationId],
+    );
+
+    final messages = <ConversationMessage>[];
+    messages.add(_mapToConversationMessage(firstMsgMaps.first, conversationId));
+
+    // Only add last message if it's different from the first
+    if (lastMsgMaps.isNotEmpty) {
+      final lastMsg = _mapToConversationMessage(
+        lastMsgMaps.first,
+        conversationId,
+      );
+      if (lastMsg.id != messages.first.id) {
+        messages.add(lastMsg);
+      }
+    }
+
+    return messages;
   }
 
   Future<Conversation?> getConversation(String id) async {

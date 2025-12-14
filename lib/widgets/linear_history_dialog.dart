@@ -48,20 +48,15 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
 
   Future<void> _loadConversations() async {
     setState(() => _isLoading = true);
+    // Optimized: Fetch only non-empty conversations directly from database
     final conversations = await _conversationService.getAllConversations(
       maxAge: _selectedTimeRange,
       tagNames: _selectedTags.isEmpty ? null : _selectedTags,
+      includeEmpty: false,
     );
-    final List<Conversation> conversationsWithMessages = [];
-    for (final conversation in conversations) {
-      final withMessages = await _conversationService
-          .getConversationWithMessages(conversation.id);
-      if (withMessages != null && withMessages.messages.isNotEmpty) {
-        conversationsWithMessages.add(conversation);
-      }
-    }
+
     setState(() {
-      _conversations = conversationsWithMessages;
+      _conversations = conversations;
       _isLoading = false;
     });
   }
@@ -237,17 +232,17 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                FutureBuilder<ConversationWithMessages?>(
+                                FutureBuilder<List<ConversationMessage>>(
                                   future: _conversationService
-                                      .getConversationWithMessages(
+                                      .getConversationPreviewMessages(
                                         conversation.id,
                                       ),
                                   builder: (context, snapshot) {
                                     if (!snapshot.hasData ||
-                                        snapshot.data!.messages.isEmpty) {
+                                        snapshot.data!.isEmpty) {
                                       return const SizedBox.shrink();
                                     }
-                                    final messages = snapshot.data!.messages;
+                                    final messages = snapshot.data!;
                                     return Row(
                                       children: [
                                         Expanded(
@@ -260,23 +255,25 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 1,
-                                          height: 40,
-                                          color: Colors.grey,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            '${l10n.last}: ${messages.last.content}',
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
+                                        if (messages.length > 1) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            width: 1,
+                                            height: 40,
+                                            color: Colors.grey,
                                           ),
-                                        ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              '${l10n.last}: ${messages.last.content}',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     );
                                   },
