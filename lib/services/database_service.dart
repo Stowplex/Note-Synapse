@@ -1262,32 +1262,173 @@ class DatabaseService {
     final db = await database;
     LoggerService.info('Querying notes table...');
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT 
-        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
-      FROM notes
-      ORDER BY pinned DESC, createdAt DESC
-    ''');
+    SELECT 
+      id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
+      CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+      length(content) as _contentLength
+    FROM notes
+    ORDER BY pinned DESC, createdAt DESC
+  ''');
     LoggerService.info('Found ${maps.length} notes in database');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
+    return await _batchLoadNotes(maps);
+  }
+
+  Future<List<Note>> _batchLoadNotes(
+    List<Map<String, dynamic>> noteMaps,
+  ) async {
+    if (noteMaps.isEmpty) return [];
+
+    final db = await database;
+    final notes = <Note>[];
+    final noteIds = noteMaps.map((m) => m['id'] as String).toList();
+
+    // Batch fetch associated data
+    // Chunking to avoid "too many variables" SQLite error (limit is usually 999)
+    const chunkSize = 500;
+    final Map<String, List<SubNote>> subNotesMap = {};
+    final Map<String, List<String>> tagsMap = {};
+    final Map<String, List<String>> attachmentsMap = {};
+
+    for (var i = 0; i < noteIds.length; i += chunkSize) {
+      final end = (i + chunkSize < noteIds.length)
+          ? i + chunkSize
+          : noteIds.length;
+      final chunkIds = noteIds.sublist(i, end);
+      final placeholders = List.filled(chunkIds.length, '?').join(',');
+
+      // Fetch SubNotes
+      final subNoteResults = await db.rawQuery('''
+      SELECT 
+        id, noteId, name, createdAt, isCompleted,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM subnotes
+      WHERE noteId IN ($placeholders)
+      ORDER BY createdAt ASC
+      ''', chunkIds);
+
+      for (final row in subNoteResults) {
+        final noteId = row['noteId'] as String;
+        String content = row['content'] as String? ?? '';
+        if (content.isEmpty && (row['_contentLength'] as int? ?? 0) > 0) {
+          content = await _readLargeString(
+            db,
+            'subnotes',
+            'content',
+            row['id'] as String,
+          );
+        }
+
+        final subNote = SubNote(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          content: content,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            row['createdAt'] as int,
+          ),
+          isCompleted: (row['isCompleted'] as int) == 1,
+        );
+
+        if (!subNotesMap.containsKey(noteId)) {
+          subNotesMap[noteId] = [];
+        }
+        subNotesMap[noteId]!.add(subNote);
+      }
+
+      // Fetch Tags
+      final tagResults = await db.rawQuery('''
+      SELECT nt.noteId, t.name 
+      FROM tags t 
+      JOIN note_tags nt ON t.id = nt.tagId 
+      WHERE nt.noteId IN ($placeholders)
+      ''', chunkIds);
+
+      for (final row in tagResults) {
+        final noteId = row['noteId'] as String;
+        final tagName = row['name'] as String;
+
+        if (!tagsMap.containsKey(noteId)) {
+          tagsMap[noteId] = [];
+        }
+        tagsMap[noteId]!.add(tagName);
+      }
+
+      // Fetch Attachments
+      final attachmentResults = await db.query(
+        'attachments',
+        where: 'noteId IN ($placeholders)',
+        whereArgs: chunkIds,
+      );
+
+      for (final row in attachmentResults) {
+        final noteId = row['noteId'] as String;
+        final filePath = row['filePath'] as String;
+        final isRelativePath = (row['isRelativePath'] as int) == 1;
+
+        String finalPath;
+        if (isRelativePath) {
+          finalPath = await FileUtils.getFullFilePath(filePath, true);
+        } else {
+          finalPath = filePath;
+        }
+
+        if (!attachmentsMap.containsKey(noteId)) {
+          attachmentsMap[noteId] = [];
+        }
+        attachmentsMap[noteId]!.add(finalPath);
+      }
+    }
+
+    // Assemble Notes
+    for (final map in noteMaps) {
       try {
-        LoggerService.info('Mapping note with id: ${map['id']}');
-        final note = await _mapToNote(map);
+        final noteId = map['id'] as String;
+        String content = map['content'] as String? ?? '';
+        if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+          content = await _readLargeString(db, 'notes', 'content', noteId);
+        }
+
+        final note = Note(
+          id: noteId,
+          title: map['title'] as String,
+          content: content,
+          type: map['type'] != null
+              ? NoteType.values.firstWhere(
+                  (e) => e.toString().split('.').last == map['type'],
+                  orElse: () => NoteType.note,
+                )
+              : NoteType.note,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            map['createdAt'] as int,
+          ),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(
+            map['updatedAt'] as int,
+          ),
+          subNotes: subNotesMap[noteId] ?? [],
+          tags: tagsMap[noteId] ?? [],
+          attachmentPaths: attachmentsMap[noteId] ?? [],
+          scheduledAt: map['scheduledAt'] as String?,
+          completeBy: map['completeBy'] as String?,
+          status: map['status'] != null
+              ? _stringToTaskStatus(map['status'] as String)
+              : null,
+          completionPercentage: map['completionPercentage'] as double?,
+          pinned: (map['pinned'] as int? ?? 0) == 1,
+          isArchived: (map['isArchived'] as int? ?? 0) == 1,
+          recurrenceRule: map['recurrenceRule'] as String?,
+        );
         notes.add(note);
       } catch (e) {
         LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
+          'Error assembling note with id ${map['id']}: $e',
           error: e,
         );
-        LoggerService.error('Note data: $map');
-        // Skip corrupted notes instead of crashing
-        continue;
+        // Skip corrupted notes
       }
     }
-    LoggerService.info('Successfully mapped ${notes.length} notes');
+
+    LoggerService.info('Successfully batch loaded ${notes.length} notes');
     return notes;
   }
 
@@ -1344,21 +1485,7 @@ class DatabaseService {
       ORDER BY pinned DESC, createdAt DESC
       ''', whereArgs);
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<List<Note>> getPinnedNotes() async {
@@ -1373,21 +1500,7 @@ class DatabaseService {
       ORDER BY createdAt DESC
     ''');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<List<Note>> getArchivedNotes() async {
@@ -1402,21 +1515,7 @@ class DatabaseService {
       ORDER BY createdAt DESC
     ''');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<Note?> getNote(String id) async {
@@ -1453,21 +1552,7 @@ class DatabaseService {
       WHERE id IN ($placeholders)
       ''', noteIds);
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<void> updateNote(Note note) async {
