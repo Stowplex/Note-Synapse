@@ -1862,14 +1862,7 @@ class _MarkdownPdfRenderer {
         case 'ol':
           return await _buildList(node, ordered: true);
         case 'table':
-          final text = _extractPlainText(node);
-          if (text.isEmpty) {
-            return null;
-          }
-          return pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 6),
-            child: pw.Text(text, style: _baseTextStyle),
-          );
+          return await _buildTable(node);
         case 'img':
           final spans = await _buildInlineSpan(node, _baseTextStyle);
           if (spans.isEmpty) {
@@ -1892,6 +1885,149 @@ class _MarkdownPdfRenderer {
       return pw.Text(text, style: _baseTextStyle);
     }
     return null;
+  }
+
+  Future<pw.Widget?> _buildTable(md.Element element) async {
+    final rows = <pw.TableRow>[];
+
+    // Process table headers (thead) usually contains one row of th
+    final thead =
+        element.children
+                ?.where((c) => c is md.Element && c.tag == 'thead')
+                .firstOrNull
+            as md.Element?;
+    if (thead != null) {
+      for (final row in thead.children ?? []) {
+        if (row is md.Element && row.tag == 'tr') {
+          rows.add(await _buildTableRow(row, isHeader: true));
+        }
+      }
+    }
+
+    // Process table body (tbody)
+    final tbody =
+        element.children
+                ?.where((c) => c is md.Element && c.tag == 'tbody')
+                .firstOrNull
+            as md.Element?;
+    if (tbody != null) {
+      for (final row in tbody.children ?? []) {
+        if (row is md.Element && row.tag == 'tr') {
+          rows.add(await _buildTableRow(row, isHeader: false));
+        }
+      }
+    }
+
+    // If no explicit thead/tbody, try parsing direct tr children (unlikely in GFM but safe to handle)
+    if (rows.isEmpty) {
+      for (final child in element.children ?? []) {
+        if (child is md.Element && child.tag == 'tr') {
+          rows.add(await _buildTableRow(child, isHeader: false));
+        }
+      }
+    }
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    // Determine column count from the first row (or max cols)
+    int colCount = 0;
+    if (rows.isNotEmpty) {
+      colCount = rows.first.children.length;
+    }
+
+    // Create table with specific border styling
+    // Using FlexColumnWidth to handle ultra-wide tables by letting columns flex within available width
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 8),
+      child: pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+        columnWidths: {
+          for (int i = 0; i < colCount; i++) i: const pw.FlexColumnWidth(),
+        },
+        children: rows,
+      ),
+    );
+  }
+
+  Future<pw.TableRow> _buildTableRow(
+    md.Element row, {
+    required bool isHeader,
+  }) async {
+    final cells = <pw.Widget>[];
+
+    for (final child in row.children ?? []) {
+      if (child is md.Element) {
+        // th or td
+        final isTh = child.tag == 'th' || isHeader;
+
+        final spans = await _buildInlineSpans(child.children ?? []);
+
+        // Apply header styling override if needed, or just standard text
+        final style = isTh
+            ? _baseTextStyle.copyWith(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              )
+            : _baseTextStyle;
+
+        // If spans are empty, add empty text
+        if (spans.isEmpty) {
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('', style: style),
+            ),
+          );
+        } else if (spans.every((span) => span is pw.WidgetSpan)) {
+          // If all widgets (e.g. images), wrap in column
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: spans
+                    .map((span) => (span as pw.WidgetSpan).child)
+                    .toList(),
+              ),
+            ),
+          );
+        } else {
+          // Mixed content or just text
+          // Re-apply style to all text spans if it's a header to ensure bolding
+          if (isTh) {
+            for (var i = 0; i < spans.length; i++) {
+              if (spans[i] is pw.TextSpan) {
+                final ts = spans[i] as pw.TextSpan;
+                spans[i] = pw.TextSpan(
+                  text: ts.text,
+                  style: ts.style?.merge(style) ?? style,
+                  children: ts.children,
+                  annotation: ts.annotation,
+                );
+              }
+            }
+          }
+
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.RichText(
+                text: pw.TextSpan(style: style, children: spans),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    return pw.TableRow(
+      decoration: isHeader
+          ? const pw.BoxDecoration(color: PdfColors.grey200)
+          : null,
+      children: cells,
+    );
   }
 
   Future<pw.Widget?> _buildList(
