@@ -747,8 +747,51 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         // Fetch available tools for the agent based on *current selection*
         final activeTools = _buildActiveToolsMap();
 
+        // Gather Context
+        final noteBuilder = NotePromptBuilder(DatabaseService());
+        final noteContext = await noteBuilder.buildNoteContext(_notes);
+        final noteAttachments = await noteBuilder.loadNoteAttachments(_notes);
+
+        final historyBuffer = StringBuffer();
+        final historyAttachments = <PlatformFile>[];
+
+        // Gather history (last 10 messages)
+        final relevantMessages = _messages.length > 10
+            ? _messages.sublist(_messages.length - 10)
+            : _messages;
+
+        for (final msg in relevantMessages) {
+          historyBuffer.writeln(
+            '${msg.type.name.toUpperCase()}: ${msg.content}',
+          );
+          // Load attachments for this message
+          final msgAttachments = await _loadConversationAttachments(msg, []);
+          historyAttachments.addAll(msgAttachments);
+        }
+
+        // Include current message attachments if not already added
+        if (attachments.isNotEmpty) {
+          historyAttachments.addAll(attachments);
+        }
+
+        final combinedContext =
+            '''
+Associated Notes Context:
+$noteContext
+
+Recent Conversation History:
+$historyBuffer
+''';
+
+        final allAttachments = [...noteAttachments, ...historyAttachments];
+
         // Trigger planning (fire and forget from UI perspective, handled by service listener)
-        agentService.generatePlan(content, activeTools: activeTools);
+        agentService.generatePlan(
+          content,
+          activeTools: activeTools,
+          context: combinedContext,
+          contextAttachments: allAttachments,
+        );
 
         // In a real app we might want to persist this message to DB
         // For V1, we add to local list. If we want persistence, we need to save it.

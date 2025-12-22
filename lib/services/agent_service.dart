@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/agent_task.dart';
@@ -198,6 +199,8 @@ Table: tag_filters
   Future<List<AgentTask>> generatePlan(
     String objective, {
     Map<String, List<McpTool>> activeTools = const {},
+    String? context,
+    List<PlatformFile> contextAttachments = const [],
   }) async {
     _externalTools = activeTools;
     _currentThought = 'Generating plan...';
@@ -224,11 +227,15 @@ Table: tag_filters
         )
         .join('\n');
 
+    final contextSection = context != null
+        ? "\nAdditional Context:\n$context\n"
+        : "";
+
     final prompt =
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
 Objective: "$objective"
-
+$contextSection
 Available Tools:
 $nativeToolsDesc
 $externalToolsDesc
@@ -249,7 +256,7 @@ Example:
     try {
       final response = await AIService.generateWithAttachments(
         prompt,
-        [],
+        contextAttachments,
         generationContext: GenerationContext(values: {'type': 'agent_plan'}),
       );
 
@@ -389,6 +396,8 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
   Future<void> startObjective(
     String objective, {
     Map<String, List<McpTool>> activeTools = const {},
+    String? context,
+    List<PlatformFile> contextAttachments = const [],
   }) async {
     if (_isRunning) {
       _tasks.clear();
@@ -398,7 +407,12 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     notifyListeners();
 
     try {
-      await generatePlan(objective, activeTools: activeTools);
+      await generatePlan(
+        objective,
+        activeTools: activeTools,
+        context: context,
+        contextAttachments: contextAttachments,
+      );
       await executePlan();
     } finally {
       _isRunning = false;
