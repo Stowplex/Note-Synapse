@@ -180,17 +180,23 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                               ),
                                             ),
                                             const SizedBox(width: 8),
-                                            Text(
-                                              'Running...',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
-                                                    fontStyle: FontStyle.italic,
-                                                  ),
+                                            Expanded(
+                                              child: Text(
+                                                agentService.currentThought ??
+                                                    'Running...',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
+                                                      fontStyle:
+                                                          FontStyle.italic,
+                                                    ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                           ],
                                         ),

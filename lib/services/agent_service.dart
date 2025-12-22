@@ -405,15 +405,31 @@ I see that the previous search failed. I will try a broader SQL query.
       );
 
       // Parse Response
+      String? thought;
       Map<String, dynamic> decision;
       try {
         final jsonMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(response);
-        final jsonStr = jsonMatch?.group(0) ?? response;
-        final cleaned = jsonStr
-            .replaceAll('```json', '')
-            .replaceAll('```', '')
-            .trim();
-        decision = jsonDecode(cleaned);
+        if (jsonMatch != null) {
+          final jsonStr = jsonMatch.group(0)!;
+
+          // Extract thought (text before JSON)
+          if (jsonMatch.start > 0) {
+            thought = response.substring(0, jsonMatch.start).trim();
+            if (thought.isNotEmpty) {
+              _currentThought = thought;
+              notifyListeners();
+              task.executionHistory.add('Thought: $thought');
+            }
+          }
+
+          final cleaned = jsonStr
+              .replaceAll('```json', '')
+              .replaceAll('```', '')
+              .trim();
+          decision = jsonDecode(cleaned);
+        } else {
+          throw FormatException('No JSON found');
+        }
       } catch (e) {
         task.executionHistory.add(
           'System: Invalid JSON format. Return ONLY JSON.',
@@ -432,6 +448,7 @@ I see that the previous search failed. I will try a broader SQL query.
             orElse: () => throw Exception('Unknown tool: $toolName'),
           );
 
+          // Update thought to show action execution
           _currentThought = 'Executing $toolName (Turn $turn)...';
           notifyListeners();
 
