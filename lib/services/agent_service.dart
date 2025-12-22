@@ -13,6 +13,7 @@ import 'model_selector.dart';
 import 'logger_service.dart';
 import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
+import 'database_service.dart';
 
 class AgentService extends ChangeNotifier {
   // State
@@ -178,39 +179,7 @@ Format with Markdown.
     return names;
   }
 
-  // DB Schema for Agent Context
-  static const String _dbSchema = '''
-Table: notes
-- id (TEXT, PK): Unique identifier for the note.
-- title (TEXT): The title of the note.
-- content (TEXT): The markdown content of the note.
-- type (TEXT): 'note' or 'task'.
-- createdAt (INTEGER): Creation timestamp (millis).
-- updatedAt (INTEGER): Last update timestamp (millis).
-- recurrenceRule (TEXT): JSON string for recurrence (e.g., {"frequency":"daily"}).
-
-Table: tags
-- id (TEXT, PK): Unique identifier for the tag.
-- name (TEXT): The display name of the tag.
-
-Table: note_tags
-- noteId (TEXT, FK): Foreign key to notes.id.
-- tagId (TEXT, FK): Foreign key to tags.id.
-
-Table: conversations
-- id (TEXT, PK): Unique identifier.
-- title (TEXT): Conversation title.
-- noteIds (TEXT): JSON array of string note IDs linked to this conversation.
-- createdAt (INTEGER): Creation timestamp.
-
-Table: tag_filters
-- id (TEXT, PK): Unique identifier.
-- name (TEXT): Name of the saved filter/view.
-- includeText (TEXT): Text query to match.
-- includeTags (TEXT): JSON array of tag IDs to include.
-- excludeTags (TEXT): JSON array of tag IDs to exclude.
-- noteTypes (TEXT): JSON array of note types ('note', 'task') to include.
-''';
+  // DB Schema is now fetched dynamically from DatabaseService
 
   /// Generates an initial plan based on the objective.
   /// Updates internal state and returns the tasks.
@@ -252,6 +221,9 @@ Table: tag_filters
         ? "\nAdditional Context:\n$context\n"
         : "";
 
+    // Get table schema dynamically
+    final dbSchema = DatabaseService.getSchemaDescription();
+
     final prompt =
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
@@ -262,7 +234,7 @@ $nativeToolsDesc
 $externalToolsDesc
 
 Database Schema (for RunSqlTool):
-$_dbSchema
+$dbSchema
 
 Break this down into a step-by-step plan.
 Each step should specify WHICH tool to use.
@@ -339,6 +311,9 @@ Example:
           .toList(),
     );
 
+    // Get table schema dynamically
+    final dbSchema = DatabaseService.getSchemaDescription();
+
     final prompt =
         '''
 Current Plan:
@@ -348,7 +323,7 @@ General User Feedback:
 $feedback
 
 DB Schema:
-$_dbSchema
+$dbSchema
 
 Update the plan based on the feedback.
 Address specific feedback for items if present.

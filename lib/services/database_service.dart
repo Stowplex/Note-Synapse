@@ -97,6 +97,7 @@ class DatabaseService {
   ''';
 
   static const String _createConversationTagsTable = '''
+      -- conversation_tags table links conversations with tags, so that conversations can be searched / filtered by tag.
       CREATE TABLE conversation_tags(
         conversationId TEXT NOT NULL, -- Conversation ID
         tagId TEXT NOT NULL, -- Tag ID
@@ -107,6 +108,7 @@ class DatabaseService {
   ''';
 
   static const String _createAttachmentsTable = '''
+      -- Attachments are external files associated with notes.
       CREATE TABLE attachments(
         id TEXT PRIMARY KEY, -- Unique identifier
         noteId TEXT NOT NULL, -- Parent note ID
@@ -121,6 +123,7 @@ class DatabaseService {
   ''';
 
   static const String _createRelationshipsTable = '''
+      -- Relationships table links notes with a relationship.
       CREATE TABLE relationships(
         id TEXT PRIMARY KEY, -- Unique identifier
         fromNoteId TEXT NOT NULL, -- Source note ID
@@ -133,6 +136,9 @@ class DatabaseService {
   ''';
 
   static const String _createFiltersTable = '''
+      -- Filters are set of tags and substring conditions to select certain notes.
+      --   Filters can be considered to have hierarchy. A filter that matches tags A and B,
+      --   is a parent filter of a filter that matches tags A, B and C.
       CREATE TABLE filters(
         id TEXT PRIMARY KEY, -- Unique identifier
         name TEXT NOT NULL, -- Filter name
@@ -202,10 +208,11 @@ class DatabaseService {
   ''';
 
   static const String _createConversationsTable = '''
+      -- conversations are threads of messages that represents interactions with AI.
       CREATE TABLE conversations(
         id TEXT PRIMARY KEY, -- Unique identifier
         title TEXT NOT NULL, -- Conversation title
-        noteIds TEXT NOT NULL DEFAULT '[]', -- JSON array of linked note IDs
+        noteIds TEXT NOT NULL DEFAULT '[]', -- JSON array of linked note IDs (DEPRECATED, use conversation_note_mapping instead)
         createdAt INTEGER NOT NULL, -- Creation timestamp
         updatedAt INTEGER NOT NULL, -- Last update timestamp
         isArchived INTEGER NOT NULL DEFAULT 0 -- Whether archived
@@ -213,6 +220,8 @@ class DatabaseService {
   ''';
 
   static const String _createConversationMessagesTable = '''
+      -- conversation_messages represent individual messages that appear in conversations. A message can be associated with multiple conversations
+      -- in NoteSynapse's tree-structured conversation model.
       CREATE TABLE conversation_messages(
         id TEXT PRIMARY KEY, -- Unique identifier
         type TEXT NOT NULL, -- Message type: 'user', 'ai'
@@ -359,6 +368,11 @@ class DatabaseService {
       _createMultiFunctionAppsTable,
       ..._createIndexes,
     ];
+  }
+
+  /// Returns the complete schema description as a formatted string
+  static String getSchemaDescription() {
+    return getSchema().join('\n\n');
   }
 
   // For testing, allow creating new instances

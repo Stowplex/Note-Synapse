@@ -778,8 +778,7 @@ Here's the complete HTML application:
 
   // Build database schema section for prompts
   static String _buildDatabaseSchemaSection() {
-    final schema = DatabaseService.getSchema();
-    final formattedSchema = schema.join('\n\n');
+    final formattedSchema = DatabaseService.getSchemaDescription();
 
     return '''
 Database Schema:

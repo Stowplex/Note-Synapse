@@ -13,6 +13,8 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
+import '../services/content_ingestion_service.dart';
+import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/media_attachment_service.dart';
 import '../utils/file_utils.dart';
@@ -1569,6 +1571,19 @@ class _ShareScreenState extends State<ShareScreen> {
         }
 
         await appProvider.addNote(finalNote);
+
+        // Trigger AI content ingestion if needed (fire and forget)
+        if (!finalNote.content.contains('> [!SUMMARY]')) {
+          ContentIngestionService().processNote(
+            finalNote,
+            appProvider,
+            onMessage: (_) {},
+            onError: (msg) =>
+                LoggerService.error('Share Screen AI Ingestion Error: $msg'),
+            onSuccess: () {},
+          );
+        }
+
         // Clear downloaded file path after successful note creation
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
@@ -1609,6 +1624,19 @@ class _ShareScreenState extends State<ShareScreen> {
         );
 
         await appProvider.updateNote(updatedNote);
+
+        // Trigger AI content ingestion if needed (fire and forget)
+        if (!updatedNote.content.contains('> [!SUMMARY]')) {
+          ContentIngestionService().processNote(
+            updatedNote,
+            appProvider,
+            onMessage: (_) {},
+            onError: (msg) =>
+                LoggerService.error('Share Screen AI Ingestion Error: $msg'),
+            onSuccess: () {},
+          );
+        }
+
         // Clear downloaded file path after successful note update
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
