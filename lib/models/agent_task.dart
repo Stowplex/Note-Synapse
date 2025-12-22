@@ -17,9 +17,9 @@ class AgentTask {
     this.result,
     this.toolName,
     this.userComment,
-    this.executionHistory = const [],
+    List<String>? executionHistory,
     this.maxTurns = 20,
-  });
+  }) : executionHistory = executionHistory ?? [];
 
   Map<String, dynamic> toJson() => {
     'id': id,
