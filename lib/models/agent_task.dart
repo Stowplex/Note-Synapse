@@ -9,6 +9,7 @@ class AgentTask {
   String? userComment;
   List<String> executionHistory;
   int maxTurns;
+  List<String> allowedTools;
 
   AgentTask({
     required this.id,
@@ -19,7 +20,9 @@ class AgentTask {
     this.userComment,
     List<String>? executionHistory,
     this.maxTurns = 20,
-  }) : executionHistory = executionHistory ?? [];
+    List<String>? allowedTools,
+  }) : executionHistory = executionHistory ?? [],
+       allowedTools = allowedTools ?? [];
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -30,5 +33,6 @@ class AgentTask {
     'userComment': userComment,
     'executionHistory': executionHistory,
     'maxTurns': maxTurns,
+    'allowedTools': allowedTools,
   };
 }

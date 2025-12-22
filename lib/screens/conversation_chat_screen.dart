@@ -743,8 +743,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       // Check for Agent Tool
       if (_selectedBuiltInTools.contains(BuiltInToolsService.agentToolId)) {
         final agentService = context.read<AgentService>();
+
+        // Fetch available tools for the agent
+        final endpoints = await McpService.getEndpoints();
+        final enabledEndpointIds = endpoints.map((e) => e.id).toList();
+        final activeTools = await McpToolIntegrationService.getAvailableTools(
+          enabledEndpointIds,
+        );
+
         // Trigger planning (fire and forget from UI perspective, handled by service listener)
-        agentService.generatePlan(content);
+        agentService.generatePlan(content, activeTools: activeTools);
 
         // In a real app we might want to persist this message to DB
         // For V1, we add to local list. If we want persistence, we need to save it.
