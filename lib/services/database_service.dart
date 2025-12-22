@@ -4523,7 +4523,7 @@ class DatabaseService {
           List<Object?> args = [sanitizedQuery];
 
           if (hasTags) {
-            for (final tag in tags!) {
+            for (final tag in tags) {
               sql += ' AND n.tags LIKE ?';
               args.add('%"$tag"%');
             }

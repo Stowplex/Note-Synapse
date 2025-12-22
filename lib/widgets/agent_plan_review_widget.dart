@@ -203,20 +203,30 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                         margin: const EdgeInsets.only(top: 8),
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceContainerHighest,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: Colors.grey.shade300,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
                                           ),
                                         ),
                                         child: Text(
                                           'Result: ${task.result}',
-                                          style: const TextStyle(
-                                            fontFamily: 'monospace',
-                                            fontSize: 11,
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontFamily: 'monospace',
+                                                fontSize: 11,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
+                                              ),
                                           maxLines: 10,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -228,43 +238,137 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                         margin: const EdgeInsets.only(top: 8),
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.red.shade50,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.errorContainer,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: Colors.red.shade200,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
                                           ),
                                         ),
                                         child: Text(
                                           'Error: ${task.result}',
-                                          style: TextStyle(
-                                            fontFamily: 'monospace',
-                                            fontSize: 11,
-                                            color: Colors.red.shade900,
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontFamily: 'monospace',
+                                                fontSize: 11,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onErrorContainer,
+                                              ),
                                         ),
                                       ),
                                     const SizedBox(height: 4),
                                     TextField(
                                       controller: _itemControllers[task.id],
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                         hintText: 'Add comment/refinement...',
                                         border: InputBorder.none,
                                         isDense: true,
                                         contentPadding: EdgeInsets.zero,
                                         hintStyle: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant
+                                              .withOpacity(0.6),
                                         ),
                                       ),
-                                      style: const TextStyle(fontSize: 12),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                             ],
                           ),
+                          if (task.status == AgentTaskStatus.paused)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.tertiaryContainer,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.tertiary,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '⚠️ ${task.result}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onTertiaryContainer,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: () =>
+                                              agentService.abortTask(task.id),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            side: BorderSide(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.error,
+                                            ),
+                                            foregroundColor: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
+                                          ),
+                                          child: const Text('Abort'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () =>
+                                              agentService.resumeTask(
+                                                task.id,
+                                                increaseLimit: true,
+                                              ),
+                                          style: ElevatedButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                          child: const Text('+10 Turns'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: () => agentService
+                                              .concludeTask(task.id),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                          child: const Text('Bail'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       );
                     },
@@ -312,12 +416,12 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                               widget.onProceed();
                             },
                       icon: isRunning
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.onPrimary,
                               ),
                             )
                           : const Icon(Icons.play_arrow),
@@ -330,9 +434,11 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                     margin: const EdgeInsets.only(top: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: Theme.of(context).colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade200),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,7 +447,9 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                           children: [
                             Icon(
                               Icons.check_circle_outline,
-                              color: Colors.green.shade700,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -349,7 +457,9 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                               'Conclusion',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.green.shade900,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ],
@@ -357,7 +467,11 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                         const SizedBox(height: 8),
                         Text(
                           agentService.finalAnswer!,
-                          style: TextStyle(color: Colors.green.shade900),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
+                          ),
                         ),
                       ],
                     ),

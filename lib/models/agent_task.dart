@@ -1,4 +1,4 @@
-enum AgentTaskStatus { pending, inProgress, completed, failed }
+enum AgentTaskStatus { pending, inProgress, completed, failed, paused }
 
 class AgentTask {
   final String id;
@@ -6,7 +6,9 @@ class AgentTask {
   AgentTaskStatus status;
   String? result;
   String? toolName;
-  String? userComment; // Feedback for this specific step
+  String? userComment;
+  List<String> executionHistory;
+  int maxTurns;
 
   AgentTask({
     required this.id,
@@ -15,6 +17,8 @@ class AgentTask {
     this.result,
     this.toolName,
     this.userComment,
+    this.executionHistory = const [],
+    this.maxTurns = 20,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,5 +28,7 @@ class AgentTask {
     'result': result,
     'toolName': toolName,
     'userComment': userComment,
+    'executionHistory': executionHistory,
+    'maxTurns': maxTurns,
   };
 }

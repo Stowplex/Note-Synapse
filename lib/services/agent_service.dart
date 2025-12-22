@@ -27,11 +27,25 @@ class AgentService extends ChangeNotifier {
   Future<void> _executeLoop() async {
     final StringBuffer globalContext = StringBuffer();
 
+    // Rebuild context from already completed tasks if we are resuming?
+    for (final t in _tasks) {
+      if (t.status == AgentTaskStatus.completed) {
+        globalContext.writeln('Task: ${t.description}');
+        globalContext.writeln('Result: ${t.result}');
+        globalContext.writeln('---');
+      }
+    }
+
     while (_isRunning &&
-        _tasks.any((t) => t.status == AgentTaskStatus.pending)) {
-      // ... (existing loop logic) ...
+        _tasks.any(
+          (t) =>
+              t.status == AgentTaskStatus.pending ||
+              t.status == AgentTaskStatus.paused,
+        )) {
       final task = _tasks.firstWhere(
-        (t) => t.status == AgentTaskStatus.pending,
+        (t) =>
+            t.status == AgentTaskStatus.pending ||
+            t.status == AgentTaskStatus.paused,
       );
 
       // Update status
@@ -41,6 +55,15 @@ class AgentService extends ChangeNotifier {
 
       try {
         await _performTask(task, globalContext.toString());
+
+        if (task.status == AgentTaskStatus.paused) {
+          // Task paused (max turns reached). Stop execution loop.
+          _isRunning = false;
+          _currentThought = 'Task paused: ${task.description}';
+          notifyListeners();
+          return;
+        }
+
         task.status = AgentTaskStatus.completed;
 
         // Append result to global context for future tasks
@@ -328,13 +351,11 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
   }
 
   Future<void> _performTask(AgentTask task, String globalContext) async {
-    // ReAct Loop (max 20 turns to prevent premature cutoff)
-    int turn = 0;
-    const maxTurns = 20;
-    final List<String> history = [];
+    // ReAct Loop
+    // logic checks task.executionHistory length vs task.maxTurns
 
-    while (turn < maxTurns) {
-      turn++;
+    while (task.executionHistory.length / 2 < task.maxTurns) {
+      final int turn = (task.executionHistory.length / 2).floor() + 1;
 
       // 1. Construct Prompt with History
       final toolsDesc = _nativeTools
@@ -357,7 +378,7 @@ DB Schema:
 $_dbSchema
 
 History (Actions in this task):
-${history.isEmpty ? "None" : history.join('\n')}
+${task.executionHistory.isEmpty ? "None" : task.executionHistory.join('\n')}
 
 Instructions:
 1. If you have enough info, return {"answer": "..."}.
@@ -394,14 +415,16 @@ I see that the previous search failed. I will try a broader SQL query.
             .trim();
         decision = jsonDecode(cleaned);
       } catch (e) {
-        // If parsing fails, it might be a malformed tool call.
-        history.add('System: Invalid JSON format. Return ONLY JSON.');
+        task.executionHistory.add(
+          'System: Invalid JSON format. Return ONLY JSON.',
+        );
         continue;
       }
 
       if (decision.containsKey('tool')) {
         final toolName = decision['tool'];
-        final args = decision['args'] as Map<String, dynamic>;
+        // FIX: Safe cast for args
+        final args = (decision['args'] as Map<String, dynamic>?) ?? {};
 
         try {
           final tool = _nativeTools.firstWhere(
@@ -416,33 +439,64 @@ I see that the previous search failed. I will try a broader SQL query.
           final resultStr = jsonEncode(result);
 
           // Add to history
-          history.add('Action: $toolName');
-          history.add('Params: $args');
+          task.executionHistory.add('Action: $toolName');
+          task.executionHistory.add('Params: $args');
 
           // Truncate result if too long to save context
           final truncatedResult = resultStr.length > 2000
               ? '${resultStr.substring(0, 2000)}... (truncated)'
               : resultStr;
-          history.add('Observation: $truncatedResult');
+          task.executionHistory.add('Observation: $truncatedResult');
 
           // Loop continues...
         } catch (e) {
-          history.add('Action: $toolName');
-          history.add('Error: $e');
+          task.executionHistory.add('Action: $toolName');
+          task.executionHistory.add('Error: $e');
         }
       } else if (decision.containsKey('answer')) {
         task.result = decision['answer'];
-        // Explicitly only mark completed if we got an answer
+        task.status = AgentTaskStatus.completed;
         return;
       } else {
-        history.add('System: Invalid JSON. Must contain "tool" or "answer".');
+        task.executionHistory.add(
+          'System: Invalid JSON. Must contain "tool" or "answer".',
+        );
       }
     }
 
-    // If we exit loop without "answer", it's a failure (or stuck).
-    task.result =
-        'Error: Max execution turns ($maxTurns) reached without final answer.';
+    // If we exit loop without "answer", it's a failure or pause.
+    task.result = 'Max execution turns (${task.maxTurns}) reached.';
+    task.status = AgentTaskStatus.paused;
+  }
+
+  // Intervention Methods
+
+  /// Resumes a paused task, optionally increasing its turn limit.
+  void resumeTask(String taskId, {bool increaseLimit = false}) {
+    final task = _tasks.firstWhere((t) => t.id == taskId);
+    if (increaseLimit) {
+      task.maxTurns += 10;
+    }
+    // Restart execution
+    executePlan();
+  }
+
+  /// Forces a task to conclude with its current observations.
+  void concludeTask(String taskId) {
+    final task = _tasks.firstWhere((t) => t.id == taskId);
+    task.status = AgentTaskStatus.completed;
+    task.result ??= "Manually concluded by user.";
+    notifyListeners();
+    executePlan(); // Move to next task
+  }
+
+  /// Aborts a task (and effectively the plan for now).
+  void abortTask(String taskId) {
+    final task = _tasks.firstWhere((t) => t.id == taskId);
     task.status = AgentTaskStatus.failed;
+    task.result = "Aborted by user.";
+    _isRunning = false;
+    notifyListeners();
   }
 
   List<dynamic> _parseJsonList(String response) {

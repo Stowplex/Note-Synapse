@@ -71,6 +71,10 @@ class AgentTraceView extends StatelessWidget {
         icon = Icons.error;
         color = Colors.red;
         break;
+      case AgentTaskStatus.paused:
+        icon = Icons.pause_circle_filled;
+        color = Colors.orange;
+        break;
     }
 
     return Card(
