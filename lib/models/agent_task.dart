@@ -5,7 +5,7 @@ class AgentTask {
   final String description;
   AgentTaskStatus status;
   String? result;
-  String? toolName;
+  List<String> toolNames;
   String? userComment;
   List<String> executionHistory;
   int maxTurns;
@@ -16,12 +16,13 @@ class AgentTask {
     required this.description,
     this.status = AgentTaskStatus.pending,
     this.result,
-    this.toolName,
+    List<String>? toolNames,
     this.userComment,
     List<String>? executionHistory,
     this.maxTurns = 20,
     List<String>? allowedTools,
-  }) : executionHistory = executionHistory ?? [],
+  }) : toolNames = toolNames ?? [],
+       executionHistory = executionHistory ?? [],
        allowedTools = allowedTools ?? [];
 
   Map<String, dynamic> toJson() => {
@@ -29,7 +30,7 @@ class AgentTask {
     'description': description,
     'status': status.toString(),
     'result': result,
-    'toolName': toolName,
+    'toolNames': toolNames,
     'userComment': userComment,
     'executionHistory': executionHistory,
     'maxTurns': maxTurns,

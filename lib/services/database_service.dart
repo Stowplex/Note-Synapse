@@ -22,7 +22,6 @@ import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 
-// Migration step configuration
 class MigrationStep {
   final String description;
   final Future<void> Function(Database db, {required bool isBackupMigration})

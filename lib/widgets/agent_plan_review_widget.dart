@@ -160,20 +160,35 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(task.description),
-                                    if (task.toolName != null)
+                                    if (task.toolNames.isNotEmpty)
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          'Using: ${task.toolName}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.secondary,
-                                                fontStyle: FontStyle.italic,
+                                        child: Wrap(
+                                          spacing: 4,
+                                          runSpacing: 4,
+                                          children: task.toolNames.map((tool) {
+                                            return Chip(
+                                              label: Text(
+                                                tool,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                ), // Small font for chips
                                               ),
+                                              backgroundColor: Theme.of(
+                                                context,
+                                              ).colorScheme.secondaryContainer,
+                                              labelPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: -4,
+                                                  ),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            );
+                                          }).toList(),
                                         ),
                                       ),
                                     if (task.status ==

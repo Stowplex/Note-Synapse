@@ -254,3 +254,47 @@ class RunSqlTool implements NativeTool {
 extension StringExtension on String {
   String take(int n) => length > n ? substring(0, n) : this;
 }
+
+class ListFiltersTool implements NativeTool {
+  final DatabaseService _db = DatabaseService();
+
+  @override
+  String get name => 'ls';
+
+  @override
+  String get description =>
+      'Lists all tag filters (folders) in a tree structure. Use this to understand the organization of notes.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {'type': 'object', 'properties': {}};
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    try {
+      final filters = await _db.getAllFilters();
+      if (filters.isEmpty) {
+        return "No filters found (Root is empty).";
+      }
+
+      // Sort by name
+      filters.sort((a, b) => a.name.compareTo(b.name));
+
+      final buffer = StringBuffer();
+      buffer.writeln("File System (Filters):");
+
+      for (final filter in filters) {
+        buffer.writeln("- [${filter.name}]");
+        if (filter.includeTags.isNotEmpty) {
+          buffer.writeln("  Tags: ${filter.includeTags.join(', ')}");
+        }
+        if (filter.includeText != null && filter.includeText!.isNotEmpty) {
+          buffer.writeln("  Text: ${filter.includeText}");
+        }
+      }
+
+      return buffer.toString();
+    } catch (e) {
+      return "Error listing filters: $e";
+    }
+  }
+}

@@ -155,6 +155,7 @@ Format with Markdown.
     NoteSearchTool(),
     NoteReadTool(),
     RunSqlTool(),
+    ListFiltersTool(),
   ];
   List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
 
@@ -237,13 +238,22 @@ Database Schema (for RunSqlTool):
 $dbSchema
 
 Break this down into a step-by-step plan.
-Each step should specify WHICH tool to use.
-Return ONLY a valid JSON list of objects with "description" and "tool" fields.
+Each step can specify ONE OR MORE tools to use to accomplish that step.
+For example, to list things and then read them, you can have separate steps or combined logic.
+Return ONLY a valid JSON list of objects:
+[
+  {
+    "description": "Step description",
+    "tools": ["tool_name_1", "tool_name_2"]
+  }
+]
 Example:
 [
-  {"description": "Find notes about...", "tool": "NoteSearchTool"},
-  {"description": "Read valid notes...", "tool": "NoteReadTool"}
+  {"description": "Search for notes", "tools": ["search_notes"]},
+  {"description": "Read notes and summarize", "tools": ["read_note"]}
 ]
+If no tools are needed for a step (e.g. analysis), use an empty list: "tools": [].
+Only use the tools listed above.
 ''';
 
     try {
@@ -253,27 +263,11 @@ Example:
         generationContext: GenerationContext(values: {'type': 'agent_plan'}),
       );
 
-      final List<dynamic> jsonList = _parseJsonList(response);
-      final allActiveTools = getAllToolNames();
-
-      _tasks = jsonList.map((item) {
-        if (item is String) {
-          return AgentTask(
-            id: const Uuid().v4(),
-            description: item,
-            status: AgentTaskStatus.pending,
-            allowedTools: allActiveTools,
-          );
-        }
-        final map = item as Map<String, dynamic>;
-        return AgentTask(
-          id: const Uuid().v4(),
-          description: map['description'] as String,
-          toolName: map['tool'] as String?,
-          status: AgentTaskStatus.pending,
-          allowedTools: allActiveTools,
-        );
-      }).toList();
+      final List<AgentTask> tasks = _parseTasksFromJson(
+        response,
+        activeTools: getAllToolNames(),
+      );
+      _tasks = tasks;
 
       _currentThought = 'Plan generated. Waiting for review.';
       notifyListeners();
@@ -303,7 +297,7 @@ Example:
           .map(
             (t) => {
               'description': t.description,
-              'tool': t.toolName,
+              'tools': t.toolNames,
               if (t.userComment != null && t.userComment!.isNotEmpty)
                 'feedback': t.userComment,
             },
@@ -327,7 +321,7 @@ $dbSchema
 
 Update the plan based on the feedback.
 Address specific feedback for items if present.
-Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}]
+Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["..."]}]
 ''';
 
     try {
@@ -339,23 +333,16 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
         ),
       );
 
-      final List<dynamic> jsonList = _parseJsonList(response);
-
-      _tasks = jsonList.map((item) {
-        if (item is String) {
-          return AgentTask(
-            id: const Uuid().v4(),
-            description: item,
-            status: AgentTaskStatus.pending,
-          );
-        }
-        final map = item as Map<String, dynamic>;
-        return AgentTask(
-          id: const Uuid().v4(),
-          description: map['description'] as String,
-          toolName: map['tool'] as String?,
-          status: AgentTaskStatus.pending,
-        );
+      final tasks = _parseTasksFromJson(
+        response,
+        activeTools: [
+          ..._nativeTools.map((t) => t.name),
+          ..._externalTools.values.expand((l) => l.map((t) => t.name)),
+        ],
+      );
+      _tasks = tasks.map((t) {
+        t.status = AgentTaskStatus.pending;
+        return t;
       }).toList();
 
       _currentThought = 'Plan revised. Waiting for review.';
@@ -423,245 +410,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     notifyListeners();
   }
 
-  Future<void> _performTask(AgentTask task, String globalContext) async {
-    // ReAct Loop
-    // logic checks task.executionHistory length vs task.maxTurns
-
-    while (task.executionHistory.length / 2 < task.maxTurns) {
-      if (task.status == AgentTaskStatus.paused) {
-        // Stop execution if paused
-        notifyListeners();
-        return;
-      }
-
-      final int turn = (task.executionHistory.length / 2).floor() + 1;
-
-      // 1. Construct Prompt with History
-      // Filter tools based on allowedTools if set
-      final allowedNativeTools = task.allowedTools.isEmpty
-          ? _nativeTools
-          : _nativeTools.where((t) => task.allowedTools.contains(t.name));
-
-      final allExternalTools = _externalTools.values.expand((l) => l).toList();
-      final allowedExternalTools = task.allowedTools.isEmpty
-          ? allExternalTools
-          : allExternalTools.where((t) => task.allowedTools.contains(t.name));
-
-      final toolsDesc = [
-        ...allowedNativeTools.map(
-          (t) =>
-              '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-        ),
-        ...allowedExternalTools.map(
-          (t) =>
-              '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-        ),
-      ].join('\n');
-
-      final prompt =
-          '''
-You are an intelligent agent working on a task.
-Task Description: "${task.description}"
-
-Global Context (Results from previous tasks):
-$globalContext
-
-Available Tools:
-$toolsDesc
-
-Execution History (Your previous steps):
-${task.executionHistory.map((h) => h.toString()).join('\n')}
-
-INSTRUCTIONS:
-1. Analyze the Global Context and Execution History.
-2. Formulate a CLEAR THOUGHT about what to do next.
-3. Select a tool to execute (or use "answer" fallback if done).
-4. If you have sufficient information to complete the task, your "Tool" action should call the `answer` tool (conceptually) by outputting the final answer in the JSON.
-   (Note: If you have a specific answer or conclusion, just output it as the content of the "answer" tool/key or simply mark task as complete if the UI allows).
-   ACTUALLY, to finish the task, you MUST use the special "answer" action:
-   { "answer": "Your final summary of what you did and the result." }
-
-FORMAT:
-You MUST provide your output in two distinct parts:
-My thought: <Your reasoning here>
-Tool:
-```json
-{ "tool": "tool_name", "args": { ... } }
-```
-OR for the final answer:
-My thought: <Your reasoning>
-Tool:
-```json
-{ "answer": "Your final explanation..." }
-```
-
-CRITICAL:
-- ALWAYS start with "My thought:".
-- ALWAYS execute ONE tool per turn.
-- If you are stuck, use "My thought: I am stuck because..." and then try a different approach or ask for user help via "answer".
-''';
-
-      try {
-        // 2. Call LLM
-        final response = await AIService.generateWithAttachments(
-          prompt,
-          [], // No attachments for the agent logic itself yet
-          generationContext: GenerationContext(
-            values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
-          ),
-        );
-
-        // 3. Parse Response (Thought + JSON)
-        String thought = '';
-        Map<String, dynamic> decision = {};
-
-        // Regex to capture "My thought: ... Tool: ... json ..."
-        // We make it robust: Look for "My thought:" grouping and then a JSON block key.
-        // Actually, let's just look for the last JSON block and treat everything before it as thought/context.
-
-        // Better regex to find the JSON block specifically associated with the tool
-        // often inside ```json ... ```
-        final codeBlockMatch = RegExp(
-          r'```json\s*(\{.*?\})\s*```',
-          dotAll: true,
-        ).firstMatch(response);
-        final rawJsonMatch = RegExp(
-          r'(\{.*\})',
-          dotAll: true,
-        ).firstMatch(response);
-
-        String? jsonStr;
-        if (codeBlockMatch != null) {
-          jsonStr = codeBlockMatch.group(1);
-          // Thought is everything before the code block
-          thought = response.substring(0, codeBlockMatch.start).trim();
-        } else if (rawJsonMatch != null) {
-          jsonStr = rawJsonMatch.group(1);
-          // Thought is everything before the JSON
-          thought = response.substring(0, rawJsonMatch.start).trim();
-        }
-
-        // Clean up "My thought:" prefix if present
-        if (thought.startsWith('My thought:')) {
-          thought = thought.replaceFirst('My thought:', '').trim();
-        }
-        // If thought is empty (LLM forgot it), use a placeholder
-        if (thought.isEmpty) thought = "Executing tool...";
-
-        // Update UI with thought immediately
-        _currentThought = thought;
-        notifyListeners(); // Refresh UI to show "My thought: ..."
-
-        if (jsonStr != null) {
-          try {
-            decision = jsonDecode(jsonStr);
-          } catch (e) {
-            // Try rudimentary fix if flexible parsing needed, else throw
-            throw FormatException("Invalid JSON in response.");
-          }
-        } else {
-          throw FormatException("No JSON tool execution found.");
-        }
-
-        // 4. Update History
-        task.executionHistory.add('Turn $turn:');
-        task.executionHistory.add('Thought: $thought');
-        // We don't add the full JSON to history to save tokens, just the decision summary
-        // task.executionHistory.add('Action: $decision');
-
-        // 5. Execute Tool
-        if (decision.containsKey('answer')) {
-          task.result = decision['answer'];
-          task.status = AgentTaskStatus.completed;
-          task.executionHistory.add(
-            'Result: Task Completed. Answer: ${task.result}',
-          );
-          notifyListeners();
-          return; // Task Done
-        }
-
-        final toolName = decision['tool'] as String?;
-        final args = decision['args'] as Map<String, dynamic>? ?? {};
-
-        if (toolName == null) {
-          task.executionHistory.add(
-            'Error: System: Invalid format. You must provide a "My thought:" line followed by a "Tool:" line containing the JSON action.',
-          );
-          continue; // Retry
-        }
-
-        task.executionHistory.add('Action: Call $toolName with $args');
-        notifyListeners(); // Update UI
-
-        dynamic result;
-        try {
-          // Check Native Tools
-          final nativeTool = _nativeTools.firstWhere(
-            (t) => t.name == toolName,
-            orElse: () => throw Exception('Tool not found'),
-          );
-          // It's a native tool
-          // Check allowed tools constraint? (Already filtered in prompt, but good to check)
-          if (task.allowedTools.isNotEmpty &&
-              !task.allowedTools.contains(toolName)) {
-            throw Exception("Tool '$toolName' is not allowed for this task.");
-          }
-
-          result = await nativeTool.execute(args);
-        } catch (e) {
-          // Check External Tools
-          String? serviceName;
-          for (final entry in _externalTools.entries) {
-            if (entry.value.any((t) => t.name == toolName)) {
-              serviceName = entry.key;
-              break;
-            }
-          }
-
-          if (serviceName != null) {
-            // Check allowed constraint
-            if (task.allowedTools.isNotEmpty &&
-                !task.allowedTools.contains(toolName)) {
-              result = "Error: Tool '$toolName' is not allowed for this task.";
-            } else {
-              final endpoints = await McpService.getEndpoints();
-              final enabledEndpointIds = endpoints.map((e) => e.id).toList();
-
-              result = await McpToolIntegrationService.executeToolCall(
-                serviceName: serviceName,
-                toolName: toolName,
-                parameters: args,
-                enabledEndpointIds: enabledEndpointIds,
-                generationContext: GenerationContext(
-                  values: {'type': 'agent_tool_exec'},
-                ),
-              );
-            }
-          } else {
-            result = 'Error: Tool "$toolName" not found.';
-          }
-        }
-
-        // 6. Record Observation
-        task.executionHistory.add('Observation: $result');
-        notifyListeners();
-      } catch (e) {
-        LoggerService.error('Agent Turn Error: $e');
-        task.executionHistory.add(
-          'Error: System: Invalid format or execution error. You must provide a "My thought:" line followed by a "Tool:" line containing the JSON action. Error details: $e',
-        );
-        // Backoff?
-      }
-    }
-
-    // Max turns reached - Wait, we are inside the method.
-    // If the loop finishes without completion
-    if (task.status != AgentTaskStatus.completed) {
-      task.status = AgentTaskStatus.paused; // Pause instead of fail
-      task.result = "Max turns reached. Paused for user intervention.";
-      notifyListeners();
-    }
-  }
+  // _performTask moved to end of file
 
   // Intervention Methods
 
@@ -693,20 +442,273 @@ CRITICAL:
     notifyListeners();
   }
 
-  List<dynamic> _parseJsonList(String response) {
+  List<AgentTask> _parseTasksFromJson(
+    String response, {
+    required List<String> activeTools,
+  }) {
     // Robust parsing for List
-    try {
-      final jsonMatch = RegExp(r'\[.*\]', dotAll: true).firstMatch(response);
-      final jsonStr = jsonMatch?.group(0) ?? response;
+    String cleanResponse = response.trim();
+    if (cleanResponse.startsWith('```json')) {
+      cleanResponse = cleanResponse.replaceFirst('```json', '');
+    }
+    if (cleanResponse.startsWith('```')) {
+      cleanResponse = cleanResponse.replaceFirst('```', '');
+    }
+    cleanResponse = cleanResponse.replaceAll(RegExp(r'```$'), '').trim();
 
-      final cleaned = jsonStr
-          .replaceAll('```json', '')
-          .replaceAll('```', '')
-          .trim();
-      return jsonDecode(cleaned);
+    try {
+      final List<dynamic> jsonList = jsonDecode(cleanResponse);
+      return jsonList.map((item) {
+        if (item is String) {
+          return AgentTask(
+            id: const Uuid().v4(),
+            description: item,
+            toolNames: [],
+            allowedTools: activeTools,
+          );
+        }
+
+        final map = item as Map<String, dynamic>;
+        List<String> tools = [];
+        if (map['tools'] != null) {
+          tools = (map['tools'] as List).cast<String>();
+        } else if (map['tool'] != null) {
+          tools = [map['tool'] as String];
+        }
+
+        return AgentTask(
+          id: const Uuid().v4(),
+          description: map['description'] ?? "No description",
+          toolNames: tools,
+          allowedTools: activeTools,
+        );
+      }).toList();
     } catch (e) {
       LoggerService.error('Failed to parse JSON list: $e');
       return [];
     }
+  }
+
+  Future<void> _performTask(AgentTask task, String globalContext) async {
+    // Check for max turns
+    if (task.executionHistory.length / 2 >= task.maxTurns) {
+      task.status = AgentTaskStatus.paused;
+      task.result = "Max turns reached. Paused.";
+      notifyListeners();
+      return;
+    }
+
+    // If no tools, simple thought step
+    if (task.toolNames.isEmpty) {
+      task.result = "Thought step completed.";
+      task.status = AgentTaskStatus.completed;
+      notifyListeners();
+      return;
+    }
+
+    final int turn = (task.executionHistory.length / 2).floor() + 1;
+
+    // We only execute ONE tool at a time in the ReAct loop per original design,
+    // BUT the prompt might have assigned multiple tools to this `AgentTask`.
+    // The `_performTask` function is effectively a mini-agent solving `task.description`.
+    // The `task.toolNames` are suggestions or constraints.
+    // Wait, if the plan said "Use Tool A and Tool B", we should probably just let the ReAct loop decide order.
+    // The prompt passed to ReAct sees `Allowed Tools` (filtered by `task.allowedTools`).
+    // So if the plan was specific about tools, we should probably restrict `task.allowedTools` to ONLY `task.toolNames`.
+    // If `task.toolNames` is NOT empty, we restrict execution to those tools?
+
+    List<NativeTool> allowedNativeFn() {
+      if (task.toolNames.isEmpty) return _nativeTools;
+      return _nativeTools
+          .where((t) => task.toolNames.contains(t.name))
+          .toList();
+    }
+
+    List<McpTool> allowedExternalFn() {
+      final all = _externalTools.values.expand((x) => x).toList();
+      if (task.toolNames.isEmpty) return all;
+      return all.where((t) => task.toolNames.contains(t.name)).toList();
+    }
+
+    final currentAllowedNative = allowedNativeFn();
+    final currentAllowedExternal = allowedExternalFn();
+
+    // Fallback: If for some reason the planned tool isn't found in native/external,
+    // we should alert or fail? For now, we proceed with what we found.
+
+    final toolsDesc = [
+      ...currentAllowedNative.map(
+        (t) =>
+            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+      ),
+      ...currentAllowedExternal.map(
+        (t) =>
+            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+      ),
+    ].join('\n');
+
+    final prompt =
+        '''
+You are an intelligent agent working on a task.
+Task Description: "${task.description}"
+
+Global Context (Results from previous tasks):
+$globalContext
+
+Available Tools (You are restricted to these if specified in plan):
+$toolsDesc
+
+Execution History:
+${task.executionHistory.map((h) => h.toString()).join('\n')}
+
+INSTRUCTIONS:
+1. Analyze the context and history.
+2. Formulate a CLEAR THOUGHT.
+3. Select a tool to execute (or use "answer" if done).
+   If the plan assigned multiple tools, you generally execute them one by one in subsequent turns until the task is satisfied.
+   
+FORMAT:
+My thought: ...
+Tool:
+```json
+{ "tool": "tool_name", "args": { ... } }
+```
+OR
+```json
+{ "answer": "Final summary..." }
+```
+''';
+
+    try {
+      final response = await AIService.generateWithAttachments(
+        prompt,
+        [],
+        generationContext: GenerationContext(
+          values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
+        ),
+      );
+
+      // ... Parsing Logic (Similar to before but inside this function) ...
+      // Re-using existing ReAct parsing logic but ensuring it matches new flow
+
+      String thought = '';
+      String? jsonStr;
+
+      // Extract thought
+      final jsonMatch = RegExp(
+        r'```json\s*(\{.*?\})\s*```',
+        dotAll: true,
+      ).firstMatch(response);
+      final altJsonMatch = RegExp(
+        r'(\{.*\})',
+        dotAll: true,
+      ).firstMatch(response);
+
+      if (jsonMatch != null) {
+        jsonStr = jsonMatch.group(1);
+        thought = response.substring(0, jsonMatch.start).trim();
+      } else if (altJsonMatch != null) {
+        jsonStr = altJsonMatch.group(1);
+        thought = response.substring(0, altJsonMatch.start).trim();
+      }
+
+      if (thought.startsWith('My thought:')) {
+        thought = thought.replaceFirst('My thought:', '').trim();
+      }
+      _currentThought = thought.isNotEmpty ? thought : "Executing...";
+      notifyListeners();
+
+      task.executionHistory.add('Turn $turn:');
+      task.executionHistory.add('Thought: $_currentThought');
+
+      if (jsonStr == null) {
+        task.executionHistory.add("Error: No JSON action found in response.");
+        return;
+      }
+
+      Map<String, dynamic> decision;
+      try {
+        decision = jsonDecode(jsonStr);
+      } catch (e) {
+        task.executionHistory.add("Error: Invalid JSON: $e");
+        return;
+      }
+
+      if (decision.containsKey('answer')) {
+        task.result = decision['answer'];
+        task.status = AgentTaskStatus.completed;
+        notifyListeners();
+        return;
+      }
+
+      final toolName = decision['tool'] as String?;
+      final args = decision['args'] as Map<String, dynamic>? ?? {};
+
+      if (toolName == null) {
+        task.executionHistory.add("Error: Missing 'tool' or 'answer' key.");
+        return;
+      }
+
+      // Execute Tool
+      task.executionHistory.add('Action: Call $toolName');
+      notifyListeners();
+
+      dynamic result;
+      try {
+        // Try Native
+        final nativeTool = _nativeTools.firstWhere(
+          (t) => t.name == toolName,
+          orElse: () => _UnknownTool(),
+        );
+        if (nativeTool is! _UnknownTool) {
+          result = await nativeTool.execute(args);
+        } else {
+          // Try External
+          String? serviceName;
+          for (final entry in _externalTools.entries) {
+            if (entry.value.any((t) => t.name == toolName)) {
+              serviceName = entry.key;
+              break;
+            }
+          }
+          if (serviceName != null) {
+            final endpoints = await McpService.getEndpoints();
+            final ids = endpoints.map((e) => e.id).toList();
+            result = await McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: args,
+              enabledEndpointIds: ids,
+              generationContext: GenerationContext(
+                values: {'type': 'agent_tool_exec'},
+              ),
+            );
+          } else {
+            throw "Tool $toolName not found.";
+          }
+        }
+      } catch (e) {
+        result = "Error executing $toolName: $e";
+      }
+
+      task.executionHistory.add("Observation: $result");
+      notifyListeners();
+    } catch (e) {
+      LoggerService.error("Agent Loop Error: $e");
+      task.executionHistory.add("Error: Internal Agent Loop Error: $e");
+    }
+  }
+}
+
+class _UnknownTool implements NativeTool {
+  @override
+  String get name => 'unknown';
+  @override
+  String get description => 'Legacy placeholder';
+  @override
+  Map<String, dynamic> get inputSchema => {};
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    throw UnimplementedError();
   }
 }
