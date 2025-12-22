@@ -114,6 +114,21 @@ class AIService {
     }, requestId: requestId);
   }
 
+  /// Generate content with attachments (Simple interface)
+  static Future<String> generateWithAttachments(
+    String prompt,
+    List<PlatformFile> attachedFiles, {
+    GenerationContext? generationContext,
+  }) {
+    final request = _singleTurnRequest(
+      taskContext:
+          'You are a helpful assistant analyzing the attached documents.',
+      userInstruction: prompt,
+      attachments: attachedFiles,
+    );
+    return executePrompt(request, generationContext: generationContext);
+  }
+
   /// New note creation
   static Future<List<Note>> createNewNotes(
     String prompt,

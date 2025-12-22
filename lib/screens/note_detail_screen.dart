@@ -33,6 +33,7 @@ import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
+import '../services/content_ingestion_service.dart';
 import '../models/conversation.dart';
 
 import 'conversation_tree_screen.dart';
@@ -1733,6 +1734,46 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
             backgroundColor: Colors.orange,
           ),
+        );
+      }
+
+      // Trigger AI Ingestion if needed (and if summary doesn't exist yet)
+      if (!updatedNote.content.contains('> [!SUMMARY]')) {
+        ContentIngestionService().processNote(
+          updatedNote,
+          appProvider,
+          onMessage: (msg) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(msg),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          },
+          onError: (err) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(err), backgroundColor: Colors.red),
+              );
+            }
+          },
+          onSuccess: () {
+            if (mounted) {
+              // Refresh local state if content changed
+              setState(() {
+                // We need to fetch the updated content from provider
+                final freshNote = appProvider.notes.firstWhere(
+                  (n) => n.id == updatedNote.id,
+                  orElse: () => updatedNote,
+                );
+                if (freshNote.content != _codeController.text) {
+                  _codeController.text = freshNote.content;
+                }
+              });
+            }
+          },
         );
       }
     } catch (e, stackTrace) {

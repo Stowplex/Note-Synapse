@@ -43,7 +43,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 30;
+  static const int DATABASE_VERSION = 31;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -482,6 +482,10 @@ class DatabaseService {
       description: 'Add recurrenceRule column to notes table',
       execute: _migrateToVersion30,
     ),
+    31: MigrationStep(
+      description: 'Create notes_fts virtual table and tag_ai_configs table',
+      execute: _migrateToVersion31,
+    ),
   };
 
   // Main migration execution method
@@ -799,6 +803,66 @@ class DatabaseService {
   }) async {
     // Add recurrenceRule column to notes table
     await db.execute("ALTER TABLE notes ADD COLUMN recurrenceRule TEXT");
+  }
+
+  static Future<void> _migrateToVersion31(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // 1. Create notes_fts virtual table using FTS5
+    // specific implementation depends on available FTS version, FTS5 is standard in Flutter sqflite
+    await db.execute('''
+      CREATE VIRTUAL TABLE notes_fts USING fts5(
+        title, 
+        content, 
+        content_rowid=id
+      );
+    ''');
+
+    // 2. Populate notes_fts with existing data
+    await db.execute('''
+      INSERT INTO notes_fts(rowid, title, content)
+      SELECT rowid, title, content FROM notes;
+    ''');
+
+    // 3. Create Triggers to keep notes_fts in sync
+    // INSERT Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+      BEGIN
+        INSERT INTO notes_fts(rowid, title, content)
+        VALUES (new.rowid, new.title, new.content);
+      END;
+    ''');
+
+    // DELETE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+      BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, title, content)
+        VALUES('delete', old.rowid, old.title, old.content);
+      END;
+    ''');
+
+    // UPDATE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+      BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, title, content)
+        VALUES('delete', old.rowid, old.title, old.content);
+        INSERT INTO notes_fts(rowid, title, content)
+        VALUES (new.rowid, new.title, new.content);
+      END;
+    ''');
+
+    // 4. Create tag_ai_configs table
+    await db.execute('''
+      CREATE TABLE tag_ai_configs (
+        tagId TEXT PRIMARY KEY,
+        extractionPrompt TEXT,
+        FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   // Recreate main database tables
@@ -4347,4 +4411,93 @@ class DatabaseService {
 
     return result;
   }
+  // --- Agent / AI Features ---
+
+  /// Search notes using Full-Text Search
+  Future<List<Note>> searchNotesFTS(String query) async {
+    final db = await database;
+    // FTS5 match query
+    // We sanitize the query to prevent syntax errors in FTS match expression
+    // A simple sanitization is to wrap phrases in quotes or remove special chars if needed.
+    // For now we pass it directly but wrapped in double quotes if it contains spaces.
+    final sanitizedQuery = '"$query"';
+
+    try {
+      // We join back to the notes table to get the full object
+      final results = await db.rawQuery(
+        '''
+        SELECT n.* 
+        FROM notes_fts fts
+        JOIN notes n ON fts.content_rowid = n.rowid
+        WHERE notes_fts MATCH ?
+        ORDER BY rank
+        LIMIT 50
+      ''',
+        [sanitizedQuery],
+      );
+
+      return await _batchLoadNotes(results);
+    } catch (e) {
+      LoggerService.error('FTS Search failed: $e');
+      // Fallback to standard LIKE search if FTS fails for some reason
+      return searchNotes(query);
+    }
+  }
+
+  /// Fallback search using LIKE
+  Future<List<Note>> searchNotes(String query) async {
+    final db = await database;
+    final results = await db.query(
+      'notes',
+      where: 'title LIKE ? OR content LIKE ?',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'updatedAt DESC',
+      limit: 50,
+    );
+    return await _batchLoadNotes(results);
+  }
+
+  /// Get the AI extraction prompt for a specific tag
+  Future<String?> getTagExtractionPrompt(String tagId) async {
+    final db = await database;
+    try {
+      final results = await db.query(
+        'tag_ai_configs',
+        columns: ['extractionPrompt'],
+        where: 'tagId = ?',
+        whereArgs: [tagId],
+      );
+
+      if (results.isNotEmpty) {
+        return results.first['extractionPrompt'] as String?;
+      }
+    } catch (e) {
+      // Table might not exist yet if migration hasn't run or dev mode
+      LoggerService.warning('Failed to get tag config: $e');
+    }
+    return null;
+  }
+
+  /// Update or Insert the AI extraction prompt for a tag
+  Future<void> updateTagExtractionPrompt(String tagId, String? prompt) async {
+    final db = await database;
+    if (prompt == null || prompt.isEmpty) {
+      await db.delete('tag_ai_configs', where: 'tagId = ?', whereArgs: [tagId]);
+    } else {
+      await db.insert('tag_ai_configs', {
+        'tagId': tagId,
+        'extractionPrompt': prompt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  Future<Note?> getNoteById(String id) async {
+    final db = await database;
+    final results = await db.query('notes', where: 'id = ?', whereArgs: [id]);
+    if (results.isEmpty) return null;
+    final notes = await _batchLoadNotes(results);
+    return notes.isNotEmpty ? notes.first : null;
+  }
+
+  // --- End Agent / AI Features ---
 }

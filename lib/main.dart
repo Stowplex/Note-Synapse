@@ -13,6 +13,7 @@ import 'services/ai_service.dart';
 import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
+import 'services/agent_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,8 +31,11 @@ class NoteSynapseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AppProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AppProvider()),
+        ChangeNotifierProvider(create: (context) => AgentService()),
+      ], // ...
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           return MaterialApp(

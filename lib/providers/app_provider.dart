@@ -409,6 +409,19 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Agent / AI Features ---
+
+  Future<String?> getTagExtractionPrompt(String tagId) async {
+    return await _databaseService.getTagExtractionPrompt(tagId);
+  }
+
+  Future<void> updateTagExtractionPrompt(String tagId, String? prompt) async {
+    await _databaseService.updateTagExtractionPrompt(tagId, prompt);
+    // We don't necessarily need to reload tags, but we could if we stored it in the Tag model.
+    // For now, it is stored separately.
+    notifyListeners();
+  }
+
   Future<void> deleteTag(String tagName) async {
     try {
       await _databaseService.deleteTag(tagName);
