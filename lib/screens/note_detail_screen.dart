@@ -1712,7 +1712,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
 
-    try {
+      final bool isFirstSave = !_hasBeenSaved;
+
       if (!_hasBeenSaved) {
         await appProvider.addNote(updatedNote);
         setState(() {
@@ -1737,8 +1738,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         );
       }
 
-      // Trigger AI Ingestion if needed (and if summary doesn't exist yet)
-      if (!updatedNote.content.contains('> [!SUMMARY]')) {
+      // Trigger AI Ingestion ONLY on first save (new note) AND if summary doesn't exist
+      if (isFirstSave && !updatedNote.content.contains('> [!SUMMARY]')) {
         ContentIngestionService().processNote(
           updatedNote,
           appProvider,
@@ -2885,6 +2886,49 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (tagNames == null || tagNames.isEmpty) return;
       for (final tagName in tagNames) {
         await appProvider.addTagToNote(currentNote.id, tagName);
+      }
+
+      if (mounted) {
+        final updatedNote = context.read<AppProvider>().notes.firstWhere(
+              (n) => n.id == currentNote.id,
+              orElse: () => currentNote,
+            );
+
+        ContentIngestionService().processNote(
+          updatedNote,
+          appProvider,
+          onMessage: (msg) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(msg),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          },
+          onError: (err) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(err), backgroundColor: Colors.red),
+              );
+            }
+          },
+          onSuccess: () {
+             if (mounted) {
+               setState(() {
+                  // Refresh state if needed, though provider update should handle it
+                   final freshNote = appProvider.notes.firstWhere(
+                    (n) => n.id == updatedNote.id,
+                    orElse: () => updatedNote,
+                  );
+                  if (freshNote.content != _codeController.text) {
+                    _codeController.text = freshNote.content;
+                  }
+               });
+             }
+          },
+        );
       }
     });
   }
