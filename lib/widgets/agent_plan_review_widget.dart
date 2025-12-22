@@ -167,6 +167,35 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                         ),
                                       ),
                                     if (task.status ==
+                                        AgentTaskStatus.inProgress)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Row(
+                                          children: [
+                                            const SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Running...',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (task.status ==
                                             AgentTaskStatus.completed &&
                                         task.result != null)
                                       Container(
@@ -296,6 +325,43 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                     ),
                   ],
                 ),
+                if (agentService.finalAnswer != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: Colors.green.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Conclusion',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          agentService.finalAnswer!,
+                          style: TextStyle(color: Colors.green.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

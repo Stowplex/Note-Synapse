@@ -14,10 +14,91 @@ class AgentService extends ChangeNotifier {
   List<AgentTask> _tasks = [];
   bool _isRunning = false;
   String? _currentThought;
+  String? _finalAnswer;
 
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   bool get isRunning => _isRunning;
   String? get currentThought => _currentThought;
+  String? get finalAnswer => _finalAnswer;
+
+  // ... (nativeTools and dbSchema definitions remain the same) ...
+
+  /// ExecuteLoop with Final Summary Generation
+  Future<void> _executeLoop() async {
+    final StringBuffer globalContext = StringBuffer();
+
+    while (_isRunning &&
+        _tasks.any((t) => t.status == AgentTaskStatus.pending)) {
+      // ... (existing loop logic) ...
+      final task = _tasks.firstWhere(
+        (t) => t.status == AgentTaskStatus.pending,
+      );
+
+      // Update status
+      task.status = AgentTaskStatus.inProgress;
+      _currentThought = 'Working on: ${task.description}';
+      notifyListeners();
+
+      try {
+        await _performTask(task, globalContext.toString());
+        task.status = AgentTaskStatus.completed;
+
+        // Append result to global context for future tasks
+        globalContext.writeln('Task: ${task.description}');
+        globalContext.writeln('Result: ${task.result}');
+        globalContext.writeln('---');
+      } catch (e) {
+        task.status = AgentTaskStatus.failed;
+        task.result = 'Error: $e';
+        // Even on failure, log it so next tasks know
+        globalContext.writeln('Task: ${task.description}');
+        globalContext.writeln('Failed: $e');
+        globalContext.writeln('---');
+      }
+      notifyListeners();
+    }
+
+    if (_tasks.every((t) => t.status == AgentTaskStatus.completed)) {
+      _currentThought = 'Generating final summary...';
+      notifyListeners();
+
+      try {
+        await _generateFinalSummary(globalContext.toString());
+        _currentThought = 'All tasks completed.';
+      } catch (e) {
+        // Fallback if summary fails
+        _finalAnswer =
+            "Execution finished, but failed to generate summary. See task details.";
+        LoggerService.error('Failed to generate summary: $e');
+      }
+    }
+  }
+
+  Future<void> _generateFinalSummary(String globalContext) async {
+    // We assume the objective is implicit in the context or we could pass it down.
+    // Ideally we should store the initial objective.
+    // For now we ask the LLM to summarize the findings.
+
+    final prompt =
+        '''
+You have completed a series of tasks to achieve a user objective.
+Here is the execution log (Context):
+$globalContext
+
+Based on the above results, provide a final, concise, and helpful response to the user.
+Answer their original request directly.
+Format with Markdown.
+''';
+
+    final response = await AIService.generateWithAttachments(
+      prompt,
+      [],
+      generationContext: GenerationContext(values: {'type': 'agent_summary'}),
+    );
+
+    _finalAnswer = response;
+    notifyListeners();
+  }
 
   // Tools
   // Tools
@@ -246,44 +327,6 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     notifyListeners();
   }
 
-  Future<void> _executeLoop() async {
-    final StringBuffer globalContext = StringBuffer();
-
-    while (_isRunning &&
-        _tasks.any((t) => t.status == AgentTaskStatus.pending)) {
-      final task = _tasks.firstWhere(
-        (t) => t.status == AgentTaskStatus.pending,
-      );
-
-      // Update status
-      task.status = AgentTaskStatus.inProgress;
-      _currentThought = 'Working on: ${task.description}';
-      notifyListeners();
-
-      try {
-        await _performTask(task, globalContext.toString());
-        task.status = AgentTaskStatus.completed;
-
-        // Append result to global context for future tasks
-        globalContext.writeln('Task: ${task.description}');
-        globalContext.writeln('Result: ${task.result}');
-        globalContext.writeln('---');
-      } catch (e) {
-        task.status = AgentTaskStatus.failed;
-        task.result = 'Error: $e';
-        // Even on failure, log it so next tasks know
-        globalContext.writeln('Task: ${task.description}');
-        globalContext.writeln('Failed: $e');
-        globalContext.writeln('---');
-      }
-      notifyListeners();
-    }
-
-    if (_tasks.every((t) => t.status == AgentTaskStatus.completed)) {
-      _currentThought = 'All tasks completed.';
-    }
-  }
-
   Future<void> _performTask(AgentTask task, String globalContext) async {
     // ReAct Loop (max 20 turns to prevent premature cutoff)
     int turn = 0;
@@ -324,7 +367,14 @@ Instructions:
 5. If you are stuck, return {"answer": "I am stuck..."} to ask user for help.
 
 Decide what to do.
-Return valid JSON: {"tool": "tool_name", "args": {...}} OR {"answer": "..."}
+First, explain your reasoning (Thought).
+Then, provide the JSON block for the action.
+
+Example:
+I see that the previous search failed. I will try a broader SQL query.
+```json
+{"tool": "RunSqlTool", "args": {"query": "..."}}
+```
 ''';
 
       final response = await AIService.generateWithAttachments(
