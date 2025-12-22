@@ -1712,8 +1712,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
 
-      final bool isFirstSave = !_hasBeenSaved;
+    final bool isFirstSave = !_hasBeenSaved;
 
+    try {
       if (!_hasBeenSaved) {
         await appProvider.addNote(updatedNote);
         setState(() {
@@ -2890,9 +2891,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       if (mounted) {
         final updatedNote = context.read<AppProvider>().notes.firstWhere(
-              (n) => n.id == currentNote.id,
-              orElse: () => currentNote,
-            );
+          (n) => n.id == currentNote.id,
+          orElse: () => currentNote,
+        );
 
         ContentIngestionService().processNote(
           updatedNote,
@@ -2915,18 +2916,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             }
           },
           onSuccess: () {
-             if (mounted) {
-               setState(() {
-                  // Refresh state if needed, though provider update should handle it
-                   final freshNote = appProvider.notes.firstWhere(
-                    (n) => n.id == updatedNote.id,
-                    orElse: () => updatedNote,
-                  );
-                  if (freshNote.content != _codeController.text) {
-                    _codeController.text = freshNote.content;
-                  }
-               });
-             }
+            if (mounted) {
+              setState(() {
+                // Refresh state if needed, though provider update should handle it
+                final freshNote = appProvider.notes.firstWhere(
+                  (n) => n.id == updatedNote.id,
+                  orElse: () => updatedNote,
+                );
+                if (freshNote.content != _codeController.text) {
+                  _codeController.text = freshNote.content;
+                }
+              });
+            }
           },
         );
       }
