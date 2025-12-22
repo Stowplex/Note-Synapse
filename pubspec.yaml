@@ -41,6 +41,7 @@ dependencies:
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0
   sqflite_common_ffi_web: ^0.4.0
+  sqlite3_flutter_libs: ^0.5.0
   path: ^1.8.3
   
   # HTTP requests

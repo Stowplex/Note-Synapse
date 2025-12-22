@@ -809,51 +809,107 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
-    // 1. Create notes_fts virtual table using FTS5
-    // specific implementation depends on available FTS version, FTS5 is standard in Flutter sqflite
-    await db.execute('''
-      CREATE VIRTUAL TABLE notes_fts USING fts5(
-        title, 
-        content, 
-        content_rowid=id
-      );
-    ''');
+    bool useFts5 = true;
+    // 1. Create notes_fts virtual table using FTS5 with fallback to FTS4
+    try {
+      await db.execute('''
+        CREATE VIRTUAL TABLE notes_fts USING fts5(
+          title, 
+          content, 
+          content_rowid=id
+        );
+      ''');
+    } catch (e) {
+      LoggerService.warning('FTS5 creation failed, falling back to FTS4: $e');
+      useFts5 = false;
+      await db.execute('''
+        CREATE VIRTUAL TABLE notes_fts USING fts4(
+          title, 
+          content, 
+          content='notes'
+        );
+      ''');
+    }
 
     // 2. Populate notes_fts with existing data
-    await db.execute('''
-      INSERT INTO notes_fts(rowid, title, content)
-      SELECT rowid, title, content FROM notes;
-    ''');
+    // Both FTS5 (external Content) and FTS4 (content=) need initial population or rebuild
+    if (useFts5) {
+      await db.execute('''
+        INSERT INTO notes_fts(rowid, title, content)
+        SELECT rowid, title, content FROM notes;
+      ''');
+    } else {
+      // FTS4 with content='notes' can be rebuilt using 'rebuild' command
+      await db.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')");
+    }
 
     // 3. Create Triggers to keep notes_fts in sync
-    // INSERT Trigger
-    await db.execute('''
-      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
-      BEGIN
-        INSERT INTO notes_fts(rowid, title, content)
-        VALUES (new.rowid, new.title, new.content);
-      END;
-    ''');
+    if (useFts5) {
+      // INSERT Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+        BEGIN
+          INSERT INTO notes_fts(rowid, title, content)
+          VALUES (new.rowid, new.title, new.content);
+        END;
+      ''');
 
-    // DELETE Trigger
-    await db.execute('''
-      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
-      BEGIN
-        INSERT INTO notes_fts(notes_fts, rowid, title, content)
-        VALUES('delete', old.rowid, old.title, old.content);
-      END;
-    ''');
+      // DELETE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+        BEGIN
+          INSERT INTO notes_fts(notes_fts, rowid, title, content)
+          VALUES('delete', old.rowid, old.title, old.content);
+        END;
+      ''');
 
-    // UPDATE Trigger
-    await db.execute('''
-      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
-      BEGIN
-        INSERT INTO notes_fts(notes_fts, rowid, title, content)
-        VALUES('delete', old.rowid, old.title, old.content);
-        INSERT INTO notes_fts(rowid, title, content)
-        VALUES (new.rowid, new.title, new.content);
-      END;
-    ''');
+      // UPDATE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+        BEGIN
+          INSERT INTO notes_fts(notes_fts, rowid, title, content)
+          VALUES('delete', old.rowid, old.title, old.content);
+          INSERT INTO notes_fts(rowid, title, content)
+          VALUES (new.rowid, new.title, new.content);
+        END;
+      ''');
+    } else {
+      // FTS4 Triggers for content='notes'
+      // Actually for content='notes', we just need to notify FTS4 of changes
+      // INSERT
+      await db.execute('''
+         CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+         BEGIN
+           INSERT INTO notes_fts(docid, title, content)
+           VALUES(new.rowid, new.title, new.content);
+         END;
+       ''');
+
+      // DELETE
+      // Note: For FTS4 external content, implementation varies.
+      // Often simpler to just execute DELETE FROM notes_fts WHERE docid = old.rowid
+      // But 'old.rowid' might be problematic if 'id' is TEXT.
+      // Wait, 'id' in notes is TEXT (UUID). 'rowid' is internal integer.
+      // FTS always uses integer rowid/docid.
+      // We should rely on standard rowid mapping if possible.
+
+      await db.execute('''
+         CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+         BEGIN
+           DELETE FROM notes_fts WHERE docid = old.rowid;
+         END;
+       ''');
+
+      // UPDATE
+      await db.execute('''
+         CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+         BEGIN
+           DELETE FROM notes_fts WHERE docid = old.rowid;
+           INSERT INTO notes_fts(docid, title, content)
+           VALUES(new.rowid, new.title, new.content);
+         END;
+       ''');
+    }
 
     // 4. Create tag_ai_configs table
     await db.execute('''
@@ -880,6 +936,11 @@ class DatabaseService {
     await db.execute('DROP TABLE IF EXISTS user_app_libraries');
     await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
     await db.execute('DROP TABLE IF EXISTS multi_function_apps');
+    await db.execute('DROP TABLE IF EXISTS conversations');
+    await db.execute('DROP TABLE IF EXISTS conversation_messages');
+    await db.execute('DROP TABLE IF EXISTS conversation_tags');
+    await db.execute('DROP TABLE IF EXISTS tag_ai_configs');
+    await db.execute('DROP TABLE IF EXISTS notes_fts');
 
     // Recreate all tables using schema constants
     await _onCreate(db, newVersion);
@@ -4428,7 +4489,7 @@ class DatabaseService {
         '''
         SELECT n.* 
         FROM notes_fts fts
-        JOIN notes n ON fts.content_rowid = n.rowid
+        JOIN notes n ON fts.rowid = n.rowid
         WHERE notes_fts MATCH ?
         ORDER BY rank
         LIMIT 50
@@ -4438,6 +4499,25 @@ class DatabaseService {
 
       return await _batchLoadNotes(results);
     } catch (e) {
+      // If FTS5 'rank' column is missing (FTS4 fallback), try without ordering by rank
+      if (e.toString().contains('no such column: rank')) {
+        try {
+          final results = await db.rawQuery(
+            '''
+            SELECT n.* 
+            FROM notes_fts fts
+            JOIN notes n ON fts.rowid = n.rowid
+            WHERE notes_fts MATCH ?
+            LIMIT 50
+          ''',
+            [sanitizedQuery],
+          );
+          return await _batchLoadNotes(results);
+        } catch (e2) {
+          LoggerService.error('FTS4 Search failed: $e2');
+        }
+      }
+
       LoggerService.error('FTS Search failed: $e');
       // Fallback to standard LIKE search if FTS fails for some reason
       return searchNotes(query);
