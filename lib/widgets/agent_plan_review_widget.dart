@@ -5,8 +5,6 @@ import '../models/agent_task.dart';
 import '../services/mcp_service.dart';
 import '../services/user_app_service.dart';
 import '../models/user_app.dart';
-import 'chat_message_action_row.dart';
-import 'interactive_checkbox_markdown.dart';
 
 class AgentPlanReviewWidget extends StatefulWidget {
   final VoidCallback onProceed;
@@ -490,63 +488,6 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                     ),
                   ],
                 ),
-                if (agentService.finalAnswer != null)
-                  Container(
-                    margin: const EdgeInsets.only(top: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimaryContainer,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Conclusion',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        InteractiveCheckboxMarkdown(
-                          originalContent: agentService.finalAnswer!,
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                        if (widget.onCopy != null && widget.onAddNote != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: ChatMessageActionRow(
-                              onCopy: () =>
-                                  widget.onCopy!(agentService.finalAnswer!),
-                              onAddNote: () =>
-                                  widget.onAddNote!(agentService.finalAnswer!),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),

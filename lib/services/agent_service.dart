@@ -9,6 +9,7 @@ import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import 'tools/note_tools.dart';
 import 'ai_service.dart';
+import 'model_selector.dart';
 import 'logger_service.dart';
 import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
@@ -20,6 +21,7 @@ class AgentService extends ChangeNotifier {
   bool _isRunning = false;
   String? _currentThought;
   String? _finalAnswer;
+  Map<String, dynamic>? _finalMetadata;
 
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   Map<String, List<McpTool>> get externalTools =>
@@ -27,6 +29,16 @@ class AgentService extends ChangeNotifier {
   bool get isRunning => _isRunning;
   String? get currentThought => _currentThought;
   String? get finalAnswer => _finalAnswer;
+  Map<String, dynamic>? get finalMetadata => _finalMetadata;
+
+  void clearState() {
+    _tasks.clear();
+    _finalAnswer = null;
+    _finalMetadata = null;
+    _currentThought = null;
+    _isRunning = false;
+    notifyListeners();
+  }
 
   // ... (nativeTools and dbSchema definitions remain the same) ...
 
@@ -127,6 +139,12 @@ Format with Markdown.
     );
 
     _finalAnswer = response;
+    // Capture metadata for the UI
+    _finalMetadata = {
+      'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+      'is_agent_summary': true,
+      // We could add more if AIService returns it in context, but for now this is sufficient
+    };
     notifyListeners();
   }
 
@@ -204,6 +222,9 @@ Table: tag_filters
   }) async {
     _externalTools = activeTools;
     _currentThought = 'Generating plan...';
+    // Reset previous results
+    _finalAnswer = null;
+    _finalMetadata = null;
     notifyListeners();
 
     // Build descriptions for external tools if available
@@ -399,9 +420,10 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     String? context,
     List<PlatformFile> contextAttachments = const [],
   }) async {
-    if (_isRunning) {
-      _tasks.clear();
-    }
+    _tasks.clear(); // Always clear tasks for new objective
+    _finalAnswer = null;
+    _finalMetadata = null;
+
     // _externalTools is set inside generatePlan now
     _isRunning = true;
     notifyListeners();
