@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_service.dart';
 import '../models/agent_task.dart';
+import '../services/mcp_service.dart';
+import '../services/user_app_service.dart';
+import '../models/user_app.dart';
 import 'chat_message_action_row.dart';
 import 'interactive_checkbox_markdown.dart';
 
@@ -557,104 +560,170 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
     AgentTask task,
     AgentService agentService,
   ) async {
-    final toolMap = agentService.getToolToServiceMap();
-    // Sort tools by Service Name, then Tool Name
-    final allTools = toolMap.keys.toList()
-      ..sort((a, b) {
-        final serviceA = toolMap[a] ?? '';
-        final serviceB = toolMap[b] ?? '';
-        final serviceCompare = serviceA.compareTo(serviceB);
-        if (serviceCompare != 0) return serviceCompare;
-        return a.compareTo(b);
-      });
-
-    final selectedTools = Set<String>.from(task.allowedTools);
-
-    await showDialog(
+    // Show loading dialog first
+    showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Select Allowed Tools'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    SwitchListTile(
-                      title: const Text('Restrict Tools?'),
-                      subtitle: const Text(
-                        'If disabled, all active tools are allowed.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      value: selectedTools.isNotEmpty,
-                      onChanged: (value) {
-                        setState(() {
-                          if (!value) {
-                            selectedTools.clear();
-                          } else {
-                            // When enabling restriction, default to ALL currently available
-                            // This matches user intent of "Starting with highlighted set"
-                            // (Since allTools IS the highlighted set passed to AgentService)
-                            selectedTools.addAll(allTools);
-                          }
-                        });
-                      },
-                    ),
-                    const Divider(),
-                    if (selectedTools.isNotEmpty)
-                      ...allTools.map((toolName) {
-                        final serviceName = toolMap[toolName] ?? 'Unknown';
-                        return CheckboxListTile(
-                          title: RichText(
-                            text: TextSpan(
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              children: [
-                                TextSpan(
-                                  text: '$serviceName: ',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                TextSpan(text: toolName),
-                              ],
-                            ),
-                          ),
-                          value: selectedTools.contains(toolName),
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                selectedTools.add(toolName);
-                              } else {
-                                selectedTools.remove(toolName);
-                              }
-                            });
-                          },
-                        );
-                      }),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    task.allowedTools = selectedTools.toList();
-                    Navigator.of(context).pop(true);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    if (mounted) setState(() {});
+
+    try {
+      // 1. Fetch all tools
+      final Map<String, String> fullToolMap = {}; // toolName -> serviceName
+
+      // Native Tools
+      for (final tool in agentService.nativeTools) {
+        fullToolMap[tool.name] = 'Built-in';
+      }
+
+      // MCP Tools
+      try {
+        final endpoints = await McpService.getEndpoints();
+        for (final endpoint in endpoints) {
+          // Assume all endpoints in the list are enabled candidates.
+          // Check for cached tools.
+          try {
+            final cache = await McpService.getCachedTools(endpoint.id);
+            if (cache != null && cache.tools.isNotEmpty) {
+              for (final tool in cache.tools) {
+                fullToolMap[tool.name] =
+                    endpoint.name; // Use friendly name 'name', not 'id'
+              }
+            } else {
+              // Optionally trigger refresh if cache empty?
+              // For now, skip to avoid slow UI.
+              // We could check if endpoint.name suggests it should have tools.
+            }
+          } catch (e) {
+            print('Failed to fetch tools for ${endpoint.name}: $e');
+          }
+        }
+      } catch (e) {
+        print('Failed to fetch MCP endpoints: $e');
+      }
+
+      // Local AI Tools
+      try {
+        final allApps = await UserAppService.getAllUserApps();
+        final localTools = allApps
+            .where((app) => app.type == UserAppType.aiTool)
+            .toList();
+        for (final tool in localTools) {
+          fullToolMap[tool.name] = 'Local AI';
+        }
+      } catch (e) {
+        print('Failed to fetch local tools: $e');
+      }
+
+      if (context.mounted) Navigator.of(context).pop(); // Dismiss loading
+
+      // 2. Sort and Prepare List
+      final allTools = fullToolMap.keys.toList()
+        ..sort((a, b) {
+          final serviceA = fullToolMap[a] ?? '';
+          final serviceB = fullToolMap[b] ?? '';
+          final serviceCompare = serviceA.compareTo(serviceB);
+          if (serviceCompare != 0) return serviceCompare;
+          return a.compareTo(b);
+        });
+
+      // 3. Show Selection Dialog
+      final selectedTools = Set<String>.from(task.allowedTools);
+
+      if (!context.mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: const Text('Select Allowed Tools'),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      SwitchListTile(
+                        title: const Text('Restrict Tools?'),
+                        subtitle: const Text(
+                          'If disabled, all active tools are allowed.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: selectedTools.isNotEmpty,
+                        onChanged: (value) {
+                          setState(() {
+                            if (!value) {
+                              selectedTools.clear();
+                            } else {
+                              // When enabling, default to all available tools
+                              selectedTools.addAll(allTools);
+                            }
+                          });
+                        },
+                      ),
+                      const Divider(),
+                      if (selectedTools.isNotEmpty)
+                        ...allTools.map((toolName) {
+                          final serviceName =
+                              fullToolMap[toolName] ?? 'Unknown';
+                          return CheckboxListTile(
+                            title: RichText(
+                              text: TextSpan(
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                children: [
+                                  TextSpan(
+                                    text: '$serviceName: ',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  TextSpan(text: toolName),
+                                ],
+                              ),
+                            ),
+                            value: selectedTools.contains(toolName),
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedTools.add(toolName);
+                                } else {
+                                  selectedTools.remove(toolName);
+                                }
+                              });
+                            },
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      task.allowedTools = selectedTools.toList();
+                      Navigator.of(context).pop(true);
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      print('Error showing tool selection: $e');
+      if (context.mounted) {
+        // Fallback or ensure dialog popped?
+        // If we are here, likely something catastrophic happened before loading pop.
+        // We just print error for now.
+      }
+    }
   }
 }

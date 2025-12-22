@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import '../database_service.dart';
 import '../../models/note.dart';
+import '../ai_service.dart';
+import '../../models/generation_context.dart';
 
 abstract class NativeTool {
   String get name;
@@ -61,8 +65,15 @@ class NoteReadTool implements NativeTool {
   String get name => 'read_note';
 
   @override
-  String get description =>
-      'Read the content of a specific note. Supports granular reading modes.';
+  String get description => '''
+Read the content of a specific note. Supports granular reading modes:
+- 'full' (default):
+    - If `extraction_guide` is provided: Uses an AI model to extract specific information from the note AND its attachments based on your guide. Use this for efficient reading.
+    - If NO `extraction_guide`: Returns the textual note content and a list of attachment paths.
+    - HINT: If you read a note and see it has 'attachments' that you need to analyze, call this tool again WITH an `extraction_guide` describing what you need from them.
+- 'summary': Returns the note's summary block or first 500 chars.
+- 'toc': Returns the Table of Contents (headers).
+''';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -75,9 +86,13 @@ class NoteReadTool implements NativeTool {
       'mode': {
         'type': 'string',
         'enum': ['full', 'summary', 'toc'],
-        'description':
-            'Reading mode. Defaults to "full". "summary" returns checking for summary block or generating one (not impl here yet). "toc" returns headers.',
+        'description': 'Reading mode. Defaults to "full".',
         'default': 'full',
+      },
+      'extraction_guide': {
+        'type': 'string',
+        'description':
+            'Optional. If provided, uses AI to extract specific info from note and attachments.',
       },
     },
     'required': ['note_id'],
@@ -87,6 +102,7 @@ class NoteReadTool implements NativeTool {
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final noteId = args['note_id'] as String;
     final mode = args['mode'] as String? ?? 'full';
+    final extractionGuide = args['extraction_guide'] as String?;
 
     final note = await _db.getNoteById(noteId);
 
@@ -110,17 +126,69 @@ class NoteReadTool implements NativeTool {
           .map((m) => {'level': m.group(1)!.length, 'text': m.group(2)})
           .toList();
       return {'toc': headers};
-    }
+    } else {
+      // Mode is 'full'
+      if (extractionGuide != null && extractionGuide.isNotEmpty) {
+        // AI Extraction Mode
+        try {
+          final attachments = <PlatformFile>[];
+          for (final path in note.attachmentPaths) {
+            final file = File(path);
+            if (await file.exists()) {
+              attachments.add(
+                PlatformFile(
+                  name: path.split('/').last,
+                  path: path,
+                  size: await file.length(),
+                  bytes: await file.readAsBytes(),
+                ),
+              );
+            }
+          }
 
-    return {
-      'id': note.id,
-      'title': note.title,
-      'content': note.content,
-      'metadata': {
-        'tags': note.tags,
-        'updatedAt': note.updatedAt.toIso8601String(),
-      },
-    };
+          final prompt =
+              '''
+Analyze the following note and its attachments based on the Extraction Guide.
+
+Note Title: ${note.title}
+Note Content:
+${note.content}
+
+Extraction Guide:
+$extractionGuide
+''';
+
+          final aiResponse = await AIService.generateWithAttachments(
+            prompt,
+            attachments,
+            generationContext: GenerationContext(
+              values: {'type': 'tool_extraction', 'noteId': note.id},
+            ),
+          );
+
+          return {'id': note.id, 'title': note.title, 'extraction': aiResponse};
+        } catch (e) {
+          return {
+            'error': 'Failed to perform AI extraction: $e',
+            'content': note.content, // Fallback
+          };
+        }
+      } else {
+        // Standard Full Read
+        return {
+          'id': note.id,
+          'title': note.title,
+          'content': note.content,
+          'attachments': note.attachmentPaths,
+          'hint':
+              'To analyze attachments, recall read_note with an extraction_guide.',
+          'metadata': {
+            'tags': note.tags,
+            'updatedAt': note.updatedAt.toIso8601String(),
+          },
+        };
+      }
+    }
   }
 }
 
