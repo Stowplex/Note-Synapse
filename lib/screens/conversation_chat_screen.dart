@@ -109,6 +109,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
+  AgentService? _agentService;
 
   @override
   void initState() {
@@ -117,11 +118,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _selectedModel = widget.initialModelOverride;
     _loadMcpEndpoints();
     _loadIterationPreference();
-
-    // Listen for Agent completion
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AgentService>().addListener(_onAgentStateChange);
-    });
+    // Listener managed in didChangeDependencies
   }
 
   @override
@@ -137,6 +134,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    // Manage AgentService listener safely
+    final newAgentService = context.watch<AgentService>();
+    if (_agentService != newAgentService) {
+      _agentService?.removeListener(_onAgentStateChange);
+      _agentService = newAgentService;
+      _agentService?.addListener(_onAgentStateChange);
+    }
+
     if (!_hasInitialized) {
       _hasInitialized = true;
       _initializeConversation();
@@ -3090,11 +3096,14 @@ $historyBuffer
   }
 
   void _onAgentStateChange() async {
-    final agentService = context.read<AgentService>();
+    // Safety check BEFORE accessing context or state
+    if (!mounted) return;
+    final agentService = _agentService;
+    if (agentService == null) return;
+
     if (_waitingForAgentResult &&
         !agentService.isRunning &&
         agentService.finalAnswer != null) {
-      if (!mounted) return;
       _waitingForAgentResult = false;
 
       final content = agentService.finalAnswer!;
@@ -3114,20 +3123,13 @@ $historyBuffer
         });
         _scrollToBottom();
       }
-
-      // Clear agent state to prevent re-triggering?
-      // No, _waitingForAgentResult = false prevents it.
-      // But we should probably clear the agent state eventually.
-      // For now, startObjective clears it next time.
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    try {
-      context.read<AgentService>().removeListener(_onAgentStateChange);
-    } catch (_) {}
+    _agentService?.removeListener(_onAgentStateChange);
 
     _resolveIterationPrompt(null);
     _messageController.dispose();
