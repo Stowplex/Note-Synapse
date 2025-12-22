@@ -557,7 +557,17 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
     AgentTask task,
     AgentService agentService,
   ) async {
-    final allTools = agentService.getAllToolNames();
+    final toolMap = agentService.getToolToServiceMap();
+    // Sort tools by Service Name, then Tool Name
+    final allTools = toolMap.keys.toList()
+      ..sort((a, b) {
+        final serviceA = toolMap[a] ?? '';
+        final serviceB = toolMap[b] ?? '';
+        final serviceCompare = serviceA.compareTo(serviceB);
+        if (serviceCompare != 0) return serviceCompare;
+        return a.compareTo(b);
+      });
+
     final selectedTools = Set<String>.from(task.allowedTools);
 
     await showDialog(
@@ -574,12 +584,19 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                   children: [
                     SwitchListTile(
                       title: const Text('Restrict Tools?'),
+                      subtitle: const Text(
+                        'If disabled, all active tools are allowed.',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       value: selectedTools.isNotEmpty,
                       onChanged: (value) {
                         setState(() {
                           if (!value) {
                             selectedTools.clear();
                           } else {
+                            // When enabling restriction, default to ALL currently available
+                            // This matches user intent of "Starting with highlighted set"
+                            // (Since allTools IS the highlighted set passed to AgentService)
                             selectedTools.addAll(allTools);
                           }
                         });
@@ -588,8 +605,23 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                     const Divider(),
                     if (selectedTools.isNotEmpty)
                       ...allTools.map((toolName) {
+                        final serviceName = toolMap[toolName] ?? 'Unknown';
                         return CheckboxListTile(
-                          title: Text(toolName),
+                          title: RichText(
+                            text: TextSpan(
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              children: [
+                                TextSpan(
+                                  text: '$serviceName: ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                TextSpan(text: toolName),
+                              ],
+                            ),
+                          ),
                           value: selectedTools.contains(toolName),
                           onChanged: (value) {
                             setState(() {

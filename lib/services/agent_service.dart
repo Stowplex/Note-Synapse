@@ -138,6 +138,19 @@ Format with Markdown.
   ];
   List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
 
+  Map<String, String> getToolToServiceMap() {
+    final map = <String, String>{};
+    for (final t in _nativeTools) {
+      map[t.name] = 'System';
+    }
+    for (final entry in _externalTools.entries) {
+      for (final t in entry.value) {
+        map[t.name] = entry.key;
+      }
+    }
+    return map;
+  }
+
   List<String> getAllToolNames() {
     final names = _nativeTools.map((t) => t.name).toList();
     for (final list in _externalTools.values) {
@@ -183,40 +196,46 @@ Table: conversations
     notifyListeners();
 
     // Build descriptions for external tools if available
-    final externalToolsDesc = _externalTools.isNotEmpty
-        ? '\nExternal Tools:\n' +
-              _externalTools.values
-                  .expand((tools) => tools)
-                  .map((t) => '- ${t.name}: ${t.description}')
-                  .join('\n')
-        : '';
+    // Build descriptions for external tools
+    String externalToolsDesc = '';
+    if (_externalTools.isNotEmpty) {
+      externalToolsDesc = '\nExternal Tools:\n';
+      for (final entry in _externalTools.entries) {
+        externalToolsDesc += 'Service: ${entry.key}\n';
+        for (final tool in entry.value) {
+          externalToolsDesc +=
+              '- ${tool.name}: ${tool.description}\n  Args: ${tool.inputSchema}\n';
+        }
+      }
+    }
+
+    final nativeToolsDesc = _nativeTools
+        .map(
+          (t) =>
+              '- ${t.name}: ${t.description}\n  Args: ${t.inputSchema['properties']}',
+        )
+        .join('\n');
 
     final prompt =
         '''
-You are an intelligent agent helpful assistant.
-Objective: $objective
-
-Context:
-You have access to a local SQLite database with personal notes.
-DB Schema:
-$_dbSchema
-
-Break this objective down into a logical list of steps (tasks).
-For each step, predict which tool you would use.
+You are an intelligent agent that plans and executes tasks to solve an objective.
+Objective: "$objective"
 
 Available Tools:
-- NoteSearchTool: Searching for notes (supports query and optional tags).
-- NoteReadTool: Reading note content.
-- RunSqlTool: Running SQL queries on local DB.$externalToolsDesc
+$nativeToolsDesc
+$externalToolsDesc
 
-Pro-Tips for Note Probing:
-1. Start broad: Use RunSqlTool to count notes or list broad categories/tags if unsure.
-   e.g. "SELECT count(*) FROM notes", "SELECT name FROM tags".
-2. Use Search for content: "NoteSearchTool" is best for finding text matches.
-3. Drill down: Once you have IDs, use "NoteReadTool" to get details.
+Database Schema (for RunSqlTool):
+$_dbSchema
 
-Return ONLY a valid JSON list of objects.
-Example: [{"description": "Check total number of notes", "tool": "RunSqlTool"}, {"description": "Search for notes about X", "tool": "NoteSearchTool"}]
+Break this down into a step-by-step plan.
+Each step should specify WHICH tool to use.
+Return ONLY a valid JSON list of objects with "description" and "tool" fields.
+Example:
+[
+  {"description": "Find notes about...", "tool": "NoteSearchTool"},
+  {"description": "Read valid notes...", "tool": "NoteReadTool"}
+]
 ''';
 
     try {
@@ -227,6 +246,7 @@ Example: [{"description": "Check total number of notes", "tool": "RunSqlTool"}, 
       );
 
       final List<dynamic> jsonList = _parseJsonList(response);
+      final allActiveTools = getAllToolNames();
 
       _tasks = jsonList.map((item) {
         if (item is String) {
@@ -234,6 +254,7 @@ Example: [{"description": "Check total number of notes", "tool": "RunSqlTool"}, 
             id: const Uuid().v4(),
             description: item,
             status: AgentTaskStatus.pending,
+            allowedTools: allActiveTools,
           );
         }
         final map = item as Map<String, dynamic>;
@@ -242,6 +263,7 @@ Example: [{"description": "Check total number of notes", "tool": "RunSqlTool"}, 
           description: map['description'] as String,
           toolName: map['tool'] as String?,
           status: AgentTaskStatus.pending,
+          allowedTools: allActiveTools,
         );
       }).toList();
 
