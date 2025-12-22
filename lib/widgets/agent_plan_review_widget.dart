@@ -280,27 +280,70 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                         ),
                                       ),
                                     const SizedBox(height: 4),
-                                    TextField(
-                                      controller: _itemControllers[task.id],
-                                      decoration: InputDecoration(
-                                        hintText: 'Add comment/refinement...',
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        hintStyle: TextStyle(
-                                          fontSize: 12,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant
-                                              .withOpacity(0.6),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller:
+                                                _itemControllers[task.id],
+                                            decoration: InputDecoration(
+                                              hintText:
+                                                  'Add comment/refinement...',
+                                              border: InputBorder.none,
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              hintStyle: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                                    .withOpacity(0.6),
+                                              ),
+                                            ),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                            ),
+                                            onChanged: (value) {
+                                              task.userComment = value;
+                                            },
+                                          ),
                                         ),
-                                      ),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                      ),
+                                        if (task.status ==
+                                            AgentTaskStatus.pending)
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.build_circle_outlined,
+                                              size: 16,
+                                              color:
+                                                  task.allowedTools.isNotEmpty
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant
+                                                        .withOpacity(0.5),
+                                            ),
+                                            tooltip: 'Configure Allowed Tools',
+                                            constraints: const BoxConstraints(
+                                              minWidth: 24,
+                                              minHeight: 24,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                            ),
+                                            onPressed: () {
+                                              _showToolSelectionDialog(
+                                                context,
+                                                task,
+                                                agentService,
+                                              );
+                                            },
+                                          ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -507,5 +550,79 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
         );
       },
     );
+  }
+
+  Future<void> _showToolSelectionDialog(
+    BuildContext context,
+    AgentTask task,
+    AgentService agentService,
+  ) async {
+    final allTools = agentService.getAllToolNames();
+    final selectedTools = Set<String>.from(task.allowedTools);
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Select Allowed Tools'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Restrict Tools?'),
+                      value: selectedTools.isNotEmpty,
+                      onChanged: (value) {
+                        setState(() {
+                          if (!value) {
+                            selectedTools.clear();
+                          } else {
+                            selectedTools.addAll(allTools);
+                          }
+                        });
+                      },
+                    ),
+                    const Divider(),
+                    if (selectedTools.isNotEmpty)
+                      ...allTools.map((toolName) {
+                        return CheckboxListTile(
+                          title: Text(toolName),
+                          value: selectedTools.contains(toolName),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                selectedTools.add(toolName);
+                              } else {
+                                selectedTools.remove(toolName);
+                              }
+                            });
+                          },
+                        );
+                      }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    task.allowedTools = selectedTools.toList();
+                    Navigator.of(context).pop(true);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (mounted) setState(() {});
   }
 }

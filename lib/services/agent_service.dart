@@ -5,18 +5,24 @@ import 'package:uuid/uuid.dart';
 
 import '../models/agent_task.dart';
 import '../models/generation_context.dart';
+import '../models/mcp_endpoint.dart';
 import 'tools/note_tools.dart';
 import 'ai_service.dart';
 import 'logger_service.dart';
+import 'mcp_tool_integration_service.dart';
+import 'mcp_service.dart';
 
 class AgentService extends ChangeNotifier {
   // State
   List<AgentTask> _tasks = [];
+  Map<String, List<McpTool>> _externalTools = {};
   bool _isRunning = false;
   String? _currentThought;
   String? _finalAnswer;
 
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
+  Map<String, List<McpTool>> get externalTools =>
+      Map.unmodifiable(_externalTools);
   bool get isRunning => _isRunning;
   String? get currentThought => _currentThought;
   String? get finalAnswer => _finalAnswer;
@@ -130,6 +136,15 @@ Format with Markdown.
     NoteReadTool(),
     RunSqlTool(),
   ];
+  List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
+
+  List<String> getAllToolNames() {
+    final names = _nativeTools.map((t) => t.name).toList();
+    for (final list in _externalTools.values) {
+      names.addAll(list.map((t) => t.name));
+    }
+    return names;
+  }
 
   // DB Schema for Agent Context
   static const String _dbSchema = '''
@@ -159,9 +174,22 @@ Table: conversations
 
   /// Generates an initial plan based on the objective.
   /// Updates internal state and returns the tasks.
-  Future<List<AgentTask>> generatePlan(String objective) async {
+  Future<List<AgentTask>> generatePlan(
+    String objective, {
+    Map<String, List<McpTool>> activeTools = const {},
+  }) async {
+    _externalTools = activeTools;
     _currentThought = 'Generating plan...';
     notifyListeners();
+
+    // Build descriptions for external tools if available
+    final externalToolsDesc = _externalTools.isNotEmpty
+        ? '\nExternal Tools:\n' +
+              _externalTools.values
+                  .expand((tools) => tools)
+                  .map((t) => '- ${t.name}: ${t.description}')
+                  .join('\n')
+        : '';
 
     final prompt =
         '''
@@ -179,7 +207,7 @@ For each step, predict which tool you would use.
 Available Tools:
 - NoteSearchTool: Searching for notes (supports query and optional tags).
 - NoteReadTool: Reading note content.
-- RunSqlTool: Running SQL queries on local DB.
+- RunSqlTool: Running SQL queries on local DB.$externalToolsDesc
 
 Pro-Tips for Note Probing:
 1. Start broad: Use RunSqlTool to count notes or list broad categories/tags if unsure.
@@ -327,16 +355,20 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     }
   }
 
-  /// Legacy entry point for auto-execution
-  Future<void> startObjective(String objective) async {
+  /// Legacy entry point for auto-execution, now supports tool injection
+  Future<void> startObjective(
+    String objective, {
+    Map<String, List<McpTool>> activeTools = const {},
+  }) async {
     if (_isRunning) {
       _tasks.clear();
     }
+    // _externalTools is set inside generatePlan now
     _isRunning = true;
     notifyListeners();
 
     try {
-      await generatePlan(objective);
+      await generatePlan(objective, activeTools: activeTools);
       await executePlan();
     } finally {
       _isRunning = false;
@@ -358,11 +390,34 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
       final int turn = (task.executionHistory.length / 2).floor() + 1;
 
       // 1. Construct Prompt with History
-      final toolsDesc = _nativeTools
-          .map((t) {
-            return '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}';
-          })
+      // Filter tools based on allowedTools if set
+      final allowedNativeTools = task.allowedTools.isEmpty
+          ? _nativeTools
+          : _nativeTools.where((t) => task.allowedTools.contains(t.name));
+
+      final allExternalTools = _externalTools.values.expand((l) => l).toList();
+      final allowedExternalTools = task.allowedTools.isEmpty
+          ? allExternalTools
+          : allExternalTools
+                .where((t) => task.allowedTools.contains(t.name))
+                .toList();
+
+      final nativeToolsDesc = allowedNativeTools
+          .map(
+            (t) =>
+                '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+          )
           .join('\n');
+
+      final externalToolsDesc = allowedExternalTools.isNotEmpty
+          ? '\nExternal Tools:\n' +
+                allowedExternalTools
+                    .map(
+                      (t) =>
+                          '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+                    )
+                    .join('\n')
+          : '';
 
       final prompt =
           '''
@@ -372,7 +427,7 @@ Objective Context (Findings from previous tasks):
 $globalContext
 
 Available Tools:
-$toolsDesc
+$nativeToolsDesc$externalToolsDesc
 
 DB Schema:
 $_dbSchema
@@ -443,16 +498,46 @@ I see that the previous search failed. I will try a broader SQL query.
         final args = (decision['args'] as Map<String, dynamic>?) ?? {};
 
         try {
-          final tool = _nativeTools.firstWhere(
-            (t) => t.name == toolName,
-            orElse: () => throw Exception('Unknown tool: $toolName'),
-          );
-
-          // Update thought to show action execution
-          _currentThought = 'Executing $toolName (Turn $turn)...';
+          // Update thought to show action execution (Persistent)
+          final executionMsg = '\n\nExecuting $toolName (Turn $turn)...';
+          _currentThought = (_currentThought ?? '') + executionMsg;
           notifyListeners();
 
-          final result = await tool.execute(args);
+          dynamic result;
+
+          // Check Native Tools
+          if (_nativeTools.any((t) => t.name == toolName)) {
+            final tool = _nativeTools.firstWhere((t) => t.name == toolName);
+            result = await tool.execute(args);
+          } else {
+            // Check External Tools
+            // Find which service contains the tool
+            String? serviceName;
+            for (final entry in _externalTools.entries) {
+              if (entry.value.any((t) => t.name == toolName)) {
+                serviceName = entry.key;
+                break;
+              }
+            }
+
+            if (serviceName != null) {
+              final endpoints = await McpService.getEndpoints();
+              final enabledEndpointIds = endpoints.map((e) => e.id).toList();
+
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: args,
+                enabledEndpointIds: enabledEndpointIds,
+                generationContext: GenerationContext(
+                  values: {'type': 'agent_tool_exec'},
+                ),
+              );
+            } else {
+              throw Exception('Unknown tool: $toolName');
+            }
+          }
+
           final resultStr = jsonEncode(result);
 
           // Add to history
