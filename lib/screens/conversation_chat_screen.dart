@@ -2728,6 +2728,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           onProceed: () {
             context.read<AgentService>().executePlan();
           },
+          onCopy: (content) => copyContentToClipboard(content),
+          onAddNote: (content) =>
+              handleAddContentToNote(content: content, contextNotes: _notes),
         ),
       );
     }

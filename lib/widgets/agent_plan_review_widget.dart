@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_service.dart';
 import '../models/agent_task.dart';
+import 'chat_message_action_row.dart';
+import 'interactive_checkbox_markdown.dart';
 
 class AgentPlanReviewWidget extends StatefulWidget {
   final VoidCallback onProceed;
+  final Function(String)? onCopy;
+  final Function(String)? onAddNote;
 
-  const AgentPlanReviewWidget({super.key, required this.onProceed});
+  const AgentPlanReviewWidget({
+    super.key,
+    required this.onProceed,
+    this.onCopy,
+    this.onAddNote,
+  });
 
   @override
   State<AgentPlanReviewWidget> createState() => _AgentPlanReviewWidgetState();
@@ -471,14 +480,24 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          agentService.finalAnswer!,
+                        InteractiveCheckboxMarkdown(
+                          originalContent: agentService.finalAnswer!,
                           style: TextStyle(
                             color: Theme.of(
                               context,
                             ).colorScheme.onPrimaryContainer,
                           ),
                         ),
+                        if (widget.onCopy != null && widget.onAddNote != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: ChatMessageActionRow(
+                              onCopy: () =>
+                                  widget.onCopy!(agentService.finalAnswer!),
+                              onAddNote: () =>
+                                  widget.onAddNote!(agentService.finalAnswer!),
+                            ),
+                          ),
                       ],
                     ),
                   ),
