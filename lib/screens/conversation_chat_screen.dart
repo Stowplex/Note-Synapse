@@ -45,6 +45,9 @@ import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/model_selector_button.dart';
+import '../services/agent_service.dart';
+import '../services/built_in_tools_service.dart';
+import '../widgets/agent_plan_review_widget.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -100,6 +103,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // Model Features support
   final Set<String> _selectedModelFeatures = {};
   ModelConfig? _selectedModel;
+
+  // Built-in Tools
+  final Set<String> _selectedBuiltInTools = {};
 
   bool _hasInitialized = false;
 
@@ -411,6 +417,24 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
+    // Add Built-in Tools
+    if (_selectedBuiltInTools.isNotEmpty) {
+      final builtInTools = _selectedBuiltInTools
+          .map((id) => BuiltInToolsService.getToolById(id))
+          .where((t) => t != null)
+          .map(
+            (t) => McpTool(
+              name: t!.name,
+              description: t.description,
+              inputSchema: {},
+            ),
+          )
+          .toList();
+      if (builtInTools.isNotEmpty) {
+        combined['Built-in'] = builtInTools;
+      }
+    }
+
     return combined;
   }
 
@@ -715,6 +739,30 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
       requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
+
+      // Check for Agent Tool
+      if (_selectedBuiltInTools.contains(BuiltInToolsService.agentToolId)) {
+        final agentService = context.read<AgentService>();
+        // Trigger planning (fire and forget from UI perspective, handled by service listener)
+        agentService.generatePlan(content);
+
+        // In a real app we might want to persist this message to DB
+        // For V1, we add to local list. If we want persistence, we need to save it.
+        final savedMessage = await _conversationService.addAIResponse(
+          conversationId: _conversation!.id,
+          content: '(Agent Plan)',
+          metadata: {'is_agent_plan': true},
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _messages.add(savedMessage);
+          _isSending = false;
+          _currentRequestId = null;
+        });
+        _scrollToBottom();
+        return;
+      }
 
       final aiResponse = await _generateAIResponse(
         content,
@@ -1726,6 +1774,70 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                         }).toList(),
                       ),
                     ],
+                    // Built-in Tools
+                    if (BuiltInToolsService.tools.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.construction,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Built-in Tools',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (_selectedBuiltInTools.isNotEmpty)
+                            ActiveToolCountBadge(
+                              count: _selectedBuiltInTools.length,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: BuiltInToolsService.tools.map((tool) {
+                          final isSelected = _selectedBuiltInTools.contains(
+                            tool.id,
+                          );
+                          return FilterChip(
+                            label: Text(tool.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedBuiltInTools.add(tool.id);
+                                } else {
+                                  _selectedBuiltInTools.remove(tool.id);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              tool.icon,
+                              size: 16,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                     if (modelConfig?.modelFeatures != null &&
                         modelConfig!.modelFeatures!.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -2607,6 +2719,19 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Widget _buildMessageCard(ConversationMessage message) {
     final l10n = AppLocalizations.of(context)!;
+
+    // Agent Plan Widget
+    if (message.metadata?['is_agent_plan'] == true) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: AgentPlanReviewWidget(
+          onProceed: () {
+            context.read<AgentService>().executePlan();
+          },
+        ),
+      );
+    }
+
     final isUser = message.type == MessageType.user;
     final hasTools =
         message.metadata != null &&

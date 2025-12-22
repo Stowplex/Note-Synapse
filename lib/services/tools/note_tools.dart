@@ -16,13 +16,18 @@ class NoteSearchTool implements NativeTool {
 
   @override
   String get description =>
-      'Search for notes using full-text search. Returns a list of relevant notes with titles and IDs.';
+      'Search for notes using full-text search. Returns a list of relevant notes with titles and IDs. Supports optional tag filtering.';
 
   @override
   Map<String, dynamic> get inputSchema => {
     'type': 'object',
     'properties': {
       'query': {'type': 'string', 'description': 'The search query string.'},
+      'tags': {
+        'type': 'array',
+        'items': {'type': 'string'},
+        'description': 'Optional list of tags to filter by.',
+      },
     },
     'required': ['query'],
   };
@@ -30,7 +35,9 @@ class NoteSearchTool implements NativeTool {
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final query = args['query'] as String;
-    final notes = await _db.searchNotesFTS(query);
+    final tags = (args['tags'] as List?)?.cast<String>();
+
+    final notes = await _db.searchNotesFTS(query, tags: tags);
 
     return notes
         .map(
@@ -67,11 +74,7 @@ class NoteReadTool implements NativeTool {
       },
       'mode': {
         'type': 'string',
-        'enum': [
-          'full',
-          'summary',
-          'toc',
-        ], // page_range unimplemented for now as notes are markdown
+        'enum': ['full', 'summary', 'toc'],
         'description':
             'Reading mode. Defaults to "full". "summary" returns checking for summary block or generating one (not impl here yet). "toc" returns headers.',
         'default': 'full',
@@ -85,25 +88,7 @@ class NoteReadTool implements NativeTool {
     final noteId = args['note_id'] as String;
     final mode = args['mode'] as String? ?? 'full';
 
-    // Fetch note
-    // We don't have getNoteById in DatabaseService explicitly?
-    // Usually we fetch all or filter. DatabaseService has getNote(id).
-    // Let's check DatabaseService again. logic usually is getNotes -> firstWhere.
-    // Or check if getNote exists.
-    // Assuming getNote(id) exists or we use search.
-    // Actually getNotes calls _batchLoadNotes.
-
-    // I'll assume getNote exists or implement a helper.
-    // Looking at step 231, I viewed DatabaseService.
-    // It has `getNote(String id)`? I'll check.
-
-    // For now I'll use a workaround if needed, but let's assume it exists or I can add it.
-    // Wait, step 231 added searchNotesFTS.
-    // I'll assume I can just fetch it.
-
-    final note = await _db.getNoteById(
-      noteId,
-    ); // Use hypothetical method, if fails I'll fix.
+    final note = await _db.getNoteById(noteId);
 
     if (note == null) {
       return {'error': 'Note not found'};
@@ -136,6 +121,65 @@ class NoteReadTool implements NativeTool {
         'updatedAt': note.updatedAt.toIso8601String(),
       },
     };
+  }
+}
+
+class RunSqlTool implements NativeTool {
+  final DatabaseService _db = DatabaseService();
+
+  @override
+  String get name => 'run_sql';
+
+  @override
+  String get description =>
+      'Run a read-only SQL query on the local database. Tables: notes(id, title, content, tags, ...), tags(id, name), conversations(...). Useful for counting, aggregating, or finding patterns not covered by FTS.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': {
+      'query': {
+        'type': 'string',
+        'description': 'The SQL SELECT query to run.',
+      },
+    },
+    'required': ['query'],
+  };
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    final query = args['query'] as String;
+    if (!query.trim().toUpperCase().startsWith('SELECT')) {
+      return {'error': 'Only SELECT queries are allowed.'};
+    }
+
+    try {
+      final results = await _db.runRawQuery(query);
+      if (results.isEmpty) return 'No results found.';
+      if (results.length > 50) {
+        return {
+          'warning': 'Result truncated to 50 rows',
+          'data': _formatTable(results.take(50).toList()),
+        };
+      }
+      return _formatTable(results);
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  String _formatTable(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return '';
+    final headers = rows.first.keys.toList();
+    final buffer = StringBuffer();
+    buffer.write('| ${headers.join(' | ')} |\n');
+    buffer.write('| ${headers.map((_) => '---').join(' | ')} |\n');
+    for (final row in rows) {
+      buffer.write(
+        '| ${headers.map((h) => row[h]?.toString().replaceAll('\n', ' ') ?? '').join(' | ')} |\n',
+      );
+    }
+    return buffer.toString();
   }
 }
 

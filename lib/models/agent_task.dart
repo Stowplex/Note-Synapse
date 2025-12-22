@@ -5,13 +5,16 @@ class AgentTask {
   final String description;
   AgentTaskStatus status;
   String? result;
-  // potentially add sub-tasks or tool calls log?
+  String? toolName;
+  String? userComment; // Feedback for this specific step
 
   AgentTask({
     required this.id,
     required this.description,
     this.status = AgentTaskStatus.pending,
     this.result,
+    this.toolName,
+    this.userComment,
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,5 +22,7 @@ class AgentTask {
     'description': description,
     'status': status.toString(),
     'result': result,
+    'toolName': toolName,
+    'userComment': userComment,
   };
 }
