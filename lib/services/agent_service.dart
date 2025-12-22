@@ -247,6 +247,8 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
   }
 
   Future<void> _executeLoop() async {
+    final StringBuffer globalContext = StringBuffer();
+
     while (_isRunning &&
         _tasks.any((t) => t.status == AgentTaskStatus.pending)) {
       final task = _tasks.firstWhere(
@@ -259,11 +261,20 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
       notifyListeners();
 
       try {
-        await _performTask(task);
+        await _performTask(task, globalContext.toString());
         task.status = AgentTaskStatus.completed;
+
+        // Append result to global context for future tasks
+        globalContext.writeln('Task: ${task.description}');
+        globalContext.writeln('Result: ${task.result}');
+        globalContext.writeln('---');
       } catch (e) {
         task.status = AgentTaskStatus.failed;
         task.result = 'Error: $e';
+        // Even on failure, log it so next tasks know
+        globalContext.writeln('Task: ${task.description}');
+        globalContext.writeln('Failed: $e');
+        globalContext.writeln('---');
       }
       notifyListeners();
     }
@@ -273,7 +284,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
     }
   }
 
-  Future<void> _performTask(AgentTask task) async {
+  Future<void> _performTask(AgentTask task, String globalContext) async {
     // ReAct Loop (max 20 turns to prevent premature cutoff)
     int turn = 0;
     const maxTurns = 20;
@@ -293,13 +304,16 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tool": "..."}
           '''
 Current Task: ${task.description}
 
+Objective Context (Findings from previous tasks):
+$globalContext
+
 Available Tools:
 $toolsDesc
 
 DB Schema:
 $_dbSchema
 
-History (Previous Actions):
+History (Actions in this task):
 ${history.isEmpty ? "None" : history.join('\n')}
 
 Instructions:
