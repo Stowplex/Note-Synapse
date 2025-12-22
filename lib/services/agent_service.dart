@@ -508,7 +508,6 @@ CRITICAL:
         // We make it robust: Look for "My thought:" grouping and then a JSON block key.
         // Actually, let's just look for the last JSON block and treat everything before it as thought/context.
 
-        final jsonMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(response);
         // Better regex to find the JSON block specifically associated with the tool
         // often inside ```json ... ```
         final codeBlockMatch = RegExp(

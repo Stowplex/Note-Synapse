@@ -744,12 +744,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       if (_selectedBuiltInTools.contains(BuiltInToolsService.agentToolId)) {
         final agentService = context.read<AgentService>();
 
-        // Fetch available tools for the agent
-        final endpoints = await McpService.getEndpoints();
-        final enabledEndpointIds = endpoints.map((e) => e.id).toList();
-        final activeTools = await McpToolIntegrationService.getAvailableTools(
-          enabledEndpointIds,
-        );
+        // Fetch available tools for the agent based on *current selection*
+        final activeTools = _buildActiveToolsMap();
 
         // Trigger planning (fire and forget from UI perspective, handled by service listener)
         agentService.generatePlan(content, activeTools: activeTools);

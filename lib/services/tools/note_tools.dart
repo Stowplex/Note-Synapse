@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import '../database_service.dart';
-import '../../models/note.dart';
+
 import '../ai_service.dart';
 import '../../models/generation_context.dart';
 
