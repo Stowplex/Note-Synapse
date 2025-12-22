@@ -180,7 +180,7 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                               labelPadding:
                                                   const EdgeInsets.symmetric(
                                                     horizontal: 4,
-                                                    vertical: -4,
+                                                    vertical: 0,
                                                   ),
                                               visualDensity:
                                                   VisualDensity.compact,

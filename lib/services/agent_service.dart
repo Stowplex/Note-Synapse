@@ -74,7 +74,16 @@ class AgentService extends ChangeNotifier {
       notifyListeners();
 
       try {
-        await _performTask(task, globalContext.toString());
+        // Run ReAct loop for this task until it's done or paused
+        while (task.status == AgentTaskStatus.inProgress && _isRunning) {
+          await _performTask(task, globalContext.toString());
+
+          // Small delay to prevent tight loops if something goes wrong,
+          // though _performTask awaits network calls usually.
+          if (task.status == AgentTaskStatus.inProgress) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        }
 
         if (task.status == AgentTaskStatus.paused) {
           // Task paused (max turns reached). Stop execution loop.
@@ -84,12 +93,22 @@ class AgentService extends ChangeNotifier {
           return;
         }
 
-        task.status = AgentTaskStatus.completed;
+        // If we exited loop without being paused, task should be completed or failed.
+        // If somehow still inProgress (e.g. _isRunning became false), we stop.
+        if (!_isRunning && task.status == AgentTaskStatus.inProgress) {
+          return;
+        }
 
-        // Append result to global context for future tasks
-        globalContext.writeln('Task: ${task.description}');
-        globalContext.writeln('Result: ${task.result}');
-        globalContext.writeln('---');
+        // Log result if completed
+        if (task.status == AgentTaskStatus.completed) {
+          globalContext.writeln('Task: ${task.description}');
+          globalContext.writeln('Result: ${task.result}');
+          globalContext.writeln('---');
+        } else if (task.status == AgentTaskStatus.failed) {
+          globalContext.writeln('Task: ${task.description}');
+          globalContext.writeln('Failed: ${task.result}');
+          globalContext.writeln('---');
+        }
       } catch (e) {
         task.status = AgentTaskStatus.failed;
         task.result = 'Error: $e';
@@ -228,6 +247,16 @@ Format with Markdown.
     final prompt =
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
+
+IMPORTANT CONTEXT ON NOTE ORGANIZATION:
+- Notes are organized using hashtags (e.g., #work, #ideas). Think of these tags as a flexible file system where a note can live in multiple "folders" simultaneously.
+- "Tag Filters" are saved views or "virtual folders" defined by includes/excludes of tags. These represent the user's explicit organizational structure.
+- The `ls` tool lists these "virtual folders".
+
+STRATEGY HINT:
+- If you are exploring, trying to understand the user's note structure, or don't know where to look: USE THE `ls` TOOL FIRST. It gives you the "directory listing" of the user's brain.
+- Only jump to `search_notes` if you have a specific keyword or if `ls` doesn't provide enough leads.
+
 Objective: "$objective"
 $contextSection
 Available Tools:
