@@ -136,7 +136,20 @@ If you return JSON, I will execute the modifications.
       );
 
       try {
-        final json = jsonDecode(response);
+        String jsonString = response.trim();
+        // Strip markdown code blocks if present
+        if (jsonString.contains('```')) {
+          final RegExp regex = RegExp(
+            r'```(?:json)?\s*(.*?)\s*```',
+            dotAll: true,
+          );
+          final match = regex.firstMatch(jsonString);
+          if (match != null) {
+            jsonString = match.group(1) ?? jsonString;
+          }
+        }
+
+        final json = jsonDecode(jsonString);
         if (json is Map<String, dynamic>) {
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
