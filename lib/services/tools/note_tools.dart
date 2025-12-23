@@ -4,6 +4,7 @@ import '../database_service.dart';
 
 import '../ai_service.dart';
 import '../../models/generation_context.dart';
+import '../../models/filter.dart';
 
 abstract class NativeTool {
   String get name;
@@ -49,7 +50,7 @@ class NoteSearchTool implements NativeTool {
             'id': n.id,
             'title': n.title,
             'snippet': n.content.length > 200
-                ? n.content.substring(0, 200) + '...'
+                ? '${n.content.substring(0, 200)}...'
                 : n.content,
             'tags': n.tags,
           },
@@ -276,20 +277,69 @@ class ListFiltersTool implements NativeTool {
         return "No filters found (Root is empty).";
       }
 
-      // Sort by name
-      filters.sort((a, b) => a.name.compareTo(b.name));
-
-      final buffer = StringBuffer();
-      buffer.writeln("File System (Filters):");
+      // Build tree
+      // 1. Identify relationships
+      final Map<String, List<String>> childrenMap =
+          {}; // parentId -> [childIds]
+      final Set<String> rootIds = {};
 
       for (final filter in filters) {
-        buffer.writeln("- [${filter.name}]");
-        if (filter.includeTags.isNotEmpty) {
-          buffer.writeln("  Tags: ${filter.includeTags.join(', ')}");
+        childrenMap.putIfAbsent(filter.id, () => []);
+      }
+
+      for (final child in filters) {
+        // Find all possible parents
+        final possibleParents = filters
+            .where((parent) => child.isChildOf(parent))
+            .toList();
+
+        if (possibleParents.isEmpty) {
+          rootIds.add(child.id);
+        } else {
+          // Find closest parent: The one with the most specificity (e.g. most tags)
+          // Sort by specificity descending
+          possibleParents.sort((a, b) {
+            final specA = (a.includeTags.length) + (a.includeText?.length ?? 0);
+            final specB = (b.includeTags.length) + (b.includeText?.length ?? 0);
+            return specB.compareTo(specA);
+          });
+
+          final closestParent = possibleParents.first;
+          childrenMap[closestParent.id]!.add(child.id);
         }
-        if (filter.includeText != null && filter.includeText!.isNotEmpty) {
-          buffer.writeln("  Text: ${filter.includeText}");
+      }
+
+      // Sort roots by name
+      final roots = filters.where((f) => rootIds.contains(f.id)).toList();
+      roots.sort((a, b) => a.name.compareTo(b.name));
+
+      final buffer = StringBuffer();
+      buffer.writeln("File System (Filters Hierarchy):");
+
+      void printNode(Filter node, String prefix) {
+        buffer.writeln("$prefix- [${node.name}]");
+        final indent = "$prefix  ";
+
+        if (node.includeTags.isNotEmpty) {
+          buffer.writeln("${indent}Tags: ${node.includeTags.join(', ')}");
         }
+        if (node.includeText != null && node.includeText!.isNotEmpty) {
+          buffer.writeln("${indent}Text: ${node.includeText}");
+        }
+
+        final childrenIds = childrenMap[node.id] ?? [];
+        final children = filters
+            .where((f) => childrenIds.contains(f.id))
+            .toList();
+        children.sort((a, b) => a.name.compareTo(b.name));
+
+        for (final child in children) {
+          printNode(child, indent);
+        }
+      }
+
+      for (final root in roots) {
+        printNode(root, "");
       }
 
       return buffer.toString();
