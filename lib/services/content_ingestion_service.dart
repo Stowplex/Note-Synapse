@@ -8,6 +8,8 @@ import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../providers/app_provider.dart';
+import 'dart:convert';
+import 'note_modification_service.dart';
 
 class ContentIngestionService {
   final DatabaseService _databaseService = DatabaseService();
@@ -108,18 +110,51 @@ class ContentIngestionService {
         return;
       }
 
-      // Generate Summary
-      final summary = await AIService.generateWithAttachments(
-        extractionPrompt,
+      final prompt =
+          '''
+$extractionPrompt
+
+INSTRUCTION:
+You can modify this note to extract information.
+You may return a JSON object to perform specific modifications (title, content, tags, links, subnotes).
+Schema:
+{
+  "content": { "action": "append"|"prepend"|"replace", "text": "..." },
+  "title": { "new_title": "..." },
+  "tags": { "added": ["..."], "removed": ["..."] },
+  "link": [{ "relation": "...", "target": "note_id" }],
+  "subnote": { "added": [{"name": "...", "content": "..."}] }
+}
+If you verify the output is simple text, I will prepend it as a summary.
+If you return JSON, I will execute the modifications.
+''';
+
+      // Generate Summary/Modification
+      final response = await AIService.generateWithAttachments(
+        prompt,
         attachedFiles,
       );
 
-      // Prepend Summary to Note Content
-      final newContent =
-          '> [!SUMMARY]\n> ${summary.replaceAll('\n', '\n> ')}\n\n${note.content}';
+      try {
+        final json = jsonDecode(response);
+        if (json is Map<String, dynamic>) {
+          // Enforce restriction: Attachment modification not allowed in this context
+          json.remove('attachments');
 
-      // Update Note
-      await appProvider.updateNoteContent(note.id, newContent);
+          final service = NoteModificationService();
+          // applyModifications writes to DB
+          final updatedNote = await service.applyModifications(note.id, json);
+          // Update AppProvider to reflect changes in UI (redundant DB write but safe)
+          await appProvider.updateNote(updatedNote);
+        } else {
+          throw const FormatException();
+        }
+      } catch (e) {
+        // Fallback: Prepend Summary to Note Content
+        final newContent =
+            '> [!SUMMARY]\n> ${response.replaceAll('\n', '\n> ')}\n\n${note.content}';
+        await appProvider.updateNoteContent(note.id, newContent);
+      }
 
       onSuccess?.call();
     } catch (e) {

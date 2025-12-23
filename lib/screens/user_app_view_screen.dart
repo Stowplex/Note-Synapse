@@ -572,6 +572,93 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
           ),
         );
       },
+      onModificationRequest: (source, noteId, modification) async {
+        if (!mounted) return false;
+
+        bool allowSession = false;
+
+        final result = await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return StatefulBuilder(
+              builder: (context, setState) {
+                return AlertDialog(
+                  title: const Text('Allow Note Modification?'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('The app wants to modify note:'),
+                        SelectableText(
+                          noteId,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Details:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Container(
+                          width: double.maxFinite,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            const JsonEncoder.withIndent(
+                              '  ',
+                            ).convert(modification),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: allowSession,
+                              onChanged: (val) {
+                                setState(() {
+                                  allowSession = val ?? false;
+                                });
+                              },
+                            ),
+                            const Expanded(
+                              child: Text('Allow for this session'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Deny'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Approve'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+
+        if (result == true) {
+          if (allowSession) {
+            source.approveSession();
+          }
+          return true;
+        }
+        return false;
+      },
     );
 
     return Stack(

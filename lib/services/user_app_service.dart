@@ -913,6 +913,23 @@ IMPORTANT:
          * Fields omitted will remain unchanged.
          * Lists (subNotes, tags, attachments) are replaced entirely if provided.
       Response format: {success: boolean, updatedCount?: number, error?: string}
+    - Synapse.modifyNote(noteId: string, modification: object) - Modifies specific parts of a note. Supports content append/prepend/replace.
+      Param format:
+        - noteId: string (required) - ID of the note to modify
+        - modification: object (required) - The modification object.
+      Schema for modification object:
+        {
+          "content": { "action": "append"|"prepend"|"replace"|"no-op", "text": "..." },
+          "title": { "new_title": "..." },
+          "tags": { "added": ["tag1"], "removed": ["tag2"] },
+          "link": [{ "relation": "...", "target": "target_note_id" }],
+          "attachments": { "added": ["/path/to/file"], "removed": ["/path/to/file"] },
+          "subnote": { 
+             "added": [{"name": "Task name", "content": "Details"}], 
+             "removed": ["subnote_id"] 
+          }
+        }
+      Response format: {success: boolean, message?: string, error?: string}
    - Synapse.deleteNotes(noteIds: array) - Delete notes from the database by their IDs
      Param format: array of note IDs (strings) - List of UUID strings identifying notes to delete
      Response format: {success: boolean, deletedCount?: number, error?: string}

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import '../database_service.dart';
+import '../note_modification_service.dart';
 
 import '../ai_service.dart';
 import '../../models/generation_context.dart';
@@ -345,6 +346,128 @@ class ListFiltersTool implements NativeTool {
       return buffer.toString();
     } catch (e) {
       return "Error listing filters: $e";
+    }
+  }
+}
+
+class ModifyNoteTool implements NativeTool {
+  final NoteModificationService _service = NoteModificationService();
+
+  @override
+  String get name => 'modify_note';
+
+  @override
+  String get description =>
+      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports append/prepend/replace for content.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': {
+      'note_id': {
+        'type': 'string',
+        'description': 'The ID of the note to modify.',
+      },
+      'modification': {
+        'type': 'object',
+        'description': 'The modification object.',
+        'properties': {
+          'content': {
+            'type': 'object',
+            'properties': {
+              'action': {
+                'type': 'string',
+                'enum': ['append', 'prepend', 'replace', 'no-op'],
+              },
+              'text': {'type': 'string'},
+            },
+          },
+          'title': {
+            'type': 'object',
+            'properties': {
+              'new_title': {'type': 'string'},
+            },
+          },
+          'tags': {
+            'type': 'object',
+            'properties': {
+              'added': {
+                'type': 'array',
+                'items': {'type': 'string'},
+              },
+              'removed': {
+                'type': 'array',
+                'items': {'type': 'string'},
+              },
+            },
+          },
+          'link': {
+            'type': 'array',
+            'items': {
+              'type': 'object',
+              'properties': {
+                'relation': {'type': 'string'},
+                'target': {'type': 'string'},
+              },
+            },
+          },
+          'attachments': {
+            'type': 'object',
+            'properties': {
+              'added': {
+                'type': 'array',
+                'items': {'type': 'string'},
+              },
+              'removed': {
+                'type': 'array',
+                'items': {'type': 'string'},
+              },
+            },
+          },
+          'subnote': {
+            'type': 'object',
+            'properties': {
+              'added': {
+                'type': 'array',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'name': {'type': 'string'},
+                    'content': {'type': 'string'},
+                  },
+                },
+              },
+              'removed': {
+                'type': 'array',
+                'items': {'type': 'string'},
+              },
+            },
+          },
+        },
+        'required': ['content'],
+      },
+    },
+    'required': ['note_id', 'modification'],
+  };
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    final noteId = args['note_id'] as String;
+    final modification = args['modification'] as Map<String, dynamic>;
+
+    try {
+      final updatedNote = await _service.applyModifications(
+        noteId,
+        modification,
+      );
+      return {
+        'status': 'success',
+        'note_id': updatedNote.id,
+        'new_title': updatedNote.title,
+        'message': 'Note modified successfully.',
+      };
+    } catch (e) {
+      return {'error': 'Failed to modify note: $e'};
     }
   }
 }

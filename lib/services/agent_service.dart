@@ -175,6 +175,7 @@ Format with Markdown.
     NoteReadTool(),
     RunSqlTool(),
     ListFiltersTool(),
+    ModifyNoteTool(),
   ];
   List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
 

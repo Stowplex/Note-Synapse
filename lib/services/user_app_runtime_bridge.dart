@@ -17,11 +17,18 @@ import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import 'note_modification_service.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
+typedef ModificationRequestCallback =
+    Future<bool> Function(
+      UserAppRuntimeBridge source,
+      String noteId,
+      Map<String, dynamic> modification,
+    );
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
@@ -37,6 +44,7 @@ class UserAppRuntimeBridge {
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
+    this.onModificationRequest,
   }) : _selectedNotes = selectedNotes ?? const [];
 
   final UserApp app;
@@ -47,6 +55,13 @@ class UserAppRuntimeBridge {
   final OpenNoteCallback? onOpenNote;
   final OpenConversationsCallback? onOpenConversations;
   final OpenAIActionsCallback? onOpenAIActions;
+  final ModificationRequestCallback? onModificationRequest;
+
+  bool _sessionApprovedModifications = false;
+
+  void approveSession() {
+    _sessionApprovedModifications = true;
+  }
 
   final DatabaseService _databaseService = DatabaseService();
   static final HttpClient _proxyHttpClient = HttpClient()
@@ -184,6 +199,10 @@ class UserAppRuntimeBridge {
           },
           updateNotes: async (notes) => {
              const result = await window.flutter_inappwebview.callHandler('updateNotes', notes ?? []);
+             return result;
+          },
+          modifyNote: async (noteId, modification) => {
+             const result = await window.flutter_inappwebview.callHandler('modifyNote', noteId, modification);
              return result;
           },
           openConversations: async (notes = [], immersiveMode = false) => {
@@ -771,6 +790,57 @@ class UserAppRuntimeBridge {
             '[Synapse.updateNotes] Error after ${duration.inMilliseconds}ms: $e',
             error: e,
           );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'modifyNote',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (args.length < 2) {
+            return {
+              'success': false,
+              'error': 'Missing arguments. Required: noteId, modification',
+            };
+          }
+          final noteId = args[0] as String;
+          final modification = args[1] as Map<String, dynamic>;
+
+          LoggerService.debug('[Synapse.modifyNote] Request for $noteId');
+
+          // Check approval
+          if (!_sessionApprovedModifications) {
+            if (onModificationRequest != null) {
+              final approved = await onModificationRequest!(
+                this,
+                noteId,
+                modification,
+              );
+              if (!approved) {
+                return {'success': false, 'error': 'User denied modification.'};
+              }
+            } else {
+              return {
+                'success': false,
+                'error': 'Modification not supported in this context.',
+              };
+            }
+          }
+
+          // Execute
+          final service = NoteModificationService();
+          await service.applyModifications(noteId, modification);
+
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.modifyNote] Success - Modified $noteId in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'message': 'Note modified successfully'};
+        } catch (e) {
+          LoggerService.error('[Synapse.modifyNote] Error: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
