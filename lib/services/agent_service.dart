@@ -255,6 +255,7 @@ IMPORTANT CONTEXT ON NOTE ORGANIZATION:
 
 STRATEGY HINT:
 - If you are exploring, trying to understand the user's note structure, or don't know where to look: USE THE `ls` TOOL FIRST. It gives you the "directory listing" of the user's brain.
+- In addition to `ls`, you can query the tags table for all user and auto-generated tags to determine their relevance to your search.
 - Only jump to `search_notes` if you have a specific keyword or if `ls` doesn't provide enough leads.
 
 Objective: "$objective"
