@@ -144,6 +144,7 @@ dependencies:
   flutter_json_view: ^1.1.5
   flutter_painter_v2: ^2.1.0+1
   phosphor_flutter: ^2.1.0
+  json_repair_flutter: ^2.0.2
 
 
 dev_dependencies:

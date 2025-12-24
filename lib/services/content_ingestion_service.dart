@@ -11,6 +11,8 @@ import '../providers/app_provider.dart';
 import 'dart:convert';
 import 'note_modification_service.dart';
 
+import 'package:json_repair_flutter/json_repair_flutter.dart';
+
 class ContentIngestionService {
   final DatabaseService _databaseService = DatabaseService();
 
@@ -154,7 +156,7 @@ Content: ${note.content}
           }
         }
 
-        final json = jsonDecode(jsonString);
+        final json = repairJson(jsonString);
         if (json is Map<String, dynamic>) {
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
