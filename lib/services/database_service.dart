@@ -2448,7 +2448,14 @@ class DatabaseService {
 
   Future<List<UserApp>> getAllUserApps() async {
     final db = await database;
-    final maps = await db.query('user_apps', orderBy: 'createdAt DESC');
+    // Exclude appState to avoid CursorWindow issues with large state data.
+    // App state should be loaded on-demand via getUserAppState().
+    final maps = await db.rawQuery('''
+      SELECT id, uuid, name, description, steps, htmlContent, type, 
+             selectedRevisionId, author, license, createdAt, updatedAt
+      FROM user_apps
+      ORDER BY createdAt DESC
+    ''');
     LoggerService.debug(
       'DatabaseService.getAllUserApps: Found ${maps.length} user apps',
     );
