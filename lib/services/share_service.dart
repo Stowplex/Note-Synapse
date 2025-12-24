@@ -219,6 +219,7 @@ class ShareService {
           appProvider: appProvider,
           l10n: l10n,
           level: 0,
+          forExport: true,
         );
 
         // Remove the separator added by _addNoteToBuffer if present
