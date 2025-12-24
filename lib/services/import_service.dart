@@ -333,8 +333,8 @@ class ImportService {
        */
 
     final bytes = await sourceFile.readAsBytes();
-    // FileUtils.saveFileToPrivateStorage takes (List<int> bytes, String fileName)
-    return await FileUtils.saveFileToPrivateStorage(bytes, fileName);
+    // Use smart save logic to avoid duplicates/renaming if possible
+    return await FileUtils.saveImportedFile(bytes, fileName);
   }
 
   _ParsedNoteData? _parseNoteMarkdown(String content) {

@@ -8,32 +8,35 @@ import 'package:uuid/uuid.dart';
 /// Utility class for file operations
 class FileUtils {
   /// Opens a file using the platform's default application
-  /// 
+  ///
   /// This method handles platform-specific file opening, including Android intents.
   /// It provides comprehensive error handling and user feedback.
-  /// 
+  ///
   /// [filePath] - The path to the file to open
   /// [context] - The BuildContext for showing error messages
-  /// 
+  ///
   /// Returns true if the file was opened successfully, false otherwise
   static Future<bool> openFile(String filePath, BuildContext context) async {
     try {
       // Check if file exists
       final file = File(filePath);
       if (!file.existsSync()) {
-        _showErrorSnackBar(context, 'File not found: ${filePath.split('/').last}');
+        _showErrorSnackBar(
+          context,
+          'File not found: ${filePath.split('/').last}',
+        );
         return false;
       }
 
       // Use open_file package for proper Android file handling
       final result = await OpenFile.open(filePath);
-      
+
       if (result.type != ResultType.done) {
         String errorMessage = _getErrorMessage(result);
         _showErrorSnackBar(context, errorMessage);
         return false;
       }
-      
+
       return true;
     } catch (e) {
       _showErrorSnackBar(context, 'Error opening file: $e');
@@ -71,7 +74,6 @@ class FileUtils {
     }
   }
 
-
   /// Gets a user-friendly error message based on the OpenFile result type
   static String _getErrorMessage(dynamic result) {
     switch (result.type) {
@@ -92,10 +94,7 @@ class FileUtils {
   static void _showErrorSnackBar(BuildContext context, String message) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
@@ -117,11 +116,15 @@ class FileUtils {
   static String generateUniqueFileName(String originalFileName) {
     const uuid = Uuid();
     final uniqueId = uuid.v4();
-    
+
     // Extract file extension
-    final fileExtension = originalFileName.contains('.') ? '.${originalFileName.split('.').last}' : '';
-    final baseFileName = originalFileName.contains('.') ? originalFileName.substring(0, originalFileName.lastIndexOf('.')) : originalFileName;
-    
+    final fileExtension = originalFileName.contains('.')
+        ? '.${originalFileName.split('.').last}'
+        : '';
+    final baseFileName = originalFileName.contains('.')
+        ? originalFileName.substring(0, originalFileName.lastIndexOf('.'))
+        : originalFileName;
+
     // Create unique filename with UUID appended before extension
     // Format: basefilename_uuid.extension (e.g., document_abc123.pdf)
     return '${baseFileName}_$uniqueId$fileExtension';
@@ -131,16 +134,19 @@ class FileUtils {
   /// [data] - The file data as bytes
   /// [originalFileName] - The original filename
   /// Returns the relative path to the saved file
-  static Future<String> saveFileToPrivateStorage(List<int> data, String originalFileName) async {
+  static Future<String> saveFileToPrivateStorage(
+    List<int> data,
+    String originalFileName,
+  ) async {
     final attachmentsDir = await getPrivateStorageDirectory();
     final uniqueFileName = generateUniqueFileName(originalFileName);
     final file = File('${attachmentsDir.path}/$uniqueFileName');
-    
+
     await file.writeAsBytes(data);
-    
+
     // Return relative path from the app's documents directory
     final relativePath = 'attachments/$uniqueFileName';
-    
+
     return relativePath;
   }
 
@@ -148,7 +154,10 @@ class FileUtils {
   /// [relativePath] - The relative path stored in the database
   /// [isRelativePath] - Whether the path is relative to app's private storage
   /// Returns the full file path
-  static Future<String> getFullFilePath(String filePath, bool isRelativePath) async {
+  static Future<String> getFullFilePath(
+    String filePath,
+    bool isRelativePath,
+  ) async {
     if (isRelativePath) {
       final appDir = await getApplicationDocumentsDirectory();
       return '${appDir.path}/$filePath';
@@ -156,5 +165,43 @@ class FileUtils {
       // Legacy absolute path - return as is
       return filePath;
     }
+  }
+
+  /// Saves an imported file, attempting to use the original filename.
+  /// If a file with the same name exists:
+  /// - If content matches: Returns existing path (deduplication).
+  /// - If content differs: Generates unique name and saves.
+  static Future<String> saveImportedFile(
+    List<int> data,
+    String fileName,
+  ) async {
+    final attachmentsDir = await getPrivateStorageDirectory();
+    final filePath = '${attachmentsDir.path}/$fileName';
+    final file = File(filePath);
+
+    if (await file.exists()) {
+      // Check for content equality (simple length + bytes check)
+      // For large files this might be slow, but attachments are usually images/docs.
+      final existingBytes = await file.readAsBytes();
+      if (_areBytesEqual(existingBytes, data)) {
+        return 'attachments/$fileName';
+      }
+
+      // Content differs, generate unique name
+      return await saveFileToPrivateStorage(data, fileName);
+    }
+
+    // Doesn't exist, save with original name (sanitized?)
+    // Warning: fileName might contain paths if zip was malicious, but p.basename was used in caller.
+    await file.writeAsBytes(data);
+    return 'attachments/$fileName';
+  }
+
+  static bool _areBytesEqual(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 }
