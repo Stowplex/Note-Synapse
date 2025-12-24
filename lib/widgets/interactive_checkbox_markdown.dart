@@ -21,6 +21,10 @@ import 'package:re_highlight/styles/atom-one-light.dart';
 
 import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/synapse_resource_uri.dart';
+import '../services/database_service.dart';
+import '../screens/note_detail_screen.dart';
+import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
@@ -79,6 +83,44 @@ class _InteractiveCheckboxMarkdownState
 
   /// Map to track image versions and force rebuilds on edit
   final Map<String, int> _imageVersions = {};
+
+  /// Handles synapseresource:// URIs and navigates to the appropriate screen.
+  Future<void> _handleSynapseResourceLink(String url) async {
+    final link = SynapseResourceUri.parse(url);
+    if (link == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Invalid resource link')));
+      }
+      return;
+    }
+
+    switch (link.type) {
+      case SynapseResourceType.note:
+        final note = await DatabaseService().getNote(link.id);
+        if (note != null && mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(note: note),
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Note not found')));
+        }
+      case SynapseResourceType.conversation:
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ConversationChatScreen(conversationId: link.id),
+            ),
+          );
+        }
+    }
+  }
 
   Future<_LocalImageSource?> _resolveLocalImageSourceCached(String url) {
     return _localImageFutures.putIfAbsent(
@@ -1010,7 +1052,15 @@ class _InteractiveCheckboxMarkdownState
         _currentContent,
         style: widget.style,
         textDirection: widget.textDirection,
-        onLinkTap: widget.onLinkTap,
+        onLinkTap: (url, text) {
+          // Handle synapseresource:// URIs internally
+          if (SynapseResourceUri.isSynapseResourceUri(url)) {
+            _handleSynapseResourceLink(url);
+            return;
+          }
+          // Fall back to parent callback
+          widget.onLinkTap?.call(url, text);
+        },
         maxLines: widget.maxLines,
         overflow: widget.overflow,
         latexBuilder: _customLatexBuilder,

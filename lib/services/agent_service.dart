@@ -150,6 +150,10 @@ $globalContext
 Based on the above results, provide a final, concise, and helpful response to the user.
 Answer their original request directly.
 Format with Markdown.
+
+When referring to notes or conversations, use inline markdown links with the synapseresource:// URI scheme. This allows users to click and navigate directly to that resource:
+- For notes: [Note Title](synapseresource://note/<note_id>)
+- For conversations: [Conversation Title](synapseresource://conversation/<conversation_id>)
 ''';
 
     final response = await AIService.generateWithAttachments(
