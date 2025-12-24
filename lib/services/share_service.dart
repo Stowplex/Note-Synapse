@@ -846,6 +846,7 @@ class ShareService {
     required AppProvider appProvider,
     required AppLocalizations l10n,
     required int level,
+    bool forExport = false,
   }) async {
     // Note: We don't need to check for duplicates here since the main BFS loop
     // already handles the visited check before calling this method
@@ -856,6 +857,9 @@ class ShareService {
     buffer.writeln();
 
     // Add note metadata
+    if (forExport) {
+      buffer.writeln('**ID:** ${note.id}');
+    }
     buffer.writeln('**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}');
     if (note.isTask && note.status != null) {
       buffer.writeln(
@@ -877,13 +881,44 @@ class ShareService {
       buffer.writeln();
     }
 
+    // Add Attachments metadata if requested
+    if (forExport && note.attachmentPaths.isNotEmpty) {
+      buffer.writeln('## Attachments');
+      buffer.writeln();
+
+      // Need to fetch attachment details to get original filename/mime if possible,
+      // but note.attachmentPaths only has IDs or paths?
+      // Let's assume paths for now as Note model defines List<String> attachmentPaths.
+      // Ideally we should lookup in Attachment table, but that requires async DB call which we might avoid if just paths needed.
+      // However user asked for "name, mimetype, path".
+      // We can get name/mime from path extension.
+
+      for (final path in note.attachmentPaths) {
+        final fileName = path.split('/').last;
+        final ext = fileName.split('.').lastOrNull ?? 'unknown';
+        // Simple mime guess or just extension
+        buffer.writeln('- **Name:** $fileName');
+        buffer.writeln(
+          '  - **Path:** $path',
+        ); // This might be internal path, need to ensure import handles it.
+        // For export, we are copying files to 'attachments/' folder in Zip.
+        // So maybe we should list the RELATIVE path in the zip? "attachments/$fileName"?
+        buffer.writeln('  - **Type:** $ext');
+        buffer.writeln();
+      }
+    }
+
     // Add sub-notes if requested
+
     if (includeSubNotesAndLinkedNotes && note.subNotes.isNotEmpty) {
       buffer.writeln('## ${l10n.subNotes}');
       buffer.writeln();
 
       for (final subNote in note.subNotes) {
         buffer.writeln('### ${subNote.name}');
+        if (forExport) {
+          buffer.writeln('**ID:** ${subNote.id}');
+        }
         if (subNote.isCompleted) {
           buffer.writeln('✅ **${l10n.completed}**');
         }

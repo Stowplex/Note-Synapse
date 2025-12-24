@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -15,6 +16,9 @@ import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'package:file_picker/file_picker.dart';
+import '../services/import_service.dart';
+import '../services/logger_service.dart';
 import 'immersive_note_screen.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -54,6 +58,63 @@ class _NotesScreenState extends State<NotesScreen> {
     setState(() {
       _availableTags = ['all', ...allTags];
     });
+  }
+
+  Future<void> _importFromZip() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        if (!mounted) return;
+
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const Center(child: CircularProgressIndicator()),
+        );
+
+        final file = File(result.files.single.path!);
+        final stats = await ImportService().importFromMarkdownZip(
+          file,
+          context.read<AppProvider>(),
+        );
+
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Dismiss loader
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import Complete: $stats'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Refresh
+        context.read<AppProvider>().loadData();
+        _loadTags();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Close loader if open?
+      // Hard to know if dialog is open easily without tracking.
+      // But standard interaction ensures we pop if we error after showing.
+      // Assuming loader acts as barrier.
+      try {
+        Navigator.of(context).pop();
+      } catch (_) {}
+
+      LoggerService.error('Import Error', error: e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import Failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -251,6 +312,26 @@ class _NotesScreenState extends State<NotesScreen> {
                 context.read<AppProvider>().loadData();
                 _loadTags();
               },
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'import_zip') {
+                  _importFromZip();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'import_zip',
+                  child: Row(
+                    children: [
+                      Icon(Icons.file_upload, size: 20),
+                      SizedBox(width: 8),
+                      Text('Import Markdown Zip'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ],
