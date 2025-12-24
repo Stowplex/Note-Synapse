@@ -127,6 +127,11 @@ Schema:
 }
 If you verify the output is simple text, I will prepend it as a summary.
 If you return JSON, I will execute the modifications.
+
+Note Context:
+Title: ${note.title}
+Tags: ${note.tags.join(', ')}
+Content: ${note.content}
 ''';
 
       // Generate Summary/Modification
