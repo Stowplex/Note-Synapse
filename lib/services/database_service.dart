@@ -1967,7 +1967,10 @@ class DatabaseService {
 
       // Only insert if the note doesn't already have the new tag
       if (existingNewTag.isEmpty) {
-        await db.insert('note_tags', {'noteId': noteId, 'tagId': newTagId});
+        await db.insert('note_tags', {
+          'noteId': noteId,
+          'tagId': newTagId,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
 
@@ -2328,7 +2331,10 @@ class DatabaseService {
     );
 
     if (existingLink.isEmpty) {
-      await db.insert('note_tags', {'noteId': noteId, 'tagId': tagId});
+      await db.insert('note_tags', {
+        'noteId': noteId,
+        'tagId': tagId,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
   }
 
