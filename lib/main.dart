@@ -14,6 +14,7 @@ import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
+import 'utils/global_keys.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,7 +52,7 @@ class NoteSynapseApp extends StatelessWidget {
               Locale('zh', ''), // Chinese Simplified
             ],
             locale: appProvider.locale,
-            navigatorKey: ShareService.navigatorKey,
+            navigatorKey: navigatorKey,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,

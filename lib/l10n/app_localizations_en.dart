@@ -2505,8 +2505,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rawDataManager => 'Raw Data Manager';
 
   @override
-  String get rawDataManagerSubtitle =>
-      'Advanced tools for file and database management';
+  String get rawDataManagerSubtitle => 'Inspect and modify raw database data';
 
   @override
   String get files => 'Files';
@@ -3940,4 +3939,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get taskRescheduled => 'Task rescheduled';
+
+  @override
+  String get recoveryManager => 'Recovery Manager';
+
+  @override
+  String get backupAndRestore => 'Backup & Restore';
 }

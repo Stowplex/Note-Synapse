@@ -27,6 +27,7 @@ import '../utils/file_utils.dart';
 import '../services/logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/global_keys.dart';
 import 'svg_renderer_service.dart';
 
 class ShareService {
@@ -38,8 +39,7 @@ class ShareService {
   static bool _isPresentingShareScreen = false;
   static final List<Map<String, dynamic>> _pendingSharedQueue =
       <Map<String, dynamic>>[];
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
+  // navigatorKey is now imported from global_keys.dart
   static final _ShareLifecycleObserver _lifecycleObserver =
       _ShareLifecycleObserver();
   static bool _observerAttached = false;

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 // Conditional imports for platform-specific code
 import 'database_service_io.dart'
@@ -21,6 +23,8 @@ import '../models/attachment.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/global_keys.dart';
+import '../screens/recovery_screen.dart';
 
 class MigrationStep {
   final String description;
@@ -508,6 +512,29 @@ class DatabaseService {
     int newVersion, {
     required bool isBackupMigration,
   }) async {
+    // 1. Perform backup before any migration (unless it's already a backup migration)
+    if (!isBackupMigration) {
+      try {
+        await _backupDatabase(db);
+      } catch (e) {
+        LoggerService.error('Pre-migration backup failed: $e', error: e);
+        // We continue with migration even if backup fails?
+        // Or should we stop? safer to stop, but user might be stuck.
+        // Let's log heavily and proceed for now, but in a strict mode we might want to stop.
+        // Given the requirement "Before upgrade, checkpoint and copy...", failure here is critical.
+        // But if we throw here, we go to recovery anyway.
+        // Let's wrap in a way that allows us to decide.
+        // For now, let's treat backup failure as a migration error to trigger recovery.
+        await _handleMigrationError(
+          db,
+          oldVersion,
+          e,
+          isBackupMigration: false,
+        );
+        return;
+      }
+    }
+
     for (int version = oldVersion + 1; version <= newVersion; version++) {
       final migrationStep = _migrationSteps[version];
       if (migrationStep == null) {
@@ -539,262 +566,67 @@ class DatabaseService {
     }
   }
 
-  // Handle migration errors with granular table recreation
+  Future<void> _backupDatabase(Database db) async {
+    try {
+      LoggerService.info('Starting pre-migration backup...');
+
+      // Force checkpoint to ensure WAL is merged
+      await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
+
+      final dbPath = db.path;
+      final dbFile = File(dbPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final backupPath = join(
+        dirname(dbPath),
+        'backup_pre_migration_$timestamp.db',
+      );
+
+      await dbFile.copy(backupPath);
+      LoggerService.info('Pre-migration backup created at: $backupPath');
+    } catch (e) {
+      LoggerService.error('Failed to create pre-migration backup', error: e);
+      rethrow;
+    }
+  }
+
+  // Handle migration errors
   Future<void> _handleMigrationError(
     Database db,
     int version,
     dynamic error, {
     required bool isBackupMigration,
   }) async {
-    switch (version) {
-      case 2:
-        // Notes table migration failed - recreate notes and related tables
-        LoggerService.error(
-          'Recreating notes table and related tables due to migration failure',
-        );
-        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
-        break;
+    LoggerService.error('Critical Migration Error at version $version: $error');
 
-      case 3:
-      case 4:
-      case 5:
-        // Notes table column additions failed - recreate notes table
-        LoggerService.error(
-          'Recreating notes table due to column addition failure',
-        );
-        await _recreateNotesTable(db, isBackupMigration: isBackupMigration);
-        break;
+    if (!isBackupMigration) {
+      // Navigate to Recovery Screen using global key
+      // We use a slight delay to ensure the app might have partially mounted or we are in a state where nav is possible
+      // though this is called during "await openDatabase ...", which happens presumably during AppWrapper init using AppProvider.loadData
+      // Navigating from here might be tricky if MaterialApp isn't built yet.
+      // However, openDatabase is called in AppProvider.loadData() which is called in AppWrapper.
+      // So context is available, but we are inside a logic class.
 
-      case 6:
-        // Filters table creation failed - recreate filters table
-        LoggerService.error('Recreating filters table due to creation failure');
-        await _recreateFiltersTable(db, isBackupMigration: isBackupMigration);
-        break;
+      // Note: navigatorKey.currentState might be null if called too early.
+      // If null, we might need another mechanism or rely on the error causing a rethrow that AppWrapper catches?
+      // But AppWrapper simply sets _error string. We want to FORCE recovery screen.
 
-      case 7:
-      case 8:
-        // User apps table operations failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to operation failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 9:
-        // App revisions table creation failed - recreate app_revisions table
-        LoggerService.error(
-          'Recreating app_revisions table due to creation failure',
-        );
-        await _recreateAppRevisionsTable(
-          db,
-          isBackupMigration: isBackupMigration,
-        );
-        break;
-
-      case 10:
-      case 11:
-      case 14:
-        // User apps table modifications failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to modification failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 15:
-        // Library tables creation failed - recreate library tables
-        LoggerService.error(
-          'Recreating library tables due to creation failure',
-        );
-        await _recreateLibraryTables(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 12:
-      case 13:
-      case 16:
-      case 17:
-        // These are safe operations - log warning but don't recreate anything
-        LoggerService.warning(
-          'Migration $version failed but is considered safe - continuing',
-        );
-        break;
-
-      case 23:
-        // User apps table UNIQUE constraint addition failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to UNIQUE constraint addition failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 25:
-        // Attachments table modification failed - recreate notes tables (which includes attachments)
-        LoggerService.error(
-          'Recreating notes tables due to attachments table modification failure',
-        );
-        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 26:
-        // Multi-function apps table creation failed - recreate the table
-        LoggerService.error(
-          'Recreating multi_function_apps table due to creation failure',
-        );
-        await _recreateMultiFunctionAppsTable(
-          db,
-          isBackupMigration: isBackupMigration,
-        );
-        break;
-
-      default:
-        // Unknown migration - fall back to full database recreation
-        LoggerService.error(
-          'Unknown migration $version failed - recreating entire database',
-        );
-        if (isBackupMigration) {
-          await _recreateBackupDatabase(db, version);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => RecoveryScreen(
+                error: 'Migration failed at version $version: $error',
+              ),
+            ),
+          );
         } else {
-          await _recreateMainDatabase(db, version);
+          LoggerService.error(
+            'Navigator context is null, cannot navigate to recovery screen.',
+          );
         }
+      });
     }
-  }
-
-  // Granular table recreation methods
-  Future<void> _recreateNotesTables(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    // Drop notes and related tables
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-
-    // Recreate tables using schema constants
-    await db.execute(_createNotesTable);
-    await db.execute(_createSubNotesTable);
-    await db.execute(_createAttachmentsTable);
-    await db.execute(_createRelationshipsTable);
-
-    // Recreate relevant indexes
-    await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
-    await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
-    await db.execute(
-      'CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)',
-    );
-    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
-    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
-    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
-    await db.execute(
-      'CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)',
-    );
-  }
-
-  Future<void> _recreateNotesTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    // Drop and recreate only the notes table
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute(_createNotesTable);
-
-    // Recreate indexes
-    await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
-    await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
-    await db.execute(
-      'CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)',
-    );
-    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
-    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
-    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
-  }
-
-  Future<void> _recreateFiltersTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute(_createFiltersTable);
-  }
-
-  Future<void> _recreateUserAppsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    // Drop dependent tables first (reverse dependency order)
-    // user_app_library_dependencies depends on user_app_libraries
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    // user_app_libraries depends on user_apps
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    // app_revisions depends on user_apps
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    // Now we can drop user_apps
-    await db.execute('DROP TABLE IF EXISTS user_apps');
-
-    // Recreate tables in dependency order
-    await db.execute(_createUserAppsTable);
-    await db.execute(_createAppRevisionsTable);
-    await db.execute(_createUserAppLibrariesTable);
-    await db.execute(_createUserAppLibraryDependenciesTable);
-
-    // Recreate indexes for library tables
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
-    );
-  }
-
-  Future<void> _recreateAppRevisionsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute(_createAppRevisionsTable);
-  }
-
-  Future<void> _recreateLibraryTables(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-
-    await db.execute(_createUserAppLibrariesTable);
-    await db.execute(_createUserAppLibraryDependenciesTable);
-
-    // Create indexes
-    await db.execute(
-      'CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
-    );
-  }
-
-  Future<void> _recreateMultiFunctionAppsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
-    await db.execute(_createMultiFunctionAppsTable);
   }
 
   static Future<void> _migrateToVersion28(
@@ -932,31 +764,6 @@ class DatabaseService {
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
       )
     ''');
-  }
-
-  // Recreate main database tables
-  Future<void> _recreateMainDatabase(Database db, int newVersion) async {
-    // Drop all tables
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute('DROP TABLE IF EXISTS tags');
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute('DROP TABLE IF EXISTS user_apps');
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
-    await db.execute('DROP TABLE IF EXISTS conversations');
-    await db.execute('DROP TABLE IF EXISTS conversation_messages');
-    await db.execute('DROP TABLE IF EXISTS conversation_tags');
-    await db.execute('DROP TABLE IF EXISTS tag_ai_configs');
-    await db.execute('DROP TABLE IF EXISTS notes_fts');
-
-    // Recreate all tables using schema constants
-    await _onCreate(db, newVersion);
   }
 
   // Individual migration methods
@@ -2399,35 +2206,6 @@ class DatabaseService {
       newVersion,
       isBackupMigration: true,
     );
-  }
-
-  Future<void> _createBackupDatabaseTables(Database db, int version) async {
-    // Create all tables using schema constants (same as main database)
-    await _onCreate(db, version);
-  }
-
-  Future<void> _recreateBackupDatabase(Database db, int newVersion) async {
-    // Drop all tables and recreate using schema constants
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute('DROP TABLE IF EXISTS tags');
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute('DROP TABLE IF EXISTS user_apps');
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS conversation_tags');
-    await db.execute('DROP TABLE IF EXISTS conversation_note_mapping');
-    await db.execute('DROP TABLE IF EXISTS conversation_message_mapping');
-    await db.execute('DROP TABLE IF EXISTS message_parents');
-    await db.execute('DROP TABLE IF EXISTS conversation_attachments');
-    await db.execute('DROP TABLE IF EXISTS conversation_messages');
-    await db.execute('DROP TABLE IF EXISTS conversations');
-
-    await _createBackupDatabaseTables(db, newVersion);
   }
 
   // Clear all data

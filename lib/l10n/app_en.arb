@@ -1568,5 +1568,9 @@
   "resetToDefaultDbTooltip": "Reset to Default DB",
   "exportDbTooltip": "Export DB",
   "undo": "Undo",
-  "taskRescheduled": "Task rescheduled"
+  "taskRescheduled": "Task rescheduled",
+  "recoveryManager": "Recovery Manager",
+  "backupAndRestore": "Backup & Restore",
+  "rawDataManagerTitle": "Raw Data Manager",
+  "rawDataManagerSubtitle": "Inspect and modify raw database data"
 }

@@ -4487,7 +4487,7 @@ abstract class AppLocalizations {
   /// No description provided for @rawDataManagerSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Advanced tools for file and database management'**
+  /// **'Inspect and modify raw database data'**
   String get rawDataManagerSubtitle;
 
   /// No description provided for @files.
@@ -6829,6 +6829,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Task rescheduled'**
   String get taskRescheduled;
+
+  /// No description provided for @recoveryManager.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Manager'**
+  String get recoveryManager;
+
+  /// No description provided for @backupAndRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup & Restore'**
+  String get backupAndRestore;
 }
 
 class _AppLocalizationsDelegate

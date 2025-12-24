@@ -3757,4 +3757,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get taskRescheduled => '任务已重新安排';
+
+  @override
+  String get recoveryManager => 'Recovery Manager';
+
+  @override
+  String get backupAndRestore => 'Backup & Restore';
 }

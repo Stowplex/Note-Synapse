@@ -17,7 +17,9 @@ import '../providers/app_provider.dart';
 import 'raw_data_manager/raw_data_manager_screen.dart';
 
 class RecoveryScreen extends StatefulWidget {
-  const RecoveryScreen({super.key});
+  final String? error;
+
+  const RecoveryScreen({super.key, this.error});
 
   @override
   State<RecoveryScreen> createState() => _RecoveryScreenState();
@@ -1643,12 +1645,78 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.recovery)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      appBar: AppBar(
+        title: Text(l10n.recoveryManager),
+        leading: widget.error != null 
+          ? IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                 // Should we allow closing? 
+                 // If it's a critical error, maybe not, but user might want to try restarting app.
+                 // Let's allow exiting to main screen, maybe app will crash again if DB is broken, 
+                 // but at least they are not trapped.
+                 Navigator.of(context).pop();
+              },
+            ) 
+          : const BackButton(),
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.error != null) ...[
+                Card(
+                  color: theme.colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Database Migration Failed', // Use l10n in real app
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: theme.colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.error!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'The database schema upgrade failed. A backup was created before the attempt. You can try to restore a previous backup below, or if this persists, contact support.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+              _buildSectionTitle(l10n.backupAndRestore),
+              const SizedBox(height: 16),
           // Backup section
           Card(
             child: Padding(
@@ -2099,5 +2167,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       LoggerService.error('Error reading String in chunks: $e', error: e);
       return '';
     }
+  }
+
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+    );
   }
 }
