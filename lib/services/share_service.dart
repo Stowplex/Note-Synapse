@@ -939,19 +939,33 @@ class ShareService {
     }
   }
 
-  /// Extract URL from text (same logic as main screen)
+  /// Extract URL from text.
+  /// Returns the first URL match if its length is greater than 1/5 of the total text length.
   static String? _extractUrl(String text) {
-    final trimmedText = text.trim();
-    final uriPattern = RegExp(r'^https?://[^\s]+$');
+    if (text.isEmpty) return null;
 
-    if (uriPattern.hasMatch(trimmedText)) {
+    // Find all potential URLs
+    // Using a more robust regex that stops at common punctuation if at end, but simplifying for now
+    // to match typical "http://..." non-whitespace sequences which is standard for simple extractors.
+    final uriPattern = RegExp(r'https?://[^\s]+');
+    final matches = uriPattern.allMatches(text);
+
+    for (final match in matches) {
+      final urlString = match.group(0);
+      if (urlString == null) continue;
+
       try {
-        final uri = Uri.parse(trimmedText);
-        if (uri.scheme == 'http' || uri.scheme == 'https') {
-          return trimmedText;
+        // Validate URL structure
+        final uri = Uri.parse(urlString);
+        if (uri.scheme != 'http' && uri.scheme != 'https') continue;
+
+        // Ratio check: URL length > Total text length / 5
+        // Example: URL is 21 chars. Text is 100 chars. 21 > 20 => TRUE.
+        if (urlString.length > text.length / 5.0) {
+          return urlString;
         }
       } catch (e) {
-        // Invalid URI
+        // Invalid URI, skip
       }
     }
 
