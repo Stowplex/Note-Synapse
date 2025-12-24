@@ -18,6 +18,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:archive/archive_io.dart';
+import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -167,6 +169,138 @@ class ShareService {
     }
 
     return buffer.toString();
+  }
+
+  /// Generates a Zip archive of Markdown notes and shares/saves it.
+  static Future<void> shareAsMarkdownZip({
+    required List<Note> notes,
+    required bool includeSubNotesAndLinkedNotes,
+    required AppProvider appProvider,
+    required AppLocalizations l10n,
+  }) async {
+    try {
+      final notesToExport = await _collectNotesForExport(
+        notes: notes,
+        includeLinkedNotes: includeSubNotesAndLinkedNotes,
+        appProvider: appProvider,
+      );
+
+      if (notesToExport.isEmpty) {
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final exportId = const Uuid().v4();
+      final exportDir = Directory(p.join(tempDir.path, 'export_$exportId'));
+      await exportDir.create();
+
+      final attachmentsDir = Directory(p.join(exportDir.path, 'attachments'));
+      await attachmentsDir.create();
+
+      // Process each note
+      for (final note in notesToExport) {
+        // Sanitize title for filename
+        final safeTitle = note.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+        final truncatedTitle = safeTitle.length > 64
+            ? safeTitle.substring(0, 64)
+            : safeTitle;
+        final fileName = '${note.id}__$truncatedTitle.md';
+        final noteFile = File(p.join(exportDir.path, fileName));
+
+        final buffer = StringBuffer();
+
+        // Add single note content
+        await _addNoteToBuffer(
+          note: note,
+          buffer: buffer,
+          processedNoteIds:
+              {}, // Not tracking visited here as we handle iteration explicitly
+          includeSubNotesAndLinkedNotes: includeSubNotesAndLinkedNotes,
+          appProvider: appProvider,
+          l10n: l10n,
+          level: 0,
+        );
+
+        // Remove the separator added by _addNoteToBuffer if present
+        var content = buffer.toString();
+        if (content.endsWith('---\n\n')) {
+          content = content.substring(0, content.length - 5);
+        }
+
+        await noteFile.writeAsString(content);
+
+        // Copy attachments
+        for (final attachmentPath in note.attachmentPaths) {
+          try {
+            final attachmentFile = File(attachmentPath);
+            if (await attachmentFile.exists()) {
+              final attachmentName = p.basename(attachmentPath);
+              final targetPath = p.join(attachmentsDir.path, attachmentName);
+              await attachmentFile.copy(targetPath);
+            }
+          } catch (e) {
+            LoggerService.warning(
+              'Failed to copy attachment for zip: $attachmentPath',
+              error: e,
+            );
+          }
+        }
+      }
+
+      // Create Zip
+      final zipFileName =
+          'notes_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
+      final zipFilePath = p.join(tempDir.path, zipFileName);
+
+      final encoder = ZipFileEncoder();
+      encoder.create(zipFilePath);
+      encoder.addDirectory(exportDir, includeDirName: false);
+      encoder.close();
+
+      // Share/Save
+      if (kIsWeb) {
+        await FileSaver.instance.saveAs(
+          name: zipFileName,
+          bytes: await File(zipFilePath).readAsBytes(),
+          fileExtension: 'zip',
+          mimeType: MimeType.zip,
+        );
+      } else if (Platform.isAndroid || Platform.isIOS) {
+        await Share.shareXFiles([
+          XFile(zipFilePath, mimeType: 'application/zip'),
+        ], subject: 'Notes Export');
+      } else {
+        // Desktop
+        final savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Zip Archive',
+          fileName: zipFileName,
+          type: FileType.custom,
+          allowedExtensions: ['zip'],
+        );
+
+        if (savePath != null) {
+          await File(zipFilePath).copy(savePath);
+        }
+      }
+
+      // Cleanup
+      try {
+        await exportDir.delete(recursive: true);
+        // Note: We might want to keep the zip file for a bit or delete it?
+        // Usually temp files are cleaned up by OS, but explicit delete is good.
+        // However, on mobile shareXFiles might need the file to exist for a bit.
+        // We'll leave the zip file in temp.
+      } catch (e) {
+        LoggerService.warning('Failed to clean up export directory', error: e);
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error generating Markdown Zip: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   /// Generates a PDF from selected notes and shares or saves it depending on the platform.
@@ -873,7 +1007,7 @@ class ShareService {
 
   /// Helper method to format DateTime
   static String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return DateFormat('MM/dd/yyyy').format(dateTime);
   }
 
   /// Process shared content from platform channels
