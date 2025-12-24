@@ -1650,18 +1650,18 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.recoveryManager),
-        leading: widget.error != null 
-          ? IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () {
-                 // Should we allow closing? 
-                 // If it's a critical error, maybe not, but user might want to try restarting app.
-                 // Let's allow exiting to main screen, maybe app will crash again if DB is broken, 
-                 // but at least they are not trapped.
-                 Navigator.of(context).pop();
-              },
-            ) 
-          : const BackButton(),
+        leading: widget.error != null
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  // Should we allow closing?
+                  // If it's a critical error, maybe not, but user might want to try restarting app.
+                  // Let's allow exiting to main screen, maybe app will crash again if DB is broken,
+                  // but at least they are not trapped.
+                  Navigator.of(context).pop();
+                },
+              )
+            : const BackButton(),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -1717,357 +1717,369 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ],
               _buildSectionTitle(l10n.backupAndRestore),
               const SizedBox(height: 16),
-          // Backup section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.backupAllNotes,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.backupAllNotesDescription,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isBackingUp ? null : _backupAllNotes,
-                      icon: _isBackingUp
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download),
-                      label: Text(
-                        _isBackingUp
-                            ? l10n.creatingBackup
-                            : l10n.backupAllNotes,
-                      ),
-                    ),
-                  ),
-                  if (_isBackingUp) ...[
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: _backupProgress,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_backupProgress * 100).toInt()}%',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Import section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.importBackup,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.importBackupDescription,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isImporting ? null : _importBackup,
-                      icon: _isImporting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.upload),
-                      label: Text(
-                        _isImporting ? l10n.importingBackup : l10n.importBackup,
-                      ),
-                    ),
-                  ),
-                  if (_isImporting) ...[
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: _importProgress,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_importProgress * 100).toInt()}%',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Raw Data Manager
-          const SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.build_circle_outlined),
-              title: Text(l10n.rawDataManagerTitle),
-              subtitle: Text(l10n.rawDataManagerSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const RawDataManagerScreen(),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Available undo options section
-          if (_availableRecoveries.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Available Undo Options',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ..._availableRecoveries.map(
-              (recovery) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.undo),
-                  title: Text('Database Backup'),
-                  subtitle: Column(
+              // Backup section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Created: ${recovery['date'] ?? ''}'),
-                      Text(_formatFileSize(recovery['size'] ?? 0)),
-                    ],
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'recover') {
-                        _recoverFromBackup(recovery);
-                      } else if (value == 'delete') {
-                        _deleteRecovery(recovery);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'recover',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.undo),
-                            const SizedBox(width: 8),
-                            Text('Undo Import'),
-                          ],
+                      Text(
+                        l10n.backupAllNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.backupAllNotesDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete),
-                            const SizedBox(width: 8),
-                            Text(l10n.delete),
-                          ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isBackingUp ? null : _backupAllNotes,
+                          icon: _isBackingUp
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download),
+                          label: Text(
+                            _isBackingUp
+                                ? l10n.creatingBackup
+                                : l10n.backupAllNotes,
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (_backupLogs.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.backupLogs,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(
+                      if (_isBackingUp) ...[
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(
+                          value: _backupProgress,
+                          backgroundColor: Theme.of(
                             context,
-                          ).colorScheme.outline.withValues(alpha: 0.3),
+                          ).colorScheme.surfaceContainerHighest,
                         ),
-                      ),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _backupLogs.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: SelectableText(
-                              _backupLogs[index],
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_backupProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
 
-          if (_importLogs.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.importLogs,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _importLogs.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: SelectableText(
-                              _importLogs[index],
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          if (_backups.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              l10n.previousBackups,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ..._backups.map(
-              (backup) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.archive),
-                  title: Text(backup['name'] ?? l10n.backup),
-                  subtitle: Column(
+              const SizedBox(height: 16),
+
+              // Import section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(backup['date'] ?? ''),
-                      Text(_formatFileSize(backup['size'] ?? 0)),
-                    ],
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'save') {
-                        _saveBackupAgain(backup);
-                      } else if (value == 'delete') {
-                        _deleteBackup(backup);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'save',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.download),
-                            const SizedBox(width: 8),
-                            Text(l10n.saveAgain),
-                          ],
+                      Text(
+                        l10n.importBackup,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.importBackupDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete),
-                            const SizedBox(width: 8),
-                            Text(l10n.delete),
-                          ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isImporting ? null : _importBackup,
+                          icon: _isImporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.upload),
+                          label: Text(
+                            _isImporting
+                                ? l10n.importingBackup
+                                : l10n.importBackup,
+                          ),
                         ),
                       ),
+                      if (_isImporting) ...[
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(
+                          value: _importProgress,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_importProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
-            ),
-          ],
-        ],
+
+              // Raw Data Manager
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.build_circle_outlined),
+                  title: Text(l10n.rawDataManagerTitle),
+                  subtitle: Text(l10n.rawDataManagerSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const RawDataManagerScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Available undo options section
+              if (_availableRecoveries.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Available Undo Options',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._availableRecoveries.map(
+                  (recovery) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.undo),
+                      title: Text('Database Backup'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Created: ${recovery['date'] ?? ''}'),
+                          Text(_formatFileSize(recovery['size'] ?? 0)),
+                        ],
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'recover') {
+                            _recoverFromBackup(recovery);
+                          } else if (value == 'delete') {
+                            _deleteRecovery(recovery);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'recover',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.undo),
+                                const SizedBox(width: 8),
+                                Text('Undo Import'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete),
+                                const SizedBox(width: 8),
+                                Text(l10n.delete),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (_backupLogs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.backupLogs,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _backupLogs.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: SelectableText(
+                                  _backupLogs[index],
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              if (_importLogs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.importLogs,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _importLogs.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: SelectableText(
+                                  _importLogs[index],
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (_backups.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  l10n.previousBackups,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._backups.map(
+                  (backup) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.archive),
+                      title: Text(backup['name'] ?? l10n.backup),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(backup['date'] ?? ''),
+                          Text(_formatFileSize(backup['size'] ?? 0)),
+                        ],
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'save') {
+                            _saveBackupAgain(backup);
+                          } else if (value == 'delete') {
+                            _deleteBackup(backup);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'save',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.download),
+                                const SizedBox(width: 8),
+                                Text(l10n.saveAgain),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete),
+                                const SizedBox(width: 8),
+                                Text(l10n.delete),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2168,7 +2180,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       return '';
     }
   }
-
 
   Widget _buildSectionTitle(String title) {
     return Text(
