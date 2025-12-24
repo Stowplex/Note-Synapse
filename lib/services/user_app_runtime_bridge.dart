@@ -201,10 +201,6 @@ class UserAppRuntimeBridge {
              const result = await window.flutter_inappwebview.callHandler('updateNotes', notes ?? []);
              return result;
           },
-          modifyNote: async (noteId, modification) => {
-             const result = await window.flutter_inappwebview.callHandler('modifyNote', noteId, modification);
-             return result;
-          },
           openConversations: async (notes = [], immersiveMode = false) => {
             const result = await window.flutter_inappwebview.callHandler('openConversations', notes ?? [], immersiveMode === true);
             return result;
@@ -778,46 +774,22 @@ class UserAppRuntimeBridge {
           LoggerService.debug(
             '[Synapse.updateNotes] Called with ${notesData.length} note updates',
           );
-          final updatedCount = await _updateNotesFromJavaScript(notesData);
-          final duration = DateTime.now().difference(startTime);
-          LoggerService.debug(
-            '[Synapse.updateNotes] Success - Updated $updatedCount notes in ${duration.inMilliseconds}ms',
-          );
-          return {'success': true, 'updatedCount': updatedCount};
-        } catch (e) {
-          final duration = DateTime.now().difference(startTime);
-          LoggerService.error(
-            '[Synapse.updateNotes] Error after ${duration.inMilliseconds}ms: $e',
-            error: e,
-          );
-          return {'success': false, 'error': e.toString()};
-        }
-      },
-    );
 
-    controller.addJavaScriptHandler(
-      handlerName: 'modifyNote',
-      callback: (args) async {
-        final startTime = DateTime.now();
-        try {
-          if (args.length < 2) {
-            return {
-              'success': false,
-              'error': 'Missing arguments. Required: noteId, modification',
-            };
-          }
-          final noteId = args[0] as String;
-          final modification = args[1] as Map<String, dynamic>;
-
-          LoggerService.debug('[Synapse.modifyNote] Request for $noteId');
-
-          // Check approval
+          // Check approval before any modifications
           if (!_sessionApprovedModifications) {
             if (onModificationRequest != null) {
+              // Build a summary of all modifications for approval
+              final summaryMod = <String, dynamic>{
+                'noteCount': notesData.length,
+                'noteIds': notesData
+                    .whereType<Map<String, dynamic>>()
+                    .map((n) => n['id']?.toString() ?? 'unknown')
+                    .toList(),
+              };
               final approved = await onModificationRequest!(
                 this,
-                noteId,
-                modification,
+                'batch-update',
+                summaryMod,
               );
               if (!approved) {
                 return {'success': false, 'error': 'User denied modification.'};
@@ -830,17 +802,18 @@ class UserAppRuntimeBridge {
             }
           }
 
-          // Execute
-          final service = NoteModificationService();
-          await service.applyModifications(noteId, modification);
-
+          final updatedCount = await _updateNotesFromJavaScript(notesData);
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(
-            '[Synapse.modifyNote] Success - Modified $noteId in ${duration.inMilliseconds}ms',
+            '[Synapse.updateNotes] Success - Updated $updatedCount notes in ${duration.inMilliseconds}ms',
           );
-          return {'success': true, 'message': 'Note modified successfully'};
+          return {'success': true, 'updatedCount': updatedCount};
         } catch (e) {
-          LoggerService.error('[Synapse.modifyNote] Error: $e', error: e);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.updateNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1587,6 +1560,8 @@ class UserAppRuntimeBridge {
 
   Future<int> _updateNotesFromJavaScript(List<dynamic> notesData) async {
     var updatedCount = 0;
+    final modificationService = NoteModificationService();
+
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
 
@@ -1605,12 +1580,38 @@ class UserAppRuntimeBridge {
           continue;
         }
 
-        final updatedNote = await _mergeNoteData(existingNote, noteData);
-        await appProvider.updateNote(updatedNote);
-        updatedCount++;
-        LoggerService.debug(
-          '[Synapse.updateNotes] Updated note: ${updatedNote.id} - ${updatedNote.title}',
-        );
+        // Check for granular modification mode
+        if (noteData.containsKey('modification') &&
+            noteData['modification'] is Map<String, dynamic>) {
+          // Use NoteModificationService for granular updates
+          final modification = noteData['modification'] as Map<String, dynamic>;
+
+          // Process attachments in modification if present
+          if (modification.containsKey('attachments')) {
+            final attMod = modification['attachments'] as Map<String, dynamic>?;
+            if (attMod != null && attMod.containsKey('added')) {
+              final addedPaths = <String>[];
+              for (final att in (attMod['added'] as List? ?? [])) {
+                addedPaths.add(await _processAttachmentFromJavaScript(att));
+              }
+              modification['attachments'] = {...attMod, 'added': addedPaths};
+            }
+          }
+
+          await modificationService.applyModifications(id, modification);
+          updatedCount++;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Applied granular modification to note: $id',
+          );
+        } else {
+          // Full replacement mode (existing behavior)
+          final updatedNote = await _mergeNoteData(existingNote, noteData);
+          await appProvider.updateNote(updatedNote);
+          updatedCount++;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Updated note: ${updatedNote.id} - ${updatedNote.title}',
+          );
+        }
       } catch (e) {
         LoggerService.error(
           '[Synapse.updateNotes] Error updating note $id: $e',

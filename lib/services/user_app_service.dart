@@ -879,12 +879,6 @@ IMPORTANT:
       * data: object with either `text` (UTF-8 string) or `binary` (base64 string, data URI supported)
       * mimeType: string - MIME type describing the data (e.g., 'image/png')
     Response format: {success: boolean, uri?: string, error?: string}
-   - Synapse.saveNotes(notes: array) - Save new notes to the database (IDs and timestamps generated automatically)
-     Param format: array of note objects with the following structure:
-       - title: string (required) - Note title
-       - content: string (required) - Note content
-       - type: string (required) - 'note' or 'task'
-       - subNotes: array (optional) - Array of subnote objects with:
    - Synapse.saveNotes(notes: array) - Create or save new notes to the database
       Param format: array of objects. Each object represents a note.
       Properties for note object:
@@ -903,33 +897,40 @@ IMPORTANT:
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
       Response format: {success: boolean, savedCount?: number, error?: string}
-    - Synapse.updateNotes(notes: array) - Update existing notes in the database
-      Param format: array of objects. Each object MUST contain an 'id' field and fields to update.
-      Properties:
+    - Synapse.updateNotes(notes: array) - Update existing notes in the database (REQUIRES USER APPROVAL)
+      Param format: array of objects. Each object MUST contain an 'id' field.
+      
+      MODES OF OPERATION:
+      1. Full Replacement Mode: Include any properties from saveNotes to replace existing values.
+      2. Granular Modification Mode: Include a 'modification' object for precise add/remove/append operations.
+      
+      Properties for Full Replacement Mode:
          * id: string (required) - ID of the note to update
-         * ... any other properties from saveNotes can be included to replace existing values
-      Behavior:
-         * Fields present in the object will replace existing values.
-         * Fields omitted will remain unchanged.
-         * Lists (subNotes, tags, attachments) are replaced entirely if provided.
+         * title, content, type, subNotes, tags, attachments, etc. from saveNotes
+         * Fields present will replace existing values; omitted fields remain unchanged
+         * Lists (subNotes, tags, attachments) are replaced entirely if provided
+      
+      Properties for Granular Modification Mode:
+         * id: string (required) - ID of the note to update
+         * modification: object (required for this mode) - The modification schema:
+           {
+             "content": { "action": "append"|"prepend"|"replace"|"no-op", "text": "..." },
+             "title": { "new_title": "..." },
+             "tags": { "added": ["tag1"], "removed": ["tag2"] },
+             "link": [{ "relation": "...", "target": "target_note_id" }],
+             "attachments": { "added": [...], "removed": ["/path/to/file"] },
+             "subnote": { 
+               "added": [{"name": "Task name", "content": "Details"}], 
+               "removed": ["subnote_id"] 
+             }
+           }
+      
+      ATTACHMENT FORMATS (for both 'attachments' list in replacement mode and 'attachments.added' in modification mode):
+         * File path string: existing path in database (e.g., "/path/to/file.pdf")
+         * synapsetemp URI: URI returned from Synapse.saveTemp (e.g., "synapsetemp:///image.png")
+         * Base64 object: { type: 'base64', data: 'data:mime;base64,...', fileName: 'name.ext' }
+      
       Response format: {success: boolean, updatedCount?: number, error?: string}
-    - Synapse.modifyNote(noteId: string, modification: object) - Modifies specific parts of a note. Supports content append/prepend/replace.
-      Param format:
-        - noteId: string (required) - ID of the note to modify
-        - modification: object (required) - The modification object.
-      Schema for modification object:
-        {
-          "content": { "action": "append"|"prepend"|"replace"|"no-op", "text": "..." },
-          "title": { "new_title": "..." },
-          "tags": { "added": ["tag1"], "removed": ["tag2"] },
-          "link": [{ "relation": "...", "target": "target_note_id" }],
-          "attachments": { "added": ["/path/to/file"], "removed": ["/path/to/file"] },
-          "subnote": { 
-             "added": [{"name": "Task name", "content": "Details"}], 
-             "removed": ["subnote_id"] 
-          }
-        }
-      Response format: {success: boolean, message?: string, error?: string}
    - Synapse.deleteNotes(noteIds: array) - Delete notes from the database by their IDs
      Param format: array of note IDs (strings) - List of UUID strings identifying notes to delete
      Response format: {success: boolean, deletedCount?: number, error?: string}
@@ -1036,6 +1037,51 @@ IMPORTANT:
        completionPercentage: 0.0,
        pinned: true,
        isArchived: false
+     }
+   ]);
+   ```
+
+   CORRECT updateNotes Usage Examples:
+   ```javascript
+   // Full replacement mode - replace specific fields (requires user approval)
+   const result1 = await Synapse.updateNotes([
+     { id: 'note-id-123', title: 'Updated Title', tags: ['new-tag'] }
+   ]);
+   if (result1.success) {
+     console.log(`Updated \${result1.updatedCount} note(s)`);
+   }
+   
+   // Full replacement mode with attachment via synapsetemp URI
+   const tempImage = await Synapse.saveTemp({ binary: 'data:image/png;base64,iVBOR...' }, 'image/png');
+   if (tempImage.success) {
+     await Synapse.updateNotes([
+       { id: 'note-id-123', attachments: [tempImage.uri, '/existing/file.pdf'] }
+     ]);
+   }
+   
+   // Granular modification mode - append content, add/remove tags
+   const result2 = await Synapse.updateNotes([
+     {
+       id: 'note-id-123',
+       modification: {
+         content: { action: 'append', text: '\\n\\n## New Section\\nAdded content here.' },
+         tags: { added: ['important'], removed: ['draft'] },
+         subnote: { added: [{ name: 'New Task', content: 'Task details' }] }
+       }
+     }
+   ]);
+   
+   // Granular modification mode - add attachments without replacing existing
+   const result3 = await Synapse.updateNotes([
+     {
+       id: 'note-id-456',
+       modification: {
+         attachments: { 
+           added: ['/path/to/new-file.pdf', { type: 'base64', data: 'data:image/jpeg;base64,...', fileName: 'photo.jpg' }],
+           removed: ['/path/to/old-file.pdf']
+         },
+         link: [{ relation: 'related', target: 'other-note-id' }]
+       }
      }
    ]);
    ```
