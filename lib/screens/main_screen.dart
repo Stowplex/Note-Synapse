@@ -20,8 +20,6 @@ import 'share_screen.dart';
 import 'settings_screen.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
-import '../services/agent_service.dart';
-import 'agent_trace_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -156,15 +154,6 @@ class _MainScreenState extends State<MainScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.auto_awesome),
-                        title: const Text('Start Agent'),
-                        subtitle: const Text('Delegate a complex objective'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _showAgentDialog(context);
-                        },
-                      ),
                       ListTile(
                         leading: const Icon(Icons.psychology),
                         title: Text(l10n.newAiAction),
@@ -802,43 +791,6 @@ class _MainScreenState extends State<MainScreen> {
     if (bytes < 1024 * 1024 * 1024)
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-
-  void _showAgentDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Start Agent Task'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'What should I do? (e.g. "Research architecture")',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                Navigator.pop(context);
-                context.read<AgentService>().startObjective(controller.text);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
-                );
-              }
-            },
-            child: const Text('Start'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildNavItem(
