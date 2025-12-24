@@ -1672,16 +1672,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       orElse: () => widget.note,
     );
 
+    // We no longer automatically download images here to prevent unwanted data usage.
+    RemoteImageDownloadReport? downloadReport;
+    /*
     final remoteImages = RemoteImageUtils.extractRemoteImages(
       _codeController.text,
     );
-    RemoteImageDownloadReport? downloadReport;
     if (remoteImages.isNotEmpty) {
       downloadReport = await MediaAttachmentService.downloadRemoteImages(
         noteId: currentNote.id,
         imageUrls: remoteImages.map((image) => image.url),
       );
     }
+    */
 
     final updatedNote = currentNote.copyWith(
       title: _titleController.text.trim().isEmpty

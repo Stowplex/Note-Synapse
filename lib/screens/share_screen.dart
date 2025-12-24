@@ -1129,36 +1129,49 @@ class _ShareScreenState extends State<ShareScreen> {
     });
 
     try {
-      String content;
-      List<String> tags = ['shared', 'image'];
+      // Use ShareService to process the image content (copies to storage)
+      final result = await ShareService.processSharedContent({
+        'action': 'SEND',
+        'type': 'image/jpeg', // Trigger image processing path
+        'filePath': filePath,
+        'fileName': fileName,
+      });
+
+      if (result['success'] != true) {
+        setState(() {
+          _isExtracting = false;
+          _error = result['error'] ?? 'Could not process image file';
+        });
+        return;
+      }
+
+      Note note = result['note'] as Note;
+      final relativePath = note.attachmentPaths.first;
 
       if (useAI) {
         // Let AI service handle API key validation
 
-        // Extract content using AI
-        final result = await AIService.extractContentFromImage(filePath);
-        if (result['success'] == true) {
-          content = result['content'] ?? 'Image content extracted with AI';
-          tags.add('ai_processed');
-        } else {
-          content = 'Image shared from ${fileName ?? 'unknown source'}';
-        }
-      } else {
-        // Basic image note
-        content = 'Image shared from ${fileName ?? 'unknown source'}';
-      }
+        // Extract content using AI - use the saved file path
+        final absolutePath = await FileUtils.getFullFilePath(
+          relativePath,
+          true,
+        );
 
-      final note = Note(
-        id: const Uuid().v4(),
-        title:
-            '${l10n.sharedImage} - ${DateTime.now().toString().substring(0, 16)}',
-        content: content,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
-        tags: tags,
-      );
+        final aiResult = await AIService.extractContentFromImage(absolutePath);
+        if (aiResult['success'] == true) {
+          // Update the note with AI-extracted content
+          note = Note(
+            id: note.id,
+            title: note.title,
+            content: aiResult['content'] ?? note.content,
+            type: note.type,
+            createdAt: note.createdAt,
+            updatedAt: DateTime.now(),
+            attachmentPaths: note.attachmentPaths,
+            tags: [...note.tags, 'ai_processed'],
+          );
+        }
+      }
 
       setState(() {
         _applyPreparedNote(note);
@@ -1168,6 +1181,7 @@ class _ShareScreenState extends State<ShareScreen> {
       // Initialize the text controllers with the extracted note's data
       _titleController.text = note.title;
       _tagsController.text = note.tags.join(', ');
+      _selectedTags.clear();
       _selectedTags.addAll(note.tags);
     } catch (e) {
       setState(() {

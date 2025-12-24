@@ -421,7 +421,7 @@ class _InteractiveCheckboxMarkdownState
           Widget buildFallback() {
             if (kDebugMode) {
               debugPrint(
-                'InteractiveCheckboxMarkdown: Building fallback for \$url',
+                'InteractiveCheckboxMarkdown: Building fallback for $url',
               );
             }
             if (SynapseTempUtils.isSynapseTempUri(url)) {
