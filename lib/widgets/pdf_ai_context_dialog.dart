@@ -50,185 +50,206 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
     debugPrint(
       'PdfAiContextDialog: totalPages=${widget.totalPages}, outline=${widget.outline?.length ?? 0} items, hasOutline=$hasOutline',
     );
-    if (widget.outline != null && widget.outline!.isNotEmpty) {
-      debugPrint('First outline item: "${widget.outline!.first.title}"');
-      for (int i = 0; i < widget.outline!.length; i++) {
-        debugPrint('Outline[$i]: "${widget.outline![i].title}"');
-      }
-    }
 
-    return AlertDialog(
-      title: const Text('Configure AI Context'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Select which pages to include when AI processes this PDF:',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Title
+              Text(
+                'Configure AI Context',
+                style: theme.textTheme.headlineSmall,
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // All Document option
-            RadioListTile<String>(
-              title: const Text('All Document'),
-              subtitle: Text('${widget.totalPages} pages'),
-              value: 'all',
-              groupValue: _mode,
-              onChanged: (value) => setState(() => _mode = value!),
-              contentPadding: EdgeInsets.zero,
-            ),
-
-            // Window option
-            RadioListTile<String>(
-              title: const Text('Window Around Current Page'),
-              subtitle: Text(
-                '$_windowSize pages centered on where you are reading',
-              ),
-              value: 'window',
-              groupValue: _mode,
-              onChanged: (value) => setState(() => _mode = value!),
-              contentPadding: EdgeInsets.zero,
-            ),
-
-            // Window size slider
-            if (_mode == 'window') ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: Row(
-                  children: [
-                    const Text('Pages:'),
-                    Expanded(
-                      child: Slider(
-                        value: _windowSize.toDouble(),
-                        min: 2,
-                        max: 20,
-                        divisions: 9,
-                        label: '$_windowSize',
-                        onChanged: (value) =>
-                            setState(() => _windowSize = value.round()),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        '$_windowSize',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                    ),
-                  ],
+              // Description
+              Text(
+                'Select which pages to include when AI processes this PDF:',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            ],
+              const SizedBox(height: 16),
 
-            // Chapters option (only if outline exists)
-            if (hasOutline) ...[
-              RadioListTile<String>(
-                title: const Text('Selected Chapters'),
-                subtitle: Text(
-                  _selectedChapters.isEmpty
-                      ? 'Choose specific sections'
-                      : '${_selectedChapters.length} chapter(s) selected',
-                ),
-                value: 'chapters',
-                groupValue: _mode,
-                onChanged: (value) => setState(() => _mode = value!),
-                contentPadding: EdgeInsets.zero,
-              ),
+              // Scrollable content
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // All Document option
+                      RadioListTile<String>(
+                        title: const Text('All Document'),
+                        subtitle: Text('${widget.totalPages} pages'),
+                        value: 'all',
+                        groupValue: _mode,
+                        onChanged: (value) => setState(() => _mode = value!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
 
-              if (_mode == 'chapters') ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 250,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: theme.dividerColor),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      children: _buildChapterCheckboxes(widget.outline!, 0),
-                    ),
+                      // Window option
+                      RadioListTile<String>(
+                        title: const Text('Window Around Current Page'),
+                        subtitle: Text(
+                          '$_windowSize pages centered on where you are reading',
+                        ),
+                        value: 'window',
+                        groupValue: _mode,
+                        onChanged: (value) => setState(() => _mode = value!),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+
+                      // Window size slider
+                      if (_mode == 'window') ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16),
+                          child: Row(
+                            children: [
+                              const Text('Pages:'),
+                              Expanded(
+                                child: Slider(
+                                  value: _windowSize.toDouble(),
+                                  min: 2,
+                                  max: 20,
+                                  divisions: 9,
+                                  label: '$_windowSize',
+                                  onChanged: (value) => setState(
+                                    () => _windowSize = value.round(),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 40,
+                                child: Text(
+                                  '$_windowSize',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyLarge,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // Chapters option (only if outline exists)
+                      if (hasOutline) ...[
+                        RadioListTile<String>(
+                          title: const Text('Selected Chapters'),
+                          subtitle: Text(
+                            _selectedChapters.isEmpty
+                                ? 'Choose specific sections'
+                                : '${_selectedChapters.length} chapter(s) selected',
+                          ),
+                          value: 'chapters',
+                          groupValue: _mode,
+                          onChanged: (value) => setState(() => _mode = value!),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+
+                        if (_mode == 'chapters') ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: theme.dividerColor),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: _buildChapterCheckboxes(
+                                widget.outline!,
+                                0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+
+                      if (!hasOutline && _mode == 'chapters') ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.errorContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.warning,
+                                color: theme.colorScheme.onErrorContainer,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'This PDF has no outline/table of contents',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onErrorContainer,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
-            ],
+              ),
 
-            if (!hasOutline && _mode == 'chapters') ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning,
-                      color: theme.colorScheme.onErrorContainer,
+              // Actions
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.cancel),
+                  ),
+                  if (widget.currentConfig != null)
+                    TextButton(
+                      onPressed: () {
+                        widget.onSave(null); // Reset to default
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Reset to Default'),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This PDF has no outline/table of contents',
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  FilledButton(
+                    onPressed: () {
+                      final config = _mode == 'all'
+                          ? null // null means all document (default)
+                          : PdfAiContextConfig(
+                              mode: _mode,
+                              windowSize: _mode == 'window'
+                                  ? _windowSize
+                                  : null,
+                              selectedChapters: _mode == 'chapters'
+                                  ? _selectedChapters.toList()
+                                  : null,
+                            );
+                      widget.onSave(config);
+                      Navigator.pop(context);
+                    },
+                    child: Text(l10n.save),
+                  ),
+                ],
               ),
             ],
-          ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.cancel),
-        ),
-        if (widget.currentConfig != null)
-          TextButton(
-            onPressed: () {
-              widget.onSave(null); // Reset to default
-              Navigator.pop(context);
-            },
-            child: const Text('Reset to Default'),
-          ),
-        FilledButton(
-          onPressed: () {
-            final config = _mode == 'all'
-                ? null // null means all document (default)
-                : PdfAiContextConfig(
-                    mode: _mode,
-                    windowSize: _mode == 'window' ? _windowSize : null,
-                    selectedChapters: _mode == 'chapters'
-                        ? _selectedChapters.toList()
-                        : null,
-                  );
-            widget.onSave(config);
-            Navigator.pop(context);
-          },
-          child: Text(l10n.save),
-        ),
-      ],
     );
   }
 
   List<Widget> _buildChapterCheckboxes(List<PdfOutlineNode> nodes, int depth) {
-    debugPrint(
-      '_buildChapterCheckboxes called with ${nodes.length} nodes at depth $depth',
-    );
     final widgets = <Widget>[];
 
     for (final node in nodes) {
-      debugPrint('Adding checkbox for: "${node.title}"');
       widgets.add(
         CheckboxListTile(
           title: Text(
@@ -255,7 +276,6 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
       }
     }
 
-    debugPrint('_buildChapterCheckboxes returning ${widgets.length} widgets');
     return widgets;
   }
 }
