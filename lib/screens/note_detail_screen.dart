@@ -2235,17 +2235,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        SelectableText(
                           fileName,
                           style: TextStyle(
                             color: fileExists ? null : Colors.grey,
                             fontSize: 16,
                           ),
                           maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        SelectableText(
                           fileExists
                               ? _formatFileSize(file.lengthSync())
                               : 'File not found',
