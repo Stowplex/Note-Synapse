@@ -2296,133 +2296,113 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             minHeight: 40,
                           ),
                         ),
-                      ] else if (fileExists)
-                        IconButton(
-                          icon: const Icon(Icons.open_in_new),
-                          onPressed: () =>
-                              FileUtils.openFile(attachmentPath, context),
-                          tooltip: 'Open with default application',
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                        ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.psychology,
-                          color:
-                              (_attachmentsMap[attachmentPath]
-                                      ?.includeInAIContext ??
-                                  true)
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey,
-                        ),
-                        onPressed: () async {
-                          final currentAttachment =
-                              _attachmentsMap[attachmentPath];
-                          final currentStatus =
-                              currentAttachment?.includeInAIContext ?? true;
-                          final newStatus = !currentStatus;
-
-                          LoggerService.debug(
-                            'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
-                          );
-
-                          // Optimistic update
-                          setState(() {
-                            if (currentAttachment != null) {
-                              _attachmentsMap[attachmentPath] =
-                                  currentAttachment.copyWith(
-                                    includeInAIContext: newStatus,
-                                  );
-                            }
-                          });
-
-                          try {
-                            if (currentAttachment != null) {
-                              await _databaseService.updateAttachmentAIContext(
-                                widget.note.id,
-                                currentAttachment
-                                    .filePath, // Use the DB stored path
-                                newStatus,
-                              );
-                            }
-                          } catch (e) {
-                            LoggerService.error(
-                              'Failed to update database: $e',
-                            );
-                            // Revert optimistic update on error
-                            setState(() {
-                              if (currentAttachment != null) {
-                                _attachmentsMap[attachmentPath] =
-                                    currentAttachment;
-                              }
-                            });
-                          }
-
-                          // Reload to ensure consistency
-                          await _loadAttachments();
-                        },
-                        tooltip: 'Include in AI Context',
+                      ],
+                      // Unified popup menu for all attachments
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        tooltip: 'Options',
                         padding: const EdgeInsets.all(8),
                         constraints: const BoxConstraints(
                           minWidth: 40,
                           minHeight: 40,
                         ),
-                      ),
-                      // PDF-specific options menu
-                      if (fileName.toLowerCase().endsWith('.pdf'))
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          tooltip: 'PDF Options',
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          onSelected: (value) async {
-                            if (value == 'configure_ai_range') {
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'open':
+                              FileUtils.openFile(attachmentPath, context);
+                              break;
+                            case 'toggle_ai':
+                              await _toggleAiContext(attachmentPath);
+                              break;
+                            case 'configure_ai_range':
                               await _showPdfAiContextDialog(attachmentPath);
-                            }
-                          },
-                          itemBuilder: (context) => [
+                              break;
+                            case 'delete':
+                              await _removeAttachment(
+                                attachmentPath,
+                                currentNote,
+                              );
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) {
+                          final includeInAI =
+                              _attachmentsMap[attachmentPath]
+                                  ?.includeInAIContext ??
+                              true;
+                          final isPdf = fileName.toLowerCase().endsWith('.pdf');
+                          final hasCustomAiRange =
+                              _attachmentsMap[attachmentPath]
+                                  ?.getAiContextConfig() !=
+                              null;
+
+                          return [
+                            if (fileExists && !isAudioFile)
+                              const PopupMenuItem<String>(
+                                value: 'open',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.open_in_new),
+                                    SizedBox(width: 12),
+                                    Text('Open'),
+                                  ],
+                                ),
+                              ),
                             PopupMenuItem<String>(
-                              value: 'configure_ai_range',
+                              value: 'toggle_ai',
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.tune,
-                                    color:
-                                        _attachmentsMap[attachmentPath]
-                                                ?.getAiContextConfig() !=
-                                            null
+                                    includeInAI
+                                        ? Icons.check_box
+                                        : Icons.check_box_outline_blank,
+                                    color: includeInAI
                                         ? Theme.of(context).colorScheme.primary
                                         : null,
                                   ),
                                   const SizedBox(width: 12),
+                                  const Text('Include in AI Context'),
+                                ],
+                              ),
+                            ),
+                            if (isPdf)
+                              PopupMenuItem<String>(
+                                value: 'configure_ai_range',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tune,
+                                      color: hasCustomAiRange
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      hasCustomAiRange
+                                          ? 'Edit AI Context Range'
+                                          : 'Configure AI Context Range',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete, color: Colors.red),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    _attachmentsMap[attachmentPath]
-                                                ?.getAiContextConfig() !=
-                                            null
-                                        ? 'Edit AI Context Range'
-                                        : 'Configure AI Context Range',
+                                    l10n.removeAttachmentTooltip,
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () =>
-                            _removeAttachment(attachmentPath, currentNote),
-                        tooltip: l10n.removeAttachmentTooltip,
-                        padding: const EdgeInsets.all(8),
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
+                          ];
+                        },
                       ),
                     ],
                   ),
@@ -2564,6 +2544,46 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _toggleAiContext(String attachmentPath) async {
+    final currentAttachment = _attachmentsMap[attachmentPath];
+    final currentStatus = currentAttachment?.includeInAIContext ?? true;
+    final newStatus = !currentStatus;
+
+    LoggerService.debug(
+      'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
+    );
+
+    // Optimistic update
+    setState(() {
+      if (currentAttachment != null) {
+        _attachmentsMap[attachmentPath] = currentAttachment.copyWith(
+          includeInAIContext: newStatus,
+        );
+      }
+    });
+
+    try {
+      if (currentAttachment != null) {
+        await _databaseService.updateAttachmentAIContext(
+          widget.note.id,
+          currentAttachment.filePath,
+          newStatus,
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Failed to update database: $e');
+      // Revert optimistic update on error
+      setState(() {
+        if (currentAttachment != null) {
+          _attachmentsMap[attachmentPath] = currentAttachment;
+        }
+      });
+    }
+
+    // Reload to ensure consistency
+    await _loadAttachments();
   }
 
   Future<void> _showPdfAiContextDialog(String attachmentPath) async {
