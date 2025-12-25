@@ -2569,17 +2569,43 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final attachment = _attachmentsMap[attachmentPath];
     if (attachment == null) return;
 
-    // For now, show the dialog with basic info since we don't have the PDF loaded here
-    // We'll need to get total pages and outline
     final currentConfig = attachment.getAiContextConfig();
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Load the PDF to get outline and page count
+    PdfDocument? pdfDocument;
+    List<PdfOutlineNode>? outline;
+    int totalPages = 0;
+
+    try {
+      final absPath = await attachment.getAbsolutePath();
+      pdfDocument = await PdfDocument.openFile(absPath);
+      totalPages = pdfDocument.pages.length;
+      outline = await pdfDocument.loadOutline();
+    } catch (e) {
+      LoggerService.error('Failed to load PDF for AI context dialog: $e');
+    }
+
+    // Close loading indicator
+    if (mounted) Navigator.pop(context);
+    if (!mounted) {
+      pdfDocument?.dispose();
+      return;
+    }
 
     await showDialog<void>(
       context: context,
-      builder: (context) => PdfAiContextDialog(
+      builder: (dialogContext) => PdfAiContextDialog(
         attachment: attachment,
         currentConfig: currentConfig,
-        outline: null, // PDF not loaded in this context, outline unavailable
-        totalPages: 0, // Will show as unknown
+        outline: outline,
+        totalPages: totalPages,
         onSave: (config) async {
           // Build new metadata
           final currentMetadata = Map<String, dynamic>.from(
@@ -2602,6 +2628,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         },
       ),
     );
+
+    // Dispose PDF document after dialog is closed
+    pdfDocument?.dispose();
   }
 
   Future<void> _addAttachment() async {

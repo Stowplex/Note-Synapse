@@ -3219,14 +3219,40 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     if (attachment == null) return;
 
     final currentConfig = attachment.getAiContextConfig();
-    final outline = _pdfOutlines[_activeAttachmentPath];
-    final totalPages = _pdfTotalPages[_activeAttachmentPath] ?? 0;
 
-    if (!mounted) return;
+    // Try to get cached outline and page count first
+    var outline = _pdfOutlines[_activeAttachmentPath];
+    var totalPages = _pdfTotalPages[_activeAttachmentPath] ?? 0;
+
+    // If not cached, load the PDF document
+    PdfDocument? loadedDocument;
+    if (outline == null || totalPages == 0) {
+      try {
+        final absPath = await attachment.getAbsolutePath();
+        // Check if we have a cached document
+        final cachedDoc = _pdfDocuments[_activeAttachmentPath];
+        if (cachedDoc != null) {
+          totalPages = cachedDoc.pages.length;
+          outline = await cachedDoc.loadOutline();
+        } else {
+          // Load fresh document
+          loadedDocument = await PdfDocument.openFile(absPath);
+          totalPages = loadedDocument.pages.length;
+          outline = await loadedDocument.loadOutline();
+        }
+      } catch (e) {
+        LoggerService.error('Failed to load PDF for AI context dialog: $e');
+      }
+    }
+
+    if (!mounted) {
+      loadedDocument?.dispose();
+      return;
+    }
 
     await showDialog<void>(
       context: context,
-      builder: (context) => PdfAiContextDialog(
+      builder: (dialogContext) => PdfAiContextDialog(
         attachment: attachment!,
         currentConfig: currentConfig,
         outline: outline,
@@ -3259,6 +3285,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         },
       ),
     );
+
+    // Dispose loaded document if we created one
+    loadedDocument?.dispose();
   }
 
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
