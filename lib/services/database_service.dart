@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 31;
+  static const int DATABASE_VERSION = 32;
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -121,6 +121,7 @@ class DatabaseService {
         isRelativePath INTEGER NOT NULL DEFAULT 0, -- Whether path is relative to app dir
         createdAt INTEGER NOT NULL, -- Creation timestamp
         includeInAIContext INTEGER NOT NULL DEFAULT 1, -- Whether to include in AI context
+        metadata TEXT, -- JSON storage for attachment-specific data (bookmarks, AI context config, etc.)
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
@@ -502,6 +503,11 @@ class DatabaseService {
     31: MigrationStep(
       description: 'Create notes_fts virtual table and tag_ai_configs table',
       execute: _migrateToVersion31,
+    ),
+    32: MigrationStep(
+      description:
+          'Add metadata column to attachments table for PDF bookmarks and AI context config',
+      execute: _migrateToVersion32,
     ),
   };
 
@@ -1129,6 +1135,35 @@ class DatabaseService {
     }
   }
 
+  static Future<void> _migrateToVersion32(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 32: Adding metadata column to attachments table',
+    );
+
+    try {
+      // Check if column already exists
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any((column) => column['name'] == 'metadata');
+
+      if (!hasColumn) {
+        await db.execute('ALTER TABLE attachments ADD COLUMN metadata TEXT');
+        LoggerService.info(
+          'Successfully added metadata column to attachments table',
+        );
+      } else {
+        LoggerService.info(
+          'metadata column already exists in attachments table',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error in migration to version 32: $e', error: e);
+      rethrow;
+    }
+  }
+
   // Migrate existing conversation data to new structure
 
   // Migration helper method to create initial revisions for existing apps
@@ -1573,6 +1608,32 @@ class DatabaseService {
       where: 'noteId = ? AND filePath = ?',
       whereArgs: [noteId, filePath],
     );
+  }
+
+  /// Updates the metadata JSON for a specific attachment
+  Future<void> updateAttachmentMetadata(
+    String attachmentId,
+    Map<String, dynamic>? metadata,
+  ) async {
+    final db = await database;
+    await db.update(
+      'attachments',
+      {'metadata': metadata != null ? jsonEncode(metadata) : null},
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
+  }
+
+  /// Gets an attachment by its ID
+  Future<Attachment?> getAttachmentById(String attachmentId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
+    if (maps.isEmpty) return null;
+    return Attachment.fromDatabase(maps.first);
   }
 
   /// Gets all attachments for a specific note

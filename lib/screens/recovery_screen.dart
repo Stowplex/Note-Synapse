@@ -480,7 +480,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       }
 
       final inputStream = InputFileStream(backupFilePath);
-      final archive = ZipDecoder().decodeBuffer(inputStream);
+      final archive = ZipDecoder().decodeStream(inputStream);
 
       // Step 2: Extract the zip to a temp directory
       final extractDir = Directory('${tempDir.path}/extract_$timestamp');

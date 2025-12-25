@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +18,7 @@ import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
+import '../models/attachment.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
 import '../models/generation_context.dart';
@@ -111,7 +112,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
-  final Map<String, PDFViewController> _pdfControllers = {};
+  final Map<String, PdfViewerController> _pdfViewerControllers = {};
+  final Map<String, PdfDocument> _pdfDocuments = {};
+  final Map<String, List<PdfOutlineNode>> _pdfOutlines = {};
   final Map<String, TransformationController> _imageTransforms = {};
 
   final ConversationAiEngine _aiEngine = const ConversationAiEngine();
@@ -2898,8 +2901,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 availableHeight: availableHeight,
                 currentPageMap: _pdfCurrentPages,
                 totalPageMap: _pdfTotalPages,
-                controllerMap: _pdfControllers,
+                controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
+                onDocumentReady: (cacheKey, document, outline) {
+                  _pdfDocuments[cacheKey] = document;
+                  if (outline != null && outline.isNotEmpty) {
+                    setState(() {
+                      _pdfOutlines[cacheKey] = outline;
+                    });
+                  }
+                },
               );
             },
           );
@@ -3017,6 +3028,139 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  /// Build an attachment outline item with PDF outline expansion support
+  Widget _buildAttachmentOutlineItem({
+    required String attachment,
+    required int noteIndex,
+    required int depth,
+    required BuildContext context,
+  }) {
+    final fileName = attachment.split(Platform.pathSeparator).last;
+    final extension = attachment.split('.').last.toLowerCase();
+    final isPdf = extension == 'pdf';
+    final leftPadding = 16.0 + (depth * 32);
+
+    // Check if this PDF has an outline
+    final pdfOutline = isPdf ? _pdfOutlines[attachment] : null;
+    final hasOutline = pdfOutline != null && pdfOutline.isNotEmpty;
+
+    if (!hasOutline) {
+      // Simple list tile for non-PDF or PDF without outline
+      return ListTile(
+        contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+        leading: Icon(_iconForAttachment(attachment)),
+        title: Text(fileName, overflow: TextOverflow.ellipsis),
+        onTap: () {
+          setState(() {
+            _activeNoteIndex = noteIndex;
+            _activeAttachmentPath = attachment;
+          });
+          Navigator.pop(context);
+        },
+      );
+    }
+
+    // ExpansionTile for PDFs with outline
+    return ExpansionTile(
+      tilePadding: EdgeInsets.only(left: leftPadding, right: 16),
+      leading: Icon(_iconForAttachment(attachment)),
+      title: Text(fileName, overflow: TextOverflow.ellipsis),
+      initiallyExpanded: false,
+      children: [
+        // Tap to view PDF button
+        ListTile(
+          contentPadding: EdgeInsets.only(left: leftPadding + 24, right: 16),
+          leading: const Icon(Icons.visibility, size: 20),
+          title: Text(
+            'View PDF',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          onTap: () {
+            setState(() {
+              _activeNoteIndex = noteIndex;
+              _activeAttachmentPath = attachment;
+            });
+            Navigator.pop(context);
+          },
+        ),
+        // PDF outline items
+        ..._buildPdfOutlineItems(
+          attachmentPath: attachment,
+          nodes: pdfOutline,
+          noteIndex: noteIndex,
+          depth: 0,
+          context: context,
+        ),
+      ],
+    );
+  }
+
+  /// Build PDF outline tree items recursively
+  List<Widget> _buildPdfOutlineItems({
+    required String attachmentPath,
+    required List<PdfOutlineNode> nodes,
+    required int noteIndex,
+    required int depth,
+    required BuildContext context,
+  }) {
+    final widgets = <Widget>[];
+    final leftPadding = 80.0 + (depth * 16);
+
+    for (final node in nodes) {
+      widgets.add(
+        ListTile(
+          contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+          leading: const Icon(Icons.bookmark_outline, size: 18),
+          title: Text(
+            node.title,
+            style: Theme.of(context).textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () {
+            setState(() {
+              _activeNoteIndex = noteIndex;
+              _activeAttachmentPath = attachmentPath;
+            });
+            Navigator.pop(context);
+            // Navigate to the outline destination after the sheet closes
+            _navigateToPdfOutlineDestination(attachmentPath, node);
+          },
+        ),
+      );
+
+      // Recursively add children
+      if (node.children.isNotEmpty) {
+        widgets.addAll(
+          _buildPdfOutlineItems(
+            attachmentPath: attachmentPath,
+            nodes: node.children,
+            noteIndex: noteIndex,
+            depth: depth + 1,
+            context: context,
+          ),
+        );
+      }
+    }
+
+    return widgets;
+  }
+
+  /// Navigate to a PDF outline destination
+  void _navigateToPdfOutlineDestination(
+    String attachmentPath,
+    PdfOutlineNode node,
+  ) {
+    final controller = _pdfViewerControllers[attachmentPath];
+    if (controller == null) return;
+
+    // Use WidgetsBinding to delay navigation until after the sheet closes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (node.dest != null) {
+        controller.goToDest(node.dest!);
+      }
+    });
+  }
+
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
     // Collect linked notes with circular reference prevention
     final linkedNotesMap = <String, List<Note>>{};
@@ -3065,20 +3209,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   },
                 ),
                 for (final attachment in notes[i].attachmentPaths)
-                  ListTile(
-                    contentPadding: const EdgeInsets.only(left: 48, right: 16),
-                    leading: Icon(_iconForAttachment(attachment)),
-                    title: Text(
-                      attachment.split(Platform.pathSeparator).last,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _activeNoteIndex = i;
-                        _activeAttachmentPath = attachment;
-                      });
-                      Navigator.pop(context);
-                    },
+                  _buildAttachmentOutlineItem(
+                    attachment: attachment,
+                    noteIndex: i,
+                    depth: 1,
+                    context: context,
                   ),
                 // Add linked notes section if present
                 if (linkedNotesMap.containsKey(notes[i].id)) ...[
@@ -3823,7 +3958,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _disposePdfResources() {
-    _pdfControllers.clear();
+    // Dispose PDF documents
+    for (final doc in _pdfDocuments.values) {
+      doc.dispose();
+    }
+    _pdfDocuments.clear();
+    _pdfViewerControllers.clear();
+    _pdfOutlines.clear();
     _pdfCurrentPages.clear();
     _pdfTotalPages.clear();
     _attachmentSourceFutures.clear();
@@ -4234,14 +4375,21 @@ class _PdfDocumentView extends StatefulWidget {
     required this.totalPageMap,
     required this.controllerMap,
     required this.onError,
+    this.onDocumentReady,
   });
 
   final _AttachmentSource source;
   final double availableHeight;
   final Map<String, int> currentPageMap;
   final Map<String, int> totalPageMap;
-  final Map<String, PDFViewController> controllerMap;
+  final Map<String, PdfViewerController> controllerMap;
   final void Function(String message) onError;
+  final void Function(
+    String cacheKey,
+    PdfDocument document,
+    List<PdfOutlineNode>? outline,
+  )?
+  onDocumentReady;
 
   @override
   State<_PdfDocumentView> createState() => _PdfDocumentViewState();
@@ -4251,7 +4399,8 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     with AutomaticKeepAliveClientMixin {
   late Future<String> _pdfPathFuture;
   String? _resolvedPath;
-  Widget? _cachedView;
+  PdfViewerController? _controller;
+  bool _documentReady = false;
 
   String get _cacheKey => widget.source.cacheKey;
 
@@ -4259,6 +4408,8 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
   void initState() {
     super.initState();
     _pdfPathFuture = _resolvePdfPath();
+    _controller = PdfViewerController();
+    widget.controllerMap[_cacheKey] = _controller!;
   }
 
   @override
@@ -4267,7 +4418,9 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     if (oldWidget.source.cacheKey != widget.source.cacheKey) {
       _pdfPathFuture = _resolvePdfPath();
       _resolvedPath = null;
-      _cachedView = null;
+      _documentReady = false;
+      _controller = PdfViewerController();
+      widget.controllerMap[_cacheKey] = _controller!;
     }
   }
 
@@ -4299,65 +4452,59 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
         }
 
         final filePath = snapshot.data!;
-        if (_cachedView == null || _resolvedPath != filePath) {
-          _resolvedPath = filePath;
-          _cachedView = _buildPdfView(filePath);
-        }
-
-        return _cachedView!;
+        _resolvedPath = filePath;
+        return _buildPdfView(filePath);
       },
     );
   }
 
   Widget _buildPdfView(String filePath) {
     widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
+    final initialPage = widget.currentPageMap[_cacheKey] ?? 0;
 
-    return PDFView(
+    return PdfViewer.file(
+      filePath,
       key: ValueKey('${_cacheKey}_pdf_view'),
-      filePath: filePath,
-      autoSpacing: false,
-      pageFling: false,
-      pageSnap: false,
-      enableSwipe: true,
-      swipeHorizontal: false,
-      fitPolicy: FitPolicy.BOTH,
-      preventLinkNavigation: false,
-      onViewCreated: (controller) async {
-        widget.controllerMap[_cacheKey] = controller;
-        final storedPage = widget.currentPageMap[_cacheKey] ?? 0;
-        try {
-          final currentPage = await controller.getCurrentPage();
-          if (currentPage != storedPage) {
-            await controller.setPage(storedPage);
+      controller: _controller,
+      params: PdfViewerParams(
+        textSelectionParams: const PdfTextSelectionParams(),
+        pageDropShadow: null,
+        onViewerReady: (document, controller) async {
+          if (_documentReady) return;
+          _documentReady = true;
+
+          // Store total pages
+          widget.totalPageMap[_cacheKey] = document.pages.length;
+
+          // Load outline
+          List<PdfOutlineNode>? outline;
+          try {
+            outline = await document.loadOutline();
+          } catch (e) {
+            // Outline loading failed, not critical
           }
-        } catch (e) {
-          widget.onError('Unable to set initial PDF page: $e');
-        }
-      },
-      onRender: (pages) {
-        if (pages != null) {
-          widget.totalPageMap[_cacheKey] = pages;
-          final stored = widget.currentPageMap[_cacheKey];
-          if (stored != null && stored >= pages) {
-            widget.currentPageMap[_cacheKey] = pages - 1;
+
+          // Notify parent
+          widget.onDocumentReady?.call(_cacheKey, document, outline);
+
+          // Navigate to stored page
+          if (initialPage > 0 && initialPage < document.pages.length) {
+            try {
+              await controller.goToPage(
+                pageNumber: initialPage + 1,
+              ); // pdfrx uses 1-indexed pages
+            } catch (e) {
+              widget.onError('Unable to set initial PDF page: $e');
+            }
           }
-        }
-      },
-      onPageChanged: (page, total) {
-        if (page != null) {
-          widget.currentPageMap[_cacheKey] = page;
-        }
-        if (total != null) {
-          widget.totalPageMap[_cacheKey] = total;
-        }
-      },
-      onError: (error) {
-        widget.onError('PDFView error: $error');
-      },
-      onPageError: (page, error) {
-        widget.onError('PDFView page error ($page): $error');
-      },
-      backgroundColor: Colors.transparent,
+        },
+        onPageChanged: (pageNumber) {
+          if (pageNumber != null) {
+            // pdfrx uses 1-indexed page numbers, convert to 0-indexed for storage
+            widget.currentPageMap[_cacheKey] = pageNumber - 1;
+          }
+        },
+      ),
     );
   }
 
