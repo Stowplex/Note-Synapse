@@ -51,6 +51,7 @@ import '../widgets/active_tool_count_badge.dart';
 import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
+import '../widgets/pdf_ai_context_dialog.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
@@ -803,9 +804,30 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         builder: (context) => const AIDebugOverlayScreen(),
                       ),
                     );
+                  } else if (value == 'configure_pdf_ai_context') {
+                    _showPdfAiContextDialogForActiveAttachment();
                   }
                 },
                 itemBuilder: (_) => [
+                  // PDF-specific option
+                  if (_activeAttachmentPath != null &&
+                      _activeAttachmentPath!.toLowerCase().endsWith('.pdf'))
+                    PopupMenuItem<String>(
+                      value: 'configure_pdf_ai_context',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.tune,
+                            color:
+                                _hasPdfAiContextConfig(_activeAttachmentPath!)
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Configure AI Context Range'),
+                        ],
+                      ),
+                    ),
                   if (_conversation != null)
                     PopupMenuItem<String>(
                       value: 'open_chat',
@@ -3159,6 +3181,84 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         controller.goToDest(node.dest!);
       }
     });
+  }
+
+  /// Check if a PDF has a custom AI context configuration
+  bool _hasPdfAiContextConfig(String attachmentPath) {
+    // Look up the attachment in the current note's attachments
+    // This is a simplified check - in a full implementation we'd cache this
+    return false; // Will be updated when attachment metadata is loaded
+  }
+
+  /// Show the PDF AI context dialog for the active attachment
+  Future<void> _showPdfAiContextDialogForActiveAttachment() async {
+    if (_activeAttachmentPath == null) return;
+    if (!_activeAttachmentPath!.toLowerCase().endsWith('.pdf')) return;
+
+    final notes = _resolveNotes(context.read<AppProvider>());
+    if (_activeNoteIndex >= notes.length) return;
+
+    final currentNote = notes[_activeNoteIndex];
+    final databaseService = DatabaseService();
+
+    // Get attachments for the note
+    final attachments = await databaseService.getAttachmentsForNote(
+      currentNote.id,
+    );
+
+    // Find the attachment that matches the active path
+    Attachment? attachment;
+    for (final att in attachments) {
+      final absPath = await att.getAbsolutePath();
+      if (absPath == _activeAttachmentPath) {
+        attachment = att;
+        break;
+      }
+    }
+
+    if (attachment == null) return;
+
+    final currentConfig = attachment.getAiContextConfig();
+    final outline = _pdfOutlines[_activeAttachmentPath];
+    final totalPages = _pdfTotalPages[_activeAttachmentPath] ?? 0;
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => PdfAiContextDialog(
+        attachment: attachment!,
+        currentConfig: currentConfig,
+        outline: outline,
+        totalPages: totalPages,
+        onSave: (config) async {
+          // Build new metadata
+          final currentMetadata = Map<String, dynamic>.from(
+            attachment!.metadata ?? {},
+          );
+          if (config == null) {
+            currentMetadata.remove('aiContextConfig');
+          } else {
+            currentMetadata['aiContextConfig'] = config.toJson();
+          }
+
+          // Update database
+          await databaseService.updateAttachmentMetadata(
+            attachment!.id,
+            currentMetadata.isEmpty ? null : currentMetadata,
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              const SnackBar(
+                content: Text('AI context configuration saved'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {

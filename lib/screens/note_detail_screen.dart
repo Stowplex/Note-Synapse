@@ -35,6 +35,8 @@ import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
 import '../models/conversation.dart';
+import '../widgets/pdf_ai_context_dialog.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
@@ -2194,8 +2196,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final isCurrentlyPlaying =
         _isPlaying && _currentPlayingPath == attachmentPath;
 
+    // Check if this PDF has a custom AI context config
+    final hasCustomAiContext =
+        fileName.toLowerCase().endsWith('.pdf') &&
+        _attachmentsMap[attachmentPath]?.getAiContextConfig() != null;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      shape: hasCustomAiContext
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            )
+          : null,
       child: InkWell(
         onTap: fileExists && !isAudioFile
             ? () => FileUtils.openFile(attachmentPath, context)
@@ -2354,6 +2370,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           minHeight: 40,
                         ),
                       ),
+                      // PDF-specific options menu
+                      if (fileName.toLowerCase().endsWith('.pdf'))
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          tooltip: 'PDF Options',
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          onSelected: (value) async {
+                            if (value == 'configure_ai_range') {
+                              await _showPdfAiContextDialog(attachmentPath);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem<String>(
+                              value: 'configure_ai_range',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.tune,
+                                    color:
+                                        _attachmentsMap[attachmentPath]
+                                                ?.getAiContextConfig() !=
+                                            null
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    _attachmentsMap[attachmentPath]
+                                                ?.getAiContextConfig() !=
+                                            null
+                                        ? 'Edit AI Context Range'
+                                        : 'Configure AI Context Range',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () =>
@@ -2505,6 +2563,45 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _showPdfAiContextDialog(String attachmentPath) async {
+    final attachment = _attachmentsMap[attachmentPath];
+    if (attachment == null) return;
+
+    // For now, show the dialog with basic info since we don't have the PDF loaded here
+    // We'll need to get total pages and outline
+    final currentConfig = attachment.getAiContextConfig();
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => PdfAiContextDialog(
+        attachment: attachment,
+        currentConfig: currentConfig,
+        outline: null, // PDF not loaded in this context, outline unavailable
+        totalPages: 0, // Will show as unknown
+        onSave: (config) async {
+          // Build new metadata
+          final currentMetadata = Map<String, dynamic>.from(
+            attachment.metadata ?? {},
+          );
+          if (config == null) {
+            currentMetadata.remove('aiContextConfig');
+          } else {
+            currentMetadata['aiContextConfig'] = config.toJson();
+          }
+
+          // Update database
+          await _databaseService.updateAttachmentMetadata(
+            attachment.id,
+            currentMetadata.isEmpty ? null : currentMetadata,
+          );
+
+          // Reload attachments
+          await _loadAttachments();
+        },
+      ),
+    );
   }
 
   Future<void> _addAttachment() async {
