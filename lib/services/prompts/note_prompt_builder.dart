@@ -444,9 +444,56 @@ class NotePromptBuilder {
               endPage = currentPdfPage + half + 1;
               extractPages = true;
             } else if (aiConfig.mode == 'chapters' &&
-                aiConfig.selectedChapters != null) {
-              // For chapters mode, still send full PDF with hint
-              // (page extraction for chapters would require PDF outline parsing)
+                aiConfig.selectedChapters != null &&
+                aiConfig.selectedChapters!.isNotEmpty) {
+              // For chapters mode, extract pages from selected chapters
+              try {
+                final pdfDoc = await PdfDocument.openFile(fullPath);
+                final outline = await pdfDoc.loadOutline();
+
+                if (outline != null && outline.isNotEmpty) {
+                  // Find page ranges for selected chapters
+                  final pageRanges = _getChapterPageRanges(
+                    outline,
+                    aiConfig.selectedChapters!,
+                    pdfDoc.pages.length,
+                  );
+
+                  if (pageRanges.isNotEmpty) {
+                    LoggerService.debug(
+                      'Extracting chapter pages: $pageRanges from ${attachment.fileName}',
+                    );
+
+                    // Extract pages from each range
+                    for (final range in pageRanges) {
+                      for (
+                        int pageNum = range.start;
+                        pageNum <= range.end;
+                        pageNum++
+                      ) {
+                        await _extractAndAddPage(
+                          pdfDoc,
+                          pageNum,
+                          attachment.fileName,
+                          target,
+                        );
+                      }
+                    }
+                    pdfDoc.dispose();
+                    continue; // Done with this attachment
+                  }
+                }
+                pdfDoc.dispose();
+
+                // Fallback if outline not found or chapters not matched
+                LoggerService.warning(
+                  'Could not find chapters in PDF outline, sending full PDF',
+                );
+              } catch (e) {
+                LoggerService.warning('Failed to extract chapter pages: $e');
+              }
+
+              // Fallback: send full PDF with hint
               final chapters = aiConfig.selectedChapters!.join(', ');
               target.add(
                 PlatformFile(
@@ -623,4 +670,129 @@ class NotePromptBuilder {
       isContext: true,
     );
   }
+
+  /// Find page ranges for selected chapters by matching titles against PDF outline
+  List<_PageRange> _getChapterPageRanges(
+    List<PdfOutlineNode> outline,
+    List<String> selectedChapters,
+    int totalPages,
+  ) {
+    final ranges = <_PageRange>[];
+    final flatNodes = _flattenOutline(outline);
+
+    for (int i = 0; i < flatNodes.length; i++) {
+      final node = flatNodes[i];
+      // Check if this node's title matches any selected chapter
+      if (selectedChapters.any(
+        (title) =>
+            node.title.toLowerCase().contains(title.toLowerCase()) ||
+            title.toLowerCase().contains(node.title.toLowerCase()),
+      )) {
+        // Start page from this node's destination
+        final startPage = node.dest?.pageNumber ?? 1;
+
+        // End page is either the next node's start or end of document
+        int endPage;
+        if (i + 1 < flatNodes.length) {
+          endPage = (flatNodes[i + 1].dest?.pageNumber ?? totalPages) - 1;
+        } else {
+          endPage = totalPages;
+        }
+
+        if (startPage <= endPage) {
+          ranges.add(_PageRange(startPage, endPage));
+        }
+      }
+    }
+
+    // Merge overlapping ranges
+    return _mergeRanges(ranges);
+  }
+
+  /// Flatten a nested outline into a linear list
+  List<PdfOutlineNode> _flattenOutline(List<PdfOutlineNode> nodes) {
+    final result = <PdfOutlineNode>[];
+    for (final node in nodes) {
+      result.add(node);
+      if (node.children.isNotEmpty) {
+        result.addAll(_flattenOutline(node.children));
+      }
+    }
+    return result;
+  }
+
+  /// Merge overlapping page ranges
+  List<_PageRange> _mergeRanges(List<_PageRange> ranges) {
+    if (ranges.isEmpty) return [];
+
+    ranges.sort((a, b) => a.start.compareTo(b.start));
+    final merged = <_PageRange>[ranges.first];
+
+    for (int i = 1; i < ranges.length; i++) {
+      final current = ranges[i];
+      final last = merged.last;
+
+      if (current.start <= last.end + 1) {
+        // Overlapping or adjacent, extend
+        merged[merged.length - 1] = _PageRange(
+          last.start,
+          current.end > last.end ? current.end : last.end,
+        );
+      } else {
+        merged.add(current);
+      }
+    }
+
+    return merged;
+  }
+
+  /// Extract a single page from PDF and add as PNG image
+  Future<void> _extractAndAddPage(
+    PdfDocument pdfDoc,
+    int pageNum,
+    String fileName,
+    List<PlatformFile> target,
+  ) async {
+    if (pageNum < 1 || pageNum > pdfDoc.pages.length) return;
+
+    final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
+
+    // Render at reasonable resolution (2x for clarity)
+    final renderWidth = (page.width * 2).toInt();
+    final renderHeight = (page.height * 2).toInt();
+
+    final pdfImage = await page.render(
+      width: renderWidth,
+      height: renderHeight,
+    );
+
+    if (pdfImage != null) {
+      final uiImage = await pdfImage.createImage();
+      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
+
+      if (byteData != null) {
+        final pngBytes = byteData.buffer.asUint8List();
+        target.add(
+          PlatformFile(
+            name: '${fileName}_page$pageNum.png',
+            path: null,
+            size: pngBytes.length,
+            bytes: pngBytes,
+          ),
+        );
+      }
+      uiImage.dispose();
+    }
+  }
+}
+
+/// Simple page range helper
+class _PageRange {
+  final int start;
+  final int end;
+
+  _PageRange(this.start, this.end);
+
+  @override
+  String toString() => '$start-$end';
 }
