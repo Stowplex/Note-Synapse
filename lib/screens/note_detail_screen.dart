@@ -37,6 +37,7 @@ import '../services/content_ingestion_service.dart';
 import '../models/conversation.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
@@ -2585,9 +2586,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     try {
       final absPath = await attachment.getAbsolutePath();
+      LoggerService.debug('Loading PDF for AI context dialog: $absPath');
+
+      // Ensure Pdfrx cache directory is set (required for programmatic PDF loading)
+      Pdfrx.getCacheDirectory ??= () async {
+        final tempDir = await getTemporaryDirectory();
+        return tempDir.path;
+      };
+
       pdfDocument = await PdfDocument.openFile(absPath);
       totalPages = pdfDocument.pages.length;
       outline = await pdfDocument.loadOutline();
+      LoggerService.debug(
+        'PDF loaded: $totalPages pages, outline has ${outline?.length ?? 0} items',
+      );
+      if (outline != null && outline.isNotEmpty) {
+        LoggerService.debug('First outline item: ${outline.first.title}');
+      }
     } catch (e) {
       LoggerService.error('Failed to load PDF for AI context dialog: $e');
     }

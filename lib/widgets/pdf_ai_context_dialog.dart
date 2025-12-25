@@ -46,6 +46,11 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
     final theme = Theme.of(context);
     final hasOutline = widget.outline != null && widget.outline!.isNotEmpty;
 
+    // Debug logging
+    debugPrint(
+      'PdfAiContextDialog: totalPages=${widget.totalPages}, outline=${widget.outline?.length ?? 0} items, hasOutline=$hasOutline',
+    );
+
     return AlertDialog(
       title: const Text('Configure AI Context'),
       content: SingleChildScrollView(

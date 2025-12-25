@@ -52,6 +52,7 @@ import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
+import 'package:path_provider/path_provider.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
@@ -3235,6 +3236,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           totalPages = cachedDoc.pages.length;
           outline = await cachedDoc.loadOutline();
         } else {
+          // Ensure Pdfrx cache directory is set (required for programmatic PDF loading)
+          Pdfrx.getCacheDirectory ??= () async {
+            final tempDir = await getTemporaryDirectory();
+            return tempDir.path;
+          };
+
           // Load fresh document
           loadedDocument = await PdfDocument.openFile(absPath);
           totalPages = loadedDocument.pages.length;
