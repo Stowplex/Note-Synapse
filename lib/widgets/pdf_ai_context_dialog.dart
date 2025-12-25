@@ -50,6 +50,12 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
     debugPrint(
       'PdfAiContextDialog: totalPages=${widget.totalPages}, outline=${widget.outline?.length ?? 0} items, hasOutline=$hasOutline',
     );
+    if (widget.outline != null && widget.outline!.isNotEmpty) {
+      debugPrint('First outline item: "${widget.outline!.first.title}"');
+      for (int i = 0; i < widget.outline!.length; i++) {
+        debugPrint('Outline[$i]: "${widget.outline![i].title}"');
+      }
+    }
 
     return AlertDialog(
       title: const Text('Configure AI Context'),
@@ -136,15 +142,17 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
 
               if (_mode == 'chapters') ...[
                 const SizedBox(height: 8),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: theme.dividerColor),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: _buildChapterCheckboxes(widget.outline!, 0),
+                SizedBox(
+                  height: 250,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.dividerColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      children: _buildChapterCheckboxes(widget.outline!, 0),
+                    ),
                   ),
                 ),
               ],
@@ -214,9 +222,13 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
   }
 
   List<Widget> _buildChapterCheckboxes(List<PdfOutlineNode> nodes, int depth) {
+    debugPrint(
+      '_buildChapterCheckboxes called with ${nodes.length} nodes at depth $depth',
+    );
     final widgets = <Widget>[];
 
     for (final node in nodes) {
+      debugPrint('Adding checkbox for: "${node.title}"');
       widgets.add(
         CheckboxListTile(
           title: Text(
@@ -243,6 +255,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
       }
     }
 
+    debugPrint('_buildChapterCheckboxes returning ${widgets.length} widgets');
     return widgets;
   }
 }
