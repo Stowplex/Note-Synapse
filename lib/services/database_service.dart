@@ -397,6 +397,12 @@ class DatabaseService {
   Future<Database> _initDatabase() async {
     final dbName = _databaseNameOverride ?? 'note_synapse.db';
     final path = join(await getDatabasesPath(), dbName);
+
+    // Perform pre-migration backup BEFORE openDatabase
+    // This is critical because _onUpgrade runs inside a transaction
+    // where PRAGMA wal_checkpoint cannot be executed
+    await _performPreMigrationBackupIfNeeded(path);
+
     return await openDatabase(
       path,
       version: DATABASE_VERSION,
@@ -405,6 +411,88 @@ class DatabaseService {
       onOpen: _onOpen,
       singleInstance: _databaseNameOverride == null,
     );
+  }
+
+  /// Check if migration is needed and create a backup before openDatabase
+  /// This runs outside any transaction, allowing WAL checkpoint to succeed
+  Future<void> _performPreMigrationBackupIfNeeded(String dbPath) async {
+    final dbFile = File(dbPath);
+    if (!await dbFile.exists()) {
+      // New database, no backup needed
+      return;
+    }
+
+    // Open database read-only to check version, without triggering migration
+    Database? checkDb;
+    try {
+      checkDb = await openDatabase(
+        dbPath,
+        readOnly: true,
+        singleInstance: false,
+      );
+      final versionResult = await checkDb.rawQuery('PRAGMA user_version');
+      final currentVersion = versionResult.isNotEmpty
+          ? versionResult.first['user_version'] as int
+          : 0;
+
+      if (currentVersion < DATABASE_VERSION && currentVersion > 0) {
+        // Migration is needed, create backup
+        LoggerService.info(
+          'Migration needed from version $currentVersion to $DATABASE_VERSION. Creating backup...',
+        );
+        await checkDb.close();
+        checkDb = null;
+
+        // Now create backup with a fresh connection that can do WAL checkpoint
+        await _createPreMigrationBackup(dbPath, currentVersion);
+      }
+    } catch (e) {
+      LoggerService.error('Error checking database version: $e', error: e);
+      // If we can't check the version, we'll let openDatabase handle it
+    } finally {
+      if (checkDb != null && checkDb.isOpen) {
+        await checkDb.close();
+      }
+    }
+  }
+
+  /// Create a backup of the database before migration
+  /// Called outside any transaction, so WAL checkpoint should succeed
+  Future<void> _createPreMigrationBackup(String dbPath, int fromVersion) async {
+    Database? backupDb;
+    try {
+      LoggerService.info('Starting pre-migration backup...');
+
+      // Open a fresh connection (not read-only) to do the checkpoint
+      backupDb = await openDatabase(dbPath, singleInstance: false);
+
+      // Force checkpoint to ensure WAL is merged
+      await backupDb.rawQuery('PRAGMA wal_checkpoint(FULL)');
+      await backupDb.close();
+      backupDb = null;
+
+      // Now copy the file
+      final dbFile = File(dbPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final backupPath = join(
+        dirname(dbPath),
+        'backup_v${fromVersion}_pre_migration_$timestamp.db',
+      );
+
+      await dbFile.copy(backupPath);
+      LoggerService.info('Pre-migration backup created at: $backupPath');
+    } catch (e) {
+      LoggerService.error(
+        'Failed to create pre-migration backup: $e',
+        error: e,
+      );
+      // Rethrow to let the caller handle it - migration should not proceed without backup
+      rethrow;
+    } finally {
+      if (backupDb != null && backupDb.isOpen) {
+        await backupDb.close();
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -512,35 +600,14 @@ class DatabaseService {
   };
 
   // Main migration execution method
+  // Note: Backup is performed BEFORE openDatabase in _performPreMigrationBackupIfNeeded
+  // to avoid SQLITE_LOCKED errors from within the transaction
   Future<void> _executeMigrations(
     Database db,
     int oldVersion,
     int newVersion, {
     required bool isBackupMigration,
   }) async {
-    // 1. Perform backup before any migration (unless it's already a backup migration)
-    if (!isBackupMigration) {
-      try {
-        await _backupDatabase(db);
-      } catch (e) {
-        LoggerService.error('Pre-migration backup failed: $e', error: e);
-        // We continue with migration even if backup fails?
-        // Or should we stop? safer to stop, but user might be stuck.
-        // Let's log heavily and proceed for now, but in a strict mode we might want to stop.
-        // Given the requirement "Before upgrade, checkpoint and copy...", failure here is critical.
-        // But if we throw here, we go to recovery anyway.
-        // Let's wrap in a way that allows us to decide.
-        // For now, let's treat backup failure as a migration error to trigger recovery.
-        await _handleMigrationError(
-          db,
-          oldVersion,
-          e,
-          isBackupMigration: false,
-        );
-        return;
-      }
-    }
-
     for (int version = oldVersion + 1; version <= newVersion; version++) {
       final migrationStep = _migrationSteps[version];
       if (migrationStep == null) {
@@ -569,29 +636,6 @@ class DatabaseService {
         );
         break; // Stop migration on error
       }
-    }
-  }
-
-  Future<void> _backupDatabase(Database db) async {
-    try {
-      LoggerService.info('Starting pre-migration backup...');
-
-      // Force checkpoint to ensure WAL is merged
-      await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
-
-      final dbPath = db.path;
-      final dbFile = File(dbPath);
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final backupPath = join(
-        dirname(dbPath),
-        'backup_pre_migration_$timestamp.db',
-      );
-
-      await dbFile.copy(backupPath);
-      LoggerService.info('Pre-migration backup created at: $backupPath');
-    } catch (e) {
-      LoggerService.error('Failed to create pre-migration backup', error: e);
-      rethrow;
     }
   }
 
