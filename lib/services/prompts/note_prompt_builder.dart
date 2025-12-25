@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import '../../models/note.dart';
 import '../../models/attachment.dart';
@@ -365,12 +367,21 @@ class NotePromptBuilder {
   }
 
   /// Load note attachments into [PlatformFile]s, avoiding duplicates.
-  Future<List<PlatformFile>> loadNoteAttachments(List<Note> notes) async {
+  /// [currentPdfPage] is used for "window" mode AI context to focus on nearby pages.
+  Future<List<PlatformFile>> loadNoteAttachments(
+    List<Note> notes, {
+    int? currentPdfPage,
+  }) async {
     final platformFiles = <PlatformFile>[];
     final processed = <String>{};
 
     for (final note in notes) {
-      await _addNoteAttachments(platformFiles, note, processed);
+      await _addNoteAttachments(
+        platformFiles,
+        note,
+        processed,
+        currentPdfPage: currentPdfPage,
+      );
 
       final relationships = await _getRelationships(note.id);
       for (final rel in relationships) {
@@ -381,7 +392,12 @@ class NotePromptBuilder {
         if (linkedNote == null) {
           continue;
         }
-        await _addNoteAttachments(platformFiles, linkedNote, processed);
+        await _addNoteAttachments(
+          platformFiles,
+          linkedNote,
+          processed,
+          currentPdfPage: currentPdfPage,
+        );
       }
     }
     return platformFiles;
@@ -415,48 +431,122 @@ class NotePromptBuilder {
           final isPdf = attachment.fileName.toLowerCase().endsWith('.pdf');
           final aiConfig = isPdf ? attachment.getAiContextConfig() : null;
 
-          // For "window" mode, we add a context hint about the relevant pages
-          // For "chapters" mode, we could filter but for now just add the hint
-          String? contextHint;
+          // Determine page range for window mode
+          int? startPage;
+          int? endPage;
+          bool extractPages = false;
+
           if (aiConfig != null && isPdf) {
             if (aiConfig.mode == 'window' && currentPdfPage != null) {
               final windowSize = aiConfig.windowSize ?? 10;
               final half = windowSize ~/ 2;
-              final startPage = (currentPdfPage - half + 1).clamp(1, 9999);
-              final endPage = startPage + windowSize - 1;
-              contextHint =
-                  '[PDF CONTEXT: Focus on pages $startPage-$endPage. '
-                  'Current reading position is around page ${currentPdfPage + 1}]';
+              startPage = (currentPdfPage - half + 1).clamp(1, 9999);
+              endPage = currentPdfPage + half + 1;
+              extractPages = true;
             } else if (aiConfig.mode == 'chapters' &&
                 aiConfig.selectedChapters != null) {
+              // For chapters mode, still send full PDF with hint
+              // (page extraction for chapters would require PDF outline parsing)
               final chapters = aiConfig.selectedChapters!.join(', ');
-              contextHint = '[PDF CONTEXT: Focus on these chapters: $chapters]';
+              target.add(
+                PlatformFile(
+                  name: '${attachment.fileName}_context.txt',
+                  path: null,
+                  size: 0,
+                  bytes: Uint8List.fromList(
+                    '[Focus on chapters: $chapters]'.codeUnits,
+                  ),
+                ),
+              );
+              final bytes = await file.readAsBytes();
+              target.add(
+                PlatformFile(
+                  name: attachment.fileName,
+                  path: fullPath,
+                  size: bytes.length,
+                  bytes: bytes,
+                ),
+              );
+              continue; // Skip to next attachment
             }
-            // mode == 'all' means no restriction
+            // mode == 'all' means send full PDF
           }
 
-          final bytes = await file.readAsBytes();
+          if (extractPages && startPage != null && endPage != null) {
+            // Extract pages as images
+            try {
+              final pdfDoc = await PdfDocument.openFile(fullPath);
+              final totalPages = pdfDoc.pages.length;
+              final actualEndPage = endPage.clamp(1, totalPages);
+              final actualStartPage = startPage.clamp(1, totalPages);
 
-          // If there's a context hint, add it as a separate text annotation
-          if (contextHint != null) {
+              LoggerService.debug(
+                'Extracting PDF pages $actualStartPage-$actualEndPage from ${attachment.fileName}',
+              );
+
+              for (
+                int pageNum = actualStartPage;
+                pageNum <= actualEndPage;
+                pageNum++
+              ) {
+                final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
+
+                // Render at reasonable resolution (2x for clarity)
+                final renderWidth = (page.width * 2).toInt();
+                final renderHeight = (page.height * 2).toInt();
+
+                final pdfImage = await page.render(
+                  width: renderWidth,
+                  height: renderHeight,
+                );
+
+                if (pdfImage != null) {
+                  // Convert to PNG bytes
+                  final uiImage = await pdfImage.createImage();
+                  final byteData = await uiImage.toByteData(
+                    format: ui.ImageByteFormat.png,
+                  );
+
+                  if (byteData != null) {
+                    final pngBytes = byteData.buffer.asUint8List();
+                    target.add(
+                      PlatformFile(
+                        name: '${attachment.fileName}_page$pageNum.png',
+                        path: null,
+                        size: pngBytes.length,
+                        bytes: pngBytes,
+                      ),
+                    );
+                  }
+                  uiImage.dispose();
+                }
+              }
+              pdfDoc.dispose();
+            } catch (e) {
+              LoggerService.warning('Failed to extract PDF pages: $e');
+              // Fallback: send full PDF
+              final bytes = await file.readAsBytes();
+              target.add(
+                PlatformFile(
+                  name: attachment.fileName,
+                  path: fullPath,
+                  size: bytes.length,
+                  bytes: bytes,
+                ),
+              );
+            }
+          } else {
+            // Send full PDF (mode == 'all' or no config)
+            final bytes = await file.readAsBytes();
             target.add(
               PlatformFile(
-                name: '${attachment.fileName}_context.txt',
-                path: null,
-                size: contextHint.length,
-                bytes: Uint8List.fromList(contextHint.codeUnits),
+                name: attachment.fileName,
+                path: fullPath,
+                size: bytes.length,
+                bytes: bytes,
               ),
             );
           }
-
-          target.add(
-            PlatformFile(
-              name: attachment.fileName,
-              path: fullPath,
-              size: bytes.length,
-              bytes: bytes,
-            ),
-          );
         } catch (e) {
           LoggerService.warning('Failed to read attachment $fullPath: $e');
         }
@@ -513,9 +603,16 @@ class NotePromptBuilder {
 
   /// Build a context message that contains the aggregated notes and optional
   /// attachments.
-  Future<PromptMessage> buildContextMessage(List<Note> notes) async {
+  /// [currentPdfPage] is used for "window" mode AI context to focus on nearby pages.
+  Future<PromptMessage> buildContextMessage(
+    List<Note> notes, {
+    int? currentPdfPage,
+  }) async {
     final context = await buildNoteContext(notes);
-    final attachments = await loadNoteAttachments(notes);
+    final attachments = await loadNoteAttachments(
+      notes,
+      currentPdfPage: currentPdfPage,
+    );
 
     return PromptMessage(
       role: PromptRole.user,

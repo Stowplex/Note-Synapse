@@ -3745,8 +3745,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
+
+    // Get current PDF page for window mode context filtering
+    final currentPdfPage = _activeAttachmentPath != null
+        ? _pdfCurrentPages[_activeAttachmentPath]
+        : null;
+
     final contextMessage = await noteBuilder.buildContextMessage(
       _conversationNotes,
+      currentPdfPage: currentPdfPage,
     );
 
     final messages = <PromptMessage>[];
