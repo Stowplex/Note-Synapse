@@ -46,7 +46,9 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 32;
+  static const int DATABASE_VERSION = 32; // Target schema version
+  static const int SQFLITE_VERSION =
+      999; // High value to prevent sqflite onUpgrade
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
@@ -405,9 +407,9 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: DATABASE_VERSION,
+      version: SQFLITE_VERSION, // High value to prevent sqflite's onUpgrade
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      // onUpgrade removed - migrations now handled in onOpen via _handleCustomMigrations
       onOpen: _onOpen,
       singleInstance: _databaseNameOverride == null,
     );
@@ -499,6 +501,15 @@ class DatabaseService {
     // Enable foreign key constraints for new databases
     await db.execute('PRAGMA foreign_keys = ON');
 
+    // Create schema version tracking table
+    await db.execute('''
+      CREATE TABLE _schema_version (
+        version INTEGER NOT NULL
+      )
+    ''');
+    // Initialize with current schema version for new databases
+    await db.insert('_schema_version', {'version': DATABASE_VERSION});
+
     // Create all tables using schema constants
     await db.execute(_createNotesTable);
     await db.execute(_createSubNotesTable);
@@ -531,19 +542,114 @@ class DatabaseService {
     // Enable foreign key constraints every time the database is opened
     // This is required because SQLite disables foreign keys by default
     await db.execute('PRAGMA foreign_keys = ON');
+
+    // Custom schema version tracking - migrations only run onOpen, not onUpgrade
+    await _handleCustomMigrations(db);
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    await _executeMigrations(
-      db,
-      oldVersion,
-      newVersion,
-      isBackupMigration: false,
+  /// Handles migrations using custom _schema_version table
+  /// Version is only updated AFTER successful migration
+  Future<void> _handleCustomMigrations(Database db) async {
+    // Check if _schema_version table exists (might be legacy DB)
+    final tableCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='_schema_version'",
     );
+
+    int currentVersion;
+    if (tableCheck.isEmpty) {
+      // Legacy database - create version table and get version from PRAGMA
+      await db.execute('''
+        CREATE TABLE _schema_version (
+          version INTEGER NOT NULL
+        )
+      ''');
+      // Get current version from sqflite's PRAGMA
+      final pragmaVersion = await db.rawQuery('PRAGMA user_version');
+      currentVersion = pragmaVersion.isNotEmpty
+          ? pragmaVersion.first['user_version'] as int
+          : 0;
+      if (currentVersion == 0)
+        currentVersion = 19; // Assume min supported version
+      await db.insert('_schema_version', {'version': currentVersion});
+      LoggerService.info(
+        'Created _schema_version table, initialized from PRAGMA: v$currentVersion',
+      );
+    } else {
+      // Read current version from custom table
+      final versionResult = await db.query('_schema_version');
+      currentVersion = versionResult.isNotEmpty
+          ? versionResult.first['version'] as int
+          : 0;
+    }
+
+    if (currentVersion >= DATABASE_VERSION) {
+      return; // No migration needed
+    }
+
+    LoggerService.info(
+      'Migration needed: v$currentVersion -> v$DATABASE_VERSION',
+    );
+
+    // Run migrations
+    bool migrationSuccess = true;
+    for (
+      int version = currentVersion + 1;
+      version <= DATABASE_VERSION;
+      version++
+    ) {
+      final migrationStep = _migrationSteps[version];
+      if (migrationStep == null) {
+        LoggerService.warning('No migration step defined for version $version');
+        continue;
+      }
+
+      try {
+        LoggerService.info(
+          'Executing migration to version $version: ${migrationStep.description}',
+        );
+        await migrationStep.execute(db, isBackupMigration: false);
+        LoggerService.info('Successfully migrated to version $version');
+      } catch (e) {
+        LoggerService.error(
+          'Migration to version $version failed: $e',
+          error: e,
+        );
+        migrationSuccess = false;
+
+        // Navigate to RecoveryScreen with error
+        _navigateToRecoveryScreen('Migration failed at version $version: $e');
+        break; // Stop migration on error
+      }
+    }
+
+    // Only update version if ALL migrations succeeded
+    if (migrationSuccess) {
+      await db.update('_schema_version', {'version': DATABASE_VERSION});
+      LoggerService.info('Schema version updated to $DATABASE_VERSION');
+    }
   }
+
+  /// Navigate to RecoveryScreen with error message
+  void _navigateToRecoveryScreen(String error) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => RecoveryScreen(error: error)),
+          (route) => false, // Remove all previous routes
+        );
+      } else {
+        LoggerService.error(
+          'Navigator context is null, cannot navigate to recovery screen. Error: $error',
+        );
+      }
+    });
+  }
+
+  // Note: _onUpgrade removed - migrations now in _handleCustomMigrations
 
   // Migration configuration structure
-  // All clients are now on version 20 or later, so only keep version 20 migration for edge cases
+  // All clients are now on version 20 or later
   static const Map<int, MigrationStep> _migrationSteps = {
     20: MigrationStep(
       description:
@@ -598,86 +704,6 @@ class DatabaseService {
       execute: _migrateToVersion32,
     ),
   };
-
-  // Main migration execution method
-  // Note: Backup is performed BEFORE openDatabase in _performPreMigrationBackupIfNeeded
-  // to avoid SQLITE_LOCKED errors from within the transaction
-  Future<void> _executeMigrations(
-    Database db,
-    int oldVersion,
-    int newVersion, {
-    required bool isBackupMigration,
-  }) async {
-    for (int version = oldVersion + 1; version <= newVersion; version++) {
-      final migrationStep = _migrationSteps[version];
-      if (migrationStep == null) {
-        LoggerService.warning('No migration step defined for version $version');
-        continue;
-      }
-
-      try {
-        LoggerService.info(
-          'Executing migration to version $version: ${migrationStep.description}',
-        );
-        await migrationStep.execute(db, isBackupMigration: isBackupMigration);
-        LoggerService.info('Successfully migrated to version $version');
-      } catch (e) {
-        LoggerService.error(
-          'Migration to version $version failed: $e',
-          error: e,
-        );
-
-        // Apply granular error handling based on the specific migration
-        await _handleMigrationError(
-          db,
-          version,
-          e,
-          isBackupMigration: isBackupMigration,
-        );
-        break; // Stop migration on error
-      }
-    }
-  }
-
-  // Handle migration errors
-  Future<void> _handleMigrationError(
-    Database db,
-    int version,
-    dynamic error, {
-    required bool isBackupMigration,
-  }) async {
-    LoggerService.error('Critical Migration Error at version $version: $error');
-
-    if (!isBackupMigration) {
-      // Navigate to Recovery Screen using global key
-      // We use a slight delay to ensure the app might have partially mounted or we are in a state where nav is possible
-      // though this is called during "await openDatabase ...", which happens presumably during AppWrapper init using AppProvider.loadData
-      // Navigating from here might be tricky if MaterialApp isn't built yet.
-      // However, openDatabase is called in AppProvider.loadData() which is called in AppWrapper.
-      // So context is available, but we are inside a logic class.
-
-      // Note: navigatorKey.currentState might be null if called too early.
-      // If null, we might need another mechanism or rely on the error causing a rethrow that AppWrapper catches?
-      // But AppWrapper simply sets _error string. We want to FORCE recovery screen.
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => RecoveryScreen(
-                error: 'Migration failed at version $version: $error',
-              ),
-            ),
-          );
-        } else {
-          LoggerService.error(
-            'Navigator context is null, cannot navigate to recovery screen.',
-          );
-        }
-      });
-    }
-  }
 
   static Future<void> _migrateToVersion28(
     Database db, {
@@ -2332,12 +2358,29 @@ class DatabaseService {
     LoggerService.info(
       'Migrating backup database from version $oldVersion to $newVersion',
     );
-    await _executeMigrations(
-      db,
-      oldVersion,
-      newVersion,
-      isBackupMigration: true,
-    );
+
+    // Inline migration execution for backup databases (no RecoveryScreen navigation)
+    for (int version = oldVersion + 1; version <= newVersion; version++) {
+      final migrationStep = _migrationSteps[version];
+      if (migrationStep == null) {
+        LoggerService.warning('No migration step defined for version $version');
+        continue;
+      }
+
+      try {
+        LoggerService.info(
+          'Executing backup migration to version $version: ${migrationStep.description}',
+        );
+        await migrationStep.execute(db, isBackupMigration: true);
+        LoggerService.info('Successfully migrated backup to version $version');
+      } catch (e) {
+        LoggerService.error(
+          'Backup migration to version $version failed: $e',
+          error: e,
+        );
+        break; // Stop on error
+      }
+    }
   }
 
   // Clear all data
