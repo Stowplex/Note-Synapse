@@ -1668,6 +1668,33 @@ class DatabaseService {
     );
   }
 
+  /// Updates just the lastViewedPage in attachment metadata
+  /// Preserves other metadata fields
+  Future<void> updateLastViewedPage(String attachmentId, int pageNumber) async {
+    try {
+      // Ensure metadata column exists
+      final db = await database;
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any((column) => column['name'] == 'metadata');
+      if (!hasColumn) {
+        LoggerService.warning(
+          'metadata column missing from attachments table - applying migration',
+        );
+        await db.execute('ALTER TABLE attachments ADD COLUMN metadata TEXT');
+      }
+
+      final attachment = await getAttachmentById(attachmentId);
+      if (attachment == null) return;
+
+      final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+      metadata['lastViewedPage'] = pageNumber;
+
+      await updateAttachmentMetadata(attachmentId, metadata);
+    } catch (e) {
+      LoggerService.warning('Failed to update last viewed page: $e');
+    }
+  }
+
   /// Gets an attachment by its ID
   Future<Attachment?> getAttachmentById(String attachmentId) async {
     final db = await database;

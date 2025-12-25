@@ -4399,15 +4399,49 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         return null;
       }
       final extension = FileTypeUtils.getFileExtension(file.path);
+
+      // For PDFs, look up the attachment to get ID and last page
+      String? attachmentId;
+      int? initialPage;
+      if (extension == 'pdf') {
+        final attachment = await _findAttachmentByPath(path);
+        if (attachment != null) {
+          attachmentId = attachment.id;
+          initialPage = attachment.getLastViewedPage();
+          LoggerService.debug(
+            'PDF attachment loaded: id=$attachmentId, initialPage=$initialPage, path=$path',
+          );
+        } else {
+          LoggerService.debug('PDF attachment not found for path: $path');
+        }
+      }
+
       return _AttachmentSource(
         file: file,
         extension: extension,
         originalPath: file.path,
+        attachmentId: attachmentId,
+        initialPage: initialPage,
       );
     } catch (e) {
       LoggerService.warning('Failed to load attachment $path: $e');
       return null;
     }
+  }
+
+  /// Finds attachment by absolute path across all notes
+  Future<Attachment?> _findAttachmentByPath(String path) async {
+    final databaseService = DatabaseService();
+    for (final note in widget.notes) {
+      final attachments = await databaseService.getAttachmentsForNote(note.id);
+      for (final attachment in attachments) {
+        final absPath = await attachment.getAbsolutePath();
+        if (absPath == path) {
+          return attachment;
+        }
+      }
+    }
+    return null;
   }
 
   IconData _iconForAttachment(String path) {
@@ -4493,12 +4527,16 @@ class _AttachmentSource {
     required this.extension,
     required this.originalPath,
     this.bytes,
+    this.attachmentId,
+    this.initialPage,
   });
 
   final File file;
   final Uint8List? bytes;
   final String extension;
   final String originalPath;
+  final String? attachmentId; // For saving page position
+  final int? initialPage; // Last viewed page from DB
 
   String get cacheKey => originalPath;
 }
@@ -4595,8 +4633,10 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
   }
 
   Widget _buildPdfView(String filePath) {
-    widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
-    final initialPage = widget.currentPageMap[_cacheKey] ?? 0;
+    // Use initialPage from source (database) if runtime map doesn't have it
+    final storedPage = widget.source.initialPage ?? 0;
+    widget.currentPageMap.putIfAbsent(_cacheKey, () => storedPage);
+    final initialPage = widget.currentPageMap[_cacheKey] ?? storedPage;
 
     return PdfViewer.file(
       filePath,
@@ -4649,6 +4689,13 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
 
   @override
   void dispose() {
+    // Save current page to database before disposing
+    final attachmentId = widget.source.attachmentId;
+    final currentPage = widget.currentPageMap[_cacheKey];
+    if (attachmentId != null && currentPage != null && currentPage > 0) {
+      DatabaseService().updateLastViewedPage(attachmentId, currentPage);
+    }
+
     widget.controllerMap.remove(_cacheKey);
     super.dispose();
   }

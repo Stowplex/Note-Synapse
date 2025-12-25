@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -383,15 +384,15 @@ class NotePromptBuilder {
         await _addNoteAttachments(platformFiles, linkedNote, processed);
       }
     }
-
     return platformFiles;
   }
 
   Future<void> _addNoteAttachments(
     List<PlatformFile> target,
     Note note,
-    Set<String> processed,
-  ) async {
+    Set<String> processed, {
+    int? currentPdfPage, // For window mode: current page being viewed
+  }) async {
     try {
       final attachments = await _databaseService.getAttachmentsForNote(note.id);
 
@@ -410,7 +411,44 @@ class NotePromptBuilder {
           final file = File(fullPath);
           if (!file.existsSync()) continue;
 
+          // Check for PDF-specific AI context config
+          final isPdf = attachment.fileName.toLowerCase().endsWith('.pdf');
+          final aiConfig = isPdf ? attachment.getAiContextConfig() : null;
+
+          // For "window" mode, we add a context hint about the relevant pages
+          // For "chapters" mode, we could filter but for now just add the hint
+          String? contextHint;
+          if (aiConfig != null && isPdf) {
+            if (aiConfig.mode == 'window' && currentPdfPage != null) {
+              final windowSize = aiConfig.windowSize ?? 10;
+              final half = windowSize ~/ 2;
+              final startPage = (currentPdfPage - half + 1).clamp(1, 9999);
+              final endPage = startPage + windowSize - 1;
+              contextHint =
+                  '[PDF CONTEXT: Focus on pages $startPage-$endPage. '
+                  'Current reading position is around page ${currentPdfPage + 1}]';
+            } else if (aiConfig.mode == 'chapters' &&
+                aiConfig.selectedChapters != null) {
+              final chapters = aiConfig.selectedChapters!.join(', ');
+              contextHint = '[PDF CONTEXT: Focus on these chapters: $chapters]';
+            }
+            // mode == 'all' means no restriction
+          }
+
           final bytes = await file.readAsBytes();
+
+          // If there's a context hint, add it as a separate text annotation
+          if (contextHint != null) {
+            target.add(
+              PlatformFile(
+                name: '${attachment.fileName}_context.txt',
+                path: null,
+                size: contextHint.length,
+                bytes: Uint8List.fromList(contextHint.codeUnits),
+              ),
+            );
+          }
+
           target.add(
             PlatformFile(
               name: attachment.fileName,
