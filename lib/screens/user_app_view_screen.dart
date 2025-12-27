@@ -750,8 +750,16 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
             return null;
           },
           shouldOverrideUrlLoading: (controller, request) async {
-            if (request.request.url != null) {
-              launchUrl(request.request.url!.uriValue);
+            final url = request.request.url;
+            if (url == null) return NavigationActionPolicy.CANCEL;
+
+            final scheme = url.scheme.toLowerCase();
+            if (scheme == 'about' || scheme == 'data') {
+              return NavigationActionPolicy.ALLOW;
+            }
+
+            if (scheme == 'http' || scheme == 'https') {
+              launchUrl(url.uriValue);
             }
             return NavigationActionPolicy.CANCEL;
           },
