@@ -38,10 +38,12 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
   bool _isAiLoading = false;
   int _selectedViewIndex = 0;
 
+  bool _hasInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _openDefaultDatabase();
+    // Don't call _openDefaultDatabase here - context is not ready
   }
 
   @override
@@ -49,6 +51,11 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
     super.didChangeDependencies();
     if (_statusMessage.isEmpty) {
       _statusMessage = AppLocalizations.of(context)!.notConnected;
+    }
+    // Initialize database only once, after context is available
+    if (!_hasInitialized) {
+      _hasInitialized = true;
+      _openDefaultDatabase();
     }
   }
 
