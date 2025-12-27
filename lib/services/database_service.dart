@@ -120,7 +120,7 @@ class DatabaseService {
         filePath TEXT NOT NULL, -- Path to file
         fileName TEXT NOT NULL, -- Original file name
         fileType TEXT NOT NULL, -- MIME type or extension
-        isRelativePath INTEGER NOT NULL DEFAULT 0, -- Whether path is relative to app dir
+        isRelativePath INTEGER NOT NULL DEFAULT 1, -- Whether path is relative to app dir
         createdAt INTEGER NOT NULL, -- Creation timestamp
         includeInAIContext INTEGER NOT NULL DEFAULT 1, -- Whether to include in AI context
         metadata TEXT, -- JSON storage for attachment-specific data (bookmarks, AI context config, etc.)
@@ -1296,10 +1296,21 @@ class DatabaseService {
     // Insert attachments
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
-      final isRelativePath = attachmentPath.startsWith('attachments/');
+      bool isRelativePath = attachmentPath.startsWith('attachments/');
+      String finalPath = attachmentPath;
+
+      if (!isRelativePath) {
+        // Try to convert absolute path to relative if it's in the app dir
+        final relativePath = await FileUtils.getRelativePath(attachmentPath);
+        if (relativePath != null) {
+          finalPath = relativePath;
+          isRelativePath = true;
+        }
+      }
+
       await _insertAttachment(
         note.id,
-        attachmentPath,
+        finalPath,
         isRelativePath: isRelativePath,
       );
     }
@@ -1651,14 +1662,27 @@ class DatabaseService {
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
-      final isRelativePath = attachmentPath.startsWith('attachments/');
+      bool isRelativePath = attachmentPath.startsWith('attachments/');
+      String finalPath = attachmentPath;
+
+      if (!isRelativePath) {
+        // Try to convert absolute path to relative if it's in the app dir
+        final relativePath = await FileUtils.getRelativePath(attachmentPath);
+        if (relativePath != null) {
+          finalPath = relativePath;
+          isRelativePath = true;
+        }
+      }
 
       // Preserve includeInAIContext if it existed, otherwise default to true
-      final includeInAIContext = existingContextMap[attachmentPath] ?? true;
+      final includeInAIContext =
+          existingContextMap[finalPath] ??
+          existingContextMap[attachmentPath] ??
+          true;
 
       await _insertAttachment(
         note.id,
-        attachmentPath,
+        finalPath,
         isRelativePath: isRelativePath,
         includeInAIContext: includeInAIContext,
       );

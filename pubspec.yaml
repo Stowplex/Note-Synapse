@@ -111,7 +111,7 @@ dependencies:
   flutter_math_fork: ^0.7.3
   
   # WebView for user-defined apps and content extraction
-  flutter_inappwebview: ^6.0.0
+  flutter_inappwebview: ^6.1.5
   
   # MIME detection
   mime: ^2.0.0

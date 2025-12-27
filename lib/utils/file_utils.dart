@@ -167,6 +167,28 @@ class FileUtils {
     }
   }
 
+  /// Attempts to convert an absolute path to a relative path if it's within the app's documents directory
+  /// [absolutePath] - The absolute path to convert
+  /// Returns the relative path if successful, or null if the path is not within the app's documents directory
+  static Future<String?> getRelativePath(String absolutePath) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final appDirPath = appDir.path;
+
+      if (absolutePath.startsWith(appDirPath)) {
+        // Remove the app dir path and the leading separator if present
+        var relativePath = absolutePath.substring(appDirPath.length);
+        if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+          relativePath = relativePath.substring(1);
+        }
+        return relativePath;
+      }
+    } catch (e) {
+      // Ignore errors finding relative path
+    }
+    return null;
+  }
+
   /// Saves an imported file, attempting to use the original filename.
   /// If a file with the same name exists:
   /// - If content matches: Returns existing path (deduplication).
