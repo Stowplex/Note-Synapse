@@ -6841,6 +6841,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup & Restore'**
   String get backupAndRestore;
+
+  /// No description provided for @databaseNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Database not connected'**
+  String get databaseNotConnected;
+
+  /// No description provided for @fileUsageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File usage status unavailable'**
+  String get fileUsageUnavailable;
+
+  /// No description provided for @fileUsageDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'File Usage Details'**
+  String get fileUsageDetails;
+
+  /// No description provided for @noReferencesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No references found in database'**
+  String get noReferencesFound;
+
+  /// No description provided for @usedByNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Used by {count} note(s)'**
+  String usedByNotes(int count);
+
+  /// No description provided for @usedByConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Used in {count} conversation message(s)'**
+  String usedByConversations(int count);
+
+  /// No description provided for @noteNoLongerExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Note no longer exists'**
+  String get noteNoLongerExists;
+
+  /// No description provided for @messageNoLongerExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Message no longer exists'**
+  String get messageNoLongerExists;
+
+  /// No description provided for @showDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Details'**
+  String get showDetails;
 }
 
 class _AppLocalizationsDelegate

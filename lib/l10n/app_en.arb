@@ -1572,5 +1572,29 @@
   "recoveryManager": "Recovery Manager",
   "backupAndRestore": "Backup & Restore",
   "rawDataManagerTitle": "Raw Data Manager",
-  "rawDataManagerSubtitle": "Inspect and modify raw database data"
+  "rawDataManagerSubtitle": "Inspect and modify raw database data",
+  "databaseNotConnected": "Database not connected",
+  "fileUsageUnavailable": "File usage status unavailable",
+  "fileUsageDetails": "File Usage Details",
+  "noReferencesFound": "No references found in database",
+  "usedByNotes": "Used by {count} note(s)",
+  "@usedByNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usedByConversations": "Used in {count} conversation message(s)",
+  "@usedByConversations": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noteNoLongerExists": "Note no longer exists",
+  "messageNoLongerExists": "Message no longer exists",
+  "showDetails": "Show Details",
+  "close": "Close"
 }

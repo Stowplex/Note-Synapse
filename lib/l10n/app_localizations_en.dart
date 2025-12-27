@@ -3945,4 +3945,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupAndRestore => 'Backup & Restore';
+
+  @override
+  String get databaseNotConnected => 'Database not connected';
+
+  @override
+  String get fileUsageUnavailable => 'File usage status unavailable';
+
+  @override
+  String get fileUsageDetails => 'File Usage Details';
+
+  @override
+  String get noReferencesFound => 'No references found in database';
+
+  @override
+  String usedByNotes(int count) {
+    return 'Used by $count note(s)';
+  }
+
+  @override
+  String usedByConversations(int count) {
+    return 'Used in $count conversation message(s)';
+  }
+
+  @override
+  String get noteNoLongerExists => 'Note no longer exists';
+
+  @override
+  String get messageNoLongerExists => 'Message no longer exists';
+
+  @override
+  String get showDetails => 'Show Details';
 }
