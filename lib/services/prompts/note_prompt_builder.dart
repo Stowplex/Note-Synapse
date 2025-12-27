@@ -515,6 +515,67 @@ class NotePromptBuilder {
                 ),
               );
               continue; // Skip to next attachment
+            } else if (aiConfig.mode == 'bookmarks' &&
+                aiConfig.selectedBookmarks != null &&
+                aiConfig.selectedBookmarks!.isNotEmpty) {
+              // Bookmarks mode
+              try {
+                final pdfDoc = await PdfDocument.openFile(fullPath);
+                final totalPages = pdfDoc.pages.length;
+                final bookmarkWindow = aiConfig.bookmarkWindowSize ?? 1;
+
+                // Calculate ranges from bookmarks
+                final ranges = <_PageRange>[];
+                for (final bookmark in aiConfig.selectedBookmarks!) {
+                  // Bookmarks are 0-indexed, pdfrx pages are 1-indexed (in this logic)
+                  // Wait, earlier code converted 1-indexed to 0-indexed?
+                  // No, pdfrx pages getter is 0-indexed access, but logic seems to use 1-based startPage/endPage vars.
+                  // Let's verify: `_extractAndAddPage` takes `pageNum`.
+                  // `_extractAndAddPage`: `if (pageNum < 1 || pageNum > pdfDoc.pages.length) return;`
+                  // So `_extractAndAddPage` expects 1-based index.
+
+                  // `PdfBookmark.pageNumber` is 0-indexed (as per ImmersiveNoteScreen usage).
+                  final centerPage = bookmark.pageNumber + 1;
+                  final start = (centerPage - bookmarkWindow).clamp(
+                    1,
+                    totalPages,
+                  );
+                  final end = (centerPage + bookmarkWindow).clamp(
+                    1,
+                    totalPages,
+                  );
+
+                  ranges.add(_PageRange(start, end));
+                }
+
+                final mergedRanges = _mergeRanges(ranges);
+
+                if (mergedRanges.isNotEmpty) {
+                  LoggerService.debug(
+                    'Extracting bookmark pages: $mergedRanges from ${attachment.fileName}',
+                  );
+
+                  for (final range in mergedRanges) {
+                    for (
+                      int pageNum = range.start;
+                      pageNum <= range.end;
+                      pageNum++
+                    ) {
+                      await _extractAndAddPage(
+                        pdfDoc,
+                        pageNum,
+                        attachment.fileName,
+                        target,
+                      );
+                    }
+                  }
+                  pdfDoc.dispose();
+                  continue; // Done
+                }
+                pdfDoc.dispose();
+              } catch (e) {
+                LoggerService.warning('Failed to extract bookmark pages: $e');
+              }
             }
             // mode == 'all' means send full PDF
           }

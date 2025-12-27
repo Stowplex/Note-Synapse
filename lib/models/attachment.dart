@@ -5,7 +5,7 @@ import 'package:uuid/uuid.dart';
 
 /// Configuration for PDF AI context range
 class PdfAiContextConfig {
-  /// Mode: 'all', 'window', 'chapters'
+  /// Mode: 'all', 'window', 'chapters', 'bookmarks'
   final String mode;
 
   /// For 'window' mode: number of pages (x/2 before, x/2 after current)
@@ -14,10 +14,18 @@ class PdfAiContextConfig {
   /// For 'chapters' mode: list of selected chapter titles
   final List<String>? selectedChapters;
 
+  /// For 'bookmarks' mode: list of selected bookmarks (page numbers)
+  final List<PdfBookmark>? selectedBookmarks;
+
+  /// For 'bookmarks' mode: window size
+  final int? bookmarkWindowSize;
+
   const PdfAiContextConfig({
     required this.mode,
     this.windowSize,
     this.selectedChapters,
+    this.selectedBookmarks,
+    this.bookmarkWindowSize,
   });
 
   factory PdfAiContextConfig.fromJson(Map<String, dynamic> json) {
@@ -27,6 +35,10 @@ class PdfAiContextConfig {
       selectedChapters: (json['selectedChapters'] as List<dynamic>?)
           ?.map((e) => e as String)
           .toList(),
+      selectedBookmarks: (json['selectedBookmarks'] as List<dynamic>?)
+          ?.map((e) => PdfBookmark.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      bookmarkWindowSize: json['bookmarkWindowSize'] as int?,
     );
   }
 
@@ -35,6 +47,9 @@ class PdfAiContextConfig {
       'mode': mode,
       if (windowSize != null) 'windowSize': windowSize,
       if (selectedChapters != null) 'selectedChapters': selectedChapters,
+      if (selectedBookmarks != null)
+        'selectedBookmarks': selectedBookmarks!.map((e) => e.toJson()).toList(),
+      if (bookmarkWindowSize != null) 'bookmarkWindowSize': bookmarkWindowSize,
     };
   }
 
@@ -47,11 +62,13 @@ class PdfBookmark {
   final String title;
   final int pageNumber;
   final DateTime createdAt;
+  final String? annotation;
 
   const PdfBookmark({
     required this.title,
     required this.pageNumber,
     required this.createdAt,
+    this.annotation,
   });
 
   factory PdfBookmark.fromJson(Map<String, dynamic> json) {
@@ -59,6 +76,7 @@ class PdfBookmark {
       title: json['title'] as String,
       pageNumber: json['page'] as int,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      annotation: json['annotation'] as String?,
     );
   }
 
@@ -67,8 +85,20 @@ class PdfBookmark {
       'title': title,
       'page': pageNumber,
       'createdAt': createdAt.toIso8601String(),
+      if (annotation != null) 'annotation': annotation,
     };
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is PdfBookmark &&
+        other.pageNumber == pageNumber &&
+        other.title == title;
+  }
+
+  @override
+  int get hashCode => pageNumber.hashCode ^ title.hashCode;
 }
 
 /// Represents an attachment with proper path handling

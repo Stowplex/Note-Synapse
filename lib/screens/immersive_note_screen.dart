@@ -749,6 +749,245 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return runtime;
   }
 
+  // --- Bookmark Management ---
+
+  Future<void> _toggleBookmark() async {
+    if (_activeAttachmentPath == null) return;
+
+    final attachment = await _resolveAttachment(_activeAttachmentPath!);
+    if (attachment == null) return;
+
+    final currentPage = _pdfCurrentPages[_activeAttachmentPath!] ?? 0;
+    final bookmarks = attachment.getBookmarks();
+
+    // Check if current page is already bookmarked (compare page numbers)
+    final existingBookmarkIndex = bookmarks.indexWhere(
+      (b) => b.pageNumber == currentPage,
+    );
+
+    if (existingBookmarkIndex != -1) {
+      // Remove bookmark
+      await _removeBookmark(attachment, currentPage);
+    } else {
+      // Add bookmark
+      await _showAddEditBookmarkDialog(attachment, currentPage);
+    }
+  }
+
+  Future<Attachment?> _resolveAttachment(String path) async {
+    final note = widget.notes[_activeNoteIndex];
+    // This is a simplification; ideally we find the attachment object from the note or DB
+    final attachments = await _databaseService.getAttachmentsForNote(note.id);
+    try {
+      // Try to find by direct path match first (handling relative/absolute)
+      return attachments.firstWhere(
+        (a) => a.filePath == path || a.filePath.endsWith(path.split('/').last),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveBookmark(
+    Attachment attachment,
+    int page,
+    String annotation,
+  ) async {
+    final bookmarks = attachment.getBookmarks();
+    final newBookmark = PdfBookmark(
+      title: 'Page ${page + 1}', // Default title
+      pageNumber: page,
+      createdAt: DateTime.now(),
+      annotation: annotation.trim(),
+    );
+
+    // Remove existing if updating
+    bookmarks.removeWhere((b) => b.pageNumber == page);
+    bookmarks.add(newBookmark);
+    // Sort by page number
+    bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+    final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+    metadata['bookmarks'] = bookmarks.map((e) => e.toJson()).toList();
+
+    await _databaseService.updateAttachmentMetadata(attachment.id, metadata);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noteUpdatedSuccessfully),
+        ),
+      );
+      // Force rebuild to update menu state if needed
+      setState(() {});
+    }
+  }
+
+  Future<void> _removeBookmark(Attachment attachment, int page) async {
+    final bookmarks = attachment.getBookmarks();
+    bookmarks.removeWhere((b) => b.pageNumber == page);
+
+    final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+    metadata['bookmarks'] = bookmarks.map((e) => e.toJson()).toList();
+
+    await _databaseService.updateAttachmentMetadata(attachment.id, metadata);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.attachmentRemoved),
+        ), // Reusing suitable string or adding new one
+      );
+      setState(() {});
+    }
+  }
+
+  void _showBookmarksList() async {
+    if (_activeAttachmentPath == null) return;
+    final attachment = await _resolveAttachment(_activeAttachmentPath!);
+    if (attachment == null) return;
+
+    final bookmarks = attachment.getBookmarks();
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.bookmarks),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: bookmarks.isEmpty
+                ? Center(child: Text(l10n.noBookmarksYet))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: bookmarks.length,
+                    itemBuilder: (context, index) {
+                      final bookmark = bookmarks[index];
+                      return ListTile(
+                        title: Text('${l10n.page} ${bookmark.pageNumber + 1}'),
+                        subtitle:
+                            bookmark.annotation != null &&
+                                bookmark.annotation!.isNotEmpty
+                            ? Text(
+                                bookmark.annotation!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _jumpToPage(bookmark.pageNumber);
+                        },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showAddEditBookmarkDialog(
+                                  attachment,
+                                  bookmark.pageNumber,
+                                  existingBookmark: bookmark,
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                await _removeBookmark(
+                                  attachment,
+                                  bookmark.pageNumber,
+                                );
+                                _showBookmarksList(); // Reopen to show updated list
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.close),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showAddEditBookmarkDialog(
+    Attachment attachment,
+    int page, {
+    PdfBookmark? existingBookmark,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(
+      text: existingBookmark?.annotation ?? '',
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                existingBookmark == null ? l10n.addBookmark : l10n.editBookmark,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${l10n.page} ${page + 1}'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    maxLength: 200,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: l10n.bookmarkAnnotationHint,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _saveBookmark(attachment, page, controller.text);
+                  },
+                  child: Text(l10n.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _jumpToPage(int page) {
+    if (_activeAttachmentPath != null) {
+      final controller = _pdfViewerControllers[_activeAttachmentPath!];
+      if (controller != null) {
+        // pdfrx uses 1-indexed pages
+        controller.goToPage(pageNumber: page + 1);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -807,43 +1046,71 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     );
                   } else if (value == 'configure_pdf_ai_context') {
                     _showPdfAiContextDialogForActiveAttachment();
+                  } else if (value == 'bookmarks') {
+                    _showBookmarksList();
+                  } else if (value == 'toggle_bookmark') {
+                    _toggleBookmark();
                   }
                 },
-                itemBuilder: (_) => [
-                  // PDF-specific option
-                  if (_activeAttachmentPath != null &&
-                      _activeAttachmentPath!.toLowerCase().endsWith('.pdf'))
-                    PopupMenuItem<String>(
-                      value: 'configure_pdf_ai_context',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.tune,
-                            color:
-                                _hasPdfAiContextConfig(_activeAttachmentPath!)
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text('Configure AI Context Range'),
-                        ],
+                itemBuilder: (context) {
+                  final l10n = AppLocalizations.of(context)!;
+                  final isPdf =
+                      _activeAttachmentPath != null &&
+                      _activeAttachmentPath!.toLowerCase().endsWith('.pdf');
+
+                  return [
+                    if (_conversation != null)
+                      PopupMenuItem<String>(
+                        value: 'open_chat',
+                        child: Text(l10n.openInChatMode),
                       ),
-                    ),
-                  if (_conversation != null)
+                    if (_conversationNotes.isNotEmpty)
+                      PopupMenuItem<String>(
+                        value: 'note_action_apps',
+                        child: Text(l10n.noteActionApps),
+                      ),
+                    if (isPdf) ...[
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        value: 'bookmarks',
+                        child: Text(l10n.bookmarks),
+                      ),
+                      // We can check if page is bookmarked if we had sync access to it,
+                      // but for now generic "Bookmark Page" which toggles is fine.
+                      // Or we could try:
+                      // final isBookmarked = _isCurrentPageBookmarked(); // helper if we can make it sync
+                      PopupMenuItem<String>(
+                        value: 'toggle_bookmark',
+                        child: Text(l10n.bookmarkPage),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'configure_pdf_ai_context',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.tune,
+                              color:
+                                  _hasPdfAiContextConfig(_activeAttachmentPath!)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                l10n.aiContextBookmarks ??
+                                    'Configure AI Context',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     PopupMenuItem<String>(
-                      value: 'open_chat',
-                      child: Text(l10n.openInChatMode),
+                      value: 'ai_logs',
+                      child: Text(l10n.aiLogs),
                     ),
-                  if (_conversationNotes.isNotEmpty)
-                    PopupMenuItem<String>(
-                      value: 'note_action_apps',
-                      child: Text(l10n.noteActionApps),
-                    ),
-                  PopupMenuItem<String>(
-                    value: 'ai_logs',
-                    child: Text(l10n.aiLogs),
-                  ),
-                ],
+                  ];
+                },
               ),
             ],
           ),

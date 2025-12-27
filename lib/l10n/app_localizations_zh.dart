@@ -2348,6 +2348,39 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get bookmarkPage => 'Bookmark Page';
+
+  @override
+  String get page => 'Page';
+
+  @override
+  String get removeBookmark => 'Remove Bookmark';
+
+  @override
+  String get bookmarks => 'Bookmarks';
+
+  @override
+  String get addBookmark => 'Add Bookmark';
+
+  @override
+  String get editBookmark => 'Edit Bookmark';
+
+  @override
+  String get bookmarkAnnotationHint => 'Enter annotation (max 200 chars)';
+
+  @override
+  String get noBookmarksYet => 'No bookmarks yet';
+
+  @override
+  String get aiContextBookmarks => 'AI Context: Bookmarks';
+
+  @override
+  String get windowSize => 'Window Size';
+
+  @override
+  String get pagesBeforeAfter => 'Pages before/after';
+
+  @override
   String errorRefreshingTools(Object error) {
     return '刷新工具时出错：$error';
   }

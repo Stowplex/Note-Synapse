@@ -29,6 +29,8 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
   late String _mode;
   late int _windowSize;
   late Set<String> _selectedChapters;
+  late Set<PdfBookmark> _selectedBookmarks;
+  late int _bookmarkWindowSize;
 
   @override
   void initState() {
@@ -38,6 +40,10 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
     _selectedChapters = Set<String>.from(
       widget.currentConfig?.selectedChapters ?? [],
     );
+    _selectedBookmarks = Set<PdfBookmark>.from(
+      widget.currentConfig?.selectedBookmarks ?? [],
+    );
+    _bookmarkWindowSize = widget.currentConfig?.bookmarkWindowSize ?? 1;
   }
 
   @override
@@ -45,11 +51,8 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final hasOutline = widget.outline != null && widget.outline!.isNotEmpty;
-
-    // Debug logging
-    debugPrint(
-      'PdfAiContextDialog: totalPages=${widget.totalPages}, outline=${widget.outline?.length ?? 0} items, hasOutline=$hasOutline',
-    );
+    final bookmarks = widget.attachment.getBookmarks();
+    final hasBookmarks = bookmarks.isNotEmpty;
 
     return Dialog(
       child: ConstrainedBox(
@@ -60,14 +63,11 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title
               Text(
                 'Configure AI Context',
                 style: theme.textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
-
-              // Description
               Text(
                 'Select which pages to include when AI processes this PDF:',
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -75,8 +75,6 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Scrollable content
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
@@ -105,39 +103,111 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                         contentPadding: EdgeInsets.zero,
                       ),
 
-                      // Window size slider
-                      if (_mode == 'window') ...[
+                      if (_mode == 'window')
+                        _buildSlider(
+                          value: _windowSize,
+                          label: 'Pages',
+                          min: 2,
+                          max: 20,
+                          onChanged: (val) => setState(() => _windowSize = val),
+                        ),
+
+                      // Bookmarks option
+                      RadioListTile<String>(
+                        title: Text(l10n.bookmarks),
+                        subtitle: Text(
+                          hasBookmarks
+                              ? '${bookmarks.length} bookmark(s) available'
+                              : l10n.noBookmarksYet,
+                        ),
+                        value: 'bookmarks',
+                        groupValue: _mode,
+                        onChanged: hasBookmarks
+                            ? (value) => setState(() => _mode = value!)
+                            : null, // Disable if no bookmarks
+                        contentPadding: EdgeInsets.zero,
+                      ),
+
+                      if (_mode == 'bookmarks') ...[
                         Padding(
-                          padding: const EdgeInsets.only(left: 16),
-                          child: Row(
+                          padding: const EdgeInsets.only(left: 16, bottom: 8),
+                          child: Text(
+                            l10n.pagesBeforeAfter, // Localized "Pages before/after"
+                            style: theme.textTheme.labelMedium,
+                          ),
+                        ),
+                        _buildSlider(
+                          value: _bookmarkWindowSize,
+                          label: 'Pages', // Or localized "Pages"
+                          min: 0,
+                          max: 5,
+                          divisions: 5,
+                          onChanged: (val) =>
+                              setState(() => _bookmarkWindowSize = val),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.dividerColor),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
                             children: [
-                              const Text('Pages:'),
-                              Expanded(
-                                child: Slider(
-                                  value: _windowSize.toDouble(),
-                                  min: 2,
-                                  max: 20,
-                                  divisions: 9,
-                                  label: '$_windowSize',
-                                  onChanged: (value) => setState(
-                                    () => _windowSize = value.round(),
+                              // "Select All" check (optional but good UX)
+                              CheckboxListTile(
+                                title: const Text('Select All'),
+                                value:
+                                    _selectedBookmarks.length ==
+                                    bookmarks.length,
+                                onChanged: (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedBookmarks.addAll(bookmarks);
+                                    } else {
+                                      _selectedBookmarks.clear();
+                                    }
+                                  });
+                                },
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                              ),
+                              const Divider(height: 1),
+                              ...bookmarks.map((bookmark) {
+                                return CheckboxListTile(
+                                  title: Text(
+                                    'Page ${bookmark.pageNumber + 1}',
                                   ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 40,
-                                child: Text(
-                                  '$_windowSize',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodyLarge,
-                                ),
-                              ),
+                                  subtitle:
+                                      bookmark.annotation != null &&
+                                          bookmark.annotation!.isNotEmpty
+                                      ? Text(
+                                          bookmark.annotation!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        )
+                                      : null,
+                                  value: _selectedBookmarks.contains(bookmark),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      if (value == true) {
+                                        _selectedBookmarks.add(bookmark);
+                                      } else {
+                                        _selectedBookmarks.remove(bookmark);
+                                      }
+                                    });
+                                  },
+                                  dense: true,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                );
+                              }).toList(),
                             ],
                           ),
                         ),
                       ],
 
-                      // Chapters option (only if outline exists)
+                      // Chapters option
                       if (hasOutline) ...[
                         RadioListTile<String>(
                           title: const Text('Selected Chapters'),
@@ -169,60 +239,32 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                           ),
                         ],
                       ],
-
-                      if (!hasOutline && _mode == 'chapters') ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.errorContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.warning,
-                                color: theme.colorScheme.onErrorContainer,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'This PDF has no outline/table of contents',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onErrorContainer,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                      if (!hasOutline && _mode == 'chapters')
+                        _buildWarning(theme, 'This PDF has no outline'),
                     ],
                   ),
                 ),
               ),
-
-              // Actions
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (widget.currentConfig != null)
+                    TextButton(
+                      onPressed: () {
+                        widget.onSave(null);
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Reset'),
+                    ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text(l10n.cancel),
                   ),
-                  if (widget.currentConfig != null)
-                    TextButton(
-                      onPressed: () {
-                        widget.onSave(null); // Reset to default
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Reset to Default'),
-                    ),
                   FilledButton(
                     onPressed: () {
                       final config = _mode == 'all'
-                          ? null // null means all document (default)
+                          ? null
                           : PdfAiContextConfig(
                               mode: _mode,
                               windowSize: _mode == 'window'
@@ -230,6 +272,12 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                                   : null,
                               selectedChapters: _mode == 'chapters'
                                   ? _selectedChapters.toList()
+                                  : null,
+                              selectedBookmarks: _mode == 'bookmarks'
+                                  ? _selectedBookmarks.toList()
+                                  : null,
+                              bookmarkWindowSize: _mode == 'bookmarks'
+                                  ? _bookmarkWindowSize
                                   : null,
                             );
                       widget.onSave(config);
@@ -242,6 +290,65 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSlider({
+    required int value,
+    required String label,
+    required int min,
+    required int max,
+    required ValueChanged<int> onChanged,
+    int? divisions,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16),
+      child: Row(
+        children: [
+          Text('$label:'),
+          Expanded(
+            child: Slider(
+              value: value.toDouble(),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: divisions ?? (max - min),
+              label: '$value',
+              onChanged: (v) => onChanged(v.round()),
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWarning(ThemeData theme, String message) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning, color: theme.colorScheme.onErrorContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: theme.colorScheme.onErrorContainer),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -268,6 +375,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
           },
           contentPadding: EdgeInsets.only(left: 8 + (depth * 16), right: 8),
           dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
         ),
       );
 

@@ -4328,6 +4328,72 @@ abstract class AppLocalizations {
   /// **'Refreshed tools for {name}'**
   String refreshedToolsFor(Object name);
 
+  /// No description provided for @bookmarkPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark Page'**
+  String get bookmarkPage;
+
+  /// No description provided for @page.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get page;
+
+  /// No description provided for @removeBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Bookmark'**
+  String get removeBookmark;
+
+  /// No description provided for @bookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get bookmarks;
+
+  /// No description provided for @addBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Bookmark'**
+  String get addBookmark;
+
+  /// No description provided for @editBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Bookmark'**
+  String get editBookmark;
+
+  /// No description provided for @bookmarkAnnotationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter annotation (max 200 chars)'**
+  String get bookmarkAnnotationHint;
+
+  /// No description provided for @noBookmarksYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No bookmarks yet'**
+  String get noBookmarksYet;
+
+  /// No description provided for @aiContextBookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Context: Bookmarks'**
+  String get aiContextBookmarks;
+
+  /// No description provided for @windowSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Window Size'**
+  String get windowSize;
+
+  /// No description provided for @pagesBeforeAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Pages before/after'**
+  String get pagesBeforeAfter;
+
   /// No description provided for @errorRefreshingTools.
   ///
   /// In en, this message translates to:
