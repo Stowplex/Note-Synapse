@@ -786,6 +786,7 @@
   "baseUrl": "Base URL",
   "baseUrlHint": "https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx",
   "baseUrlHelperText": "Include query params for auth if needed (e.g., Smithery)",
+  "builtInTools": "Built-in Tools",
   "transportType": "Transport Type",
   "bearerTokenOptional": "Bearer Token (Optional)",
   "bearerTokenHint": "Leave empty if auth is in URL params",

@@ -2371,6 +2371,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Include query params for auth if needed (e.g., Smithery)';
 
   @override
+  String get builtInTools => 'Built-in Tools';
+
+  @override
   String get transportType => 'Transport Type';
 
   @override

@@ -2300,6 +2300,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
 
   @override
+  String get builtInTools => 'Built-in Tools';
+
+  @override
   String get transportType => '传输类型';
 
   @override

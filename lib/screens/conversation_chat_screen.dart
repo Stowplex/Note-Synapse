@@ -418,6 +418,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     });
   }
 
+  bool get _hasAvailableTools =>
+      _availableMcpEndpoints.isNotEmpty ||
+      _aiToolBundles.isNotEmpty ||
+      BuiltInToolsService.tools.isNotEmpty ||
+      true; // Model features are always potential candidates
+
   Map<String, List<McpTool>> _buildActiveToolsMap() {
     final combined = <String, List<McpTool>>{};
     combined.addAll(_mcpToolsByEndpoint);
@@ -1648,8 +1654,12 @@ $historyBuffer
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final activeBuiltInToolsCount = _selectedBuiltInTools.length;
     final totalActiveCount =
-        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
+        activeMcpCount +
+        activeLocalCount +
+        activeModelFeaturesCount +
+        activeBuiltInToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     // Get current model config to check for features
@@ -1717,6 +1727,67 @@ $historyBuffer
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
+                    // Built-in Tools
+                    if (BuiltInToolsService.tools.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.build,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.builtInTools,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeBuiltInToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeBuiltInToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...BuiltInToolsService.tools.map((tool) {
+                        final isSelected = _selectedBuiltInTools.contains(
+                          tool.id,
+                        );
+                        return CheckboxListTile(
+                          title: Text(tool.name),
+                          subtitle: Text(
+                            tool.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          value: isSelected,
+                          secondary: Icon(tool.icon, color: tool.color),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedBuiltInTools.add(tool.id);
+                              } else {
+                                _selectedBuiltInTools.remove(tool.id);
+                              }
+                            });
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        );
+                      }),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                    ],
                     Row(
                       children: [
                         Icon(
@@ -2419,8 +2490,7 @@ $historyBuffer
           // Attached files section
           _buildAttachedFilesSection(),
           // MCP selection section
-          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
-            _buildMcpSelectionSection(),
+          if (_hasAvailableTools) _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),

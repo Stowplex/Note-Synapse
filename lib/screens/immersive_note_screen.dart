@@ -57,6 +57,7 @@ import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
+import '../services/built_in_tools_service.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -162,6 +163,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
   ToolIterationPrompt? _iterationPrompt;
   final List<Offset> _penStrokePoints = [];
+
+  // Built-in Tools
+  final Set<String> _selectedBuiltInTools = {};
 
   // Drawing State
   List<DrawingAction> _drawingActions = [];
@@ -506,6 +510,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  bool get _hasAvailableTools =>
+      _availableMcpEndpoints.isNotEmpty ||
+      _aiToolBundles.isNotEmpty ||
+      BuiltInToolsService.tools.isNotEmpty ||
+      true; // Model features are always potential candidates
+
   Map<String, List<McpTool>> _buildActiveToolsMap() {
     final combined = <String, List<McpTool>>{};
     combined.addAll(_mcpToolsByEndpoint);
@@ -514,6 +524,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final tools = _aiToolMcpMap[service];
       if (tools != null && tools.isNotEmpty) {
         combined[service] = tools;
+      }
+    }
+
+    // Add Built-in Tools
+    if (_selectedBuiltInTools.isNotEmpty) {
+      final builtInTools = _selectedBuiltInTools
+          .map((id) => BuiltInToolsService.getToolById(id))
+          .where((t) => t != null)
+          .map(
+            (t) => McpTool(
+              name: t!.name,
+              description: t.description,
+              inputSchema: {},
+            ),
+          )
+          .toList();
+      if (builtInTools.isNotEmpty) {
+        combined['Built-in'] = builtInTools;
       }
     }
 
@@ -1937,6 +1965,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Widget _buildSendControl(AppLocalizations l10n) {
+    // Only show handle if there are tools available
+    if (!_hasAvailableTools) {
+      return const SizedBox.shrink();
+    }
     if (_isAborting) {
       return const SizedBox(
         width: 40,
@@ -2045,8 +2077,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final activeBuiltInToolsCount = _selectedBuiltInTools.length;
     final totalActiveCount =
-        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
+        activeMcpCount +
+        activeLocalCount +
+        activeModelFeaturesCount +
+        activeBuiltInToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
@@ -2115,6 +2151,65 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
+                    // Built-in Tools
+                    if (BuiltInToolsService.tools.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.build,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.builtInTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeBuiltInToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeBuiltInToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...BuiltInToolsService.tools.map((tool) {
+                        final isSelected = _selectedBuiltInTools.contains(
+                          tool.id,
+                        );
+                        return CheckboxListTile(
+                          title: Text(tool.name),
+                          subtitle: Text(
+                            tool.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          value: isSelected,
+                          secondary: Icon(tool.icon, color: tool.color),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedBuiltInTools.add(tool.id);
+                              } else {
+                                _selectedBuiltInTools.remove(tool.id);
+                              }
+                            });
+                          },
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                          dense: true,
+                        );
+                      }),
+                      const Divider(),
+                    ],
                     if (_availableMcpEndpoints.isNotEmpty) ...[
                       Row(
                         children: [

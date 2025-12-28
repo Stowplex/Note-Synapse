@@ -4256,6 +4256,12 @@ abstract class AppLocalizations {
   /// **'Include query params for auth if needed (e.g., Smithery)'**
   String get baseUrlHelperText;
 
+  /// No description provided for @builtInTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in Tools'**
+  String get builtInTools;
+
   /// No description provided for @transportType.
   ///
   /// In en, this message translates to:
