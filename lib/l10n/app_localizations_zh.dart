@@ -2378,6 +2378,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiContextBookmarks => 'AI Context: Bookmarks';
 
   @override
+  String get configureAiContext => 'Configure AI Context';
+
+  @override
+  String aiContext(String mode) {
+    return 'AI Context: $mode';
+  }
+
+  @override
+  String get aiContextFullPdf => 'Full PDF';
+
+  @override
+  String get aiContextWindow => 'Window';
+
+  @override
+  String get aiContextChapters => 'Chapters';
+
+  @override
   String get windowSize => 'Window Size';
 
   @override

@@ -4388,6 +4388,36 @@ abstract class AppLocalizations {
   /// **'AI Context: Bookmarks'**
   String get aiContextBookmarks;
 
+  /// No description provided for @configureAiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure AI Context'**
+  String get configureAiContext;
+
+  /// No description provided for @aiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Context: {mode}'**
+  String aiContext(String mode);
+
+  /// No description provided for @aiContextFullPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Full PDF'**
+  String get aiContextFullPdf;
+
+  /// No description provided for @aiContextWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window'**
+  String get aiContextWindow;
+
+  /// No description provided for @aiContextChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get aiContextChapters;
+
   /// No description provided for @windowSize.
   ///
   /// In en, this message translates to:

@@ -808,6 +808,18 @@
   "bookmarkAnnotationHint": "Enter annotation (max 200 chars)",
   "noBookmarksYet": "No bookmarks yet",
   "aiContextBookmarks": "AI Context: Bookmarks",
+  "configureAiContext": "Configure AI Context",
+  "aiContext": "AI Context: {mode}",
+  "@aiContext": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "aiContextFullPdf": "Full PDF",
+  "aiContextWindow": "Window",
+  "aiContextChapters": "Chapters",
   "windowSize": "Window Size",
   "pagesBeforeAfter": "Pages before/after",
   "errorRefreshingTools": "Error refreshing tools: {error}",

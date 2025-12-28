@@ -115,6 +115,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
+  final Map<String, PdfAiContextConfig> _pdfContextConfigs = {};
   final Map<String, PdfViewerController> _pdfViewerControllers = {};
   final Map<String, PdfDocument> _pdfDocuments = {};
   final Map<String, List<PdfOutlineNode>> _pdfOutlines = {};
@@ -221,6 +222,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (index != null) {
         _activeNoteIndex = index;
       }
+      _loadPdfContextConfig(widget.initialAttachmentPath!);
     }
 
     // Don't create conversation immediately - wait for first message
@@ -796,9 +798,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     if (existingBookmarkIndex != -1) {
       // Remove bookmark
       await _removeBookmark(attachment, currentPage);
+      await _loadPdfContextConfig(_activeAttachmentPath!);
     } else {
       // Add bookmark
       await _showAddEditBookmarkDialog(attachment, currentPage);
+      await _loadPdfContextConfig(_activeAttachmentPath!);
     }
   }
 
@@ -848,6 +852,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
       // Force rebuild to update menu state if needed
       setState(() {});
+      // Reload config as bookmarks might be part of it, or just to be safe
+      await _loadPdfContextConfig(_activeAttachmentPath!);
     }
   }
 
@@ -867,6 +873,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         ), // Reusing suitable string or adding new one
       );
       setState(() {});
+      await _loadPdfContextConfig(attachment.filePath);
     }
   }
 
@@ -1055,7 +1062,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
+                onSelected: (value) async {
                   if (value == 'open_chat') {
                     _openConversationInChatMode();
                   } else if (value == 'note_action_apps') {
@@ -1073,7 +1080,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       ),
                     );
                   } else if (value == 'configure_pdf_ai_context') {
-                    _showPdfAiContextDialogForActiveAttachment();
+                    await _showPdfAiContextDialogForActiveAttachment();
+                    if (_activeAttachmentPath != null) {
+                      await _loadPdfContextConfig(_activeAttachmentPath!);
+                    }
                   } else if (value == 'bookmarks') {
                     _showBookmarksList();
                   } else if (value == 'toggle_bookmark') {
@@ -1090,18 +1100,36 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     if (_conversation != null)
                       PopupMenuItem<String>(
                         value: 'open_chat',
-                        child: Text(l10n.openInChatMode),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.chat_bubble_outline),
+                            const SizedBox(width: 8),
+                            Text(l10n.openInChatMode),
+                          ],
+                        ),
                       ),
                     if (_conversationNotes.isNotEmpty)
                       PopupMenuItem<String>(
                         value: 'note_action_apps',
-                        child: Text(l10n.noteActionApps),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.apps),
+                            const SizedBox(width: 8),
+                            Text(l10n.noteActionApps),
+                          ],
+                        ),
                       ),
                     if (isPdf) ...[
                       const PopupMenuDivider(),
                       PopupMenuItem<String>(
                         value: 'bookmarks',
-                        child: Text(l10n.bookmarks),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bookmarks_outlined),
+                            const SizedBox(width: 8),
+                            Text(l10n.bookmarks),
+                          ],
+                        ),
                       ),
                       // We can check if page is bookmarked if we had sync access to it,
                       // but for now generic "Bookmark Page" which toggles is fine.
@@ -1109,7 +1137,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       // final isBookmarked = _isCurrentPageBookmarked(); // helper if we can make it sync
                       PopupMenuItem<String>(
                         value: 'toggle_bookmark',
-                        child: Text(l10n.bookmarkPage),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bookmark_add_outlined),
+                            const SizedBox(width: 8),
+                            Text(l10n.bookmarkPage),
+                          ],
+                        ),
                       ),
                       PopupMenuItem<String>(
                         value: 'configure_pdf_ai_context',
@@ -1123,19 +1157,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                   : null,
                             ),
                             const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                l10n.aiContextBookmarks ??
-                                    'Configure AI Context',
-                              ),
-                            ),
+                            Expanded(child: Text(_getPdfAiContextLabel(l10n))),
                           ],
                         ),
                       ),
                     ],
                     PopupMenuItem<String>(
                       value: 'ai_logs',
-                      child: Text(l10n.aiLogs),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bug_report_outlined),
+                          const SizedBox(width: 8),
+                          Text(l10n.aiLogs),
+                        ],
+                      ),
                     ),
                   ];
                 },
@@ -3548,9 +3583,69 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   /// Check if a PDF has a custom AI context configuration
   bool _hasPdfAiContextConfig(String attachmentPath) {
-    // Look up the attachment in the current note's attachments
-    // This is a simplified check - in a full implementation we'd cache this
-    return false; // Will be updated when attachment metadata is loaded
+    if (_activeAttachmentPath != attachmentPath) return false;
+    final config = _pdfContextConfigs[attachmentPath];
+    return config != null && config.hasCustomRange;
+  }
+
+  /// Get the label for the PDF AI context menu item
+  String _getPdfAiContextLabel(AppLocalizations l10n) {
+    if (_activeAttachmentPath == null) return l10n.configureAiContext;
+
+    final config = _pdfContextConfigs[_activeAttachmentPath];
+    if (config == null || !config.hasCustomRange) {
+      return l10n.configureAiContext;
+    }
+
+    String modeLabel;
+    switch (config.mode) {
+      case 'window':
+        modeLabel = l10n.aiContextWindow;
+        break;
+      case 'chapters':
+        modeLabel = l10n.aiContextChapters;
+        break;
+      case 'bookmarks':
+        modeLabel = l10n.aiContextBookmarks.replaceAll(
+          'AI Context: ',
+          '',
+        ); // Reuse existing label part or fallback
+        // Better to use the new simple labels if possible, but aiContextBookmarks in arb includes prefix.
+        // Let's rely on the new pattern:
+        // "aiContext": "AI Context: {mode}"
+        // But for bookmarks, the existing key "aiContextBookmarks" is "AI Context: Bookmarks".
+        // To be consistent with the plan, let's use the new key "aiContext" and pass specific string.
+        // Wait, "aiContextBookmarks" is "AI Context: Bookmarks".
+        // "aiContext" is "AI Context: {mode}".
+        // If I pass "Bookmarks" to the second one, I get "AI Context: Bookmarks".
+        // I don't have a "Bookmarks" standalone string key in the plan, I only saw "aiContextBookmarks".
+        // Actually, "bookmarks" key exists (line 1104 in original file view shows usage of l10n.bookmarks).
+        modeLabel = l10n.bookmarks;
+        break;
+      default:
+        modeLabel = l10n.aiContextFullPdf;
+    }
+
+    return l10n.aiContext(modeLabel);
+  }
+
+  /// Load and cache the PDF AI context configuration
+  Future<void> _loadPdfContextConfig(String path) async {
+    if (!path.toLowerCase().endsWith('.pdf')) return;
+
+    final attachment = await _resolveAttachment(path);
+    if (attachment == null) return;
+
+    final config = attachment.getAiContextConfig();
+    if (mounted) {
+      setState(() {
+        if (config != null) {
+          _pdfContextConfigs[path] = config;
+        } else {
+          _pdfContextConfigs.remove(path);
+        }
+      });
+    }
   }
 
   /// Show the PDF AI context dialog for the active attachment
