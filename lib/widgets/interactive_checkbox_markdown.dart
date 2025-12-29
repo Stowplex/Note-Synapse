@@ -277,8 +277,9 @@ class _InteractiveCheckboxMarkdownState
     BuildContext context,
     String url,
     double? width,
-    double? height,
-  ) {
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+  }) {
     return FutureBuilder<SynapseTempFile>(
       future: _resolveSynapseTempFileCached(url),
       builder: (context, snapshot) {
@@ -319,7 +320,7 @@ class _InteractiveCheckboxMarkdownState
           final imageWidget = Image.memory(
             tempFile.bytes,
             key: ValueKey('\$url_\${_imageVersions[url] ?? 0}'),
-            fit: BoxFit.contain,
+            fit: fit,
             errorBuilder: (context, error, stackTrace) {
               return _buildPlaceholder(width, height, 'Failed to render image');
             },
@@ -358,6 +359,14 @@ class _InteractiveCheckboxMarkdownState
     double? width,
     double? height,
   }) {
+    // If we are in "preview mode" (indicated by maxLines being set),
+    // we want to enforce a stable image height to prevent scroll jumping in lists.
+    // We also use BoxFit.cover to fill the banner area nicely.
+    final bool isPreview = widget.maxLines != null;
+    final double? effectiveHeight = isPreview ? 200.0 : height;
+    final double? effectiveWidth = isPreview ? double.infinity : width;
+    final BoxFit effectiveFit = isPreview ? BoxFit.cover : BoxFit.contain;
+
     if (url.startsWith('data:')) {
       try {
         final uri = Uri.parse(url);
@@ -365,7 +374,11 @@ class _InteractiveCheckboxMarkdownState
 
         final commaIndex = dataString.indexOf(',');
         if (commaIndex == -1) {
-          return _buildPlaceholder(width, height, 'Invalid data URL format');
+          return _buildPlaceholder(
+            effectiveWidth,
+            effectiveHeight,
+            'Invalid data URL format',
+          );
         }
 
         final header = dataString.substring(5, commaIndex); // Skip 'data:'
@@ -393,23 +406,27 @@ class _InteractiveCheckboxMarkdownState
             return _SvgWebViewWithInfoBar(
               svgContent: svgContent,
               imageUrl: url,
-              width: width,
-              height: height,
+              width: effectiveWidth,
+              height: effectiveHeight,
               noteId: widget.noteId,
             );
           } catch (e) {
             if (kDebugMode) {
               debugPrint('Error decoding SVG from data URL: $e');
             }
-            return _buildPlaceholder(width, height, 'Failed to decode SVG');
+            return _buildPlaceholder(
+              effectiveWidth,
+              effectiveHeight,
+              'Failed to decode SVG',
+            );
           }
         }
 
         if (mimetype.startsWith('image/')) {
           if (!isBase64) {
             return _buildPlaceholder(
-              width,
-              height,
+              effectiveWidth,
+              effectiveHeight,
               'Only base64 encoded images are supported',
             );
           }
@@ -418,13 +435,21 @@ class _InteractiveCheckboxMarkdownState
           final imageWidget = Image.memory(
             bytes,
             key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
-            fit: BoxFit.contain,
+            fit: effectiveFit,
             errorBuilder: (context, error, stackTrace) {
-              return _buildPlaceholder(width, height, 'Failed to render image');
+              return _buildPlaceholder(
+                effectiveWidth,
+                effectiveHeight,
+                'Failed to render image',
+              );
             },
           );
           return _wrapImageWithInfoBar(
-            image: SizedBox(width: width, height: height, child: imageWidget),
+            image: SizedBox(
+              width: effectiveWidth,
+              height: effectiveHeight,
+              child: imageWidget,
+            ),
             imageUrl: url,
             isSvg: false,
             onFullscreen: () {
@@ -438,12 +463,16 @@ class _InteractiveCheckboxMarkdownState
         }
 
         return _buildPlaceholder(
-          width,
-          height,
+          effectiveWidth,
+          effectiveHeight,
           'Unsupported image type: $mimetype',
         );
       } catch (e) {
-        return _buildPlaceholder(width, height, 'Error loading image: $e');
+        return _buildPlaceholder(
+          effectiveWidth,
+          effectiveHeight,
+          'Error loading image: $e',
+        );
       }
     }
 
@@ -457,7 +486,7 @@ class _InteractiveCheckboxMarkdownState
         future: _resolveLocalImageSourceCached(url),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingPlaceholder(width, height);
+            return _buildLoadingPlaceholder(effectiveWidth, effectiveHeight);
           }
 
           Widget buildFallback() {
@@ -467,10 +496,21 @@ class _InteractiveCheckboxMarkdownState
               );
             }
             if (SynapseTempUtils.isSynapseTempUri(url)) {
-              return _buildGenericSynapseTempImage(context, url, width, height);
+              return _buildGenericSynapseTempImage(
+                context,
+                url,
+                effectiveWidth,
+                effectiveHeight,
+                fit: effectiveFit,
+              );
             }
             return _wrapImageWithInfoBar(
-              image: _buildNetworkImage(url, width, height),
+              image: _buildNetworkImage(
+                url,
+                effectiveWidth,
+                effectiveHeight,
+                fit: effectiveFit,
+              ),
               imageUrl: url,
               isSvg: false,
               onFullscreen: () {
@@ -494,8 +534,8 @@ class _InteractiveCheckboxMarkdownState
               return _SvgWebViewWithInfoBar(
                 svgContent: source.svgContent!,
                 imageUrl: url,
-                width: width,
-                height: height,
+                width: effectiveWidth,
+                height: effectiveHeight,
                 noteId: widget.noteId,
               );
             }
@@ -518,16 +558,16 @@ class _InteractiveCheckboxMarkdownState
                   }
                   return _wrapImageWithInfoBar(
                     image: SizedBox(
-                      width: width,
-                      height: height,
+                      width: effectiveWidth,
+                      height: effectiveHeight,
                       child: Image.memory(
                         byteSnapshot.data!,
                         key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
-                        fit: BoxFit.contain,
+                        fit: effectiveFit,
                         errorBuilder: (context, error, stackTrace) {
                           return _buildPlaceholder(
-                            width,
-                            height,
+                            effectiveWidth,
+                            effectiveHeight,
                             'Failed to render local image bytes',
                           );
                         },
@@ -547,7 +587,10 @@ class _InteractiveCheckboxMarkdownState
                     },
                   );
                 }
-                return _buildLoadingPlaceholder(width, height);
+                return _buildLoadingPlaceholder(
+                  effectiveWidth,
+                  effectiveHeight,
+                );
               },
             );
           }
@@ -557,12 +600,27 @@ class _InteractiveCheckboxMarkdownState
     }
 
     if (SynapseTempUtils.isSynapseTempUri(url)) {
-      return _buildGenericSynapseTempImage(context, url, width, height);
+      return _buildGenericSynapseTempImage(
+        context,
+        url,
+        effectiveWidth,
+        effectiveHeight,
+        fit: effectiveFit,
+      );
     }
 
-    final imageWidget = _buildNetworkImage(url, width, height);
+    final imageWidget = _buildNetworkImage(
+      url,
+      effectiveWidth,
+      effectiveHeight,
+      fit: effectiveFit,
+    );
     return _wrapImageWithInfoBar(
-      image: SizedBox(width: width, height: height, child: imageWidget),
+      image: SizedBox(
+        width: effectiveWidth,
+        height: effectiveHeight,
+        child: imageWidget,
+      ),
       imageUrl: url,
       isSvg: false,
       onFullscreen: () {
@@ -610,7 +668,12 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
-  Widget _buildNetworkImage(String url, double? width, double? height) {
+  Widget _buildNetworkImage(
+    String url,
+    double? width,
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+  }) {
     return SizedBox(
       width: width,
       height: height,
@@ -635,7 +698,7 @@ class _InteractiveCheckboxMarkdownState
                 ),
               );
             },
-        fit: BoxFit.contain,
+        fit: fit,
         errorBuilder: (context, error, stackTrace) {
           return const Icon(Icons.broken_image, size: 48);
         },
