@@ -140,6 +140,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _includeScratchpadInChat = false;
   int _lastSavedScratchpadCount = 0;
 
+  // PDF State
+  bool _isPdfNightMode = false;
+
   bool get _isScratchpadDirty =>
       _scratchpadItems.length != _lastSavedScratchpadCount;
 
@@ -1088,6 +1091,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     _showBookmarksList();
                   } else if (value == 'toggle_bookmark') {
                     _toggleBookmark();
+                  } else if (value == 'toggle_pdf_night_mode') {
+                    setState(() {
+                      _isPdfNightMode = !_isPdfNightMode;
+                    });
                   }
                 },
                 itemBuilder: (context) {
@@ -1158,6 +1165,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                             const SizedBox(width: 8),
                             Expanded(child: Text(_getPdfAiContextLabel(l10n))),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'toggle_pdf_night_mode',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isPdfNightMode
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isPdfNightMode ? 'Day Mode' : 'Night Mode',
+                            ), // TODO: l10n
                           ],
                         ),
                       ),
@@ -3331,6 +3354,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     });
                   }
                 },
+                isNightMode: _isPdfNightMode,
               );
             },
           );
@@ -5014,6 +5038,7 @@ class _PdfDocumentView extends StatefulWidget {
     required this.controllerMap,
     required this.onError,
     this.onDocumentReady,
+    this.isNightMode = false,
   });
 
   final _AttachmentSource source;
@@ -5028,6 +5053,7 @@ class _PdfDocumentView extends StatefulWidget {
     List<PdfOutlineNode>? outline,
   )?
   onDocumentReady;
+  final bool isNightMode;
 
   @override
   State<_PdfDocumentView> createState() => _PdfDocumentViewState();
@@ -5102,48 +5128,54 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     widget.currentPageMap.putIfAbsent(_cacheKey, () => storedPage);
     final initialPage = widget.currentPageMap[_cacheKey] ?? storedPage;
 
-    return PdfViewer.file(
-      filePath,
-      key: ValueKey('${_cacheKey}_pdf_view'),
-      controller: _controller,
-      params: PdfViewerParams(
-        textSelectionParams: const PdfTextSelectionParams(),
-        pageDropShadow: null,
-        onViewerReady: (document, controller) async {
-          if (_documentReady) return;
-          _documentReady = true;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(
+        Colors.white,
+        widget.isNightMode ? BlendMode.difference : BlendMode.dst,
+      ),
+      child: PdfViewer.file(
+        filePath,
+        key: ValueKey('${_cacheKey}_pdf_view'),
+        controller: _controller,
+        params: PdfViewerParams(
+          textSelectionParams: const PdfTextSelectionParams(),
+          pageDropShadow: null,
+          onViewerReady: (document, controller) async {
+            if (_documentReady) return;
+            _documentReady = true;
 
-          // Store total pages
-          widget.totalPageMap[_cacheKey] = document.pages.length;
+            // Store total pages
+            widget.totalPageMap[_cacheKey] = document.pages.length;
 
-          // Load outline
-          List<PdfOutlineNode>? outline;
-          try {
-            outline = await document.loadOutline();
-          } catch (e) {
-            // Outline loading failed, not critical
-          }
-
-          // Notify parent
-          widget.onDocumentReady?.call(_cacheKey, document, outline);
-
-          // Navigate to stored page
-          if (initialPage > 0 && initialPage < document.pages.length) {
+            // Load outline
+            List<PdfOutlineNode>? outline;
             try {
-              await controller.goToPage(
-                pageNumber: initialPage + 1,
-              ); // pdfrx uses 1-indexed pages
+              outline = await document.loadOutline();
             } catch (e) {
-              widget.onError('Unable to set initial PDF page: $e');
+              // Outline loading failed, not critical
             }
-          }
-        },
-        onPageChanged: (pageNumber) {
-          if (pageNumber != null) {
-            // pdfrx uses 1-indexed page numbers, convert to 0-indexed for storage
-            widget.currentPageMap[_cacheKey] = pageNumber - 1;
-          }
-        },
+
+            // Notify parent
+            widget.onDocumentReady?.call(_cacheKey, document, outline);
+
+            // Navigate to stored page
+            if (initialPage > 0 && initialPage < document.pages.length) {
+              try {
+                await controller.goToPage(
+                  pageNumber: initialPage + 1,
+                ); // pdfrx uses 1-indexed pages
+              } catch (e) {
+                widget.onError('Unable to set initial PDF page: $e');
+              }
+            }
+          },
+          onPageChanged: (pageNumber) {
+            if (pageNumber != null) {
+              // pdfrx uses 1-indexed page numbers, convert to 0-indexed for storage
+              widget.currentPageMap[_cacheKey] = pageNumber - 1;
+            }
+          },
+        ),
       ),
     );
   }
