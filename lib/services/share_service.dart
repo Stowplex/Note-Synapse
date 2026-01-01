@@ -19,7 +19,6 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:archive/archive_io.dart';
-import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
@@ -351,8 +350,8 @@ class ShareService {
     }
   }
 
-  /// Creates a ZIP archive from a directory by iterating files asynchronously.
-  /// Uses Archive/ZipEncoder directly for more reliable file inclusion.
+  /// Creates a ZIP archive from a directory using streaming approach.
+  /// Uses ZipFileEncoder for memory-efficient streaming to avoid OOM with large files.
   static Future<void> _createZipArchiveFromDirectory(
     Directory sourceDir,
     String zipFilePath,
@@ -361,44 +360,78 @@ class ShareService {
       '_createZipArchiveFromDirectory: sourceDir=${sourceDir.path}',
     );
 
-    final archive = Archive();
+    final encoder = ZipFileEncoder();
+    encoder.create(zipFilePath);
+
     int fileCount = 0;
 
     await for (final entity in sourceDir.list(recursive: true)) {
       if (entity is File) {
-        final relativePath = entity.path.substring(sourceDir.path.length + 1);
-
-        // Read file bytes asynchronously
-        final bytes = await entity.readAsBytes();
+        final file = entity;
+        final relativePath = file.path.substring(sourceDir.path.length + 1);
 
         LoggerService.debug(
           '_createZipArchiveFromDirectory: Adding file: $relativePath '
-          '(${bytes.length} bytes)',
+          '(${await file.length()} bytes)',
         );
 
-        // Create archive file with the bytes
-        final archiveFile = ArchiveFile(relativePath, bytes.length, bytes);
-        archive.addFile(archiveFile);
+        // Use addFile with explicit File object for streaming
+        encoder.addFile(file, relativePath);
         fileCount++;
+
+        // Yield to allow I/O operations to complete (matches recovery_screen pattern)
+        await Future.delayed(Duration.zero);
       }
     }
 
+    encoder.close();
+
+    // Verify the ZIP was created correctly
+    final zipFile = File(zipFilePath);
+    final zipSize = await zipFile.length();
+
     LoggerService.debug(
-      '_createZipArchiveFromDirectory: Encoding $fileCount files...',
+      '_createZipArchiveFromDirectory: Added $fileCount files, '
+      'ZIP size: $zipSize bytes',
     );
 
-    // Encode the archive to ZIP format
+    // If ZIP is suspiciously small (< 100 bytes with files), fall back to in-memory encoding
+    if (fileCount > 0 && zipSize < 100) {
+      LoggerService.warning(
+        '_createZipArchiveFromDirectory: Streaming ZIP failed ($zipSize bytes), '
+        'falling back to in-memory encoding',
+      );
+      await _createZipArchiveInMemory(sourceDir, zipFilePath);
+    }
+  }
+
+  /// Fallback: Creates a ZIP archive by loading all files into memory.
+  /// Used when streaming approach fails.
+  static Future<void> _createZipArchiveInMemory(
+    Directory sourceDir,
+    String zipFilePath,
+  ) async {
+    final archive = Archive();
+
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final relativePath = entity.path.substring(sourceDir.path.length + 1);
+        final bytes = await entity.readAsBytes();
+
+        LoggerService.debug(
+          '_createZipArchiveInMemory: Adding file: $relativePath '
+          '(${bytes.length} bytes)',
+        );
+
+        archive.addFile(ArchiveFile(relativePath, bytes.length, bytes));
+      }
+    }
+
     final zipData = ZipEncoder().encode(archive);
-
-    LoggerService.debug(
-      '_createZipArchiveFromDirectory: Encoded ZIP size: ${zipData.length} bytes',
-    );
-
-    // Write the ZIP data to file
     await File(zipFilePath).writeAsBytes(zipData);
 
     LoggerService.debug(
-      '_createZipArchiveFromDirectory: Added $fileCount files to ZIP',
+      '_createZipArchiveInMemory: Created ZIP with ${zipData.length} bytes',
     );
   }
 
