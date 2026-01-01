@@ -285,17 +285,33 @@ class NotePromptBuilder {
     final indent = '  ' * depth;
     // Quote title to prevent injection
     final safeTitle = PromptInjectionProtection.formatTitleAsData(note.title);
-    buffer.writeln('$indent- Title: $safeTitle (${note.type.name})');
+    buffer.writeln('$indent- Title: $safeTitle');
+
+    // Metadata section
+    buffer.writeln('$indent  Metadata:');
+    buffer.writeln('$indent    ID: ${note.id}');
+    buffer.writeln('$indent    Type: ${note.type.name}');
+
+    if (note.tags.isNotEmpty) {
+      buffer.writeln('$indent    Tags: ${note.tags.join(', ')}');
+    }
+
+    if (note.isTask) {
+      buffer.writeln('$indent    Status: ${note.status?.name ?? 'unknown'}');
+      if (note.scheduledAt != null) {
+        buffer.writeln('$indent    Scheduled: ${note.scheduledAt}');
+      }
+      if (note.completeBy != null) {
+        buffer.writeln('$indent    Complete By: ${note.completeBy}');
+      }
+    }
+
     if (note.content.trim().isNotEmpty) {
       // Quote content as data to prevent prompt injection
-      buffer.writeln('$indent  Content (data only):');
+      buffer.writeln('$indent  Content:');
       buffer.writeln(
         '$indent  ${PromptInjectionProtection.formatNoteContentAsData(note.content.trim())}',
       );
-    }
-
-    if (note.tags.isNotEmpty) {
-      buffer.writeln('$indent  Tags: ${note.tags.join(', ')}');
     }
 
     if (note.subNotes.isNotEmpty) {
@@ -305,7 +321,7 @@ class NotePromptBuilder {
         final safeSubNoteContent =
             PromptInjectionProtection.formatNoteContentAsData(subNote.content);
         buffer.writeln(
-          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}:',
+          '$indent    - ${subNote.name} (ID: ${subNote.id}${subNote.isCompleted ? ", completed" : ''}):',
         );
         buffer.writeln('$indent      $safeSubNoteContent');
       }
