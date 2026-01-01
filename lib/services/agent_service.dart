@@ -5,10 +5,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/agent_task.dart';
+import '../models/context_node.dart';
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import 'tools/note_tools.dart';
 import 'ai_service.dart';
+import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
 import 'mcp_tool_integration_service.dart';
@@ -34,6 +36,16 @@ class AgentService extends ChangeNotifier {
   Map<String, dynamic>? _finalMetadata;
   ToolExecutor? _toolExecutor;
 
+  // Hierarchical Context Management
+  final ContextManagerService _contextManager = ContextManagerService();
+  String? _currentObjective;
+
+  /// Gets the context manager for external access.
+  ContextManagerService get contextManager => _contextManager;
+
+  /// Gets the current objective.
+  String? get currentObjective => _currentObjective;
+
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   Map<String, List<McpTool>> get externalTools =>
       Map.unmodifiable(_externalTools);
@@ -49,23 +61,24 @@ class AgentService extends ChangeNotifier {
     _currentThought = null;
     _isRunning = false;
     _toolExecutor = null;
+    _currentObjective = null;
+    _contextManager.clear();
     notifyListeners();
   }
 
   // ... (nativeTools and dbSchema definitions remain the same) ...
 
-  /// ExecuteLoop with Final Summary Generation
+  /// ExecuteLoop with Hierarchical Context Management
   Future<void> _executeLoop() async {
-    final StringBuffer globalContext = StringBuffer();
-
-    // Rebuild context from already completed tasks if we are resuming?
-    for (final t in _tasks) {
-      if (t.status == AgentTaskStatus.completed) {
-        globalContext.writeln('Task: ${t.description}');
-        globalContext.writeln('Result: ${t.result}');
-        globalContext.writeln('---');
-      }
+    // Ensure root context exists (should be created in generatePlan)
+    if (_contextManager.rootContext == null && _currentObjective != null) {
+      _contextManager.createRootContext(
+        objective: _currentObjective!,
+        allowedTools: getAllToolNames(),
+      );
     }
+
+    final rootContext = _contextManager.rootContext;
 
     while (_isRunning &&
         _tasks.any(
@@ -79,25 +92,45 @@ class AgentService extends ChangeNotifier {
             t.status == AgentTaskStatus.paused,
       );
 
+      // Create or get context node for this task
+      ContextNode taskContext;
+      if (task.contextNodeId != null) {
+        taskContext =
+            _contextManager.getContext(task.contextNodeId!) ??
+            _createTaskContext(task, rootContext);
+      } else {
+        taskContext = _createTaskContext(task, rootContext);
+        task.contextNodeId = taskContext.id;
+      }
+
+      _contextManager.setActiveContext(taskContext);
+
       // Update status
       task.status = AgentTaskStatus.inProgress;
+      taskContext.status = ContextNodeStatus.active;
       _currentThought = 'Working on: ${task.description}';
       notifyListeners();
 
       try {
         // Run ReAct loop for this task until it's done or paused
         while (task.status == AgentTaskStatus.inProgress && _isRunning) {
-          await _performTask(task, globalContext.toString());
+          // Check and compact context if nearing token limit
+          await _contextManager.checkAndCompact(taskContext);
 
-          // Small delay to prevent tight loops if something goes wrong,
-          // though _performTask awaits network calls usually.
+          // Build scoped context for this task
+          final scopedContext = _contextManager.buildContextForNode(
+            taskContext,
+          );
+          await _performTask(task, scopedContext);
+
+          // Small delay to prevent tight loops
           if (task.status == AgentTaskStatus.inProgress) {
             await Future.delayed(const Duration(milliseconds: 100));
           }
         }
 
         if (task.status == AgentTaskStatus.paused) {
-          // Task paused (max turns reached). Stop execution loop.
+          taskContext.status = ContextNodeStatus.paused;
           _isRunning = false;
           _currentThought = 'Task paused: ${task.description}';
           notifyListeners();
@@ -105,46 +138,102 @@ class AgentService extends ChangeNotifier {
         }
 
         // If we exited loop without being paused, task should be completed or failed.
-        // If somehow still inProgress (e.g. _isRunning became false), we stop.
         if (!_isRunning && task.status == AgentTaskStatus.inProgress) {
           return;
         }
 
-        // Log result if completed
+        // Generate condensed summary for completed tasks
         if (task.status == AgentTaskStatus.completed) {
-          globalContext.writeln('Task: ${task.description}');
-          globalContext.writeln('Result: ${task.result}');
-          globalContext.writeln('---');
+          try {
+            task.condensedSummary = await _contextManager.generateFinalSummary(
+              taskContext,
+            );
+            taskContext.log('Task completed with result: ${task.result}');
+          } catch (e) {
+            LoggerService.error('Failed to generate task summary: $e');
+            task.condensedSummary = task.result;
+            taskContext.status = ContextNodeStatus.completed;
+          }
         } else if (task.status == AgentTaskStatus.failed) {
-          globalContext.writeln('Task: ${task.description}');
-          globalContext.writeln('Failed: ${task.result}');
-          globalContext.writeln('---');
+          _contextManager.markContextFailed(
+            taskContext,
+            task.result ?? 'Unknown error',
+          );
         }
       } catch (e) {
         task.status = AgentTaskStatus.failed;
         task.result = 'Error: $e';
-        // Even on failure, log it so next tasks know
-        globalContext.writeln('Task: ${task.description}');
-        globalContext.writeln('Failed: $e');
-        globalContext.writeln('---');
+        _contextManager.markContextFailed(taskContext, '$e');
       }
       notifyListeners();
     }
 
+    // Generate final summary using root context
     if (_tasks.every((t) => t.status == AgentTaskStatus.completed)) {
       _currentThought = 'Generating final summary...';
       notifyListeners();
 
       try {
-        await _generateFinalSummary(globalContext.toString());
+        final rootCtx = _contextManager.rootContext;
+        final contextSummary = rootCtx != null
+            ? _contextManager.buildContextForNode(rootCtx)
+            : _buildLegacyContext();
+        await _generateFinalSummary(contextSummary);
         _currentThought = 'All tasks completed.';
       } catch (e) {
-        // Fallback if summary fails
         _finalAnswer =
             "Execution finished, but failed to generate summary. See task details.";
         LoggerService.error('Failed to generate summary: $e');
       }
     }
+  }
+
+  /// Creates a context node for a task, linking it to parent context.
+  ContextNode _createTaskContext(AgentTask task, ContextNode? rootContext) {
+    if (rootContext == null) {
+      return _contextManager.createRootContext(
+        objective: task.description,
+        allowedTools: task.allowedTools,
+      );
+    }
+
+    // For subtasks, create child context
+    if (task.isSubtask) {
+      final parentTask = _tasks.firstWhere(
+        (t) => t.id == task.parentTaskId,
+        orElse: () => task,
+      );
+      final parentContext = parentTask.contextNodeId != null
+          ? _contextManager.getContext(parentTask.contextNodeId!)
+          : rootContext;
+
+      return _contextManager.createChildContext(
+        parent: parentContext ?? rootContext,
+        objective: task.description,
+        allowedTools: task.allowedTools.isNotEmpty ? task.allowedTools : null,
+      );
+    }
+
+    // For root-level tasks in a multi-task plan, use root context directly
+    // or create a child context for isolation
+    return _contextManager.createChildContext(
+      parent: rootContext,
+      objective: task.description,
+      allowedTools: task.allowedTools.isNotEmpty ? task.allowedTools : null,
+    );
+  }
+
+  /// Builds legacy context from completed tasks (fallback for backwards compatibility).
+  String _buildLegacyContext() {
+    final buffer = StringBuffer();
+    for (final t in _tasks) {
+      if (t.status == AgentTaskStatus.completed) {
+        buffer.writeln('Task: ${t.description}');
+        buffer.writeln('Result: ${t.condensedSummary ?? t.result}');
+        buffer.writeln('---');
+      }
+    }
+    return buffer.toString();
   }
 
   Future<void> _generateFinalSummary(String globalContext) async {
@@ -232,6 +321,19 @@ When referring to notes or conversations, use inline markdown links with the syn
     // Reset previous results
     _finalAnswer = null;
     _finalMetadata = null;
+
+    // Store objective and initialize root context for hierarchical management
+    _currentObjective = objective;
+    _contextManager.clear();
+    _contextManager.createRootContext(
+      objective: objective,
+      allowedTools: getAllToolNames(),
+    );
+    _contextManager.rootContext?.log('Planning phase started');
+    if (context != null) {
+      _contextManager.rootContext?.log('Additional context provided: $context');
+    }
+
     notifyListeners();
 
     // Build descriptions for external tools if available
@@ -671,6 +773,13 @@ OR
       task.executionHistory.add('Turn $turn:');
       task.executionHistory.add('Thought: $_currentThought');
 
+      // Log to hierarchical context
+      if (task.contextNodeId != null) {
+        _contextManager
+            .getContext(task.contextNodeId!)
+            ?.log('Turn $turn - Thought: $_currentThought');
+      }
+
       if (jsonStr == null) {
         task.executionHistory.add("Error: No JSON action found in response.");
         return;
@@ -701,6 +810,11 @@ OR
 
       // Execute Tool
       task.executionHistory.add('Action: Call $toolName');
+      _contextManager
+          .getContext(task.contextNodeId ?? '')
+          ?.log(
+            'Action: Calling tool $toolName with args: ${jsonEncode(args)}',
+          );
       notifyListeners();
 
       dynamic result;
@@ -754,6 +868,10 @@ OR
       }
 
       task.executionHistory.add("Observation: $result");
+      // Log observation to hierarchical context
+      _contextManager
+          .getContext(task.contextNodeId ?? '')
+          ?.log('Observation: $result');
       notifyListeners();
     } catch (e) {
       LoggerService.error("Agent Loop Error: $e");
