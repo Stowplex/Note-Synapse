@@ -38,7 +38,7 @@ class _ShareDialogState extends State<ShareDialog> {
           Text(l10n.shareDialogDescription, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 16),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Checkbox(
                 value: _includeSubNotesAndLinkedNotes,
