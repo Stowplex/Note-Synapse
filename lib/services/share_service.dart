@@ -29,6 +29,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/global_keys.dart';
 import 'svg_renderer_service.dart';
+import 'math_renderer_service.dart';
 
 class ShareService {
   static const MethodChannel _channel = MethodChannel(
@@ -311,6 +312,7 @@ class ShareService {
     required AppProvider appProvider,
     required AppLocalizations l10n,
     required Size pageSize,
+    required BuildContext context,
     bool useSinglePageLayout = false,
   }) async {
     try {
@@ -329,6 +331,7 @@ class ShareService {
         includeSubNotes: includeSubNotesAndLinkedNotes,
         l10n: l10n,
         pageSize: pageSize,
+        context: context,
         useSinglePageLayout: useSinglePageLayout,
       );
 
@@ -457,6 +460,7 @@ class ShareService {
     required bool includeSubNotes,
     required AppLocalizations l10n,
     required Size pageSize,
+    required BuildContext context,
     required bool useSinglePageLayout,
   }) async {
     final fonts = await _PdfFontManager.instance.load();
@@ -478,6 +482,8 @@ class ShareService {
       l10n: l10n,
       pageFormat: pageFormat,
       fonts: fonts,
+      // ignore: use_build_context_synchronously
+      context: context,
     );
 
     final content = await exporter.buildContent();
@@ -531,7 +537,7 @@ class ShareService {
         }
 
         // Attachments
-        for (final path in note.attachmentPaths) {
+        for (final _ in note.attachmentPaths) {
           // Assume each attachment takes some vertical space (image or file listing)
           // Images/SVGs can be up to 500px wide, let's assume 400px height avg
           estimatedHeight += 400.0;
@@ -1485,11 +1491,13 @@ class _PdfNoteRenderer {
     required this.l10n,
     required this.pageFormat,
     required this.fonts,
+    required this.context,
   }) : _contentWidth = math.max(pageFormat.width - 48, 0),
        _markdownRenderer = _MarkdownPdfRenderer(
          l10n: l10n,
          maxContentWidth: math.max(pageFormat.width - 48, 0),
          fonts: fonts,
+         context: context,
        );
 
   final List<Note> notes;
@@ -1497,6 +1505,7 @@ class _PdfNoteRenderer {
   final AppLocalizations l10n;
   final PdfPageFormat pageFormat;
   final _PdfFonts fonts;
+  final BuildContext context;
 
   final double _contentWidth;
   final _MarkdownPdfRenderer _markdownRenderer;
@@ -1905,6 +1914,7 @@ class _MarkdownPdfRenderer {
     required this.l10n,
     required this.maxContentWidth,
     required this.fonts,
+    required this.context,
   }) : _baseTextStyle = pw.TextStyle(
          fontSize: 12,
          lineSpacing: 1.3,
@@ -1930,6 +1940,7 @@ class _MarkdownPdfRenderer {
   final AppLocalizations l10n;
   final double maxContentWidth;
   final _PdfFonts fonts;
+  final BuildContext context;
 
   final pw.TextStyle _baseTextStyle;
   final pw.TextStyle _linkStyle;
@@ -1940,7 +1951,11 @@ class _MarkdownPdfRenderer {
 
   Future<List<pw.Widget>> render(String markdown) async {
     final sanitized = markdown.replaceAll('\r\n', '\n');
-    final document = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored);
+    final document = md.Document(
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+      inlineSyntaxes: [LatexInlineSyntax()],
+      blockSyntaxes: [LatexBlockSyntax()],
+    );
     final nodes = document.parseLines(sanitized.split('\n'));
 
     final widgets = <pw.Widget>[];
@@ -2060,6 +2075,35 @@ class _MarkdownPdfRenderer {
                 )
                 .toList(),
           );
+        case 'latex':
+          // Block LaTeX
+          final tex = node.textContent;
+          final imageBytes = await MathRendererService.renderMathToImage(
+            tex,
+            context,
+            isInline: false,
+          );
+
+          if (imageBytes != null) {
+            final image = pw.MemoryImage(imageBytes);
+            // Limit width if needed, but for block math we can use full width
+            final maxWidth = math.min(maxContentWidth, 600.0).toDouble();
+
+            return pw.Container(
+              padding: const pw.EdgeInsets.symmetric(vertical: 8),
+              alignment: pw.Alignment.center,
+              child: pw.Image(image, width: maxWidth, fit: pw.BoxFit.contain),
+            );
+          } else {
+            // Fallback to text
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 8),
+              child: pw.Text(
+                tex,
+                style: _codeStyle.copyWith(color: PdfColors.red900),
+              ),
+            );
+          }
       }
     } else if (node is md.Text) {
       final text = node.text.trim();
@@ -2371,6 +2415,39 @@ class _MarkdownPdfRenderer {
       case 'img':
         final imageSpan = await _buildImageSpan(node);
         return imageSpan ?? const [];
+      case 'latex':
+        // Inline LaTeX
+        final tex = node.textContent;
+        // Use a smaller scale or adjustment for inline
+        final imageBytes = await MathRendererService.renderMathToImage(
+          tex,
+          context,
+          isInline: true,
+          scale: 3.0, // Higher scale for inline to look crisp when resized down
+        );
+
+        if (imageBytes != null) {
+          final image = pw.MemoryImage(imageBytes);
+          // Calculate reasonable height based on font size.
+          // Standard text is 12pt. Let's aim for something that fits in line.
+          // However, pw.Image in TextSpan isn't fully supported as WidgetSpan in standard RichText in all pdf implementations?
+          // pdf package supports WidgetSpan in RichText.
+
+          return [
+            pw.WidgetSpan(
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 2),
+                child: pw.Image(
+                  image,
+                  height: 14, // align with text size
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+              baseline: -4,
+            ),
+          ];
+        }
+        return [pw.TextSpan(text: tex, style: _codeStyle)];
       default:
         return _buildInlineSpans(node.children ?? [], styleOverride: style);
     }
@@ -2470,5 +2547,39 @@ class _MarkdownPdfRenderer {
       return buffer.toString();
     }
     return '';
+  }
+}
+
+/// Syntax for inline LaTeX: \( ... \)
+class LatexInlineSyntax extends md.InlineSyntax {
+  LatexInlineSyntax() : super(r'\\\((.+?)\\\)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final element = md.Element.text('latex', match[1]!);
+    parser.addNode(element);
+    return true;
+  }
+}
+
+/// Syntax for block LaTeX: \[ ... \]
+class LatexBlockSyntax extends md.BlockSyntax {
+  @override
+  RegExp get pattern =>
+      RegExp(r'^\\\[(.+?)\\\]', multiLine: true, dotAll: true);
+
+  const LatexBlockSyntax();
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    final match = pattern.firstMatch(parser.current.content);
+    if (match != null) {
+      parser.advance();
+      return md.Element.text('latex', match[1]!.trim());
+    }
+
+    // Fallback if regex didn't match (shouldn't happen if pattern matched)
+    parser.advance();
+    return md.Element.text('latex', '');
   }
 }

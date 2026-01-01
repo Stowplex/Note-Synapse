@@ -233,6 +233,7 @@ class _ShareDialogState extends State<ShareDialog> {
         appProvider: appProvider,
         l10n: l10n,
         pageSize: screenSize,
+        context: context,
         useSinglePageLayout: _useSinglePageLayout,
       );
 
