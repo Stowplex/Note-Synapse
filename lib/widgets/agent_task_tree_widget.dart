@@ -297,6 +297,9 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                             ),
                           ),
                         ),
+                      // Paused task controls (turn limit exceeded)
+                      if (task.status == AgentTaskStatus.paused)
+                        _buildPausedTaskControls(context, task, agentService),
                       // Execution log preview (for active task)
                       if (task.status == AgentTaskStatus.inProgress &&
                           contextNode != null)
@@ -536,6 +539,93 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPausedTaskControls(
+    BuildContext context,
+    AgentTask task,
+    AgentService agentService,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Theme.of(context).colorScheme.tertiary),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    task.result ?? 'Max turns reached',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => agentService.abortTask(task.id),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    child: const Text('Abort', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () =>
+                        agentService.resumeTask(task.id, increaseLimit: true),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                    ),
+                    child: const Text(
+                      '+10 Turns',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => agentService.concludeTask(task.id),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                    ),
+                    child: const Text('Bail', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
