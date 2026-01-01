@@ -2082,6 +2082,7 @@ class _MarkdownPdfRenderer {
             tex,
             context,
             isInline: false,
+            color: Colors.black,
           );
 
           if (imageBytes != null) {
@@ -2424,6 +2425,7 @@ class _MarkdownPdfRenderer {
           context,
           isInline: true,
           scale: 3.0, // Higher scale for inline to look crisp when resized down
+          color: Colors.black,
         );
 
         if (imageBytes != null) {
