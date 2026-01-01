@@ -237,23 +237,34 @@ class AgentService extends ChangeNotifier {
   }
 
   Future<void> _generateFinalSummary(String globalContext) async {
-    // We assume the objective is implicit in the context or we could pass it down.
-    // Ideally we should store the initial objective.
-    // For now we ask the LLM to summarize the findings.
+    // Include the original objective to ensure the response addresses user's intent
+    final objective = _currentObjective ?? 'the user\'s request';
 
     final prompt =
         '''
-You have completed a series of tasks to achieve a user objective.
-Here is the execution log (Context):
+USER'S ORIGINAL OBJECTIVE:
+"$objective"
+
+EXECUTION CONTEXT (results from all tasks):
 $globalContext
 
-Based on the above results, provide a final, concise, and helpful response to the user.
-Answer their original request directly.
-Format with Markdown.
+INSTRUCTIONS:
+You have completed a series of tasks to achieve the user's objective stated above.
+Now provide the FINAL RESPONSE to the user that directly addresses their original request.
 
-When referring to notes or conversations, use inline markdown links with the synapseresource:// URI scheme. This allows users to click and navigate directly to that resource:
+This is NOT a summary of what you did - this IS the deliverable the user asked for.
+- If they asked for a list, provide the list
+- If they asked for analysis, provide the analysis
+- If they asked for writing, provide the writing
+- If they asked for information, provide that information
+
+Format your response with Markdown for readability.
+
+When referring to notes or conversations, use inline markdown links with the synapseresource:// URI scheme:
 - For notes: [Note Title](synapseresource://note/<note_id>)
 - For conversations: [Conversation Title](synapseresource://conversation/<conversation_id>)
+
+Respond directly to: "$objective"
 ''';
 
     final response = await AIService.generateWithAttachments(
@@ -267,7 +278,7 @@ When referring to notes or conversations, use inline markdown links with the syn
     _finalMetadata = {
       'modelUsed': ModelSelector.instance.currentModelConfig?.id,
       'is_agent_summary': true,
-      // We could add more if AIService returns it in context, but for now this is sufficient
+      'objective': _currentObjective,
     };
     notifyListeners();
   }
