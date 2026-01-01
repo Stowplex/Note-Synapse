@@ -19,6 +19,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:archive/archive_io.dart';
+import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
@@ -187,13 +188,20 @@ class ShareService {
       );
 
       if (notesToExport.isEmpty) {
+        LoggerService.warning('shareAsMarkdownZip: No notes to export');
         return;
       }
+
+      LoggerService.debug(
+        'shareAsMarkdownZip: Exporting ${notesToExport.length} notes',
+      );
 
       final tempDir = await getTemporaryDirectory();
       final exportId = const Uuid().v4();
       final exportDir = Directory(p.join(tempDir.path, 'export_$exportId'));
       await exportDir.create();
+
+      LoggerService.debug('shareAsMarkdownZip: Export dir: ${exportDir.path}');
 
       final attachmentsDir = Directory(p.join(exportDir.path, 'attachments'));
       await attachmentsDir.create();
@@ -231,6 +239,17 @@ class ShareService {
 
         await noteFile.writeAsString(content);
 
+        LoggerService.debug(
+          'shareAsMarkdownZip: Wrote note file: ${noteFile.path} '
+          '(${content.length} chars)',
+        );
+
+        // Verify file was written
+        final exists = await noteFile.exists();
+        LoggerService.debug(
+          'shareAsMarkdownZip: Note file exists after write: $exists',
+        );
+
         // Copy attachments
         for (final attachmentPath in note.attachmentPaths) {
           try {
@@ -249,25 +268,52 @@ class ShareService {
         }
       }
 
-      // Create Zip
+      // List files in export directory before zipping
+      LoggerService.debug(
+        'shareAsMarkdownZip: Listing files in export directory...',
+      );
+      await for (final entity in exportDir.list(recursive: true)) {
+        final stat = await entity.stat();
+        LoggerService.debug(
+          'shareAsMarkdownZip: Found: ${entity.path} '
+          '(type: ${entity is File ? "file" : "dir"}, size: ${stat.size})',
+        );
+      }
+
+      // Create Zip using async file iteration to avoid race conditions
       final zipFileName =
           'notes_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
       final zipFilePath = p.join(tempDir.path, zipFileName);
 
-      final encoder = ZipFileEncoder();
-      encoder.create(zipFilePath);
-      encoder.addDirectory(exportDir, includeDirName: false);
-      encoder.close();
+      LoggerService.debug('shareAsMarkdownZip: Creating ZIP at: $zipFilePath');
+
+      await _createZipArchiveFromDirectory(exportDir, zipFilePath);
+
+      // Verify ZIP was created
+      final zipFile = File(zipFilePath);
+      final zipExists = await zipFile.exists();
+      final zipSize = zipExists ? await zipFile.length() : 0;
+      LoggerService.debug(
+        'shareAsMarkdownZip: ZIP created - exists: $zipExists, size: $zipSize bytes',
+      );
 
       // Share/Save
       if (kIsWeb) {
         await FileSaver.instance.saveAs(
           name: zipFileName,
+
           bytes: await File(zipFilePath).readAsBytes(),
           fileExtension: 'zip',
           mimeType: MimeType.zip,
         );
-      } else if (Platform.isAndroid || Platform.isIOS) {
+      } else if (Platform.isAndroid) {
+        // Use native file save dialog on Android (ACTION_CREATE_DOCUMENT)
+        await _channel.invokeMethod('saveFileToExternalStorage', {
+          'filePath': zipFilePath,
+          'fileName': zipFileName,
+          'mimeType': 'application/zip',
+        });
+      } else if (Platform.isIOS) {
         await Share.shareXFiles([
           XFile(zipFilePath, mimeType: 'application/zip'),
         ], subject: 'Notes Export');
@@ -303,6 +349,57 @@ class ShareService {
       );
       rethrow;
     }
+  }
+
+  /// Creates a ZIP archive from a directory by iterating files asynchronously.
+  /// Uses Archive/ZipEncoder directly for more reliable file inclusion.
+  static Future<void> _createZipArchiveFromDirectory(
+    Directory sourceDir,
+    String zipFilePath,
+  ) async {
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: sourceDir=${sourceDir.path}',
+    );
+
+    final archive = Archive();
+    int fileCount = 0;
+
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final relativePath = entity.path.substring(sourceDir.path.length + 1);
+
+        // Read file bytes asynchronously
+        final bytes = await entity.readAsBytes();
+
+        LoggerService.debug(
+          '_createZipArchiveFromDirectory: Adding file: $relativePath '
+          '(${bytes.length} bytes)',
+        );
+
+        // Create archive file with the bytes
+        final archiveFile = ArchiveFile(relativePath, bytes.length, bytes);
+        archive.addFile(archiveFile);
+        fileCount++;
+      }
+    }
+
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: Encoding $fileCount files...',
+    );
+
+    // Encode the archive to ZIP format
+    final zipData = ZipEncoder().encode(archive);
+
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: Encoded ZIP size: ${zipData.length} bytes',
+    );
+
+    // Write the ZIP data to file
+    await File(zipFilePath).writeAsBytes(zipData);
+
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: Added $fileCount files to ZIP',
+    );
   }
 
   /// Generates a PDF from selected notes and shares or saves it depending on the platform.
