@@ -811,6 +811,19 @@ $historyBuffer
         agentService.generatePlan(
           content,
           activeTools: activeTools,
+          executeTool: (serviceName, toolName, params, ctx) async {
+            if (_aiToolBundles.containsKey(serviceName)) {
+              final runtime = await _getAiToolRuntime(serviceName);
+              return runtime.invoke(toolName, params, ctx);
+            }
+            return McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+              generationContext: ctx,
+            );
+          },
           context: combinedContext,
           contextAttachments: allAttachments,
         );

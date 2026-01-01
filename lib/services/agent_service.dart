@@ -15,6 +15,15 @@ import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
 import 'database_service.dart';
 
+/// Callback for executing an external tool (MCP or local AI tool).
+typedef ToolExecutor =
+    Future<String> Function(
+      String serviceName,
+      String toolName,
+      Map<String, dynamic> parameters,
+      GenerationContext generationContext,
+    );
+
 class AgentService extends ChangeNotifier {
   // State
   List<AgentTask> _tasks = [];
@@ -23,6 +32,7 @@ class AgentService extends ChangeNotifier {
   String? _currentThought;
   String? _finalAnswer;
   Map<String, dynamic>? _finalMetadata;
+  ToolExecutor? _toolExecutor;
 
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   Map<String, List<McpTool>> get externalTools =>
@@ -38,6 +48,7 @@ class AgentService extends ChangeNotifier {
     _finalMetadata = null;
     _currentThought = null;
     _isRunning = false;
+    _toolExecutor = null;
     notifyListeners();
   }
 
@@ -211,10 +222,12 @@ When referring to notes or conversations, use inline markdown links with the syn
   Future<List<AgentTask>> generatePlan(
     String objective, {
     Map<String, List<McpTool>> activeTools = const {},
+    ToolExecutor? executeTool,
     String? context,
     List<PlatformFile> contextAttachments = const [],
   }) async {
     _externalTools = activeTools;
+    _toolExecutor = executeTool;
     _currentThought = 'Generating plan...';
     // Reset previous results
     _finalAnswer = null;
@@ -414,6 +427,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
   Future<void> startObjective(
     String objective, {
     Map<String, List<McpTool>> activeTools = const {},
+    ToolExecutor? executeTool,
     String? context,
     List<PlatformFile> contextAttachments = const [],
   }) async {
@@ -429,6 +443,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       await generatePlan(
         objective,
         activeTools: activeTools,
+        executeTool: executeTool,
         context: context,
         contextAttachments: contextAttachments,
       );
@@ -707,17 +722,29 @@ OR
             }
           }
           if (serviceName != null) {
-            final endpoints = await McpService.getEndpoints();
-            final ids = endpoints.map((e) => e.id).toList();
-            result = await McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: args,
-              enabledEndpointIds: ids,
-              generationContext: GenerationContext(
-                values: {'type': 'agent_tool_exec'},
-              ),
+            final generationContext = GenerationContext(
+              values: {'type': 'agent_tool_exec'},
             );
+            // Use injected executor if available (supports both MCP and local AI tools)
+            if (_toolExecutor != null) {
+              result = await _toolExecutor!(
+                serviceName,
+                toolName,
+                args,
+                generationContext,
+              );
+            } else {
+              // Fallback: MCP-only execution (legacy behavior)
+              final endpoints = await McpService.getEndpoints();
+              final ids = endpoints.map((e) => e.id).toList();
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: args,
+                enabledEndpointIds: ids,
+                generationContext: generationContext,
+              );
+            }
           } else {
             throw "Tool $toolName not found.";
           }
