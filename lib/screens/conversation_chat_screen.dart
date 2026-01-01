@@ -10,6 +10,7 @@ import '../widgets/drawing_editor.dart';
 import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
+import '../models/agent_task.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
@@ -48,6 +49,7 @@ import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
 import '../services/built_in_tools_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
+import '../widgets/agent_task_tree_widget.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -2868,16 +2870,35 @@ $historyBuffer
 
     // Agent Plan Widget
     if (message.metadata?['is_agent_plan'] == true) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8.0),
-        child: AgentPlanReviewWidget(
-          onProceed: () {
-            context.read<AgentService>().executePlan();
-          },
-          onCopy: (content) => copyContentToClipboard(content),
-          onAddNote: (content) =>
-              handleAddContentToNote(content: content, contextNotes: _notes),
-        ),
+      return Consumer<AgentService>(
+        builder: (context, agentService, child) {
+          final isExecuting = agentService.isRunning;
+          final hasStartedExecution = agentService.tasks.any(
+            (t) => t.status != AgentTaskStatus.pending,
+          );
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              children: [
+                // Show tree view during/after execution
+                if (hasStartedExecution) const AgentTaskTreeWidget(),
+                // Show plan review when not executing and tasks are pending
+                if (!isExecuting && !hasStartedExecution)
+                  AgentPlanReviewWidget(
+                    onProceed: () {
+                      context.read<AgentService>().executePlan();
+                    },
+                    onCopy: (content) => copyContentToClipboard(content),
+                    onAddNote: (content) => handleAddContentToNote(
+                      content: content,
+                      contextNotes: _notes,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       );
     }
 
