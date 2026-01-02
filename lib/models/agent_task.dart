@@ -39,6 +39,10 @@ class AgentTask {
   int maxTurns;
   List<String> allowedTools;
 
+  /// User-attached notes to provide context for this specific task.
+  /// These notes are included only in this task's context.
+  List<String> contextNoteIds;
+
   AgentTask({
     required this.id,
     required this.description,
@@ -56,9 +60,11 @@ class AgentTask {
     List<String>? executionHistory,
     this.maxTurns = 20,
     List<String>? allowedTools,
+    List<String>? contextNoteIds,
   }) : toolNames = toolNames ?? [],
        executionHistory = executionHistory ?? [],
-       allowedTools = allowedTools ?? [];
+       allowedTools = allowedTools ?? [],
+       contextNoteIds = contextNoteIds ?? [];
 
   /// Whether this is a root-level task (no parent).
   bool get isRootTask => parentTaskId == null;
@@ -83,5 +89,6 @@ class AgentTask {
     'executionHistory': executionHistory,
     'maxTurns': maxTurns,
     'allowedTools': allowedTools,
+    'contextNoteIds': contextNoteIds,
   };
 }

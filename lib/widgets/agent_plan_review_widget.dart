@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_service.dart';
 import '../models/agent_task.dart';
+import '../models/note.dart';
 import '../services/mcp_service.dart';
 import '../services/user_app_service.dart';
 import '../models/user_app.dart';
+import '../screens/note_selection_dialog.dart';
+import '../l10n/app_localizations.dart';
 
 class AgentPlanReviewWidget extends StatefulWidget {
   final VoidCallback onProceed;
@@ -114,12 +117,15 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                       color: Theme.of(context).colorScheme.primary,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'Proposed Plan',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        'Proposed Plan',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
+                    // Global context notes button
+                    _buildGlobalContextButton(context, agentService),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -358,6 +364,14 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                                                 agentService,
                                               );
                                             },
+                                          ),
+                                        // Task context notes button
+                                        if (task.status ==
+                                            AgentTaskStatus.pending)
+                                          _buildTaskContextButton(
+                                            context,
+                                            task,
+                                            agentService,
                                           ),
                                       ],
                                     ),
@@ -679,6 +693,148 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
         // Fallback or ensure dialog popped?
         // If we are here, likely something catastrophic happened before loading pop.
         // We just print error for now.
+      }
+    }
+  }
+
+  Widget _buildGlobalContextButton(
+    BuildContext context,
+    AgentService agentService,
+  ) {
+    final noteCount = agentService.globalContextNoteIds.length;
+    final l10n = AppLocalizations.of(context)!;
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            Icons.description_outlined,
+            color: noteCount > 0
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withOpacity(0.5),
+          ),
+          tooltip: l10n.globalContextNotes,
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          onPressed: () => _showNoteSelectionDialog(
+            context,
+            isGlobal: true,
+            agentService: agentService,
+          ),
+        ),
+        if (noteCount > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '$noteCount',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTaskContextButton(
+    BuildContext context,
+    AgentTask task,
+    AgentService agentService,
+  ) {
+    final noteCount = task.contextNoteIds.length;
+    final l10n = AppLocalizations.of(context)!;
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            Icons.attach_file_outlined,
+            size: 16,
+            color: noteCount > 0
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withOpacity(0.5),
+          ),
+          tooltip: l10n.taskContextNotes,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          onPressed: () => _showNoteSelectionDialog(
+            context,
+            isGlobal: false,
+            task: task,
+            agentService: agentService,
+          ),
+        ),
+        if (noteCount > 0)
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '$noteCount',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showNoteSelectionDialog(
+    BuildContext context, {
+    required bool isGlobal,
+    AgentTask? task,
+    required AgentService agentService,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+
+    // Get current note IDs
+    final currentNoteIds = isGlobal
+        ? agentService.globalContextNoteIds.toList()
+        : task?.contextNoteIds.toList() ?? [];
+
+    final selectedNotes = await showDialog<List<Note>>(
+      context: context,
+      builder: (dialogContext) => NoteSelectionDialog(
+        onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
+        title: isGlobal ? l10n.globalContextNotes : l10n.taskContextNotes,
+        singleSelection: false,
+        initialSelectedNoteIds: currentNoteIds,
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (selectedNotes != null) {
+      final noteIds = selectedNotes.map((n) => n.id).toList();
+      if (isGlobal) {
+        agentService.setGlobalContextNotes(noteIds);
+      } else if (task != null) {
+        setState(() {
+          task.contextNoteIds.clear();
+          task.contextNoteIds.addAll(noteIds);
+        });
       }
     }
   }

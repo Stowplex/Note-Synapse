@@ -7021,6 +7021,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show Details'**
   String get showDetails;
+
+  /// No description provided for @saveFindings.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Findings'**
+  String get saveFindings;
+
+  /// No description provided for @saveFindingsToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Save findings to note'**
+  String get saveFindingsToNote;
+
+  /// No description provided for @attachNotesToPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach Notes to Plan'**
+  String get attachNotesToPlan;
+
+  /// No description provided for @attachNotesToTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach Notes to Task'**
+  String get attachNotesToTask;
+
+  /// No description provided for @globalContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Global Context Notes'**
+  String get globalContextNotes;
+
+  /// No description provided for @taskContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Task Context Notes'**
+  String get taskContextNotes;
+
+  /// No description provided for @globalContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'These notes will be included as context for all tasks'**
+  String get globalContextDescription;
+
+  /// No description provided for @taskContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'These notes will be included as context for this task only'**
+  String get taskContextDescription;
+
+  /// No description provided for @notesAttachedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No notes attached} =1{1 note attached} other{{count} notes attached}}'**
+  String notesAttachedCount(int count);
 }
 
 class _AppLocalizationsDelegate

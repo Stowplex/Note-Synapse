@@ -4042,4 +4042,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get showDetails => 'Show Details';
+
+  @override
+  String get saveFindings => 'Save Findings';
+
+  @override
+  String get saveFindingsToNote => 'Save findings to note';
+
+  @override
+  String get attachNotesToPlan => 'Attach Notes to Plan';
+
+  @override
+  String get attachNotesToTask => 'Attach Notes to Task';
+
+  @override
+  String get globalContextNotes => 'Global Context Notes';
+
+  @override
+  String get taskContextNotes => 'Task Context Notes';
+
+  @override
+  String get globalContextDescription =>
+      'These notes will be included as context for all tasks';
+
+  @override
+  String get taskContextDescription =>
+      'These notes will be included as context for this task only';
+
+  @override
+  String notesAttachedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes attached',
+      one: '1 note attached',
+      zero: 'No notes attached',
+    );
+    return '$_temp0';
+  }
 }

@@ -40,11 +40,45 @@ class AgentService extends ChangeNotifier {
   final ContextManagerService _contextManager = ContextManagerService();
   String? _currentObjective;
 
+  /// User-attached notes to provide context for ALL tasks in the plan.
+  List<String> _globalContextNoteIds = [];
+
   /// Gets the context manager for external access.
   ContextManagerService get contextManager => _contextManager;
 
   /// Gets the current objective.
   String? get currentObjective => _currentObjective;
+
+  /// Gets the global context note IDs.
+  List<String> get globalContextNoteIds =>
+      List.unmodifiable(_globalContextNoteIds);
+
+  /// Adds a note to the global context.
+  void addGlobalContextNote(String noteId) {
+    if (!_globalContextNoteIds.contains(noteId)) {
+      _globalContextNoteIds.add(noteId);
+      notifyListeners();
+    }
+  }
+
+  /// Removes a note from the global context.
+  void removeGlobalContextNote(String noteId) {
+    if (_globalContextNoteIds.remove(noteId)) {
+      notifyListeners();
+    }
+  }
+
+  /// Clears all global context notes.
+  void clearGlobalContextNotes() {
+    _globalContextNoteIds.clear();
+    notifyListeners();
+  }
+
+  /// Sets the global context notes (replacing existing).
+  void setGlobalContextNotes(List<String> noteIds) {
+    _globalContextNoteIds = List.from(noteIds);
+    notifyListeners();
+  }
 
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   Map<String, List<McpTool>> get externalTools =>
@@ -62,6 +96,7 @@ class AgentService extends ChangeNotifier {
     _isRunning = false;
     _toolExecutor = null;
     _currentObjective = null;
+    _globalContextNoteIds.clear();
     _contextManager.clear();
     notifyListeners();
   }
@@ -122,7 +157,14 @@ class AgentService extends ChangeNotifier {
           final scopedContext = task.isFinalDeliverable
               ? _contextManager.buildSynthesisContext(taskContext)
               : _contextManager.buildContextForNode(taskContext);
-          await _performTask(task, scopedContext);
+
+          // Include attached notes context (global + task-specific)
+          final attachedNotesContext = await _buildAttachedNotesContext(task);
+          final fullContext = attachedNotesContext.isNotEmpty
+              ? '$attachedNotesContext\n\n$scopedContext'
+              : scopedContext;
+
+          await _performTask(task, fullContext);
 
           // Small delay to prevent tight loops
           if (task.status == AgentTaskStatus.inProgress) {
@@ -272,6 +314,46 @@ class AgentService extends ChangeNotifier {
         buffer.writeln('---');
       }
     }
+    return buffer.toString();
+  }
+
+  /// Builds context string from attached notes (global + task-specific).
+  Future<String> _buildAttachedNotesContext(AgentTask task) async {
+    final allNoteIds = <String>{
+      ..._globalContextNoteIds,
+      ...task.contextNoteIds,
+    };
+
+    if (allNoteIds.isEmpty) {
+      return '';
+    }
+
+    final db = DatabaseService();
+    final buffer = StringBuffer();
+    buffer.writeln('## User-Provided Context Notes');
+    buffer.writeln();
+
+    for (final noteId in allNoteIds) {
+      try {
+        final note = await db.getNoteById(noteId);
+        if (note != null) {
+          final isGlobal = _globalContextNoteIds.contains(noteId);
+          final scope = isGlobal ? '(Global)' : '(Task-specific)';
+          buffer.writeln('### ${note.title} $scope');
+          if (note.tags.isNotEmpty) {
+            buffer.writeln('Tags: ${note.tags.join(", ")}');
+          }
+          buffer.writeln();
+          buffer.writeln(note.content);
+          buffer.writeln();
+          buffer.writeln('---');
+          buffer.writeln();
+        }
+      } catch (e) {
+        LoggerService.error('Failed to load context note $noteId: $e');
+      }
+    }
+
     return buffer.toString();
   }
 

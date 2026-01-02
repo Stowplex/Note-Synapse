@@ -3859,4 +3859,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showDetails => 'Show Details';
+
+  @override
+  String get saveFindings => '保存发现';
+
+  @override
+  String get saveFindingsToNote => '将发现保存到笔记';
+
+  @override
+  String get attachNotesToPlan => '添加笔记到计划';
+
+  @override
+  String get attachNotesToTask => '添加笔记到任务';
+
+  @override
+  String get globalContextNotes => '全局上下文笔记';
+
+  @override
+  String get taskContextNotes => '任务上下文笔记';
+
+  @override
+  String get globalContextDescription => '这些笔记将作为所有任务的上下文';
+
+  @override
+  String get taskContextDescription => '这些笔记仅作为此任务的上下文';
+
+  @override
+  String notesAttachedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已附加$count个笔记',
+      one: '已附加1个笔记',
+      zero: '未附加笔记',
+    );
+    return '$_temp0';
+  }
 }

@@ -1624,5 +1624,22 @@
   "noteNoLongerExists": "Note no longer exists",
   "messageNoLongerExists": "Message no longer exists",
   "showDetails": "Show Details",
-  "close": "Close"
+  "close": "Close",
+
+  "saveFindings": "Save Findings",
+  "saveFindingsToNote": "Save findings to note",
+  "attachNotesToPlan": "Attach Notes to Plan",
+  "attachNotesToTask": "Attach Notes to Task",
+  "globalContextNotes": "Global Context Notes",
+  "taskContextNotes": "Task Context Notes",
+  "globalContextDescription": "These notes will be included as context for all tasks",
+  "taskContextDescription": "These notes will be included as context for this task only",
+  "notesAttachedCount": "{count, plural, =0{No notes attached} =1{1 note attached} other{{count} notes attached}}",
+  "@notesAttachedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

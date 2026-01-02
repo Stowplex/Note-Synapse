@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/agent_task.dart';
 import '../models/context_node.dart';
 import '../services/agent_service.dart';
+import 'add_note_dialog.dart';
 
 /// Widget for displaying hierarchical agent task execution.
 /// Shows a tree structure of tasks with their context nodes,
@@ -681,31 +682,31 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
     final findings = task.structuredFindings ?? [];
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
             Icon(
               Icons.analytics_outlined,
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(dialogContext).colorScheme.primary,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Extracted Findings (${findings.length})',
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(dialogContext).textTheme.titleMedium,
               ),
             ),
           ],
         ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
-          height: MediaQuery.of(context).size.height * 0.6,
+          width: MediaQuery.of(dialogContext).size.width * 0.8,
+          height: MediaQuery.of(dialogContext).size.height * 0.6,
           child: findings.isEmpty
               ? const Center(child: Text('No findings extracted.'))
               : ListView.separated(
                   itemCount: findings.length,
                   separatorBuilder: (_, __) => const Divider(height: 16),
-                  itemBuilder: (context, index) {
+                  itemBuilder: (listContext, index) {
                     final f = findings[index];
                     final fact = f['fact'] ?? '';
                     final source = f['source'] ?? '';
@@ -716,7 +717,7 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                       children: [
                         Text(
                           '${index + 1}. $fact',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          style: Theme.of(listContext).textTheme.bodyMedium,
                         ),
                         if (source.isNotEmpty)
                           Padding(
@@ -725,10 +726,10 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                               url.isNotEmpty
                                   ? 'Source: $source ($url)'
                                   : 'Source: $source',
-                              style: Theme.of(context).textTheme.bodySmall
+                              style: Theme.of(listContext).textTheme.bodySmall
                                   ?.copyWith(
                                     color: Theme.of(
-                                      context,
+                                      listContext,
                                     ).colorScheme.onSurfaceVariant,
                                   ),
                             ),
@@ -739,13 +740,60 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                 ),
         ),
         actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _saveFindings(task);
+            },
+            icon: const Icon(Icons.save_outlined, size: 18),
+            label: const Text('Save Findings'),
+          ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Close'),
           ),
         ],
       ),
     );
+  }
+
+  String _formatFindingsAsMarkdown(AgentTask task) {
+    final findings = task.structuredFindings ?? [];
+    if (findings.isEmpty) return '';
+
+    final buffer = StringBuffer();
+    buffer.writeln('## Research Findings');
+    buffer.writeln();
+    buffer.writeln('Task: ${task.description}');
+    buffer.writeln();
+
+    for (int i = 0; i < findings.length; i++) {
+      final f = findings[i];
+      final fact = f['fact'] ?? '';
+      final source = f['source'] ?? '';
+      final url = f['url'] ?? '';
+
+      buffer.writeln('${i + 1}. **$fact**');
+      if (source.isNotEmpty) {
+        buffer.writeln('   - Source: $source');
+      }
+      if (url.isNotEmpty) {
+        buffer.writeln('   - URL: $url');
+      }
+      buffer.writeln();
+    }
+
+    return buffer.toString();
+  }
+
+  Future<void> _saveFindings(AgentTask task) async {
+    if (!mounted) return;
+
+    final content = _formatFindingsAsMarkdown(task);
+    if (content.isEmpty) return;
+
+    // Use the AddNoteDialog to let user choose create new or append
+    await AddNoteDialog.show(context: context, content: content);
   }
 
   String _truncate(String text, int maxLength) {

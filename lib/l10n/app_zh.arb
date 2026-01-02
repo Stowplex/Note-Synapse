@@ -1569,5 +1569,22 @@
   "resetToDefaultDbTooltip": "重置为默认数据库",
   "exportDbTooltip": "导出数据库",
   "undo": "撤销",
-  "taskRescheduled": "任务已重新安排"
+  "taskRescheduled": "任务已重新安排",
+
+  "saveFindings": "保存发现",
+  "saveFindingsToNote": "将发现保存到笔记",
+  "attachNotesToPlan": "添加笔记到计划",
+  "attachNotesToTask": "添加笔记到任务",
+  "globalContextNotes": "全局上下文笔记",
+  "taskContextNotes": "任务上下文笔记",
+  "globalContextDescription": "这些笔记将作为所有任务的上下文",
+  "taskContextDescription": "这些笔记仅作为此任务的上下文",
+  "notesAttachedCount": "{count, plural, =0{未附加笔记} =1{已附加1个笔记} other{已附加{count}个笔记}}",
+  "@notesAttachedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
