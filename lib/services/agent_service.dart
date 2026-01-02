@@ -118,9 +118,10 @@ class AgentService extends ChangeNotifier {
           await _contextManager.checkAndCompact(taskContext);
 
           // Build scoped context for this task
-          final scopedContext = _contextManager.buildContextForNode(
-            taskContext,
-          );
+          // Final deliverable tasks get synthesis context with all accumulated findings
+          final scopedContext = task.isFinalDeliverable
+              ? _contextManager.buildSynthesisContext(taskContext)
+              : _contextManager.buildContextForNode(taskContext);
           await _performTask(task, scopedContext);
 
           // Small delay to prevent tight loops
@@ -144,6 +145,19 @@ class AgentService extends ChangeNotifier {
 
         // Generate condensed summary for completed tasks
         if (task.status == AgentTaskStatus.completed) {
+          // Extract structured findings if marked for extraction
+          if (task.extractFindings && task.result != null) {
+            try {
+              task.structuredFindings = await _extractStructuredFindings(task);
+              _contextManager.addFindings(task.structuredFindings ?? []);
+              taskContext.log(
+                'Extracted ${task.structuredFindings?.length ?? 0} findings',
+              );
+            } catch (e) {
+              LoggerService.error('Failed to extract findings: $e');
+            }
+          }
+
           if (task.isFinalDeliverable) {
             // Preserve full result for final deliverable tasks - no summarization
             task.condensedSummary = task.result;
@@ -308,6 +322,68 @@ Respond directly to: "$objective"
     notifyListeners();
   }
 
+  /// Extracts structured key findings from a task's result.
+  /// Called when task.extractFindings is true.
+  Future<List<Map<String, String>>> _extractStructuredFindings(
+    AgentTask task,
+  ) async {
+    final prompt =
+        '''
+Extract key findings from this task result that should be preserved for final synthesis.
+
+Task: ${task.description}
+Result:
+${task.result}
+
+Extract ONLY:
+- Specific facts, data points, statistics
+- Source names and URLs
+- Key quotes or claims
+
+Return compact JSON array (max 10 items):
+[{"fact": "...", "source": "...", "url": "..."}]
+
+If no findings worth preserving, return: []
+''';
+
+    final response = await AIService.generateWithAttachments(
+      prompt,
+      [],
+      generationContext: GenerationContext(
+        values: {'type': 'extract_findings', 'taskId': task.id},
+      ),
+    );
+
+    return _parseFindings(response);
+  }
+
+  /// Parses findings JSON from LLM response.
+  List<Map<String, String>> _parseFindings(String response) {
+    try {
+      String cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json')) {
+        cleanResponse = cleanResponse.replaceFirst('```json', '');
+      }
+      if (cleanResponse.startsWith('```')) {
+        cleanResponse = cleanResponse.replaceFirst('```', '');
+      }
+      cleanResponse = cleanResponse.replaceAll(RegExp(r'```$'), '').trim();
+
+      final List<dynamic> jsonList = jsonDecode(cleanResponse);
+      return jsonList.map((item) {
+        final map = item as Map<String, dynamic>;
+        return <String, String>{
+          'fact': (map['fact'] ?? '').toString(),
+          'source': (map['source'] ?? '').toString(),
+          if (map['url'] != null) 'url': map['url'].toString(),
+        };
+      }).toList();
+    } catch (e) {
+      LoggerService.error('Failed to parse findings: $e');
+      return [];
+    }
+  }
+
   // Tools
   // Tools
   final List<NativeTool> _nativeTools = [
@@ -404,52 +480,79 @@ Respond directly to: "$objective"
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
 
-IMPORTANT CONTEXT ON NOTE ORGANIZATION:
-- Notes are organized using hashtags (e.g., #work, #ideas). Think of these tags as a flexible file system where a note can live in multiple "folders" simultaneously.
-- "Tag Filters" are saved views or "virtual folders" defined by includes/excludes of tags. These represent the user's explicit organizational structure.
-- The `ls` tool lists these "virtual folders".
-
-STRATEGY HINT:
-- If you are exploring, trying to understand the user's note structure, or don't know where to look: USE THE `ls` TOOL FIRST. It gives you the "directory listing" of the user's brain.
-- In addition to `ls`, you can query the tags table for all user and auto-generated tags to determine their relevance to your search.
-- Only jump to `search_notes` if you have a specific keyword or if `ls` doesn't provide enough leads.
-
 Objective: "$objective"
 $contextSection
 Available Tools:
 $nativeToolsDesc
 $externalToolsDesc
 
-Database Schema (for RunSqlTool):
+Database Schema (for run_sql):
 $dbSchema
 
-Break this down into a step-by-step plan.
-Each step can specify ONE OR MORE tools to use to accomplish that step.
-For example, to list things and then read them, you can have separate steps or combined logic.
-Return ONLY a valid JSON list of objects:
+## EXECUTION STRATEGY GUIDANCE
+
+Choose an appropriate strategy based on the objective and available tools:
+
+**Quick Lookup** (1-2 tasks):
+- Simple factual questions with direct answers
+- Single tool call sufficient
+- Example: "What tags do I have?" → use `ls` or `run_sql`
+
+**Iterative Research** (3-6+ tasks):
+- Complex questions requiring multiple sources
+- When you have search tools (web search, database search)
+- Plan: broad search → analyze gaps → targeted searches → synthesize
+- Mark intermediate search tasks with "extractFindings": true
+- Example: "What are the latest developments in X?"
+
+**Multi-Step Workflow** (variable):
+- Tasks with dependencies (read → modify → verify)
+- Each step builds on previous results
+- Example: "Find notes about X and summarize them"
+
+## NOTE EXPLORATION (when working with user's notes)
+
+DON'T read full note content immediately!
+
+Tool Priority for Note Discovery:
+1. `ls` / `run_sql` → metadata exploration (no content loading) - PREFERRED
+2. `search_notes` → keyword-based filtering
+3. `read_note` mode='toc'/'summary' → structural overview
+4. `read_note` mode='full' → only for targeted deep reads
+
+Example: "identify knowledge gaps in transformer notes":
+1. `run_sql` → SELECT id, title, tags FROM notes WHERE tags LIKE '%transformer%'
+2. `ls` → find relevant filters
+3. `read_note` mode='toc' → scan structure of key notes
+4. `read_note` full only for specific sections needed
+
+## TASK CONFIGURATION
+
+For each task, you can specify:
+- "tools": List of tools to use
+- "isFinalDeliverable": true for the task producing user's final answer (only one task)
+- "extractFindings": true if this task's detailed results should be preserved for synthesis (use for research/search tasks)
+
+## OUTPUT FORMAT
+
+Return ONLY valid JSON:
 [
   {
     "description": "Step description",
-    "tools": ["tool_name_1", "tool_name_2"],
-    "isFinalDeliverable": false
+    "tools": ["tool_name"],
+    "isFinalDeliverable": false,
+    "extractFindings": true
   }
 ]
 
-IMPORTANT - Final Deliverable:
-- Set "isFinalDeliverable": true for the task that produces the FINAL OUTPUT the user requested.
-- This task's full result will be shown to the user WITHOUT summarization.
-- Only ONE task should have isFinalDeliverable: true (typically the last synthesis/compilation task).
-- If the objective asks for a report, analysis, list, or any specific output format,
-  the task that produces that output should be marked as the final deliverable.
-
 Example:
 [
-  {"description": "Search for notes", "tools": ["search_notes"], "isFinalDeliverable": false},
-  {"description": "Read notes", "tools": ["read_note"], "isFinalDeliverable": false},
+  {"description": "Explore note structure with SQL", "tools": ["run_sql"], "extractFindings": true},
+  {"description": "Search for relevant notes", "tools": ["search_notes"], "extractFindings": true},
   {"description": "Synthesize comprehensive report", "tools": [], "isFinalDeliverable": true}
 ]
 
-If no tools are needed for a step (e.g. analysis), use an empty list: "tools": [].
+If no tools are needed for a step (e.g. analysis), use: "tools": [].
 Only use the tools listed above.
 ''';
 
@@ -678,12 +781,16 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
         // Extract isFinalDeliverable flag (defaults to false if not present)
         final isFinalDeliverable = map['isFinalDeliverable'] == true;
 
+        // Extract extractFindings flag (defaults to false if not present)
+        final extractFindings = map['extractFindings'] == true;
+
         return AgentTask(
           id: const Uuid().v4(),
           description: map['description'] ?? "No description",
           toolNames: tools,
           allowedTools: activeTools,
           isFinalDeliverable: isFinalDeliverable,
+          extractFindings: extractFindings,
         );
       }).toList();
     } catch (e) {
@@ -800,6 +907,24 @@ $toolsDesc
 
 Execution History:
 ${task.executionHistory.map((h) => h.toString()).join('\n')}
+
+## ITERATION PROTOCOL
+
+After each tool call, evaluate:
+1. Did I get what I needed? If yes, proceed to answer.
+2. Are there gaps? If yes, make another tool call.
+3. Are there contradictions? If yes, search for authoritative sources.
+
+You may call tools MULTIPLE TIMES per task if needed.
+Don't settle for incomplete information when tools are available.
+
+## RESPONSE FORMAT (preserved for UI display)
+
+Always structure your response as:
+1. "My thought: [your reasoning about what to do next]"
+2. Tool call in JSON format, OR final answer
+
+This format is shown to the user to help them understand your reasoning.
 
 INSTRUCTIONS:
 1. Analyze the context and history.

@@ -303,11 +303,48 @@ Provide a summary (2-5 paragraphs):
     }
   }
 
+  /// Accumulated structured findings from tasks with extractFindings=true.
+  /// Compact storage to minimize token usage between tasks.
+  final List<Map<String, String>> _accumulatedFindings = [];
+
+  /// Gets accumulated findings count.
+  int get findingsCount => _accumulatedFindings.length;
+
+  /// Adds structured findings to the accumulator.
+  void addFindings(List<Map<String, String>> findings) {
+    _accumulatedFindings.addAll(findings);
+    rootContext?.log(
+      '📌 Added ${findings.length} findings (total: ${_accumulatedFindings.length})',
+    );
+  }
+
+  /// Builds rich context for synthesis tasks (includes all accumulated findings).
+  String buildSynthesisContext(ContextNode node) {
+    final buffer = StringBuffer();
+    buffer.writeln(buildContextForNode(node));
+
+    if (_accumulatedFindings.isNotEmpty) {
+      buffer.writeln('\n## Accumulated Findings\n');
+      for (final f in _accumulatedFindings) {
+        buffer.writeln('- **${f['fact']}**');
+        if (f['source']?.isNotEmpty == true) {
+          buffer.writeln('  Source: ${f['source']}');
+        }
+        if (f['url']?.isNotEmpty == true) {
+          buffer.writeln('  URL: ${f['url']}');
+        }
+      }
+    }
+
+    return buffer.toString();
+  }
+
   /// Clears all context state.
   void clear() {
     _rootContext = null;
     _currentContext = null;
     _contextMap.clear();
+    _accumulatedFindings.clear();
   }
 
   /// Gets a context node by ID.

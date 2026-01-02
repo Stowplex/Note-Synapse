@@ -18,12 +18,20 @@ class AgentTask {
   /// without summarization. Set by the LLM planner for synthesis/final tasks.
   final bool isFinalDeliverable;
 
+  /// If true, LLM will extract key findings from this task's results
+  /// to preserve for final synthesis. Set by planner for research/search tasks.
+  final bool extractFindings;
+
   AgentTaskStatus status;
   String? result;
 
   /// AI-generated condensed summary for parent task consumption.
   /// This is the distilled result that gets passed up the hierarchy.
   String? condensedSummary;
+
+  /// Compact structured findings extracted by LLM after task completion.
+  /// Format: List of {fact, source, url?}
+  List<Map<String, String>>? structuredFindings;
 
   List<String> toolNames;
   String? userComment;
@@ -38,9 +46,11 @@ class AgentTask {
     this.depth = 0,
     this.contextNodeId,
     this.isFinalDeliverable = false,
+    this.extractFindings = false,
     this.status = AgentTaskStatus.pending,
     this.result,
     this.condensedSummary,
+    this.structuredFindings,
     List<String>? toolNames,
     this.userComment,
     List<String>? executionHistory,
@@ -63,9 +73,11 @@ class AgentTask {
     'depth': depth,
     'contextNodeId': contextNodeId,
     'isFinalDeliverable': isFinalDeliverable,
+    'extractFindings': extractFindings,
     'status': status.toString(),
     'result': result,
     'condensedSummary': condensedSummary,
+    'structuredFindings': structuredFindings,
     'toolNames': toolNames,
     'userComment': userComment,
     'executionHistory': executionHistory,
