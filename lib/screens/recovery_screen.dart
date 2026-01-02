@@ -297,12 +297,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       await for (final entity in sourceDir.list(recursive: true)) {
         if (entity is File) {
           final relativePath = entity.path.substring(sourceDir.path.length + 1);
-          encoder.addFile(entity, relativePath);
-          await Future.delayed(Duration.zero); // Yield to UI
+          await encoder.addFile(entity, relativePath);
         }
       }
 
-      encoder.close();
+      await encoder.close();
 
       final end = DateTime.now();
       final duration = end.difference(start);
