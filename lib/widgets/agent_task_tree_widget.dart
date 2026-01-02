@@ -270,6 +270,53 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                                 ),
                           ),
                         ),
+                      // Findings button (for tasks with extracted findings)
+                      if (task.status == AgentTaskStatus.completed &&
+                          task.structuredFindings != null &&
+                          task.structuredFindings!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: InkWell(
+                            onTap: () => _showFindingsDialog(context, task),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.tertiaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.analytics_outlined,
+                                    size: 14,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onTertiaryContainer,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${task.structuredFindings!.length} findings',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onTertiaryContainer,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       // Error message
                       if (task.status == AgentTaskStatus.failed &&
                           task.result != null)
@@ -626,6 +673,77 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showFindingsDialog(BuildContext context, AgentTask task) {
+    final findings = task.structuredFindings ?? [];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.analytics_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Extracted Findings (${findings.length})',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: findings.isEmpty
+              ? const Center(child: Text('No findings extracted.'))
+              : ListView.separated(
+                  itemCount: findings.length,
+                  separatorBuilder: (_, __) => const Divider(height: 16),
+                  itemBuilder: (context, index) {
+                    final f = findings[index];
+                    final fact = f['fact'] ?? '';
+                    final source = f['source'] ?? '';
+                    final url = f['url'] ?? '';
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${index + 1}. $fact',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        if (source.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              url.isNotEmpty
+                                  ? 'Source: $source ($url)'
+                                  : 'Source: $source',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }

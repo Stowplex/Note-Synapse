@@ -322,26 +322,54 @@ Respond directly to: "$objective"
     notifyListeners();
   }
 
-  /// Extracts structured key findings from a task's result.
+  /// Extracts structured key findings from a task's RAW OBSERVATIONS.
+  /// Uses executionHistory (raw tool output) instead of task.result (LLM summary)
+  /// to prevent information loss from double-compression.
   /// Called when task.extractFindings is true.
   Future<List<Map<String, String>>> _extractStructuredFindings(
     AgentTask task,
   ) async {
+    // Extract raw observations from execution history to preserve URLs and details
+    final rawObservations = _getRawObservations(task);
+
+    // If no observations, fall back to task.result
+    final sourceContent = rawObservations.isNotEmpty
+        ? rawObservations.join('\n\n---\n\n')
+        : task.result ?? '';
+
+    if (sourceContent.isEmpty) {
+      return [];
+    }
+
     final prompt =
         '''
-Extract key findings from this task result that should be preserved for final synthesis.
+Extract key findings from this research task for final synthesis.
 
 Task: ${task.description}
-Result:
-${task.result}
 
-Extract ONLY:
-- Specific facts, data points, statistics
-- Source names and URLs
-- Key quotes or claims
+RAW TOOL OBSERVATIONS (preserve URLs and specific data):
+$sourceContent
 
-Return compact JSON array (max 10 items):
-[{"fact": "...", "source": "...", "url": "..."}]
+## EXTRACTION RULES
+
+1. Extract ONLY verifiable facts with clear sources
+2. Each finding MUST have:
+   - fact: A specific data point, statistic, or claim (1-2 sentences)
+   - source: The organization or publication name (e.g., "CDC", "USDA", "NSF 2024")
+   - url: The actual URL if mentioned in the observations, otherwise use empty string ""
+
+3. CRITICAL: URLs are present in the observations - extract them accurately
+4. Do NOT use placeholders like "Not specified" or "Unspecified" for URLs
+5. If no URL is available, use empty string: "url": ""
+6. Maximum 10 findings per task
+
+## OUTPUT FORMAT
+
+Return ONLY valid JSON array:
+[
+  {"fact": "Specific finding with numbers", "source": "Organization Name", "url": "https://..."},
+  {"fact": "Another finding", "source": "Report Name 2024", "url": ""}
+]
 
 If no findings worth preserving, return: []
 ''';
@@ -357,7 +385,20 @@ If no findings worth preserving, return: []
     return _parseFindings(response);
   }
 
+  /// Extracts raw observation content from task execution history.
+  /// Returns list of observation strings (tool outputs) before LLM summarization.
+  List<String> _getRawObservations(AgentTask task) {
+    final observations = <String>[];
+    for (final entry in task.executionHistory) {
+      if (entry.startsWith('Observation:')) {
+        observations.add(entry.substring('Observation:'.length).trim());
+      }
+    }
+    return observations;
+  }
+
   /// Parses findings JSON from LLM response.
+  /// Normalizes URL values to remove placeholders like "Not specified".
   List<Map<String, String>> _parseFindings(String response) {
     try {
       String cleanResponse = response.trim();
@@ -372,10 +413,17 @@ If no findings worth preserving, return: []
       final List<dynamic> jsonList = jsonDecode(cleanResponse);
       return jsonList.map((item) {
         final map = item as Map<String, dynamic>;
+
+        // Normalize URL: remove placeholders, keep only actual URLs
+        String url = (map['url'] ?? '').toString().trim();
+        if (_isPlaceholderUrl(url)) {
+          url = '';
+        }
+
         return <String, String>{
-          'fact': (map['fact'] ?? '').toString(),
-          'source': (map['source'] ?? '').toString(),
-          if (map['url'] != null) 'url': map['url'].toString(),
+          'fact': (map['fact'] ?? '').toString().trim(),
+          'source': (map['source'] ?? '').toString().trim(),
+          'url': url,
         };
       }).toList();
     } catch (e) {
@@ -384,7 +432,20 @@ If no findings worth preserving, return: []
     }
   }
 
-  // Tools
+  /// Checks if a URL string is a placeholder rather than an actual URL.
+  bool _isPlaceholderUrl(String url) {
+    if (url.isEmpty) return true;
+    final lower = url.toLowerCase();
+    return lower.contains('not specified') ||
+        lower.contains('not provided') ||
+        lower.contains('unspecified') ||
+        lower.contains('unavailable') ||
+        lower.contains('n/a') ||
+        lower == 'none' ||
+        lower == 'null' ||
+        (!url.startsWith('http://') && !url.startsWith('https://'));
+  }
+
   // Tools
   final List<NativeTool> _nativeTools = [
     NoteSearchTool(),

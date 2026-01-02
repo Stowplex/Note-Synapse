@@ -324,15 +324,28 @@ Provide a summary (2-5 paragraphs):
     buffer.writeln(buildContextForNode(node));
 
     if (_accumulatedFindings.isNotEmpty) {
-      buffer.writeln('\n## Accumulated Findings\n');
-      for (final f in _accumulatedFindings) {
-        buffer.writeln('- **${f['fact']}**');
-        if (f['source']?.isNotEmpty == true) {
-          buffer.writeln('  Source: ${f['source']}');
+      buffer.writeln(
+        '\n## Accumulated Research Findings (${_accumulatedFindings.length} items)\n',
+      );
+      buffer.writeln(
+        'Use these findings to support your synthesis. Each finding should be considered for inclusion.\n',
+      );
+
+      for (var i = 0; i < _accumulatedFindings.length; i++) {
+        final f = _accumulatedFindings[i];
+        final fact = f['fact'] ?? '';
+        final source = f['source'] ?? '';
+        final url = f['url'] ?? '';
+
+        buffer.writeln('${i + 1}. **$fact**');
+        if (source.isNotEmpty) {
+          if (url.isNotEmpty) {
+            buffer.writeln('   — Source: $source ($url)');
+          } else {
+            buffer.writeln('   — Source: $source');
+          }
         }
-        if (f['url']?.isNotEmpty == true) {
-          buffer.writeln('  URL: ${f['url']}');
-        }
+        buffer.writeln();
       }
     }
 
