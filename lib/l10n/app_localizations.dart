@@ -734,6 +734,30 @@ abstract class AppLocalizations {
   /// **'Language changed successfully'**
   String get languageChanged;
 
+  /// No description provided for @system.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get system;
+
+  /// No description provided for @systemSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'System behavior settings'**
+  String get systemSubtitle;
+
+  /// No description provided for @keepScreenOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Screen On'**
+  String get keepScreenOn;
+
+  /// No description provided for @keepScreenOnSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent screen from turning off automatically'**
+  String get keepScreenOnSubtitle;
+
   /// No description provided for @errorChangingLanguage.
   ///
   /// In en, this message translates to:

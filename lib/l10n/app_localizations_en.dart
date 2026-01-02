@@ -369,6 +369,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageChanged => 'Language changed successfully';
 
   @override
+  String get system => 'System';
+
+  @override
+  String get systemSubtitle => 'System behavior settings';
+
+  @override
+  String get keepScreenOn => 'Keep Screen On';
+
+  @override
+  String get keepScreenOnSubtitle =>
+      'Prevent screen from turning off automatically';
+
+  @override
   String errorChangingLanguage(Object error) {
     return 'Error changing language: $error';
   }

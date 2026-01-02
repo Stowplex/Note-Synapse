@@ -14,6 +14,7 @@ import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
+import 'services/wake_lock_service.dart' as wake_lock;
 import 'utils/global_keys.dart';
 
 void main() async {
@@ -116,6 +117,9 @@ class _AppWrapperState extends State<AppWrapper> {
 
     await AIService.initialize(appProvider);
     await ShareService.init(appProvider);
+
+    // Initialize wake lock if it was enabled in settings
+    await wake_lock.initializeWakeLock();
 
     final modelConfig = appProvider.modelConfig;
     final isConfigured = modelConfig?.isConfigured ?? false;

@@ -362,6 +362,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageChanged => '语言更改成功';
 
   @override
+  String get system => '系统';
+
+  @override
+  String get systemSubtitle => '系统行为设置';
+
+  @override
+  String get keepScreenOn => '保持屏幕常亮';
+
+  @override
+  String get keepScreenOnSubtitle => '防止屏幕自动关闭';
+
+  @override
   String errorChangingLanguage(Object error) {
     return '更改语言时出错：$error';
   }

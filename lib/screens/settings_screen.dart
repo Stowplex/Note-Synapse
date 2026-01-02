@@ -17,6 +17,7 @@ import 'getting_started_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
+import '../services/wake_lock_service.dart' as wake_lock;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -120,6 +121,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AIDebugOverlayScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.settings_applications),
+              title: Text(l10n.system),
+              subtitle: Text(l10n.systemSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SystemSettingsScreen(),
                 ),
               ),
             ),
@@ -1246,6 +1262,66 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class SystemSettingsScreen extends StatefulWidget {
+  const SystemSettingsScreen({super.key});
+
+  @override
+  State<SystemSettingsScreen> createState() => _SystemSettingsScreenState();
+}
+
+class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
+  bool _keepScreenOn = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    final enabled = await wake_lock.isWakeLockEnabled();
+    if (mounted) {
+      setState(() {
+        _keepScreenOn = enabled;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleKeepScreenOn(bool value) async {
+    setState(() {
+      _keepScreenOn = value;
+    });
+    await wake_lock.setWakeLock(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.system)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: SwitchListTile(
+                    title: Text(l10n.keepScreenOn),
+                    subtitle: Text(l10n.keepScreenOnSubtitle),
+                    value: _keepScreenOn,
+                    onChanged: _toggleKeepScreenOn,
+                    secondary: const Icon(Icons.brightness_7),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }

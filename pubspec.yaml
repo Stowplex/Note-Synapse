@@ -95,6 +95,9 @@ dependencies:
   path_provider: ^2.1.1
   open_file: ^3.3.2
   
+  # Wake lock to keep screen on
+  wakelock_plus: ^1.2.8
+  
   # Archive handling
   archive: ^4.0.7
   
