@@ -236,7 +236,7 @@ class ShareService {
           content = content.substring(0, content.length - 5);
         }
 
-        await noteFile.writeAsString(content);
+        await noteFile.writeAsString(content, flush: true);
 
         LoggerService.debug(
           'shareAsMarkdownZip: Wrote note file: ${noteFile.path} '
@@ -376,15 +376,12 @@ class ShareService {
         );
 
         // Use addFile with explicit File object for streaming
-        encoder.addFile(file, relativePath);
+        await encoder.addFile(file, relativePath);
         fileCount++;
-
-        // Yield to allow I/O operations to complete (matches recovery_screen pattern)
-        await Future.delayed(Duration.zero);
       }
     }
 
-    encoder.close();
+    await encoder.close();
 
     // Verify the ZIP was created correctly
     final zipFile = File(zipFilePath);
