@@ -14,6 +14,10 @@ class AgentTask {
   /// ID of the associated ContextNode for context management.
   String? contextNodeId;
 
+  /// If true, this task's output should be passed directly to the user
+  /// without summarization. Set by the LLM planner for synthesis/final tasks.
+  final bool isFinalDeliverable;
+
   AgentTaskStatus status;
   String? result;
 
@@ -33,6 +37,7 @@ class AgentTask {
     this.parentTaskId,
     this.depth = 0,
     this.contextNodeId,
+    this.isFinalDeliverable = false,
     this.status = AgentTaskStatus.pending,
     this.result,
     this.condensedSummary,
@@ -57,6 +62,7 @@ class AgentTask {
     'parentTaskId': parentTaskId,
     'depth': depth,
     'contextNodeId': contextNodeId,
+    'isFinalDeliverable': isFinalDeliverable,
     'status': status.toString(),
     'result': result,
     'condensedSummary': condensedSummary,

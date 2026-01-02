@@ -144,15 +144,22 @@ class AgentService extends ChangeNotifier {
 
         // Generate condensed summary for completed tasks
         if (task.status == AgentTaskStatus.completed) {
-          try {
-            task.condensedSummary = await _contextManager.generateFinalSummary(
-              taskContext,
-            );
-            taskContext.log('Task completed with result: ${task.result}');
-          } catch (e) {
-            LoggerService.error('Failed to generate task summary: $e');
+          if (task.isFinalDeliverable) {
+            // Preserve full result for final deliverable tasks - no summarization
             task.condensedSummary = task.result;
+            taskContext.summary = task.result;
             taskContext.status = ContextNodeStatus.completed;
+            taskContext.log('Final deliverable preserved (no summarization)');
+          } else {
+            try {
+              task.condensedSummary = await _contextManager
+                  .generateFinalSummary(taskContext);
+              taskContext.log('Task completed with result: ${task.result}');
+            } catch (e) {
+              LoggerService.error('Failed to generate task summary: $e');
+              task.condensedSummary = task.result;
+              taskContext.status = ContextNodeStatus.completed;
+            }
           }
         } else if (task.status == AgentTaskStatus.failed) {
           _contextManager.markContextFailed(
@@ -168,18 +175,36 @@ class AgentService extends ChangeNotifier {
       notifyListeners();
     }
 
-    // Generate final summary using root context
+    // Generate final answer
     if (_tasks.every((t) => t.status == AgentTaskStatus.completed)) {
-      _currentThought = 'Generating final summary...';
+      _currentThought = 'Generating final response...';
       notifyListeners();
 
       try {
-        final rootCtx = _contextManager.rootContext;
-        final contextSummary = rootCtx != null
-            ? _contextManager.buildContextForNode(rootCtx)
-            : _buildLegacyContext();
-        await _generateFinalSummary(contextSummary);
-        _currentThought = 'All tasks completed.';
+        // Check if we have a final deliverable task - use its result directly
+        final deliverableTask = _tasks
+            .where((t) => t.isFinalDeliverable)
+            .lastOrNull;
+
+        if (deliverableTask != null && deliverableTask.result != null) {
+          // Use the deliverable's result directly - this IS the user's answer
+          _finalAnswer = deliverableTask.result!;
+          _finalMetadata = {
+            'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+            'is_agent_summary': true,
+            'objective': _currentObjective,
+            'deliverable_task': deliverableTask.description,
+          };
+          _currentThought = 'All tasks completed.';
+        } else {
+          // Fallback: generate summary from context (no deliverable marked)
+          final rootCtx = _contextManager.rootContext;
+          final contextSummary = rootCtx != null
+              ? _contextManager.buildContextForNode(rootCtx)
+              : _buildLegacyContext();
+          await _generateFinalSummary(contextSummary);
+          _currentThought = 'All tasks completed.';
+        }
       } catch (e) {
         _finalAnswer =
             "Execution finished, but failed to generate summary. See task details.";
@@ -405,14 +430,25 @@ Return ONLY a valid JSON list of objects:
 [
   {
     "description": "Step description",
-    "tools": ["tool_name_1", "tool_name_2"]
+    "tools": ["tool_name_1", "tool_name_2"],
+    "isFinalDeliverable": false
   }
 ]
+
+IMPORTANT - Final Deliverable:
+- Set "isFinalDeliverable": true for the task that produces the FINAL OUTPUT the user requested.
+- This task's full result will be shown to the user WITHOUT summarization.
+- Only ONE task should have isFinalDeliverable: true (typically the last synthesis/compilation task).
+- If the objective asks for a report, analysis, list, or any specific output format,
+  the task that produces that output should be marked as the final deliverable.
+
 Example:
 [
-  {"description": "Search for notes", "tools": ["search_notes"]},
-  {"description": "Read notes and summarize", "tools": ["read_note"]}
+  {"description": "Search for notes", "tools": ["search_notes"], "isFinalDeliverable": false},
+  {"description": "Read notes", "tools": ["read_note"], "isFinalDeliverable": false},
+  {"description": "Synthesize comprehensive report", "tools": [], "isFinalDeliverable": true}
 ]
+
 If no tools are needed for a step (e.g. analysis), use an empty list: "tools": [].
 Only use the tools listed above.
 ''';
@@ -639,11 +675,15 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
           tools = [map['tool'] as String];
         }
 
+        // Extract isFinalDeliverable flag (defaults to false if not present)
+        final isFinalDeliverable = map['isFinalDeliverable'] == true;
+
         return AgentTask(
           id: const Uuid().v4(),
           description: map['description'] ?? "No description",
           toolNames: tools,
           allowedTools: activeTools,
+          isFinalDeliverable: isFinalDeliverable,
         );
       }).toList();
     } catch (e) {
@@ -661,8 +701,9 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       return;
     }
 
-    // If no tools, simple thought step
-    if (task.toolNames.isEmpty) {
+    // If no tools AND not a final deliverable, simple thought step
+    // Final deliverable tasks need LLM to synthesize even without tools
+    if (task.toolNames.isEmpty && !task.isFinalDeliverable) {
       task.result = "Thought step completed.";
       task.status = AgentTaskStatus.completed;
       notifyListeners();
@@ -710,6 +751,42 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       ),
     ].join('\n');
 
+    // Build special instructions for final deliverable tasks
+    final deliverableInstructions = task.isFinalDeliverable
+        ? '''
+
+IMPORTANT: This is the FINAL DELIVERABLE task.
+Your answer will be shown DIRECTLY to the user without further processing.
+- Produce the complete, detailed output the user requested (report, analysis, etc.)
+- Do NOT summarize - give the full deliverable
+- Format with Markdown for readability
+- Include all relevant data, citations, and findings from the context above
+
+OUTPUT FORMAT (NO JSON for final deliverable):
+Just write your complete report/deliverable directly in Markdown. Do NOT wrap it in JSON.
+'''
+        : '';
+
+    // Use different format instructions based on whether this is a final deliverable
+    final formatInstructions = task.isFinalDeliverable
+        ? '''
+FORMAT:
+Since this is the FINAL DELIVERABLE, just write your complete response directly.
+Do NOT use JSON format - output the full report/analysis in Markdown.
+'''
+        : '''
+FORMAT:
+My thought: ...
+Tool:
+```json
+{ "tool": "tool_name", "args": { ... } }
+```
+OR
+```json
+{ "answer": "Final summary..." }
+```
+''';
+
     final prompt =
         '''
 You are an intelligent agent working on a task.
@@ -729,17 +806,8 @@ INSTRUCTIONS:
 2. Formulate a CLEAR THOUGHT.
 3. Select a tool to execute (or use "answer" if done).
    If the plan assigned multiple tools, you generally execute them one by one in subsequent turns until the task is satisfied.
-   
-FORMAT:
-My thought: ...
-Tool:
-```json
-{ "tool": "tool_name", "args": { ... } }
-```
-OR
-```json
-{ "answer": "Final summary..." }
-```
+$deliverableInstructions
+$formatInstructions
 ''';
 
     try {
@@ -753,6 +821,29 @@ OR
 
       // ... Parsing Logic (Similar to before but inside this function) ...
       // Re-using existing ReAct parsing logic but ensuring it matches new flow
+
+      // SPECIAL HANDLING: For final deliverable tasks, use the full response as the answer
+      // (no JSON parsing needed since we told LLM to output directly in Markdown)
+      if (task.isFinalDeliverable) {
+        // Strip any "My thought:" prefix if present
+        String result = response;
+        final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
+        result = result.replaceFirst(thoughtPrefix, '').trim();
+
+        task.result = result;
+        task.status = AgentTaskStatus.completed;
+        task.executionHistory.add('Turn $turn:');
+        task.executionHistory.add('Final deliverable produced.');
+
+        if (task.contextNodeId != null) {
+          _contextManager
+              .getContext(task.contextNodeId!)
+              ?.log('Turn $turn - Final deliverable produced');
+        }
+
+        notifyListeners();
+        return;
+      }
 
       String thought = '';
       String? jsonStr;
