@@ -1027,14 +1027,24 @@ Do NOT use JSON format - output the full report/analysis in Markdown.
         : '''
 FORMAT:
 My thought: ...
-Tool:
+
+Then choose ONE action:
 ```json
 { "tool": "tool_name", "args": { ... } }
 ```
 OR
 ```json
-{ "answer": "Final summary..." }
+{ "think": "Detailed analysis or reasoning about data already in context" }
 ```
+OR
+```json
+{ "answer": "Final summary when task is complete" }
+```
+
+IMPORTANT:
+- Use "think" when you need to analyze/reason about data ALREADY in the execution history
+- Use "tool" ONLY when you need NEW data not yet loaded
+- Do NOT re-read files already shown in execution history - use "think" instead
 ''';
 
     final prompt =
@@ -1168,6 +1178,22 @@ $formatInstructions
         task.status = AgentTaskStatus.completed;
         notifyListeners();
         return;
+      }
+
+      // Handle "think" action - pure reasoning on existing context
+      if (decision.containsKey('think')) {
+        final thinkContent = decision['think'] as String?;
+        if (thinkContent != null && thinkContent.isNotEmpty) {
+          task.executionHistory.add('Analysis: $thinkContent');
+          _contextManager
+              .getContext(task.contextNodeId ?? '')
+              ?.log('Analysis: $thinkContent');
+          _currentThought =
+              'Analyzing: ${thinkContent.length > 100 ? '${thinkContent.substring(0, 100)}...' : thinkContent}';
+          notifyListeners();
+          // Continue loop without calling a tool
+          return;
+        }
       }
 
       final toolName = decision['tool'] as String?;

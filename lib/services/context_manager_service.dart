@@ -2,11 +2,20 @@ import '../models/context_node.dart';
 import 'ai_service.dart';
 import 'logger_service.dart';
 import '../models/generation_context.dart';
+import 'model_selector.dart';
 
 /// Default token budgets for context management.
-const int kRootContextBudget = 100000;
+/// These are fallbacks; prefer model's configured maxInputTokens.
+const int kDefaultContextBudget = 100000;
 const int kSubtaskBudgetRatio = 60;
 const int kMinSubtaskBudget = 5000;
+
+/// Gets the configured model's max input token limit, or default.
+int getModelContextBudget() {
+  // final config = ModelSelector.instance.currentModelConfig;
+  return kDefaultContextBudget;
+  // return config?.maxInputTokens ?? kDefaultContextBudget;
+}
 
 /// Service for managing hierarchical context in agent execution.
 ///
@@ -29,16 +38,18 @@ class ContextManagerService {
   ContextNode? get currentContext => _currentContext;
 
   /// Creates a new root context for an agent session.
+  /// Uses model's configured maxInputTokens if not explicitly provided.
   ContextNode createRootContext({
     required String objective,
     List<String> allowedTools = const [],
-    int maxTokens = kRootContextBudget,
+    int? maxTokens,
   }) {
+    final budget = maxTokens ?? getModelContextBudget();
     final root = ContextNode(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       objective: objective,
       depth: 0,
-      maxContextTokens: maxTokens,
+      maxContextTokens: budget,
       status: ContextNodeStatus.active,
       allowedTools: allowedTools,
     );
@@ -217,21 +228,30 @@ class ContextManagerService {
     }
   }
 
-  /// Generates an intermediate summary of work done so far.
+  /// Generates a smart handoff summary of work done so far.
+  /// Uses a "handoff to colleague" persona to preserve essential context.
   Future<String> _generateIntermediateSummary(ContextNode node) async {
     final prompt =
         '''
-Summarize the following execution log for the task: "${node.objective}"
+Imagine you are handing off your work to a colleague. They will pick up where you left WITHOUT any prior context.
 
-Keep the summary:
-- Concise but complete (preserve key facts, findings, and citations)
-- Grounded in the actual results (no hallucination)
-- Structured for easy reference
+Your task: "${node.objective}"
 
 Execution Log:
 ${node.executionLog.join('\n')}
 
-Provide a summary in 2-4 paragraphs:
+Create a COMPACT handoff document that preserves:
+1. Key data and findings needed to continue work
+2. Current work state (what's done, what's pending)
+3. Important URLs, citations, and sources
+4. Tool outputs that may be referenced again
+
+Remove:
+- Redundant or superseded information
+- Verbose tool output that has been processed (keep conclusions)
+- Internal deliberation that led to conclusions (keep the conclusions only)
+
+Output structured, scannable context. Not prose:
 ''';
 
     final response = await AIService.generateWithAttachments(

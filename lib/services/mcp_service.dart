@@ -473,11 +473,30 @@ class McpService {
         // Call the tool
         final result = await client.callTool(toolName, arguments);
 
-        // Extract text content from result
+        // Extract content from result
+        // MCP tools can return multiple content types:
+        // - TextContent: simple text responses
+        // - ResourceContent: file contents (with text or blob field)
+        // - ImageContent: images (not handled yet)
         final buffer = StringBuffer();
         for (final content in result.content) {
           if (content is mcp.TextContent) {
             buffer.write(content.text);
+          } else if (content is mcp.ResourceContent) {
+            // ResourceContent contains the actual file/resource data
+            // Prefer text content, fall back to blob (which is base64)
+            if (content.text != null) {
+              buffer.write(content.text);
+            } else if (content.blob != null) {
+              // blob is base64-encoded, decode it for text files
+              try {
+                final decoded = utf8.decode(base64Decode(content.blob!));
+                buffer.write(decoded);
+              } catch (_) {
+                // If base64 decode fails or isn't valid UTF-8, return raw blob
+                buffer.write(content.blob);
+              }
+            }
           }
         }
 
