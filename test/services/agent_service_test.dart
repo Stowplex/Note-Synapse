@@ -111,4 +111,119 @@ void main() {
       expect(mcpServiceName.startsWith('NS/'), isFalse);
     });
   });
+
+  group('JSON extraction patterns', () {
+    // Helper function that mirrors the extraction logic from _performTask
+    String? extractJsonFromResponse(String response) {
+      // Method 1: Look for ```json ... ``` block
+      final jsonBlockMatch = RegExp(
+        r'```json\s*(\{.*?\})\s*```',
+        dotAll: true,
+      ).firstMatch(response);
+
+      if (jsonBlockMatch != null) {
+        return jsonBlockMatch.group(1);
+      }
+
+      // Method 2: Find JSON object with expected action keys
+      final jsonStartMatch = RegExp(
+        r'\{\s*"(?:tool|answer|think)"\s*:',
+      ).firstMatch(response);
+
+      if (jsonStartMatch != null) {
+        final startIdx = jsonStartMatch.start;
+        int braceCount = 0;
+        int? endIdx;
+        for (int i = startIdx; i < response.length; i++) {
+          if (response[i] == '{') {
+            braceCount++;
+          } else if (response[i] == '}') {
+            braceCount--;
+            if (braceCount == 0) {
+              endIdx = i + 1;
+              break;
+            }
+          }
+        }
+        if (endIdx != null) {
+          return response.substring(startIdx, endIdx);
+        }
+      }
+      return null;
+    }
+
+    test('extracts valid JSON from code block', () {
+      final response = '''
+My thought: I have all the information needed.
+
+```json
+{ "answer": "The REST API endpoints are documented below." }
+```
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"answer"'));
+    });
+
+    test('extracts JSON without code block', () {
+      final response = '''
+My thought: Analysis complete.
+
+{ "answer": "Here is the summary." }
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"answer"'));
+    });
+
+    test('ignores template placeholders like {cid}', () {
+      final response = '''
+My thought: The endpoint uses GET https://api.example.com/{cid}/data
+
+To fetch data, use the following pattern:
+- Endpoint: https://api.example.com/{oid}.xml
+- The {BVID} parameter should be replaced.
+''';
+      // This should return null since there's no valid JSON action
+      final json = extractJsonFromResponse(response);
+      expect(json, isNull);
+    });
+
+    test('extracts JSON even with template placeholders in response', () {
+      final response = '''
+My thought: The endpoint uses GET https://api.example.com/{cid}/data
+
+```json
+{ "answer": "Use the endpoint https://api.example.com/{cid}/data" }
+```
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"answer"'));
+    });
+
+    test('handles nested JSON objects in tool args', () {
+      final response = '''
+My thought: Need to call the search tool.
+
+{ "tool": "search", "args": { "query": "test", "options": { "limit": 10 } } }
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"tool"'));
+      expect(json, contains('"args"'));
+      expect(json, contains('"options"'));
+    });
+
+    test('handles think action', () {
+      final response = '''
+My thought: I need to analyze the data more carefully.
+
+{ "think": "The data shows that there are two main approaches..." }
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"think"'));
+    });
+  });
 }

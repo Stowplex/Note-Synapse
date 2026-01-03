@@ -1123,25 +1123,47 @@ $formatInstructions
         return;
       }
 
-      String thought = '';
+      // Extract thought and JSON action
       String? jsonStr;
+      String thought = '';
 
-      // Extract thought
-      final jsonMatch = RegExp(
+      // Method 1: Look for ```json ... ``` block (most reliable)
+      final jsonBlockMatch = RegExp(
         r'```json\s*(\{.*?\})\s*```',
         dotAll: true,
       ).firstMatch(response);
-      final altJsonMatch = RegExp(
-        r'(\{.*\})',
-        dotAll: true,
-      ).firstMatch(response);
 
-      if (jsonMatch != null) {
-        jsonStr = jsonMatch.group(1);
-        thought = response.substring(0, jsonMatch.start).trim();
-      } else if (altJsonMatch != null) {
-        jsonStr = altJsonMatch.group(1);
-        thought = response.substring(0, altJsonMatch.start).trim();
+      if (jsonBlockMatch != null) {
+        jsonStr = jsonBlockMatch.group(1);
+        thought = response.substring(0, jsonBlockMatch.start).trim();
+      } else {
+        // Method 2: Find JSON object with expected action keys (tool/answer/think)
+        // This avoids matching template placeholders like {cid} or {BVID}
+        final jsonStartMatch = RegExp(
+          r'\{\s*"(?:tool|answer|think)"\s*:',
+        ).firstMatch(response);
+
+        if (jsonStartMatch != null) {
+          thought = response.substring(0, jsonStartMatch.start).trim();
+          // Extract full JSON by finding matching closing brace
+          final startIdx = jsonStartMatch.start;
+          int braceCount = 0;
+          int? endIdx;
+          for (int i = startIdx; i < response.length; i++) {
+            if (response[i] == '{') {
+              braceCount++;
+            } else if (response[i] == '}') {
+              braceCount--;
+              if (braceCount == 0) {
+                endIdx = i + 1;
+                break;
+              }
+            }
+          }
+          if (endIdx != null) {
+            jsonStr = response.substring(startIdx, endIdx);
+          }
+        }
       }
 
       if (thought.startsWith('My thought:')) {
@@ -1161,7 +1183,70 @@ $formatInstructions
       }
 
       if (jsonStr == null) {
-        task.executionHistory.add("Error: No JSON action found in response.");
+        // LLM-based verdict extraction: ask LLM to classify its own response
+        // using tag format to avoid JSON parsing issues
+        final verdictPrompt =
+            '''
+The following response was produced but does not conform to the expected JSON format.
+Analyze the content and determine the intent:
+
+---
+$response
+---
+
+Was this response:
+1. A completed ANSWER to the task?
+2. A TOOL call request that wasn't properly formatted?
+3. A THINK step (analysis/reasoning) that should continue?
+
+Respond ONLY in this exact format (no JSON):
+<verdict>answer|tool|think</verdict>
+<content>
+The actual content (answer text, or tool call details, or reasoning)
+</content>
+''';
+
+        try {
+          final verdictResponse = await AIService.generateWithAttachments(
+            verdictPrompt,
+            [],
+            generationContext: GenerationContext(
+              values: {'type': 'agent_verdict', 'taskId': task.id},
+            ),
+          );
+
+          final verdictMatch = RegExp(
+            r'<verdict>(answer|tool|think)</verdict>',
+          ).firstMatch(verdictResponse);
+          final contentMatch = RegExp(
+            r'<content>\s*([\s\S]*?)\s*</content>',
+          ).firstMatch(verdictResponse);
+
+          if (verdictMatch != null && contentMatch != null) {
+            final verdict = verdictMatch.group(1);
+            final content = contentMatch.group(1)?.trim() ?? '';
+
+            if (verdict == 'answer' && content.isNotEmpty) {
+              task.result = content;
+              task.status = AgentTaskStatus.completed;
+              task.executionHistory.add('Answer extracted via verdict check.');
+              notifyListeners();
+              return;
+            } else if (verdict == 'think') {
+              task.executionHistory.add('Analysis: $content');
+              // Continue loop
+              return;
+            }
+            // 'tool' case: content should describe what was intended
+            task.executionHistory.add(
+              'Tool intent detected but malformed: $content',
+            );
+          }
+        } catch (e) {
+          LoggerService.error('Verdict extraction failed: $e');
+        }
+
+        task.executionHistory.add('Error: No JSON action found in response.');
         return;
       }
 
