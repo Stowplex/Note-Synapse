@@ -1463,7 +1463,7 @@ The actual content (answer text, or tool call details, or reasoning)
     // 2. Validate depth limit
     if (parentTask.depth >= kMaxSubtaskDepth) {
       parentTask.executionHistory.add(
-        'Cannot spawn subtasks: maximum depth ($kMaxSubtaskDepth) reached. Use "think" to analyze instead.',
+        'Cannot spawn subtasks: maximum depth ($kMaxSubtaskDepth) reached. Use "think" to analyze or use "tool" to carry out tasks in current context instead.',
       );
       _currentThought = 'Subtask depth limit reached';
       notifyListeners();
@@ -1475,22 +1475,17 @@ The actual content (answer text, or tool call details, or reasoning)
       parentTask.contextNodeId ?? '',
     );
 
-    // 4. Compact parent context once for all subtasks
-    String? sharedCompactedContext;
-    if (parentContext != null) {
-      try {
-        sharedCompactedContext = await _compactContextForSubtasks(
-          parentContext,
-          specs.map((s) => s['description'] as String? ?? '').toList(),
-        );
-      } catch (e) {
-        LoggerService.error('Failed to compact context for subtasks: $e');
-      }
-    }
+    // 4. Extract all subtask descriptions for sibling awareness
+    final allDescriptions = specs
+        .map((s) => s['description'] as String?)
+        .where((d) => d != null && d.isNotEmpty)
+        .cast<String>()
+        .toList();
 
     // 5. Create all subtasks
     final createdSubtasks = <AgentTask>[];
-    for (final spec in specs) {
+    for (int i = 0; i < specs.length; i++) {
+      final spec = specs[i];
       final description = spec['description'] as String?;
       final toolsList = spec['tools'] as List?;
       final tools = toolsList?.cast<String>() ?? <String>[];
@@ -1514,7 +1509,7 @@ The actual content (answer text, or tool call details, or reasoning)
         maxTurns: parentTask.maxTurns,
       );
 
-      // Create context for subtask
+      // Create context for subtask with tailored briefing
       if (parentContext != null) {
         final childContext = _contextManager.createChildContext(
           parent: parentContext,
@@ -1523,11 +1518,25 @@ The actual content (answer text, or tool call details, or reasoning)
         );
         subtask.contextNodeId = childContext.id;
 
-        // Add shared compacted context
-        if (sharedCompactedContext != null) {
-          childContext.log('Parent context summary:\n$sharedCompactedContext');
-        } else {
-          childContext.log('Parent objective: ${parentContext.objective}');
+        // Generate per-subtask briefing with sibling awareness
+        try {
+          final briefing = await _compactContextForSubtask(
+            parentContext,
+            description,
+            allDescriptions.where((d) => d != description).toList(),
+          );
+          childContext.log(briefing);
+        } catch (e) {
+          LoggerService.error('Failed to compact context for subtask: $e');
+          // Fallback: at least inform about siblings
+          final siblings = allDescriptions
+              .where((d) => d != description)
+              .map((d) => '  - $d')
+              .join('\n');
+          childContext.log(
+            'Parent objective: ${parentContext.objective}\n'
+            'Parallel subtasks (do not duplicate their work):\n$siblings',
+          );
         }
       }
 
@@ -1561,38 +1570,42 @@ The actual content (answer text, or tool call details, or reasoning)
     notifyListeners();
   }
 
-  /// Compacts parent context for multiple subtasks.
-  /// Creates a shared briefing relevant to all subtask objectives.
-  Future<String> _compactContextForSubtasks(
+  /// Compacts parent context for a specific subtask.
+  /// Creates a tailored briefing for the subtask's objective while
+  /// informing it about parallel sibling tasks to prevent duplication.
+  Future<String> _compactContextForSubtask(
     ContextNode parentContext,
-    List<String> subtaskObjectives,
+    String subtaskObjective,
+    List<String> siblingObjectives,
   ) async {
-    final objectivesList = subtaskObjectives
-        .where((o) => o.isNotEmpty)
-        .map((o) => '- $o')
-        .join('\n');
+    final siblingsList = siblingObjectives.isEmpty
+        ? 'None'
+        : siblingObjectives.map((o) => '  - $o').join('\n');
 
     final prompt =
         '''
-You are handing off work to colleagues who will handle these subtasks:
-$objectivesList
+You are handing off work to a colleague who will handle this specific subtask:
+"$subtaskObjective"
 
-Provide a CONCISE briefing (max 500 words) RELEVANT to the subtasks:
-1. What has been discovered that's relevant
-2. Key data/URLs/findings the subtasks will need
-3. What NOT to repeat (already tried approaches)
+PARALLEL SIBLING TASKS (do NOT duplicate their work):
+$siblingsList
+
+Provide a CONCISE briefing (max 400 words) tailored to THIS subtask:
+1. What has been discovered that's RELEVANT to "$subtaskObjective"
+2. Key data/URLs/findings this specific subtask will need
+3. What NOT to repeat (already tried approaches OR being handled by siblings)
 
 Current execution log:
 ${parentContext.executionLog.join('\n')}
 
-Write a focused briefing for the subtasks:
+Write a focused briefing for this subtask:
 ''';
 
     return await AIService.generateWithAttachments(
       prompt,
       [],
       generationContext: GenerationContext(
-        values: {'type': 'subtasks_briefing'},
+        values: {'type': 'subtask_briefing'},
       ),
     );
   }
