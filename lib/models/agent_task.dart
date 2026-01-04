@@ -43,6 +43,15 @@ class AgentTask {
   /// These notes are included only in this task's context.
   List<String> contextNoteIds;
 
+  /// IDs of subtasks dynamically spawned during this task's execution.
+  /// Unlike planned subtasks (via parentTaskId at plan time), these are
+  /// created mid-execution when LLM decides to decompose work.
+  List<String> spawnedSubtaskIds;
+
+  /// True if this task was spawned dynamically during execution,
+  /// rather than created during initial planning.
+  final bool isSpawnedDynamically;
+
   AgentTask({
     required this.id,
     required this.description,
@@ -51,6 +60,7 @@ class AgentTask {
     this.contextNodeId,
     this.isFinalDeliverable = false,
     this.extractFindings = false,
+    this.isSpawnedDynamically = false,
     this.status = AgentTaskStatus.pending,
     this.result,
     this.condensedSummary,
@@ -61,10 +71,12 @@ class AgentTask {
     this.maxTurns = 20,
     List<String>? allowedTools,
     List<String>? contextNoteIds,
+    List<String>? spawnedSubtaskIds,
   }) : toolNames = toolNames ?? [],
        executionHistory = executionHistory ?? [],
        allowedTools = allowedTools ?? [],
-       contextNoteIds = contextNoteIds ?? [];
+       contextNoteIds = contextNoteIds ?? [],
+       spawnedSubtaskIds = spawnedSubtaskIds ?? [];
 
   /// Whether this is a root-level task (no parent).
   bool get isRootTask => parentTaskId == null;
@@ -80,6 +92,7 @@ class AgentTask {
     'contextNodeId': contextNodeId,
     'isFinalDeliverable': isFinalDeliverable,
     'extractFindings': extractFindings,
+    'isSpawnedDynamically': isSpawnedDynamically,
     'status': status.toString(),
     'result': result,
     'condensedSummary': condensedSummary,
@@ -90,5 +103,6 @@ class AgentTask {
     'maxTurns': maxTurns,
     'allowedTools': allowedTools,
     'contextNoteIds': contextNoteIds,
+    'spawnedSubtaskIds': spawnedSubtaskIds,
   };
 }

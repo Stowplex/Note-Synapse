@@ -26,6 +26,9 @@ typedef ToolExecutor =
       GenerationContext generationContext,
     );
 
+/// Maximum allowed subtask depth (0=root, so 3 means 4 levels total)
+const int kMaxSubtaskDepth = 3;
+
 class AgentService extends ChangeNotifier {
   // State
   List<AgentTask> _tasks = [];
@@ -197,6 +200,34 @@ class AgentService extends ChangeNotifier {
               );
             } catch (e) {
               LoggerService.error('Failed to extract findings: $e');
+            }
+          }
+
+          // Extract findings from dynamically spawned subtasks
+          if (task.spawnedSubtaskIds.isNotEmpty) {
+            for (final subtaskId in task.spawnedSubtaskIds) {
+              final subtask = _tasks
+                  .where((t) => t.id == subtaskId)
+                  .firstOrNull;
+              if (subtask != null &&
+                  subtask.status == AgentTaskStatus.completed) {
+                try {
+                  // Extract structured findings from subtask's execution history
+                  // (same mechanism as extractFindings=true tasks)
+                  subtask.structuredFindings = await _extractStructuredFindings(
+                    subtask,
+                  );
+                  _contextManager.addFindings(subtask.structuredFindings ?? []);
+
+                  // Log findings summary to parent context
+                  final findingsCount = subtask.structuredFindings?.length ?? 0;
+                  taskContext.log(
+                    'Subtask "${subtask.description}" completed with $findingsCount findings',
+                  );
+                } catch (e) {
+                  LoggerService.error('Failed to extract subtask findings: $e');
+                }
+              }
             }
           }
 
@@ -1038,13 +1069,21 @@ OR
 ```
 OR
 ```json
+{ "spawn_subtask": { "description": "What the subtask should accomplish", "tools": ["tool1", "tool2"] } }
+```
+OR
+```json
 { "answer": "Final summary when task is complete" }
 ```
 
-IMPORTANT:
-- Use "think" when you need to analyze/reason about data ALREADY in the execution history
-- Use "tool" ONLY when you need NEW data not yet loaded
-- Do NOT re-read files already shown in execution history - use "think" instead
+ACTION GUIDANCE:
+- **think**: Analyze/reason about data ALREADY in execution history - don't reload files
+- **tool**: Fetch NEW data not yet in context
+- **spawn_subtask**: Delegate complex sub-problems to a focused child task (max depth: ${kMaxSubtaskDepth})
+  Use when: task is too complex, needs parallel investigation, or benefits from context isolation
+- **answer**: Conclude when objective is satisfied
+
+Current task depth: ${task.depth} / $kMaxSubtaskDepth
 ''';
 
     final prompt =
@@ -1063,10 +1102,10 @@ ${task.executionHistory.map((h) => h.toString()).join('\n')}
 
 ## ITERATION PROTOCOL
 
-After each tool call, evaluate:
+After each action, evaluate:
 1. Did I get what I needed? If yes, proceed to answer.
-2. Are there gaps? If yes, make another tool call.
-3. Are there contradictions? If yes, search for authoritative sources.
+2. Are there gaps? Make another tool call OR spawn a subtask.
+3. Is the problem complex? Consider spawning subtasks for focused investigation.
 
 You may call tools MULTIPLE TIMES per task if needed.
 Don't settle for incomplete information when tools are available.
@@ -1075,15 +1114,18 @@ Don't settle for incomplete information when tools are available.
 
 Always structure your response as:
 1. "My thought: [your reasoning about what to do next]"
-2. Tool call in JSON format, OR final answer
+2. ONE action in JSON format (tool, think, spawn_subtask, or answer)
 
 This format is shown to the user to help them understand your reasoning.
 
 INSTRUCTIONS:
 1. Analyze the context and history.
-2. Formulate a CLEAR THOUGHT.
-3. Select a tool to execute (or use "answer" if done).
-   If the plan assigned multiple tools, you generally execute them one by one in subsequent turns until the task is satisfied.
+2. Formulate a CLEAR THOUGHT about what to do next.
+3. Choose ONE action:
+   - "tool": Execute a tool to fetch NEW data
+   - "think": Analyze data ALREADY in context (don't reload)
+   - "spawn_subtask": Delegate complex work to a focused child task
+   - "answer": Complete the task when objective is satisfied
 $deliverableInstructions
 $formatInstructions
 ''';
@@ -1137,10 +1179,10 @@ $formatInstructions
         jsonStr = jsonBlockMatch.group(1);
         thought = response.substring(0, jsonBlockMatch.start).trim();
       } else {
-        // Method 2: Find JSON object with expected action keys (tool/answer/think)
+        // Method 2: Find JSON object with expected action keys
         // This avoids matching template placeholders like {cid} or {BVID}
         final jsonStartMatch = RegExp(
-          r'\{\s*"(?:tool|answer|think)"\s*:',
+          r'\{\s*"(?:tool|answer|think|spawn_subtask)"\s*:',
         ).firstMatch(response);
 
         if (jsonStartMatch != null) {
@@ -1281,6 +1323,15 @@ The actual content (answer text, or tool call details, or reasoning)
         }
       }
 
+      // Handle "spawn_subtask" action - delegate work to a child task
+      if (decision.containsKey('spawn_subtask')) {
+        final subtaskSpec = decision['spawn_subtask'] as Map<String, dynamic>?;
+        if (subtaskSpec != null) {
+          await _handleSpawnSubtask(task, subtaskSpec);
+          return; // Subtask spawned, continue loop to wait for it
+        }
+      }
+
       final toolName = decision['tool'] as String?;
       final args = decision['args'] as Map<String, dynamic>? ?? {};
 
@@ -1358,6 +1409,116 @@ The actual content (answer text, or tool call details, or reasoning)
       LoggerService.error("Agent Loop Error: $e");
       task.executionHistory.add("Error: Internal Agent Loop Error: $e");
     }
+  }
+
+  /// Handles LLM request to spawn a subtask dynamically.
+  Future<void> _handleSpawnSubtask(
+    AgentTask parentTask,
+    Map<String, dynamic> spec,
+  ) async {
+    // 1. Validate depth limit
+    if (parentTask.depth >= kMaxSubtaskDepth) {
+      parentTask.executionHistory.add(
+        'Cannot spawn subtask: maximum depth ($kMaxSubtaskDepth) reached. Use "think" to analyze instead.',
+      );
+      _currentThought = 'Subtask depth limit reached';
+      notifyListeners();
+      return;
+    }
+
+    // 2. Extract subtask details
+    final description = spec['description'] as String?;
+    final toolsList = spec['tools'] as List?;
+    final tools = toolsList?.cast<String>() ?? <String>[];
+
+    if (description == null || description.isEmpty) {
+      parentTask.executionHistory.add(
+        'Cannot spawn subtask: missing description',
+      );
+      return;
+    }
+
+    // 3. Create subtask with parent linkage
+    final subtask = AgentTask(
+      id: const Uuid().v4(),
+      description: description,
+      parentTaskId: parentTask.id,
+      depth: parentTask.depth + 1,
+      isSpawnedDynamically: true,
+      toolNames: tools,
+      allowedTools: tools.isEmpty ? parentTask.allowedTools : tools,
+      maxTurns: parentTask.maxTurns,
+    );
+
+    // 4. Create context for subtask with compacted parent context
+    final parentContext = _contextManager.getContext(
+      parentTask.contextNodeId ?? '',
+    );
+    if (parentContext != null) {
+      final childContext = _contextManager.createChildContext(
+        parent: parentContext,
+        objective: description,
+        allowedTools: subtask.allowedTools,
+      );
+      subtask.contextNodeId = childContext.id;
+
+      // Add compacted parent summary to child context (objective-aware)
+      try {
+        final compactedContext = await _compactContextForSubtask(
+          parentContext,
+          description,
+        );
+        childContext.log('Parent context summary:\n$compactedContext');
+      } catch (e) {
+        LoggerService.error('Failed to compact context for subtask: $e');
+        childContext.log('Parent objective: ${parentContext.objective}');
+      }
+    }
+
+    // 5. Track spawned subtask
+    parentTask.spawnedSubtaskIds.add(subtask.id);
+
+    // 6. Insert subtask into queue (right after parent's current position)
+    final parentIndex = _tasks.indexOf(parentTask);
+    _tasks.insert(parentIndex + 1, subtask);
+
+    // 7. Log and notify
+    parentTask.executionHistory.add(
+      'Spawned subtask [depth=${subtask.depth}]: ${subtask.description}',
+    );
+    _currentThought = 'Spawned subtask: ${subtask.description}';
+    notifyListeners();
+  }
+
+  /// Compacts parent context for subtask consumption.
+  /// The compaction is objective-aware to preserve relevant information.
+  Future<String> _compactContextForSubtask(
+    ContextNode parentContext,
+    String subtaskObjective,
+  ) async {
+    final prompt =
+        '''
+You are handing off work to a colleague who will handle this subtask:
+"$subtaskObjective"
+
+Provide a CONCISE briefing (max 500 words) RELEVANT to the subtask:
+1. What has been discovered that's relevant to the subtask
+2. Key data/URLs/findings the subtask will need
+3. What NOT to repeat (already tried approaches)
+
+Current execution log:
+${parentContext.executionLog.join('\n')}
+
+Write a focused briefing for the subtask:
+''';
+
+    return await AIService.generateWithAttachments(
+      prompt,
+      [],
+      generationContext: GenerationContext(
+        values: {'type': 'subtask_briefing'},
+      ),
+    );
   }
 }
 

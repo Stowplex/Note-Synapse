@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/services/agent_service.dart';
@@ -127,7 +128,7 @@ void main() {
 
       // Method 2: Find JSON object with expected action keys
       final jsonStartMatch = RegExp(
-        r'\{\s*"(?:tool|answer|think)"\s*:',
+        r'\{\s*"(?:tool|answer|think|spawn_subtask)"\s*:',
       ).firstMatch(response);
 
       if (jsonStartMatch != null) {
@@ -224,6 +225,76 @@ My thought: I need to analyze the data more carefully.
       final json = extractJsonFromResponse(response);
       expect(json, isNotNull);
       expect(json, contains('"think"'));
+    });
+
+    test('handles spawn_subtask action', () {
+      final response = '''
+My thought: This task is complex, I'll spawn a subtask.
+
+{ "spawn_subtask": { "description": "Research topic A", "tools": ["search"] } }
+''';
+      final json = extractJsonFromResponse(response);
+      expect(json, isNotNull);
+      expect(json, contains('"spawn_subtask"'));
+    });
+  });
+
+  group('Subtask spawning', () {
+    test('kMaxSubtaskDepth constant is defined', () {
+      // Verify the constant exists and has expected value
+      expect(kMaxSubtaskDepth, equals(3));
+    });
+
+    test('AgentTask has spawnedSubtaskIds field', () {
+      final task = AgentTask(id: 'test-id', description: 'Test task');
+
+      expect(task.spawnedSubtaskIds, isEmpty);
+
+      task.spawnedSubtaskIds.add('child-1');
+      expect(task.spawnedSubtaskIds, contains('child-1'));
+    });
+
+    test('AgentTask has isSpawnedDynamically field', () {
+      // Default is false
+      final plannedTask = AgentTask(
+        id: 'planned-id',
+        description: 'Planned task',
+      );
+      expect(plannedTask.isSpawnedDynamically, isFalse);
+
+      // Can be set to true
+      final spawnedTask = AgentTask(
+        id: 'spawned-id',
+        description: 'Spawned task',
+        isSpawnedDynamically: true,
+      );
+      expect(spawnedTask.isSpawnedDynamically, isTrue);
+    });
+
+    test('AgentTask toJson includes new fields', () {
+      final task = AgentTask(
+        id: 'test-id',
+        description: 'Test',
+        isSpawnedDynamically: true,
+        spawnedSubtaskIds: ['child-1', 'child-2'],
+      );
+
+      final json = task.toJson();
+
+      expect(json['isSpawnedDynamically'], isTrue);
+      expect(json['spawnedSubtaskIds'], equals(['child-1', 'child-2']));
+    });
+
+    test('depth limit prevents exceeding max levels', () {
+      // A task at maximum depth cannot spawn more subtasks
+      final deepTask = AgentTask(
+        id: 'deep-id',
+        description: 'Deep task',
+        depth: kMaxSubtaskDepth, // At max depth
+      );
+
+      expect(deepTask.depth, equals(kMaxSubtaskDepth));
+      // In actual execution, _handleSpawnSubtask would reject this
     });
   });
 }

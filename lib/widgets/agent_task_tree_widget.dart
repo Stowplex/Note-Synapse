@@ -231,6 +231,46 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                                   ),
                             ),
                           ),
+                          // Show indicator for dynamically spawned tasks
+                          if (task.isSpawnedDynamically)
+                            Container(
+                              margin: const EdgeInsets.only(left: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.tertiaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.call_split,
+                                    size: 10,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onTertiaryContainer,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    'spawned',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          fontSize: 9,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onTertiaryContainer,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (hasChildren)
                             Icon(
                               isExpanded
