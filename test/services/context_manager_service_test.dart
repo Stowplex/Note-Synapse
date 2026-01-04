@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/context_node.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('ContextManagerService', () {
@@ -8,10 +9,12 @@ void main() {
 
     setUp(() {
       service = ContextManagerService();
+      // Initialize SharedPreferences with empty values for testing
+      SharedPreferences.setMockInitialValues({});
     });
 
-    test('createRootContext creates root with correct properties', () {
-      final root = service.createRootContext(
+    test('createRootContext creates root with correct properties', () async {
+      final root = await service.createRootContext(
         objective: 'Research vaccines',
         allowedTools: ['search', 'read'],
         maxTokens: 50000,
@@ -27,27 +30,30 @@ void main() {
       expect(service.currentContext, root);
     });
 
-    test('createChildContext creates child with inherited properties', () {
-      final root = service.createRootContext(
-        objective: 'Main objective',
-        allowedTools: ['tool1', 'tool2'],
-      );
+    test(
+      'createChildContext creates child with inherited properties',
+      () async {
+        final root = await service.createRootContext(
+          objective: 'Main objective',
+          allowedTools: ['tool1', 'tool2'],
+        );
 
-      final child = service.createChildContext(
-        parent: root,
-        objective: 'Subtask 1',
-      );
+        final child = service.createChildContext(
+          parent: root,
+          objective: 'Subtask 1',
+        );
 
-      expect(child.parentId, root.id);
-      expect(child.depth, 1);
-      expect(child.objective, 'Subtask 1');
-      expect(child.allowedTools, ['tool1', 'tool2']);
-      expect(child.maxContextTokens, lessThan(root.maxContextTokens));
-      expect(root.children, contains(child));
-    });
+        expect(child.parentId, root.id);
+        expect(child.depth, 1);
+        expect(child.objective, 'Subtask 1');
+        expect(child.allowedTools, ['tool1', 'tool2']);
+        expect(child.maxContextTokens, lessThan(root.maxContextTokens));
+        expect(root.children, contains(child));
+      },
+    );
 
-    test('createChildContext with custom tools', () {
-      final root = service.createRootContext(
+    test('createChildContext with custom tools', () async {
+      final root = await service.createRootContext(
         objective: 'Main objective',
         allowedTools: ['tool1', 'tool2', 'tool3'],
       );
@@ -61,8 +67,8 @@ void main() {
       expect(child.allowedTools, ['tool1']);
     });
 
-    test('setActiveContext updates current context', () {
-      final root = service.createRootContext(objective: 'Root');
+    test('setActiveContext updates current context', () async {
+      final root = await service.createRootContext(objective: 'Root');
       final child = service.createChildContext(
         parent: root,
         objective: 'Child',
@@ -76,8 +82,10 @@ void main() {
       expect(child.status, ContextNodeStatus.active);
     });
 
-    test('buildContextForNode includes root and ancestor context', () {
-      final root = service.createRootContext(objective: 'Research project');
+    test('buildContextForNode includes root and ancestor context', () async {
+      final root = await service.createRootContext(
+        objective: 'Research project',
+      );
       root.summary = 'Global progress made';
 
       final child = service.createChildContext(
@@ -97,8 +105,8 @@ void main() {
       expect(context, contains('Found useful data'));
     });
 
-    test('buildContextForNode includes sibling summaries', () {
-      final root = service.createRootContext(objective: 'Main task');
+    test('buildContextForNode includes sibling summaries', () async {
+      final root = await service.createRootContext(objective: 'Main task');
 
       final sibling1 = service.createChildContext(
         parent: root,
@@ -119,8 +127,8 @@ void main() {
       expect(context, contains('Sibling 1 results'));
     });
 
-    test('markContextFailed sets status and logs error', () {
-      final root = service.createRootContext(objective: 'Task');
+    test('markContextFailed sets status and logs error', () async {
+      final root = await service.createRootContext(objective: 'Task');
 
       service.markContextFailed(root, 'Something went wrong');
 
@@ -129,8 +137,8 @@ void main() {
       expect(root.executionLog, anyElement(contains('ERROR')));
     });
 
-    test('getContext retrieves context by ID', () {
-      final root = service.createRootContext(objective: 'Root');
+    test('getContext retrieves context by ID', () async {
+      final root = await service.createRootContext(objective: 'Root');
       final child = service.createChildContext(
         parent: root,
         objective: 'Child',
@@ -141,8 +149,8 @@ void main() {
       expect(service.getContext('nonexistent'), isNull);
     });
 
-    test('clear removes all context state', () {
-      service.createRootContext(objective: 'Root');
+    test('clear removes all context state', () async {
+      await service.createRootContext(objective: 'Root');
 
       expect(service.rootContext, isNotNull);
       expect(service.currentContext, isNotNull);
@@ -153,8 +161,8 @@ void main() {
       expect(service.currentContext, isNull);
     });
 
-    test('exportSnapshot and importSnapshot preserve context tree', () {
-      final root = service.createRootContext(objective: 'Root');
+    test('exportSnapshot and importSnapshot preserve context tree', () async {
+      final root = await service.createRootContext(objective: 'Root');
       root.log('Root log 1');
 
       final child = service.createChildContext(
@@ -183,8 +191,8 @@ void main() {
     });
 
     group('token budget management', () {
-      test('child budget is calculated from parent remaining budget', () {
-        final root = service.createRootContext(
+      test('child budget is calculated from parent remaining budget', () async {
+        final root = await service.createRootContext(
           objective: 'Root',
           maxTokens: 100000,
         );
@@ -200,8 +208,8 @@ void main() {
         expect(child.maxContextTokens, greaterThan(kMinSubtaskBudget));
       });
 
-      test('child budget has minimum threshold', () {
-        final root = service.createRootContext(
+      test('child budget has minimum threshold', () async {
+        final root = await service.createRootContext(
           objective: 'Root',
           maxTokens: 10000,
         );

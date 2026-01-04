@@ -748,9 +748,10 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                   separatorBuilder: (_, __) => const Divider(height: 16),
                   itemBuilder: (listContext, index) {
                     final f = findings[index];
-                    final fact = f['fact'] ?? '';
-                    final source = f['source'] ?? '';
-                    final url = f['url'] ?? '';
+                    final fact = (f['fact'] ?? '').toString();
+                    final source = (f['source'] ?? '').toString();
+                    final url = (f['url'] ?? '').toString();
+                    final details = f['details'];
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,6 +773,49 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                                       listContext,
                                     ).colorScheme.onSurfaceVariant,
                                   ),
+                            ),
+                          ),
+                        // Display bullet point details
+                        if (details != null &&
+                            details is List &&
+                            details.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (final detail in details)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '•  ',
+                                          style: Theme.of(listContext)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(
+                                                  listContext,
+                                                ).colorScheme.primary,
+                                              ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            detail.toString(),
+                                            style: Theme.of(
+                                              listContext,
+                                            ).textTheme.bodySmall,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                       ],
@@ -809,9 +853,10 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
 
     for (int i = 0; i < findings.length; i++) {
       final f = findings[i];
-      final fact = f['fact'] ?? '';
-      final source = f['source'] ?? '';
-      final url = f['url'] ?? '';
+      final fact = (f['fact'] ?? '').toString();
+      final source = (f['source'] ?? '').toString();
+      final url = (f['url'] ?? '').toString();
+      final details = f['details'];
 
       buffer.writeln('${i + 1}. **$fact**');
       if (source.isNotEmpty) {
@@ -819,6 +864,13 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
       }
       if (url.isNotEmpty) {
         buffer.writeln('   - URL: $url');
+      }
+      // Include bullet point details
+      if (details != null && details is List && details.isNotEmpty) {
+        buffer.writeln('   - Details:');
+        for (final detail in details) {
+          buffer.writeln('     - $detail');
+        }
       }
       buffer.writeln();
     }

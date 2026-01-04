@@ -13,6 +13,7 @@ import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
 import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
+import 'agentic_settings_screen.dart';
 import 'getting_started_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
@@ -446,6 +447,21 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       MaterialPageRoute(
                         builder: (context) =>
                             const AiConversationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.account_tree_rounded),
+                    title: Text(l10n.agenticSettings),
+                    subtitle: Text(l10n.agenticSettingsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AgenticSettingsScreen(),
                       ),
                     ),
                   ),

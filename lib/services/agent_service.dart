@@ -10,6 +10,7 @@ import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import 'tools/note_tools.dart';
 import 'ai_service.dart';
+import 'agentic_settings_service.dart';
 import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
@@ -110,7 +111,7 @@ class AgentService extends ChangeNotifier {
   Future<void> _executeLoop() async {
     // Ensure root context exists (should be created in generatePlan)
     if (_contextManager.rootContext == null && _currentObjective != null) {
-      _contextManager.createRootContext(
+      await _contextManager.createRootContext(
         objective: _currentObjective!,
         allowedTools: getAllToolNames(),
       );
@@ -135,9 +136,9 @@ class AgentService extends ChangeNotifier {
       if (task.contextNodeId != null) {
         taskContext =
             _contextManager.getContext(task.contextNodeId!) ??
-            _createTaskContext(task, rootContext);
+            await _createTaskContext(task, rootContext);
       } else {
-        taskContext = _createTaskContext(task, rootContext);
+        taskContext = await _createTaskContext(task, rootContext);
         task.contextNodeId = taskContext.id;
       }
 
@@ -301,9 +302,12 @@ class AgentService extends ChangeNotifier {
   }
 
   /// Creates a context node for a task, linking it to parent context.
-  ContextNode _createTaskContext(AgentTask task, ContextNode? rootContext) {
+  Future<ContextNode> _createTaskContext(
+    AgentTask task,
+    ContextNode? rootContext,
+  ) async {
     if (rootContext == null) {
-      return _contextManager.createRootContext(
+      return await _contextManager.createRootContext(
         objective: task.description,
         allowedTools: task.allowedTools,
       );
@@ -439,9 +443,13 @@ Respond directly to: "$objective"
   /// Uses executionHistory (raw tool output) instead of task.result (LLM summary)
   /// to prevent information loss from double-compression.
   /// Called when task.extractFindings is true.
-  Future<List<Map<String, String>>> _extractStructuredFindings(
+  Future<List<Map<String, dynamic>>> _extractStructuredFindings(
     AgentTask task,
   ) async {
+    // Load configurable settings
+    final findingLimit = await AgenticSettingsService.getFindingLimit();
+    final maxWords = await AgenticSettingsService.getFindingMaxWords();
+
     // Extract raw observations from execution history to preserve URLs and details
     final rawObservations = _getRawObservations(task);
 
@@ -470,18 +478,30 @@ $sourceContent
    - fact: A specific data point, statistic, or claim (1-2 sentences)
    - source: The organization or publication name (e.g., "CDC", "USDA", "NSF 2024")
    - url: The actual URL if mentioned in the observations, otherwise use empty string ""
+   - details: An array of 1-5 bullet points with supporting details, context, or related data (max $maxWords words total)
 
 3. CRITICAL: URLs are present in the observations - extract them accurately
 4. Do NOT use placeholders like "Not specified" or "Unspecified" for URLs
 5. If no URL is available, use empty string: "url": ""
-6. Maximum 10 findings per task
+6. Maximum $findingLimit findings per task
+7. Each finding's details should expand on the fact with specific supporting information
 
 ## OUTPUT FORMAT
 
 Return ONLY valid JSON array:
 [
-  {"fact": "Specific finding with numbers", "source": "Organization Name", "url": "https://..."},
-  {"fact": "Another finding", "source": "Report Name 2024", "url": ""}
+  {
+    "fact": "Specific finding with numbers",
+    "source": "Organization Name",
+    "url": "https://...",
+    "details": ["Supporting detail 1", "Additional context", "Related statistic"]
+  },
+  {
+    "fact": "Another finding",
+    "source": "Report Name 2024",
+    "url": "",
+    "details": ["Key insight from this finding"]
+  }
 ]
 
 If no findings worth preserving, return: []
@@ -512,7 +532,8 @@ If no findings worth preserving, return: []
 
   /// Parses findings JSON from LLM response.
   /// Normalizes URL values to remove placeholders like "Not specified".
-  List<Map<String, String>> _parseFindings(String response) {
+  /// Includes details as a list of bullet points.
+  List<Map<String, dynamic>> _parseFindings(String response) {
     try {
       String cleanResponse = response.trim();
       if (cleanResponse.startsWith('```json')) {
@@ -533,10 +554,20 @@ If no findings worth preserving, return: []
           url = '';
         }
 
-        return <String, String>{
+        // Parse details as a list of strings
+        List<String> details = [];
+        if (map['details'] != null && map['details'] is List) {
+          details = (map['details'] as List)
+              .map((d) => d.toString().trim())
+              .where((d) => d.isNotEmpty)
+              .toList();
+        }
+
+        return <String, dynamic>{
           'fact': (map['fact'] ?? '').toString().trim(),
           'source': (map['source'] ?? '').toString().trim(),
           'url': url,
+          'details': details,
         };
       }).toList();
     } catch (e) {
@@ -611,7 +642,7 @@ If no findings worth preserving, return: []
     // Store objective and initialize root context for hierarchical management
     _currentObjective = objective;
     _contextManager.clear();
-    _contextManager.createRootContext(
+    await _contextManager.createRootContext(
       objective: objective,
       allowedTools: getAllToolNames(),
     );

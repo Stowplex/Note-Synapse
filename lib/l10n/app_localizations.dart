@@ -242,6 +242,60 @@ abstract class AppLocalizations {
   /// **'Iteration limit updated to {count}'**
   String iterationLimitUpdated(Object count);
 
+  /// No description provided for @settingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings saved'**
+  String get settingsSaved;
+
+  /// No description provided for @agenticSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Agentic Settings'**
+  String get agenticSettings;
+
+  /// No description provided for @agenticSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure agent mode parameters'**
+  String get agenticSettingsSubtitle;
+
+  /// No description provided for @compactionThreshold.
+  ///
+  /// In en, this message translates to:
+  /// **'Compaction Threshold'**
+  String get compactionThreshold;
+
+  /// No description provided for @compactionThresholdDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum tokens before context compaction. Runtime uses min(this value, model\'s context window).'**
+  String get compactionThresholdDescription;
+
+  /// No description provided for @findingLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding Limit'**
+  String get findingLimit;
+
+  /// No description provided for @findingLimitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of findings to extract per task for synthesis.'**
+  String get findingLimitDescription;
+
+  /// No description provided for @findingMaxWords.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding Detail Words'**
+  String get findingMaxWords;
+
+  /// No description provided for @findingMaxWordsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum words per finding\'s bullet point details.'**
+  String get findingMaxWordsDescription;
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:

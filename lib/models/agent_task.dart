@@ -30,8 +30,8 @@ class AgentTask {
   String? condensedSummary;
 
   /// Compact structured findings extracted by LLM after task completion.
-  /// Format: List of {fact, source, url?}
-  List<Map<String, String>>? structuredFindings;
+  /// Format: List of {fact, source, url, details: [bulletPoints]}
+  List<Map<String, dynamic>>? structuredFindings;
 
   List<String> toolNames;
   String? userComment;

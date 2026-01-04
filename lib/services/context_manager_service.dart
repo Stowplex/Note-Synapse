@@ -1,5 +1,6 @@
 import '../models/context_node.dart';
 import 'ai_service.dart';
+import 'agentic_settings_service.dart';
 import 'logger_service.dart';
 import '../models/generation_context.dart';
 import 'model_selector.dart';
@@ -10,11 +11,14 @@ const int kDefaultContextBudget = 100000;
 const int kSubtaskBudgetRatio = 60;
 const int kMinSubtaskBudget = 5000;
 
-/// Gets the configured model's max input token limit, or default.
-int getModelContextBudget() {
-  // final config = ModelSelector.instance.currentModelConfig;
-  return kDefaultContextBudget;
-  // return config?.maxInputTokens ?? kDefaultContextBudget;
+/// Gets the effective context budget for agent execution.
+/// Returns: min(configuredCompactionThreshold, model.maxInputTokens)
+Future<int> getModelContextBudget() async {
+  final config = ModelSelector.instance.currentModelConfig;
+  final modelLimit = config?.maxInputTokens ?? kDefaultContextBudget;
+  final compactionThreshold =
+      await AgenticSettingsService.getCompactionThreshold();
+  return compactionThreshold < modelLimit ? compactionThreshold : modelLimit;
 }
 
 /// Service for managing hierarchical context in agent execution.
@@ -39,12 +43,12 @@ class ContextManagerService {
 
   /// Creates a new root context for an agent session.
   /// Uses model's configured maxInputTokens if not explicitly provided.
-  ContextNode createRootContext({
+  Future<ContextNode> createRootContext({
     required String objective,
     List<String> allowedTools = const [],
     int? maxTokens,
-  }) {
-    final budget = maxTokens ?? getModelContextBudget();
+  }) async {
+    final budget = maxTokens ?? await getModelContextBudget();
     final root = ContextNode(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       objective: objective,
@@ -325,13 +329,13 @@ Provide a summary (2-5 paragraphs):
 
   /// Accumulated structured findings from tasks with extractFindings=true.
   /// Compact storage to minimize token usage between tasks.
-  final List<Map<String, String>> _accumulatedFindings = [];
+  final List<Map<String, dynamic>> _accumulatedFindings = [];
 
   /// Gets accumulated findings count.
   int get findingsCount => _accumulatedFindings.length;
 
   /// Adds structured findings to the accumulator.
-  void addFindings(List<Map<String, String>> findings) {
+  void addFindings(List<Map<String, dynamic>> findings) {
     _accumulatedFindings.addAll(findings);
     rootContext?.log(
       '📌 Added ${findings.length} findings (total: ${_accumulatedFindings.length})',
@@ -353,9 +357,10 @@ Provide a summary (2-5 paragraphs):
 
       for (var i = 0; i < _accumulatedFindings.length; i++) {
         final f = _accumulatedFindings[i];
-        final fact = f['fact'] ?? '';
-        final source = f['source'] ?? '';
-        final url = f['url'] ?? '';
+        final fact = (f['fact'] ?? '').toString();
+        final source = (f['source'] ?? '').toString();
+        final url = (f['url'] ?? '').toString();
+        final details = f['details'];
 
         buffer.writeln('${i + 1}. **$fact**');
         if (source.isNotEmpty) {
@@ -363,6 +368,12 @@ Provide a summary (2-5 paragraphs):
             buffer.writeln('   — Source: $source ($url)');
           } else {
             buffer.writeln('   — Source: $source');
+          }
+        }
+        // Include bullet point details if present
+        if (details != null && details is List && details.isNotEmpty) {
+          for (final detail in details) {
+            buffer.writeln('   • $detail');
           }
         }
         buffer.writeln();

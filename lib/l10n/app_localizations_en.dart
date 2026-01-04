@@ -96,6 +96,36 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get settingsSaved => 'Settings saved';
+
+  @override
+  String get agenticSettings => 'Agentic Settings';
+
+  @override
+  String get agenticSettingsSubtitle => 'Configure agent mode parameters';
+
+  @override
+  String get compactionThreshold => 'Compaction Threshold';
+
+  @override
+  String get compactionThresholdDescription =>
+      'Maximum tokens before context compaction. Runtime uses min(this value, model\'s context window).';
+
+  @override
+  String get findingLimit => 'Finding Limit';
+
+  @override
+  String get findingLimitDescription =>
+      'Maximum number of findings to extract per task for synthesis.';
+
+  @override
+  String get findingMaxWords => 'Finding Detail Words';
+
+  @override
+  String get findingMaxWordsDescription =>
+      'Maximum words per finding\'s bullet point details.';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override

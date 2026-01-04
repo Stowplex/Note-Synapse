@@ -94,6 +94,34 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get settingsSaved => '设置已保存';
+
+  @override
+  String get agenticSettings => '智能代理设置';
+
+  @override
+  String get agenticSettingsSubtitle => '配置智能代理模式参数';
+
+  @override
+  String get compactionThreshold => '上下文压缩阈值';
+
+  @override
+  String get compactionThresholdDescription =>
+      '触发上下文压缩的最大令牌数。运行时使用此值与模型上下文窗口的较小值。';
+
+  @override
+  String get findingLimit => '发现数量限制';
+
+  @override
+  String get findingLimitDescription => '每个任务提取用于综合的最大发现数量。';
+
+  @override
+  String get findingMaxWords => '发现详情字数';
+
+  @override
+  String get findingMaxWordsDescription => '每个发现的要点详情的最大字数。';
+
+  @override
   String get darkMode => '深色模式';
 
   @override
