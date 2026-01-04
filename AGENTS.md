@@ -20,3 +20,5 @@
 - User_app_revision's revision number is the revision. ID is timestamp_{revision} which is not useful.
 - user_app_libraries code could be large.
 - note's content should be treated as big column
+- Database change: when tables are changed, make sure to update the recovery code in recovery_screen.dart and ensure table remains consistent, and new tables are added to recovery or
+  explicitly dismissed.
