@@ -41,6 +41,8 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
   late final CodeFindController _findController;
   late final MobileSelectionToolbarController _mobileToolbarController;
   bool _isSearchVisible = false;
+  bool _isArrowsVisible = false;
+  bool _isSelectionMode = false;
 
   @override
   void initState() {
@@ -80,6 +82,64 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
 
   void _redo() {
     widget.controller.redo();
+  }
+
+  void _moveCursor(int dIndex, int dOffset) {
+    final selection = widget.controller.selection;
+    final codeLines = widget.controller.value.codeLines;
+
+    int newIndex = selection.extentIndex + dIndex;
+    int newOffset = selection.extentOffset + dOffset;
+
+    // Bounds check for index
+    if (newIndex < 0) {
+      newIndex = 0;
+      newOffset = 0;
+    } else if (newIndex >= codeLines.length) {
+      newIndex = codeLines.length - 1;
+      newOffset = codeLines.last.length;
+    }
+
+    // Bounds check for offset on current line
+    if (dIndex != 0) {
+      // Moving up/down: cap offset to line length
+      if (newOffset > codeLines[newIndex].length) {
+        newOffset = codeLines[newIndex].length;
+      }
+    } else {
+      // Moving left/right: handle line wrapping
+      if (newOffset < 0) {
+        if (newIndex > 0) {
+          newIndex--;
+          newOffset = codeLines[newIndex].length;
+        } else {
+          newOffset = 0;
+        }
+      } else if (newOffset > codeLines[newIndex].length) {
+        if (newIndex < codeLines.length - 1) {
+          newIndex++;
+          newOffset = 0;
+        } else {
+          newOffset = codeLines[newIndex].length;
+        }
+      }
+    }
+
+    final newPos = CodeLinePosition(index: newIndex, offset: newOffset);
+
+    if (_isSelectionMode) {
+      widget.controller.selection = CodeLineSelection(
+        baseIndex: selection.baseIndex,
+        baseOffset: selection.baseOffset,
+        extentIndex: newPos.index,
+        extentOffset: newPos.offset,
+      );
+    } else {
+      widget.controller.selection = CodeLineSelection.collapsed(
+        index: newPos.index,
+        offset: newPos.offset,
+      );
+    }
   }
 
   Future<void> _paste() async {
@@ -207,6 +267,25 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                       onPressed: _toggleSearch,
                       tooltip: _isSearchVisible ? 'Hide Search' : 'Show Search',
                     ),
+                    IconButton(
+                      icon: Icon(
+                        _isArrowsVisible
+                            ? Icons.unfold_less
+                            : Icons.open_with,
+                        size: 20,
+                        color: _isArrowsVisible
+                            ? theme.colorScheme.primary
+                            : null,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isArrowsVisible = !_isArrowsVisible;
+                        });
+                      },
+                      tooltip: _isArrowsVisible
+                          ? 'Hide Arrows'
+                          : 'Show Arrows',
+                    ),
                     if (widget.actions != null &&
                         widget.actions!.isNotEmpty) ...[
                       const SizedBox(width: 8),
@@ -229,46 +308,53 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
           CodeEditorTapRegion(child: _buildSearchBar(context)),
 
         Expanded(
-          child: Builder(
-            builder: (context) {
-              final Map<String, CodeHighlightThemeMode> allLanguages = {
-                'markdown': CodeHighlightThemeMode(mode: langMarkdown),
-                'dart': CodeHighlightThemeMode(mode: langDart),
-                'json': CodeHighlightThemeMode(mode: langJson),
-                'xml': CodeHighlightThemeMode(mode: langXml),
-                'yaml': CodeHighlightThemeMode(mode: langYaml),
-                'javascript': CodeHighlightThemeMode(mode: langJavascript),
-                'css': CodeHighlightThemeMode(mode: langCss),
-              };
+          child: Stack(
+            children: [
+              Builder(
+                builder: (context) {
+                  final Map<String, CodeHighlightThemeMode> allLanguages = {
+                    'markdown': CodeHighlightThemeMode(mode: langMarkdown),
+                    'dart': CodeHighlightThemeMode(mode: langDart),
+                    'json': CodeHighlightThemeMode(mode: langJson),
+                    'xml': CodeHighlightThemeMode(mode: langXml),
+                    'yaml': CodeHighlightThemeMode(mode: langYaml),
+                    'javascript': CodeHighlightThemeMode(mode: langJavascript),
+                    'css': CodeHighlightThemeMode(mode: langCss),
+                  };
 
-              CodeHighlightTheme codeTheme;
-              if (widget.language != null &&
-                  allLanguages.containsKey(widget.language)) {
-                codeTheme = CodeHighlightTheme(
-                  languages: {widget.language!: allLanguages[widget.language]!},
-                  theme: style,
-                );
-              } else {
-                codeTheme = CodeHighlightTheme(
-                  languages: allLanguages,
-                  theme: style,
-                );
-              }
+                  CodeHighlightTheme codeTheme;
+                  if (widget.language != null &&
+                      allLanguages.containsKey(widget.language)) {
+                    codeTheme = CodeHighlightTheme(
+                      languages: {
+                        widget.language!: allLanguages[widget.language]!
+                      },
+                      theme: style,
+                    );
+                  } else {
+                    codeTheme = CodeHighlightTheme(
+                      languages: allLanguages,
+                      theme: style,
+                    );
+                  }
 
-              return CodeEditor(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                toolbarController: _mobileToolbarController,
-                style: CodeEditorStyle(
-                  fontSize: widget.fontSize,
-                  fontFamily: widget.fontFamily,
-                  codeTheme: codeTheme,
-                ),
-                wordWrap: widget.wordWrap,
-                findController: _findController,
-                readOnly: widget.readOnly,
-              );
-            },
+                  return CodeEditor(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    toolbarController: _mobileToolbarController,
+                    style: CodeEditorStyle(
+                      fontSize: widget.fontSize,
+                      fontFamily: widget.fontFamily,
+                      codeTheme: codeTheme,
+                    ),
+                    wordWrap: widget.wordWrap,
+                    findController: _findController,
+                    readOnly: widget.readOnly,
+                  );
+                },
+              ),
+              if (_isArrowsVisible) _buildArrowsOverlay(context),
+            ],
           ),
         ),
       ],
@@ -525,6 +611,95 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
     widget.controller.selection = CodeLineSelection.collapsed(
       index: startIndex,
       offset: startOffset,
+    );
+  }
+
+  Widget _buildArrowsOverlay(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Positioned(
+      bottom: 16,
+      right: 16,
+      child: CodeEditorTapRegion(
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: colorScheme.surface.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colorScheme.outlineVariant),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.keyboard_arrow_up),
+                onPressed: () => _moveCursor(-1, 0),
+                visualDensity: VisualDensity.compact,
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_left),
+                    onPressed: () => _moveCursor(0, -1),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  _buildSelectionToggle(context),
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_right),
+                    onPressed: () => _moveCursor(0, 1),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.keyboard_arrow_down),
+                onPressed: () => _moveCursor(1, 0),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionToggle(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: _isSelectionMode ? 'Selection Mode: ON' : 'Selection Mode: OFF',
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _isSelectionMode = !_isSelectionMode;
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: _isSelectionMode
+                ? theme.colorScheme.primaryContainer
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            _isSelectionMode ? Icons.select_all : Icons.touch_app,
+            size: 20,
+            color: _isSelectionMode
+                ? theme.colorScheme.onPrimaryContainer
+                : theme.colorScheme.onSurface,
+          ),
+        ),
+      ),
     );
   }
 }
