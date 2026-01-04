@@ -128,7 +128,7 @@ void main() {
 
       // Method 2: Find JSON object with expected action keys
       final jsonStartMatch = RegExp(
-        r'\{\s*"(?:tool|answer|think|spawn_subtask)"\s*:',
+        r'\{\s*"(?:tool|answer|think|spawn_subtasks)"\s*:',
       ).firstMatch(response);
 
       if (jsonStartMatch != null) {
@@ -227,15 +227,15 @@ My thought: I need to analyze the data more carefully.
       expect(json, contains('"think"'));
     });
 
-    test('handles spawn_subtask action', () {
+    test('handles spawn_subtasks action', () {
       final response = '''
-My thought: This task is complex, I'll spawn a subtask.
+My thought: This task is complex, I'll spawn multiple subtasks.
 
-{ "spawn_subtask": { "description": "Research topic A", "tools": ["search"] } }
+{ "spawn_subtasks": [ { "description": "Research topic A", "tools": ["search"] }, { "description": "Research topic B", "tools": ["search"] } ] }
 ''';
       final json = extractJsonFromResponse(response);
       expect(json, isNotNull);
-      expect(json, contains('"spawn_subtask"'));
+      expect(json, contains('"spawn_subtasks"'));
     });
   });
 
