@@ -119,17 +119,47 @@ class AgentService extends ChangeNotifier {
 
     final rootContext = _contextManager.rootContext;
 
+    // Build name-to-task map for dependency lookup
+    final nameToTask = <String, AgentTask>{};
+    for (final t in _tasks) {
+      if (t.name != null) {
+        nameToTask[t.name!] = t;
+      }
+    }
+
     while (_isRunning &&
         _tasks.any(
           (t) =>
               t.status == AgentTaskStatus.pending ||
               t.status == AgentTaskStatus.paused,
         )) {
-      final task = _tasks.firstWhere(
-        (t) =>
-            t.status == AgentTaskStatus.pending ||
-            t.status == AgentTaskStatus.paused,
-      );
+      // Find a task whose dependencies are all met
+      final task = _tasks.cast<AgentTask?>().firstWhere((t) {
+        if (t == null) return false;
+        if (t.status != AgentTaskStatus.pending &&
+            t.status != AgentTaskStatus.paused) {
+          return false;
+        }
+        // Check if all dependencies are completed
+        for (final depName in t.dependsOn) {
+          final depTask = nameToTask[depName];
+          if (depTask != null && depTask.status != AgentTaskStatus.completed) {
+            return false; // Dependency not yet complete
+          }
+        }
+        return true;
+      }, orElse: () => null);
+
+      // No runnable task found - might be circular dependency or all blocked
+      if (task == null) {
+        LoggerService.error(
+          'No runnable task found - all pending tasks have unmet dependencies',
+        );
+        _currentThought = 'Error: No runnable task found (dependency issue)';
+        _isRunning = false;
+        notifyListeners();
+        return;
+      }
 
       // Create or get context node for this task
       ContextNode taskContext;
@@ -733,63 +763,120 @@ Example: "identify knowledge gaps in transformer notes":
 
 ## TASK CONFIGURATION
 
-For each task, you can specify:
-- "tools": List of tools to use
+For each task, you MUST specify:
+- "name": Short unique identifier (lowercase with underscores, e.g., "research_1918_social")
+- "description": Human-readable task description
+- "tools": List of tools to use (use [] if no tools needed)
+
+Optional fields:
+- "dependsOn": [names] - List of task names this task depends on. These tasks must complete first.
 - "isFinalDeliverable": true for the task producing user's final answer (only one task)
-- "extractFindings": true if this task's detailed results should be preserved for synthesis (use for research/search tasks)
+- "extractFindings": true if this task's detailed results should be preserved for synthesis
+
+## DEPENDENCY RULES
+
+1. Tasks that synthesize, analyze, or hypothesize MUST depend on the research tasks they need
+2. Every task name must be unique
+3. No circular dependencies (A depends on B, B depends on A)
+4. The isFinalDeliverable task should depend on all tasks it needs to synthesize
+5. Tasks with no dependencies can run immediately
 
 ## OUTPUT FORMAT
 
 Return ONLY valid JSON:
 [
   {
+    "name": "task_name",
     "description": "Step description",
     "tools": ["tool_name"],
+    "dependsOn": ["prior_task_name"],
     "isFinalDeliverable": false,
     "extractFindings": true
   }
 ]
 
-Example:
+Example (research + synthesis):
 [
-  {"description": "Explore note structure with SQL", "tools": ["run_sql"], "extractFindings": true},
-  {"description": "Search for relevant notes", "tools": ["search_notes"], "extractFindings": true},
-  {"description": "Synthesize comprehensive report", "tools": [], "isFinalDeliverable": true}
+  {"name": "research_topic_a", "description": "Research topic A with web search", "tools": ["brave_web_search"], "extractFindings": true},
+  {"name": "research_topic_b", "description": "Research topic B with web search", "tools": ["brave_web_search"], "extractFindings": true},
+  {"name": "synthesize", "description": "Synthesize findings into comprehensive report", "tools": [], "dependsOn": ["research_topic_a", "research_topic_b"], "isFinalDeliverable": true}
 ]
+
+Example (note exploration):
+[
+  {"name": "explore_structure", "description": "Explore note structure with SQL", "tools": ["run_sql"], "extractFindings": true},
+  {"name": "search_notes", "description": "Search for relevant notes", "tools": ["search_notes"], "extractFindings": true},
+  {"name": "synthesize", "description": "Synthesize comprehensive report", "tools": [], "dependsOn": ["explore_structure", "search_notes"], "isFinalDeliverable": true}
+];
 
 If no tools are needed for a step (e.g. analysis), use: "tools": [].
 Only use the tools listed above.
 ''';
 
-    try {
-      final response = await AIService.generateWithAttachments(
-        prompt,
-        contextAttachments,
-        generationContext: GenerationContext(values: {'type': 'agent_plan'}),
-      );
+    const maxRetries = 3;
+    String? lastError;
 
-      final List<AgentTask> tasks = _parseTasksFromJson(
-        response,
-        activeTools: getAllToolNames(),
-      );
-      _tasks = tasks;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Build prompt with error feedback if retrying
+        final retryFeedback = lastError != null
+            ? '''
 
-      _currentThought = 'Plan generated. Waiting for review.';
-      notifyListeners();
-      return _tasks;
-    } catch (e) {
-      LoggerService.error('Failed to generate plan: $e');
-      // Fallback
-      _tasks = [
-        AgentTask(
-          id: const Uuid().v4(),
-          description: objective,
-          status: AgentTaskStatus.pending,
-        ),
-      ];
-      notifyListeners();
-      return _tasks;
+## PREVIOUS PLAN ERROR
+Your last plan had this issue: $lastError
+Please fix and regenerate the plan.
+'''
+            : '';
+
+        final fullPrompt = prompt + retryFeedback;
+
+        final response = await AIService.generateWithAttachments(
+          fullPrompt,
+          contextAttachments,
+          generationContext: GenerationContext(values: {'type': 'agent_plan'}),
+        );
+
+        final List<AgentTask> tasks = _parseTasksFromJson(
+          response,
+          activeTools: getAllToolNames(),
+        );
+
+        // Validate dependency graph
+        final validationError = _validatePlanDependencies(tasks);
+        if (validationError != null) {
+          lastError = validationError;
+          LoggerService.warning(
+            'Plan validation failed (attempt ${attempt + 1}): $validationError',
+          );
+          continue; // Retry
+        }
+
+        _tasks = tasks;
+        _currentThought = 'Plan generated. Waiting for review.';
+        notifyListeners();
+        return _tasks;
+      } catch (e) {
+        lastError = e.toString();
+        LoggerService.error(
+          'Failed to generate plan (attempt ${attempt + 1}): $e',
+        );
+      }
     }
+
+    // All retries failed - use fallback
+    LoggerService.error(
+      'All plan generation attempts failed. Last error: $lastError',
+    );
+    _tasks = [
+      AgentTask(
+        id: const Uuid().v4(),
+        description: objective,
+        name: 'main_task',
+        status: AgentTaskStatus.pending,
+      ),
+    ];
+    notifyListeners();
+    return _tasks;
   }
 
   /// Revises the current plan based on user feedback.
@@ -989,9 +1076,22 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
         // Extract extractFindings flag (defaults to false if not present)
         final extractFindings = map['extractFindings'] == true;
 
+        // Extract name (short unique identifier for dependency references)
+        final name = map['name'] as String?;
+
+        // Extract dependsOn list (names of tasks this depends on)
+        List<String> dependsOn = [];
+        if (map['dependsOn'] != null && map['dependsOn'] is List) {
+          dependsOn = (map['dependsOn'] as List)
+              .map((e) => e.toString())
+              .toList();
+        }
+
         return AgentTask(
           id: const Uuid().v4(),
           description: map['description'] ?? "No description",
+          name: name,
+          dependsOn: dependsOn,
           toolNames: tools,
           allowedTools: activeTools,
           isFinalDeliverable: isFinalDeliverable,
@@ -1002,6 +1102,89 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       LoggerService.error('Failed to parse JSON list: $e');
       return [];
     }
+  }
+
+  /// Validates the dependency graph for the plan.
+  /// Returns error message if invalid, null if valid.
+  String? _validatePlanDependencies(List<AgentTask> tasks) {
+    // Build name-to-task map
+    final nameToTask = <String, AgentTask>{};
+    for (final task in tasks) {
+      if (task.name != null) {
+        if (nameToTask.containsKey(task.name)) {
+          return 'Duplicate task name: ${task.name}';
+        }
+        nameToTask[task.name!] = task;
+      }
+    }
+
+    // Check all dependsOn references are valid
+    for (final task in tasks) {
+      for (final dep in task.dependsOn) {
+        if (!nameToTask.containsKey(dep)) {
+          return 'Task "${task.name ?? task.description}" depends on unknown task: $dep';
+        }
+      }
+    }
+
+    // Check for cycles using DFS
+    final visited = <String>{};
+    final inStack = <String>{};
+
+    bool hasCycle(String? name) {
+      if (name == null) return false;
+      if (inStack.contains(name)) return true;
+      if (visited.contains(name)) return false;
+
+      visited.add(name);
+      inStack.add(name);
+
+      final task = nameToTask[name];
+      if (task != null) {
+        for (final dep in task.dependsOn) {
+          if (hasCycle(dep)) return true;
+        }
+      }
+
+      inStack.remove(name);
+      return false;
+    }
+
+    for (final task in tasks) {
+      if (task.name != null && hasCycle(task.name)) {
+        return 'Circular dependency detected involving: ${task.name}';
+      }
+    }
+
+    // Check all tasks are reachable from isFinalDeliverable (walk backwards)
+    final finalTask = tasks.where((t) => t.isFinalDeliverable).firstOrNull;
+    if (finalTask != null && finalTask.name != null) {
+      final reachable = <String>{};
+
+      void walkDeps(String? name) {
+        if (name == null || reachable.contains(name)) return;
+        reachable.add(name);
+        final task = nameToTask[name];
+        if (task != null) {
+          for (final dep in task.dependsOn) {
+            walkDeps(dep);
+          }
+        }
+      }
+
+      walkDeps(finalTask.name);
+
+      // Check for islands - tasks with names that aren't reachable
+      for (final task in tasks) {
+        if (task.name != null &&
+            !reachable.contains(task.name) &&
+            task.name != finalTask.name) {
+          return 'Task "${task.name}" is not reachable from the final deliverable';
+        }
+      }
+    }
+
+    return null; // Valid
   }
 
   Future<void> _performTask(AgentTask task, String globalContext) async {

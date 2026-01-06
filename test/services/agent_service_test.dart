@@ -297,4 +297,327 @@ My thought: This task is complex, I'll spawn multiple subtasks.
       // In actual execution, _handleSpawnSubtask would reject this
     });
   });
+
+  group('Task dependencies', () {
+    test('AgentTask has name and dependsOn fields', () {
+      final task = AgentTask(
+        id: 'test-id',
+        description: 'Test task',
+        name: 'test_task',
+        dependsOn: ['dep_a', 'dep_b'],
+      );
+
+      expect(task.name, equals('test_task'));
+      expect(task.dependsOn, equals(['dep_a', 'dep_b']));
+    });
+
+    test('AgentTask defaults to empty dependsOn', () {
+      final task = AgentTask(id: 'test-id', description: 'Test task');
+
+      expect(task.dependsOn, isEmpty);
+      expect(task.name, isNull);
+    });
+
+    test('AgentTask toJson includes name and dependsOn', () {
+      final task = AgentTask(
+        id: 'test-id',
+        description: 'Test',
+        name: 'my_task',
+        dependsOn: ['task_a', 'task_b'],
+      );
+
+      final json = task.toJson();
+
+      expect(json['name'], equals('my_task'));
+      expect(json['dependsOn'], equals(['task_a', 'task_b']));
+    });
+
+    // Tests for dependency graph validation logic
+    // Since _validatePlanDependencies is private, we test the expected behavior
+    // through the data model and document the validation rules
+
+    test('dependency validation - duplicate task names are invalid', () {
+      // Create tasks with duplicate names (would fail validation)
+      final tasks = [
+        AgentTask(id: '1', description: 'Research A', name: 'research'),
+        AgentTask(
+          id: '2',
+          description: 'Research B',
+          name: 'research', // Duplicate!
+        ),
+      ];
+
+      // Build name map as validation does
+      final nameToTask = <String, AgentTask>{};
+      String? error;
+      for (final task in tasks) {
+        if (task.name != null) {
+          if (nameToTask.containsKey(task.name)) {
+            error = 'Duplicate task name: ${task.name}';
+            break;
+          }
+          nameToTask[task.name!] = task;
+        }
+      }
+
+      expect(error, isNotNull);
+      expect(error, contains('Duplicate task name'));
+    });
+
+    test('dependency validation - unknown dependency is invalid', () {
+      final tasks = [
+        AgentTask(id: '1', description: 'Research', name: 'research'),
+        AgentTask(
+          id: '2',
+          description: 'Synthesize',
+          name: 'synthesize',
+          dependsOn: ['research', 'unknown_task'], // Unknown!
+        ),
+      ];
+
+      // Check for unknown dependencies
+      final nameToTask = <String, AgentTask>{};
+      for (final task in tasks) {
+        if (task.name != null) {
+          nameToTask[task.name!] = task;
+        }
+      }
+
+      String? error;
+      for (final task in tasks) {
+        for (final dep in task.dependsOn) {
+          if (!nameToTask.containsKey(dep)) {
+            error = 'Unknown dependency: $dep';
+            break;
+          }
+        }
+        if (error != null) break;
+      }
+
+      expect(error, isNotNull);
+      expect(error, contains('unknown_task'));
+    });
+
+    test('dependency validation - circular dependency is invalid', () {
+      final tasks = [
+        AgentTask(
+          id: '1',
+          description: 'Task A',
+          name: 'task_a',
+          dependsOn: ['task_b'], // A depends on B
+        ),
+        AgentTask(
+          id: '2',
+          description: 'Task B',
+          name: 'task_b',
+          dependsOn: ['task_a'], // B depends on A -> cycle!
+        ),
+      ];
+
+      // Cycle detection using DFS
+      final nameToTask = <String, AgentTask>{};
+      for (final task in tasks) {
+        if (task.name != null) {
+          nameToTask[task.name!] = task;
+        }
+      }
+
+      final visited = <String>{};
+      final inStack = <String>{};
+      bool hasCycle = false;
+
+      bool dfs(String? name) {
+        if (name == null) return false;
+        if (inStack.contains(name)) return true;
+        if (visited.contains(name)) return false;
+
+        visited.add(name);
+        inStack.add(name);
+
+        final task = nameToTask[name];
+        if (task != null) {
+          for (final dep in task.dependsOn) {
+            if (dfs(dep)) return true;
+          }
+        }
+
+        inStack.remove(name);
+        return false;
+      }
+
+      for (final task in tasks) {
+        if (task.name != null && dfs(task.name)) {
+          hasCycle = true;
+          break;
+        }
+      }
+
+      expect(hasCycle, isTrue);
+    });
+
+    test('dependency validation - valid DAG passes', () {
+      // Valid dependency graph: research_a, research_b -> synthesize
+      final tasks = [
+        AgentTask(
+          id: '1',
+          description: 'Research A',
+          name: 'research_a',
+          extractFindings: true,
+        ),
+        AgentTask(
+          id: '2',
+          description: 'Research B',
+          name: 'research_b',
+          extractFindings: true,
+        ),
+        AgentTask(
+          id: '3',
+          description: 'Synthesize',
+          name: 'synthesize',
+          dependsOn: ['research_a', 'research_b'],
+          isFinalDeliverable: true,
+        ),
+      ];
+
+      // Build name map
+      final nameToTask = <String, AgentTask>{};
+      String? error;
+      for (final task in tasks) {
+        if (task.name != null) {
+          if (nameToTask.containsKey(task.name)) {
+            error = 'Duplicate';
+            break;
+          }
+          nameToTask[task.name!] = task;
+        }
+      }
+      expect(error, isNull);
+
+      // Check deps
+      for (final task in tasks) {
+        for (final dep in task.dependsOn) {
+          if (!nameToTask.containsKey(dep)) {
+            error = 'Unknown dep';
+            break;
+          }
+        }
+      }
+      expect(error, isNull);
+
+      // Check cycles (should pass)
+      final visited = <String>{};
+      final inStack = <String>{};
+      bool hasCycle = false;
+
+      bool dfs(String? name) {
+        if (name == null) return false;
+        if (inStack.contains(name)) return true;
+        if (visited.contains(name)) return false;
+
+        visited.add(name);
+        inStack.add(name);
+
+        final task = nameToTask[name];
+        if (task != null) {
+          for (final dep in task.dependsOn) {
+            if (dfs(dep)) return true;
+          }
+        }
+
+        inStack.remove(name);
+        return false;
+      }
+
+      for (final task in tasks) {
+        if (task.name != null && dfs(task.name)) {
+          hasCycle = true;
+          break;
+        }
+      }
+      expect(hasCycle, isFalse);
+
+      // Check reachability from final deliverable
+      final finalTask = tasks.where((t) => t.isFinalDeliverable).first;
+      final reachable = <String>{};
+
+      void walkDeps(String? name) {
+        if (name == null || reachable.contains(name)) return;
+        reachable.add(name);
+        final task = nameToTask[name];
+        if (task != null) {
+          for (final dep in task.dependsOn) {
+            walkDeps(dep);
+          }
+        }
+      }
+
+      walkDeps(finalTask.name);
+
+      // All tasks should be reachable
+      for (final task in tasks) {
+        if (task.name != null) {
+          expect(
+            reachable.contains(task.name),
+            isTrue,
+            reason: '${task.name} should be reachable',
+          );
+        }
+      }
+    });
+
+    test('dependency validation - unreachable task (island) is invalid', () {
+      // Task "island_task" is not connected to the final deliverable
+      final tasks = [
+        AgentTask(id: '1', description: 'Research A', name: 'research_a'),
+        AgentTask(
+          id: '2',
+          description: 'Island Task',
+          name: 'island_task', // Not depended on by anyone!
+        ),
+        AgentTask(
+          id: '3',
+          description: 'Synthesize',
+          name: 'synthesize',
+          dependsOn: ['research_a'], // Only depends on research_a
+          isFinalDeliverable: true,
+        ),
+      ];
+
+      final nameToTask = <String, AgentTask>{};
+      for (final task in tasks) {
+        if (task.name != null) {
+          nameToTask[task.name!] = task;
+        }
+      }
+
+      final finalTask = tasks.where((t) => t.isFinalDeliverable).first;
+      final reachable = <String>{};
+
+      void walkDeps(String? name) {
+        if (name == null || reachable.contains(name)) return;
+        reachable.add(name);
+        final task = nameToTask[name];
+        if (task != null) {
+          for (final dep in task.dependsOn) {
+            walkDeps(dep);
+          }
+        }
+      }
+
+      walkDeps(finalTask.name);
+
+      // Find unreachable tasks
+      String? unreachableTask;
+      for (final task in tasks) {
+        if (task.name != null &&
+            !reachable.contains(task.name) &&
+            task.name != finalTask.name) {
+          unreachableTask = task.name;
+          break;
+        }
+      }
+
+      expect(unreachableTask, equals('island_task'));
+    });
+  });
 }

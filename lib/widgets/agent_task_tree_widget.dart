@@ -388,6 +388,61 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                       // Paused task controls (turn limit exceeded)
                       if (task.status == AgentTaskStatus.paused)
                         _buildPausedTaskControls(context, task, agentService),
+                      // Waiting for dependencies indicator (for pending tasks)
+                      if (task.status == AgentTaskStatus.pending &&
+                          task.dependsOn.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            // Build name-to-task map to check dependency status
+                            final allTasks = agentService.tasks;
+                            final nameToTask = <String, AgentTask>{};
+                            for (final t in allTasks) {
+                              if (t.name != null) {
+                                nameToTask[t.name!] = t;
+                              }
+                            }
+                            // Find pending dependencies
+                            final pendingDeps = task.dependsOn.where((name) {
+                              final depTask = nameToTask[name];
+                              return depTask != null &&
+                                  depTask.status != AgentTaskStatus.completed;
+                            }).toList();
+                            if (pendingDeps.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.hourglass_empty,
+                                    size: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Waiting for: ${pendingDeps.join(", ")}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontStyle: FontStyle.italic,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outline,
+                                          ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       // Execution log preview (for active task)
                       if (task.status == AgentTaskStatus.inProgress &&
                           contextNode != null)

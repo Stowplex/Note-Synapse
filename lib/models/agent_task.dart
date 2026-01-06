@@ -4,6 +4,14 @@ class AgentTask {
   final String id;
   final String description;
 
+  /// Short unique name for this task (e.g., "research_1918_social").
+  /// Used for dependency references between tasks.
+  final String? name;
+
+  /// Names of tasks this task depends on.
+  /// These tasks must complete before this one starts.
+  final List<String> dependsOn;
+
   /// Reference to parent task for hierarchical execution.
   /// Null for root-level tasks.
   final String? parentTaskId;
@@ -55,6 +63,8 @@ class AgentTask {
   AgentTask({
     required this.id,
     required this.description,
+    this.name,
+    List<String>? dependsOn,
     this.parentTaskId,
     this.depth = 0,
     this.contextNodeId,
@@ -72,7 +82,8 @@ class AgentTask {
     List<String>? allowedTools,
     List<String>? contextNoteIds,
     List<String>? spawnedSubtaskIds,
-  }) : toolNames = toolNames ?? [],
+  }) : dependsOn = dependsOn ?? [],
+       toolNames = toolNames ?? [],
        executionHistory = executionHistory ?? [],
        allowedTools = allowedTools ?? [],
        contextNoteIds = contextNoteIds ?? [],
@@ -87,6 +98,8 @@ class AgentTask {
   Map<String, dynamic> toJson() => {
     'id': id,
     'description': description,
+    'name': name,
+    'dependsOn': dependsOn,
     'parentTaskId': parentTaskId,
     'depth': depth,
     'contextNodeId': contextNodeId,
