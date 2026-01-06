@@ -809,6 +809,19 @@ class ShareService {
         return tempFile.bytes;
       }
 
+      // Handle simple filenames (local attachments)
+      // Same logic as InteractiveCheckboxMarkdown._resolveLocalImageSource
+      if (!source.contains(':') &&
+          !source.contains('/') &&
+          !source.contains('\\')) {
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final filePath = p.join(dir.path, source);
+        final file = File(filePath);
+        if (await file.exists()) {
+          return await file.readAsBytes();
+        }
+      }
+
       final uri = Uri.tryParse(source);
       if (uri != null && uri.hasScheme) {
         if (uri.scheme == 'http' || uri.scheme == 'https') {
@@ -913,6 +926,18 @@ class ShareService {
       if (SynapseTempUtils.isSynapseTempUri(source)) {
         final tempFile = await SynapseTempUtils.loadFile(source);
         return _decodeBytesToString(tempFile.bytes);
+      }
+
+      // Handle simple filenames (local attachments)
+      if (!source.contains(':') &&
+          !source.contains('/') &&
+          !source.contains('\\')) {
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final filePath = p.join(dir.path, source);
+        final file = File(filePath);
+        if (await file.exists()) {
+          return await file.readAsString();
+        }
       }
 
       final uri = Uri.tryParse(source);
