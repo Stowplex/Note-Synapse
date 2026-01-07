@@ -65,13 +65,19 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header with objective
-                _buildHeader(context, objective, agentService.isRunning),
+                // Header with objective and controls
+                _buildHeader(
+                  context,
+                  objective,
+                  agentService.isRunning,
+                  agentService.isPaused,
+                  agentService,
+                ),
                 const SizedBox(height: 12),
                 // Task tree
                 _buildTaskTree(context, tasks, agentService),
                 // Current thought indicator
-                if (agentService.isRunning &&
+                if ((agentService.isRunning || agentService.isPaused) &&
                     agentService.currentThought != null)
                   _buildCurrentThought(context, agentService.currentThought!),
               ],
@@ -82,7 +88,13 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
     );
   }
 
-  Widget _buildHeader(BuildContext context, String? objective, bool isRunning) {
+  Widget _buildHeader(
+    BuildContext context,
+    String? objective,
+    bool isRunning,
+    bool isPaused,
+    AgentService agentService,
+  ) {
     return Row(
       children: [
         AnimatedBuilder(
@@ -90,7 +102,9 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
           builder: (context, child) {
             return Icon(
               Icons.account_tree_rounded,
-              color: isRunning
+              color: isPaused
+                  ? Theme.of(context).colorScheme.tertiary
+                  : isRunning
                   ? Color.lerp(
                       Theme.of(context).colorScheme.primary,
                       Theme.of(context).colorScheme.tertiary,
@@ -123,7 +137,40 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
             ],
           ),
         ),
-        if (isRunning)
+        // Pause/Resume button
+        if (isRunning && !isPaused)
+          IconButton(
+            icon: const Icon(Icons.pause_circle_outline),
+            tooltip: 'Pause',
+            onPressed: () => agentService.pauseExecution(),
+            iconSize: 24,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        if (isPaused)
+          IconButton(
+            icon: const Icon(Icons.play_circle_outline),
+            tooltip: 'Continue',
+            onPressed: () => agentService.resumeExecution(),
+            iconSize: 24,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        // Stop button (only visible when paused)
+        if (isPaused)
+          IconButton(
+            icon: const Icon(Icons.stop_circle_outlined),
+            tooltip: 'Stop',
+            onPressed: () => agentService.stopExecution(),
+            iconSize: 24,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            color: Theme.of(context).colorScheme.error,
+          ),
+        // Progress indicator when running (not paused)
+        if (isRunning && !isPaused) const SizedBox(width: 8),
+        if (isRunning && !isPaused)
           SizedBox(
             width: 16,
             height: 16,

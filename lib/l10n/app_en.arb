@@ -1661,5 +1661,20 @@
     }
   },
   "agentCompleteNotificationTitle": "Agent Complete",
-  "agentCompleteNotificationBody": "Tap to view results"
+  "agentCompleteNotificationBody": "Tap to view results",
+  "agentPauseExecution": "Pause",
+  "agentResumeExecution": "Continue",
+  "agentStopExecution": "Stop",
+  "agentPausedStatus": "Paused",
+  "agentConflictTitle": "Agent Already Running",
+  "agentConflictMessage": "An agent is currently {status} in another conversation. You can stop it to start a new one, or switch to that conversation.",
+  "@agentConflictMessage": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "agentConflictStop": "Stop Agent",
+  "agentConflictSwitch": "Switch to Conversation"
 }

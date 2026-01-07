@@ -4124,4 +4124,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get agentCompleteNotificationBody => 'Tap to view results';
+
+  @override
+  String get agentPauseExecution => 'Pause';
+
+  @override
+  String get agentResumeExecution => 'Continue';
+
+  @override
+  String get agentStopExecution => 'Stop';
+
+  @override
+  String get agentPausedStatus => 'Paused';
+
+  @override
+  String get agentConflictTitle => 'Agent Already Running';
+
+  @override
+  String agentConflictMessage(String status) {
+    return 'An agent is currently $status in another conversation. You can stop it to start a new one, or switch to that conversation.';
+  }
+
+  @override
+  String get agentConflictStop => 'Stop Agent';
+
+  @override
+  String get agentConflictSwitch => 'Switch to Conversation';
 }

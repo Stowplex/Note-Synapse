@@ -1606,5 +1606,20 @@
     }
   },
   "agentCompleteNotificationTitle": "智能体完成",
-  "agentCompleteNotificationBody": "点击查看结果"
+  "agentCompleteNotificationBody": "点击查看结果",
+  "agentPauseExecution": "暂停",
+  "agentResumeExecution": "继续",
+  "agentStopExecution": "停止",
+  "agentPausedStatus": "已暂停",
+  "agentConflictTitle": "智能体已在运行",
+  "agentConflictMessage": "智能体当前在另一个会话中{status}。您可以停止它以启动新的智能体，或切换到该会话。",
+  "@agentConflictMessage": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "agentConflictStop": "停止智能体",
+  "agentConflictSwitch": "切换到会话"
 }

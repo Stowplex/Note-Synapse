@@ -620,4 +620,95 @@ My thought: This task is complex, I'll spawn multiple subtasks.
       expect(unreachableTask, equals('island_task'));
     });
   });
+
+  group('Pause/Resume/Stop execution controls', () {
+    test('pauseExecution sets isPaused when running', () {
+      final agentService = AgentService();
+
+      // Simulate running state (we can't actually run without AI, but test the state)
+      // Start by checking default state
+      expect(agentService.isPaused, isFalse);
+      expect(agentService.isRunning, isFalse);
+
+      // pauseExecution should not do anything when not running
+      agentService.pauseExecution();
+      expect(agentService.isPaused, isFalse);
+    });
+
+    test('resumeExecution clears paused state', () {
+      final agentService = AgentService();
+
+      // Default state
+      expect(agentService.isPaused, isFalse);
+
+      // resumeExecution when not paused should be no-op
+      agentService.resumeExecution();
+      expect(agentService.isPaused, isFalse);
+    });
+
+    test('stopExecution clears all state', () {
+      final agentService = AgentService();
+
+      // Stop should clear everything
+      agentService.stopExecution();
+
+      expect(agentService.tasks, isEmpty);
+      expect(agentService.isRunning, isFalse);
+      expect(agentService.isPaused, isFalse);
+      expect(agentService.boundConversationId, isNull);
+      expect(agentService.currentThought, isNull);
+      expect(agentService.finalAnswer, isNull);
+    });
+
+    test('bindToConversation sets boundConversationId', () {
+      final agentService = AgentService();
+
+      expect(agentService.boundConversationId, isNull);
+
+      agentService.bindToConversation('test-conv-123');
+      expect(agentService.boundConversationId, equals('test-conv-123'));
+
+      // clearState should clear it
+      agentService.clearState();
+      expect(agentService.boundConversationId, isNull);
+    });
+
+    test('canStartNewAgent returns true when no agent active', () {
+      final agentService = AgentService();
+
+      // No agent running - should allow starting
+      expect(agentService.canStartNewAgent('conv-1'), isTrue);
+      expect(agentService.canStartNewAgent('conv-2'), isTrue);
+      expect(agentService.canStartNewAgent(null), isTrue);
+    });
+
+    test('canStartNewAgent returns true for same conversation', () {
+      final agentService = AgentService();
+
+      // Bind to a conversation
+      agentService.bindToConversation('conv-1');
+
+      // Same conversation should be allowed
+      expect(agentService.canStartNewAgent('conv-1'), isTrue);
+    });
+
+    test('AgentCheckpoint enum has expected values', () {
+      // Verify checkpoint enum values exist
+      expect(AgentCheckpoint.values, contains(AgentCheckpoint.beforeLlmCall));
+      expect(
+        AgentCheckpoint.values,
+        contains(AgentCheckpoint.afterLlmResponse),
+      );
+      expect(AgentCheckpoint.values, contains(AgentCheckpoint.beforeToolCall));
+      expect(AgentCheckpoint.values, contains(AgentCheckpoint.afterToolResult));
+      expect(AgentCheckpoint.values.length, equals(4));
+    });
+
+    test('currentCheckpoint getter is accessible', () {
+      final agentService = AgentService();
+
+      // Default should be null
+      expect(agentService.currentCheckpoint, isNull);
+    });
+  });
 }

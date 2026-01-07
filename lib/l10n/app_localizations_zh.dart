@@ -3937,4 +3937,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get agentCompleteNotificationBody => '点击查看结果';
+
+  @override
+  String get agentPauseExecution => '暂停';
+
+  @override
+  String get agentResumeExecution => '继续';
+
+  @override
+  String get agentStopExecution => '停止';
+
+  @override
+  String get agentPausedStatus => '已暂停';
+
+  @override
+  String get agentConflictTitle => '智能体已在运行';
+
+  @override
+  String agentConflictMessage(String status) {
+    return '智能体当前在另一个会话中$status。您可以停止它以启动新的智能体，或切换到该会话。';
+  }
+
+  @override
+  String get agentConflictStop => '停止智能体';
+
+  @override
+  String get agentConflictSwitch => '切换到会话';
 }

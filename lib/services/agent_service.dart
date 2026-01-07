@@ -30,6 +30,14 @@ typedef ToolExecutor =
 /// Maximum allowed subtask depth (0=root, so 3 means 4 levels total)
 const int kMaxSubtaskDepth = 3;
 
+/// Checkpoint types where agent can be paused.
+enum AgentCheckpoint {
+  beforeLlmCall,
+  afterLlmResponse,
+  beforeToolCall,
+  afterToolResult,
+}
+
 class AgentService extends ChangeNotifier {
   // State
   List<AgentTask> _tasks = [];
@@ -39,6 +47,20 @@ class AgentService extends ChangeNotifier {
   String? _finalAnswer;
   Map<String, dynamic>? _finalMetadata;
   ToolExecutor? _toolExecutor;
+
+  // Pause/Resume/Stop state
+  bool _isPaused = false;
+  String? _boundConversationId;
+  AgentCheckpoint? _currentCheckpoint;
+
+  /// Whether the agent is currently paused.
+  bool get isPaused => _isPaused;
+
+  /// The conversation ID that this agent is bound to.
+  String? get boundConversationId => _boundConversationId;
+
+  /// The current checkpoint type (for UI display).
+  AgentCheckpoint? get currentCheckpoint => _currentCheckpoint;
 
   /// Callback for external progress updates (e.g., background notifications).
   /// Called whenever agent status changes (current thought updates).
@@ -106,7 +128,56 @@ class AgentService extends ChangeNotifier {
     _currentObjective = null;
     _globalContextNoteIds.clear();
     _contextManager.clear();
+    // Clear pause/resume state
+    _isPaused = false;
+    _boundConversationId = null;
+    _currentCheckpoint = null;
     notifyListeners();
+  }
+
+  /// Pauses agent execution at the next checkpoint.
+  void pauseExecution() {
+    if (_isRunning && !_isPaused) {
+      _isPaused = true;
+      _currentThought = 'Pausing at next checkpoint...';
+      notifyListeners();
+    }
+  }
+
+  /// Resumes agent execution after being paused.
+  void resumeExecution() {
+    if (_isPaused) {
+      _isPaused = false;
+      _currentCheckpoint = null;
+      notifyListeners();
+      // Restart the execution loop
+      executePlan();
+    }
+  }
+
+  /// Stops agent execution and clears all state.
+  void stopExecution() {
+    clearState();
+  }
+
+  /// Binds this agent to a conversation.
+  void bindToConversation(String conversationId) {
+    _boundConversationId = conversationId;
+  }
+
+  /// Checks if a new agent can be started for the given conversation.
+  /// Returns true if no agent is running/paused OR if it's the same conversation.
+  bool canStartNewAgent(String? conversationId) {
+    // No agent running or paused - can start
+    if (!_isRunning && !_isPaused && _tasks.isEmpty) {
+      return true;
+    }
+    // Same conversation - can start (will replace current)
+    if (conversationId != null && conversationId == _boundConversationId) {
+      return true;
+    }
+    // Different conversation while agent running/paused - cannot start
+    return false;
   }
 
   // ... (nativeTools and dbSchema definitions remain the same) ...
@@ -1353,6 +1424,15 @@ $formatInstructions
 ''';
 
     try {
+      // Checkpoint: Before LLM call
+      _currentCheckpoint = AgentCheckpoint.beforeLlmCall;
+      notifyListeners();
+      if (_isPaused) {
+        _currentThought = 'Paused before LLM call';
+        notifyListeners();
+        return;
+      }
+
       final response = await AIService.generateWithAttachments(
         prompt,
         [],
@@ -1360,6 +1440,16 @@ $formatInstructions
           values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
         ),
       );
+
+      // Checkpoint: After LLM response
+      _currentCheckpoint = AgentCheckpoint.afterLlmResponse;
+      notifyListeners();
+      if (_isPaused) {
+        _currentThought = 'Paused after LLM response';
+        task.executionHistory.add('Turn $turn: (paused after LLM response)');
+        notifyListeners();
+        return;
+      }
 
       // ... Parsing Logic (Similar to before but inside this function) ...
       // Re-using existing ReAct parsing logic but ensuring it matches new flow
@@ -1566,6 +1656,18 @@ The actual content (answer text, or tool call details, or reasoning)
         return;
       }
 
+      // Checkpoint: Before tool call
+      _currentCheckpoint = AgentCheckpoint.beforeToolCall;
+      notifyListeners();
+      if (_isPaused) {
+        _currentThought = 'Paused before tool call: $toolName';
+        task.executionHistory.add(
+          'Turn $turn: (paused before tool call: $toolName)',
+        );
+        notifyListeners();
+        return;
+      }
+
       // Execute Tool
       task.executionHistory.add('Action: Call $toolName');
       _contextManager
@@ -1631,6 +1733,15 @@ The actual content (answer text, or tool call details, or reasoning)
           .getContext(task.contextNodeId ?? '')
           ?.log('Observation: $result');
       notifyListeners();
+
+      // Checkpoint: After tool result
+      _currentCheckpoint = AgentCheckpoint.afterToolResult;
+      notifyListeners();
+      if (_isPaused) {
+        _currentThought = 'Paused after tool result';
+        notifyListeners();
+        return;
+      }
     } catch (e) {
       LoggerService.error("Agent Loop Error: $e");
       task.executionHistory.add("Error: Internal Agent Loop Error: $e");

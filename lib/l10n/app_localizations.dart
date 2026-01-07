@@ -7153,6 +7153,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to view results'**
   String get agentCompleteNotificationBody;
+
+  /// No description provided for @agentPauseExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get agentPauseExecution;
+
+  /// No description provided for @agentResumeExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get agentResumeExecution;
+
+  /// No description provided for @agentStopExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get agentStopExecution;
+
+  /// No description provided for @agentPausedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get agentPausedStatus;
+
+  /// No description provided for @agentConflictTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Already Running'**
+  String get agentConflictTitle;
+
+  /// No description provided for @agentConflictMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'An agent is currently {status} in another conversation. You can stop it to start a new one, or switch to that conversation.'**
+  String agentConflictMessage(String status);
+
+  /// No description provided for @agentConflictStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Agent'**
+  String get agentConflictStop;
+
+  /// No description provided for @agentConflictSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Conversation'**
+  String get agentConflictSwitch;
 }
 
 class _AppLocalizationsDelegate
