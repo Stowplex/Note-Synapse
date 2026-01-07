@@ -98,6 +98,9 @@ dependencies:
   # Wake lock to keep screen on
   wakelock_plus: ^1.2.8
   
+  # Foreground service for background agent execution (Android)
+  flutter_foreground_task: ^8.15.0
+  
   # Archive handling
   archive: ^4.0.7
   

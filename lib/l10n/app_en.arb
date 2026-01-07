@@ -1650,5 +1650,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "agentRunningNotificationTitle": "Agent Running",
+  "agentRunningNotificationBody": "Working on: {objective}",
+  "@agentRunningNotificationBody": {
+    "placeholders": {
+      "objective": {
+        "type": "String"
+      }
+    }
+  },
+  "agentCompleteNotificationTitle": "Agent Complete",
+  "agentCompleteNotificationBody": "Tap to view results"
 }

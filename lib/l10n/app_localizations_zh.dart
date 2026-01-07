@@ -3923,4 +3923,18 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get agentRunningNotificationTitle => '智能体运行中';
+
+  @override
+  String agentRunningNotificationBody(String objective) {
+    return '正在处理: $objective';
+  }
+
+  @override
+  String get agentCompleteNotificationTitle => '智能体完成';
+
+  @override
+  String get agentCompleteNotificationBody => '点击查看结果';
 }

@@ -40,6 +40,10 @@ class AgentService extends ChangeNotifier {
   Map<String, dynamic>? _finalMetadata;
   ToolExecutor? _toolExecutor;
 
+  /// Callback for external progress updates (e.g., background notifications).
+  /// Called whenever agent status changes (current thought updates).
+  void Function(String status)? onProgressUpdate;
+
   // Hierarchical Context Management
   final ContextManagerService _contextManager = ContextManagerService();
   String? _currentObjective;
@@ -178,6 +182,7 @@ class AgentService extends ChangeNotifier {
       task.status = AgentTaskStatus.inProgress;
       taskContext.status = ContextNodeStatus.active;
       _currentThought = 'Working on: ${task.description}';
+      onProgressUpdate?.call(_currentThought!);
       notifyListeners();
 
       try {
@@ -954,6 +959,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
 
     _isRunning = true;
     _currentThought = 'Starting execution...';
+    onProgressUpdate?.call(_currentThought!);
     notifyListeners();
 
     try {
@@ -961,8 +967,10 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     } catch (e) {
       LoggerService.error('Agent execution failure: $e');
       _currentThought = 'Error during execution: $e';
+      onProgressUpdate?.call(_currentThought!);
     } finally {
       _isRunning = false;
+      onProgressUpdate?.call('Agent completed');
       notifyListeners();
     }
   }
@@ -1426,6 +1434,7 @@ $formatInstructions
         thought = thought.replaceFirst('My thought:', '').trim();
       }
       _currentThought = thought.isNotEmpty ? thought : "Executing...";
+      onProgressUpdate?.call(_currentThought!);
       notifyListeners();
 
       task.executionHistory.add('Turn $turn:');

@@ -1595,5 +1595,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "agentRunningNotificationTitle": "智能体运行中",
+  "agentRunningNotificationBody": "正在处理: {objective}",
+  "@agentRunningNotificationBody": {
+    "placeholders": {
+      "objective": {
+        "type": "String"
+      }
+    }
+  },
+  "agentCompleteNotificationTitle": "智能体完成",
+  "agentCompleteNotificationBody": "点击查看结果"
 }

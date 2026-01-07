@@ -7129,6 +7129,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{No notes attached} =1{1 note attached} other{{count} notes attached}}'**
   String notesAttachedCount(int count);
+
+  /// No description provided for @agentRunningNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Running'**
+  String get agentRunningNotificationTitle;
+
+  /// No description provided for @agentRunningNotificationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Working on: {objective}'**
+  String agentRunningNotificationBody(String objective);
+
+  /// No description provided for @agentCompleteNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Complete'**
+  String get agentCompleteNotificationTitle;
+
+  /// No description provided for @agentCompleteNotificationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view results'**
+  String get agentCompleteNotificationBody;
 }
 
 class _AppLocalizationsDelegate

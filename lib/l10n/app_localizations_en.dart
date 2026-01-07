@@ -4110,4 +4110,18 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get agentRunningNotificationTitle => 'Agent Running';
+
+  @override
+  String agentRunningNotificationBody(String objective) {
+    return 'Working on: $objective';
+  }
+
+  @override
+  String get agentCompleteNotificationTitle => 'Agent Complete';
+
+  @override
+  String get agentCompleteNotificationBody => 'Tap to view results';
 }

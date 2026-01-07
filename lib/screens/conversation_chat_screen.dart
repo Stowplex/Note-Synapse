@@ -47,6 +47,7 @@ import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
+import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
@@ -128,6 +129,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     if (state == AppLifecycleState.resumed) {
       // Refresh model features when app resumes (e.g., after model configuration change)
       _loadModelFeatures();
+      // Stop background service when returning to app (agent continues in foreground)
+      BackgroundAgentService.stop();
+      // Clear background callback - UI will show progress instead
+      _agentService?.onProgressUpdate = null;
+    } else if (state == AppLifecycleState.paused) {
+      // Start background service if agent is running when app goes to background
+      final agentService = _agentService;
+      if (agentService != null &&
+          agentService.isRunning &&
+          _conversation != null) {
+        // Wire up progress updates to background notification
+        agentService.onProgressUpdate = (status) {
+          if (BackgroundAgentService.isRunningInBackground) {
+            BackgroundAgentService.updateProgress(status);
+            // Check for completion
+            if (status == 'Agent completed' || !agentService.isRunning) {
+              BackgroundAgentService.markComplete(status);
+            }
+          }
+        };
+        BackgroundAgentService.startBackgroundExecution(
+          conversationId: _conversation!.id,
+          objective: agentService.currentObjective ?? 'Agent task',
+        );
+      }
     }
   }
 
