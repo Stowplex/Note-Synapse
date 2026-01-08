@@ -1198,7 +1198,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       }).toList();
     } catch (e) {
       LoggerService.error('Failed to parse JSON list: $e');
-      return [];
+      rethrow;
     }
   }
 
