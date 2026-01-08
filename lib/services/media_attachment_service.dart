@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
 import '../services/logger_service.dart';
+import '../services/network_provider.dart';
 import '../utils/remote_image_storage.dart';
 
 class RemoteImageDownloadReport {
@@ -76,7 +76,7 @@ class MediaAttachmentService {
       }
 
       try {
-        final response = await http.get(Uri.parse(url));
+        final response = await NetworkProvider.get(Uri.parse(url));
         if (response.statusCode != 200) {
           failures.add(url);
           continue;

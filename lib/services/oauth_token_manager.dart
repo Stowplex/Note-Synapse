@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
 import 'oauth_redirect_helper.dart';
+import 'network_provider.dart';
 
 /// Manages OAuth tokens (access/refresh/id) for a single endpoint.
 /// Stores tokens securely and refreshes them as needed.
@@ -37,7 +38,10 @@ class OAuthTokenManager {
       final expiryIso = await _readSecure(_expiryPrefix);
       if (expiryIso != null) {
         final expiry = DateTime.tryParse(expiryIso);
-        if (expiry != null && DateTime.now().isAfter(expiry.subtract(const Duration(seconds: 30)))) {
+        if (expiry != null &&
+            DateTime.now().isAfter(
+              expiry.subtract(const Duration(seconds: 30)),
+            )) {
           await _refreshToken();
         }
       }
@@ -88,11 +92,13 @@ class OAuthTokenManager {
         'client_id': config.clientId,
         'redirect_uri': OAuthRedirectHelper.resolve(config.redirectUri),
       };
-      if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
+      if (!config.usePkce &&
+          config.clientSecret != null &&
+          config.clientSecret!.isNotEmpty) {
         body['client_secret'] = config.clientSecret!;
       }
 
-      final response = await http.post(
+      final response = await NetworkProvider.post(
         Uri.parse(config.tokenEndpoint),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: body,
@@ -102,7 +108,9 @@ class OAuthTokenManager {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         await saveTokens(data);
       } else {
-        LoggerService.warning('OAuthTokenManager: refresh failed ${response.statusCode}: ${response.body}');
+        LoggerService.warning(
+          'OAuthTokenManager: refresh failed ${response.statusCode}: ${response.body}',
+        );
       }
     } catch (e) {
       LoggerService.error('OAuthTokenManager: error refreshing token: $e');
@@ -144,5 +152,3 @@ class OAuthTokenManager {
     }
   }
 }
-
-

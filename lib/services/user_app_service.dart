@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:html2md/html2md.dart' as html2md;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/app_revision.dart';
@@ -12,6 +12,7 @@ import '../models/user_app.dart';
 import 'ai_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'network_provider.dart';
 import 'prompts/note_prompt_builder.dart';
 import 'prompts/prompt_configuration_service.dart';
 import 'prompts/registrations/app_prompt_configuration.dart';
@@ -1770,7 +1771,7 @@ ${libraries.map((lib) => '''
           try {
             LoggerService.debug('Downloading library file: $link');
 
-            final response = await http.get(Uri.parse(link));
+            final response = await NetworkProvider.get(Uri.parse(link));
             if (response.statusCode == 200) {
               // Process the URL to get the local path
               final localPath = _processLibraryUrl(link);

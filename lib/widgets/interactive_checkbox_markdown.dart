@@ -11,7 +11,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:re_highlight/languages/all.dart';
@@ -23,6 +23,7 @@ import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/synapse_resource_uri.dart';
 import '../services/database_service.dart';
+import '../services/network_provider.dart';
 import '../screens/note_detail_screen.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
@@ -832,7 +833,7 @@ class _InteractiveCheckboxMarkdownState
     if (shouldDownload == true) {
       try {
         // Download
-        final response = await http.get(Uri.parse(imageUrl));
+        final response = await NetworkProvider.get(Uri.parse(imageUrl));
         if (response.statusCode == 200) {
           final bytes = response.bodyBytes;
           final tempDir = await getTemporaryDirectory();

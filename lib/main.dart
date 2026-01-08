@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:rhttp/rhttp.dart';
 
 import 'l10n/app_localizations.dart';
 import 'providers/app_provider.dart';
@@ -16,10 +17,17 @@ import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
+import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize rhttp Rust bindings (must be first)
+  await Rhttp.init();
+
+  // Initialize network provider
+  await NetworkProvider.init();
 
   // Initialize secure storage
   await SecureStorageService.initialize();

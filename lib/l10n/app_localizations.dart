@@ -812,6 +812,84 @@ abstract class AppLocalizations {
   /// **'Prevent screen from turning off automatically'**
   String get keepScreenOnSubtitle;
 
+  /// No description provided for @network.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get network;
+
+  /// No description provided for @networkSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP protocol and retry settings'**
+  String get networkSubtitle;
+
+  /// No description provided for @protocolPreference.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol Preference'**
+  String get protocolPreference;
+
+  /// No description provided for @protocolPreferenceSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose HTTP protocol mode for network requests'**
+  String get protocolPreferenceSubtitle;
+
+  /// No description provided for @protocolAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (Upgrade to HTTP/3)'**
+  String get protocolAuto;
+
+  /// No description provided for @protocolHttp3Only.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP/3 Only'**
+  String get protocolHttp3Only;
+
+  /// No description provided for @protocolHttp11Only.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP/1.1 Only'**
+  String get protocolHttp11Only;
+
+  /// No description provided for @retryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry Count'**
+  String get retryCount;
+
+  /// No description provided for @retryCountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of retry attempts for failed requests (0-5)'**
+  String get retryCountSubtitle;
+
+  /// No description provided for @backoffBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Backoff Base'**
+  String get backoffBase;
+
+  /// No description provided for @backoffBaseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Base delay for exponential backoff in seconds (1-10)'**
+  String get backoffBaseSubtitle;
+
+  /// No description provided for @retryPattern.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry delays: {base}s → {second}s → {third}s'**
+  String retryPattern(String base, String second, String third);
+
+  /// No description provided for @networkSettingsUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Network settings updated'**
+  String get networkSettingsUpdated;
+
   /// No description provided for @errorChangingLanguage.
   ///
   /// In en, this message translates to:

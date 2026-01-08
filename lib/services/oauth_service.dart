@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
 import 'oauth_redirect_helper.dart';
+import 'network_provider.dart';
 
 class ResourceDiscoveryResult {
   ResourceDiscoveryResult({
@@ -95,23 +96,27 @@ class OAuthService {
         _activeCompleter != null ||
         _activeRedirectCompleter != null) {
       LoggerService.debug('OAuthService: Cancelling active OAuth flow');
-      
+
       // Complete the completer with cancellation error if not already completed
       if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
-        _activeCompleter!.completeError(Exception('OAuth flow cancelled by user'));
+        _activeCompleter!.completeError(
+          Exception('OAuth flow cancelled by user'),
+        );
       }
 
-      if (_activeRedirectCompleter != null && !_activeRedirectCompleter!.isCompleted) {
-        _activeRedirectCompleter!
-            .completeError(Exception('OAuth flow cancelled by user'));
+      if (_activeRedirectCompleter != null &&
+          !_activeRedirectCompleter!.isCompleted) {
+        _activeRedirectCompleter!.completeError(
+          Exception('OAuth flow cancelled by user'),
+        );
       }
-      
+
       // Save references before any async operations
       final server = _activeServer;
       final subscription = _activeSubscription;
       final linkSubscription = _activeLinkSubscription;
       final closingFuture = _activeClosingFuture;
-      
+
       // Clear references immediately to prevent race conditions
       _activeServer = null;
       _activeSubscription = null;
@@ -119,7 +124,7 @@ class OAuthService {
       _activeCompleter = null;
       _activeRedirectCompleter = null;
       _activeClosingFuture = null;
-      
+
       // Wait for any in-progress closing operation
       if (closingFuture != null) {
         try {
@@ -128,7 +133,7 @@ class OAuthService {
           // Ignore errors from closing future
         }
       }
-      
+
       // Close server and subscription if they weren't already closed
       if (server != null) {
         try {
@@ -170,7 +175,9 @@ class OAuthService {
     Map<String, dynamic>? resourceMetadata = resourceResult.metadata;
     final resourceMetadataUrl = resourceResult.metadataUrl;
     final scopeHint = resourceResult.scopeHint;
-    final availableServers = List<String>.from(resourceResult.authorizationServers);
+    final availableServers = List<String>.from(
+      resourceResult.authorizationServers,
+    );
 
     Map<String, dynamic>? authorizationMetadata;
     String? authorizationMetadataUrl;
@@ -198,7 +205,9 @@ class OAuthService {
         selectedServer = origin.toString();
       }
 
-      final authResult = await discoverAuthorizationServerMetadata(issuer: selectedServer);
+      final authResult = await discoverAuthorizationServerMetadata(
+        issuer: selectedServer,
+      );
       authorizationMetadata = authResult.metadata;
       authorizationMetadataUrl = authResult.metadataUrl;
       issuer = authResult.issuer;
@@ -209,14 +218,22 @@ class OAuthService {
       throw Exception('Failed to resolve authorization server metadata.');
     }
 
-    final authorizationEndpoint = authorizationMetadata['authorization_endpoint'] as String?;
+    final authorizationEndpoint =
+        authorizationMetadata['authorization_endpoint'] as String?;
     final tokenEndpoint = authorizationMetadata['token_endpoint'] as String?;
     if (authorizationEndpoint == null || tokenEndpoint == null) {
-      throw Exception('Authorization server metadata missing required endpoints.');
+      throw Exception(
+        'Authorization server metadata missing required endpoints.',
+      );
     }
 
-    final registrationEndpoint = authorizationMetadata['registration_endpoint'] as String?;
-    final recommendedScope = _determineScope(scopeHint, resourceMetadata, authorizationMetadata);
+    final registrationEndpoint =
+        authorizationMetadata['registration_endpoint'] as String?;
+    final recommendedScope = _determineScope(
+      scopeHint,
+      resourceMetadata,
+      authorizationMetadata,
+    );
 
     return OAuthDiscoverySummary(
       authorizationEndpoint: authorizationEndpoint,
@@ -262,9 +279,17 @@ class OAuthService {
         metadataUrl = resolved.toString();
         metadata = json;
         issuer = json['issuer'] as String?;
-        servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, resolved));
+        servers.addAll(
+          _extractAuthorizationServers(
+            json['authorization_servers'],
+            baseUri,
+            resolved,
+          ),
+        );
       } else {
-        throw Exception('Metadata at ${resolved.toString()} is not recognized as protected resource or authorization server metadata.');
+        throw Exception(
+          'Metadata at ${resolved.toString()} is not recognized as protected resource or authorization server metadata.',
+        );
       }
 
       return ResourceDiscoveryResult(
@@ -281,7 +306,7 @@ class OAuthService {
 
     // Step 1: 401 challenge with WWW-Authenticate
     try {
-      final response = await http.get(baseUri);
+      final response = await NetworkProvider.get(baseUri);
       if (response.statusCode == 401) {
         final header = response.headers['www-authenticate'];
         final metadataUri = _extractResourceMetadataUri(header, baseUri);
@@ -292,12 +317,20 @@ class OAuthService {
             metadataUrl = metadataUri.toString();
             metadata = json;
             issuer = json['issuer'] as String?;
-            servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, metadataUri));
+            servers.addAll(
+              _extractAuthorizationServers(
+                json['authorization_servers'],
+                baseUri,
+                metadataUri,
+              ),
+            );
           }
         }
       }
     } catch (e) {
-      LoggerService.warning('OAuthService: Failed initial resource metadata request: $e');
+      LoggerService.warning(
+        'OAuthService: Failed initial resource metadata request: $e',
+      );
     }
 
     // Step 2: Well-known URIs if not already resolved
@@ -308,7 +341,13 @@ class OAuthService {
           metadataUrl = candidate.toString();
           metadata = json;
           issuer = json['issuer'] as String?;
-          servers.addAll(_extractAuthorizationServers(json['authorization_servers'], baseUri, candidate));
+          servers.addAll(
+            _extractAuthorizationServers(
+              json['authorization_servers'],
+              baseUri,
+              candidate,
+            ),
+          );
           break;
         }
       }
@@ -326,9 +365,8 @@ class OAuthService {
     );
   }
 
-  static Future<AuthorizationServerMetadataResult> discoverAuthorizationServerMetadata({
-    required String issuer,
-  }) async {
+  static Future<AuthorizationServerMetadataResult>
+  discoverAuthorizationServerMetadata({required String issuer}) async {
     final issuerUri = Uri.parse(issuer);
     for (final candidate in _authorizationMetadataCandidates(issuerUri)) {
       final json = await _fetchJsonIfSuccessful(candidate);
@@ -341,26 +379,32 @@ class OAuthService {
         );
       }
     }
-    throw Exception('Unable to resolve authorization server metadata for issuer $issuer');
+    throw Exception(
+      'Unable to resolve authorization server metadata for issuer $issuer',
+    );
   }
 
   static List<Uri> _resourceMetadataCandidates(Uri baseUri) {
     final candidates = <Uri>[];
     final trimmedPath = baseUri.path.replaceAll(RegExp(r'^/+|/+$'), '');
     if (trimmedPath.isNotEmpty) {
-      candidates.add(Uri(
+      candidates.add(
+        Uri(
+          scheme: baseUri.scheme,
+          host: baseUri.host,
+          port: baseUri.hasPort ? baseUri.port : null,
+          path: '/.well-known/oauth-protected-resource/$trimmedPath',
+        ),
+      );
+    }
+    candidates.add(
+      Uri(
         scheme: baseUri.scheme,
         host: baseUri.host,
         port: baseUri.hasPort ? baseUri.port : null,
-        path: '/.well-known/oauth-protected-resource/$trimmedPath',
-      ));
-    }
-    candidates.add(Uri(
-      scheme: baseUri.scheme,
-      host: baseUri.host,
-      port: baseUri.hasPort ? baseUri.port : null,
-      path: '/.well-known/oauth-protected-resource',
-    ));
+        path: '/.well-known/oauth-protected-resource',
+      ),
+    );
     return candidates;
   }
 
@@ -374,17 +418,29 @@ class OAuthService {
     final trimmedPath = issuerUri.path.replaceAll(RegExp(r'^/+|/+$'), '');
 
     if (trimmedPath.isNotEmpty) {
-      candidates.add(base.replace(path: '/.well-known/oauth-authorization-server/$trimmedPath'));
-      candidates.add(base.replace(path: '/.well-known/openid-configuration/$trimmedPath'));
+      candidates.add(
+        base.replace(
+          path: '/.well-known/oauth-authorization-server/$trimmedPath',
+        ),
+      );
+      candidates.add(
+        base.replace(path: '/.well-known/openid-configuration/$trimmedPath'),
+      );
 
       final normalized = issuerUri.path.endsWith('/')
           ? issuerUri.path.substring(0, issuerUri.path.length - 1)
           : issuerUri.path;
-      final withPrefix = normalized.startsWith('/') ? normalized : '/$normalized';
+      final withPrefix = normalized.startsWith('/')
+          ? normalized
+          : '/$normalized';
       final appended = '$withPrefix/.well-known/openid-configuration';
-      candidates.add(issuerUri.replace(path: appended, query: null, fragment: null));
+      candidates.add(
+        issuerUri.replace(path: appended, query: null, fragment: null),
+      );
     } else {
-      candidates.add(base.replace(path: '/.well-known/oauth-authorization-server'));
+      candidates.add(
+        base.replace(path: '/.well-known/oauth-authorization-server'),
+      );
       candidates.add(base.replace(path: '/.well-known/openid-configuration'));
     }
     return candidates;
@@ -399,7 +455,8 @@ class OAuthService {
   }
 
   static bool _looksLikeAuthorizationMetadata(Map<String, dynamic> json) {
-    return (json['authorization_endpoint'] ?? json['authorizationEndpoint']) != null &&
+    return (json['authorization_endpoint'] ?? json['authorizationEndpoint']) !=
+            null &&
         (json['token_endpoint'] ?? json['tokenEndpoint']) != null;
   }
 
@@ -431,13 +488,19 @@ class OAuthService {
 
   static String? _extractScopeFromHeader(String? header) {
     if (header == null) return null;
-    final match = RegExp(r'scope="([^"]+)"', caseSensitive: false).firstMatch(header);
+    final match = RegExp(
+      r'scope="([^"]+)"',
+      caseSensitive: false,
+    ).firstMatch(header);
     return match?.group(1);
   }
 
   static Uri? _extractResourceMetadataUri(String? header, Uri baseUri) {
     if (header == null) return null;
-    final match = RegExp(r'resource_metadata="([^"]+)"', caseSensitive: false).firstMatch(header);
+    final match = RegExp(
+      r'resource_metadata="([^"]+)"',
+      caseSensitive: false,
+    ).firstMatch(header);
     final value = match?.group(1);
     if (value == null || value.isEmpty) return null;
     return _resolveUri(baseUri, value);
@@ -454,14 +517,22 @@ class OAuthService {
     }
     final resourceScopes = resourceMetadata?['scopes_supported'];
     if (resourceScopes is List) {
-      final scopes = resourceScopes.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final scopes = resourceScopes
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       if (scopes.isNotEmpty) {
         return scopes.join(' ');
       }
     }
     final authScopes = authorizationMetadata?['scopes_supported'];
     if (authScopes is List) {
-      final scopes = authScopes.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final scopes = authScopes
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       if (scopes.isNotEmpty) {
         return scopes.join(' ');
       }
@@ -471,12 +542,17 @@ class OAuthService {
 
   static Future<Map<String, dynamic>?> _fetchJsonIfSuccessful(Uri uri) async {
     try {
-      final response = await http.get(uri, headers: {'Accept': 'application/json'});
+      final response = await NetworkProvider.get(
+        uri,
+        headers: {'Accept': 'application/json'},
+      );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      LoggerService.warning('OAuthService: Failed to fetch ${uri.toString()}: $e');
+      LoggerService.warning(
+        'OAuthService: Failed to fetch ${uri.toString()}: $e',
+      );
     }
     return null;
   }
@@ -507,7 +583,7 @@ class OAuthService {
       if (scope != null && scope.isNotEmpty) 'scope': scope,
     };
 
-    final response = await http.post(
+    final response = await NetworkProvider.post(
       Uri.parse(registrationEndpoint),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(metadata),
@@ -516,7 +592,8 @@ class OAuthService {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return {
         'client_id': '${data['client_id']}',
-        if (data['client_secret'] != null) 'client_secret': '${data['client_secret']}',
+        if (data['client_secret'] != null)
+          'client_secret': '${data['client_secret']}',
       };
     }
     throw Exception('Client registration failed (${response.statusCode})');
@@ -529,7 +606,9 @@ class OAuthService {
     required String state,
   }) async {
     final verifier = config.usePkce ? _codeVerifier() : null;
-    final codeChallenge = config.usePkce && verifier != null ? _codeChallenge(verifier) : null;
+    final codeChallenge = config.usePkce && verifier != null
+        ? _codeChallenge(verifier)
+        : null;
 
     await cancelActiveFlow();
     final redirectUri = OAuthRedirectHelper.resolve(config.redirectUri);
@@ -565,17 +644,23 @@ class OAuthService {
       throw Exception('Invalid redirect URI configured: $redirectUri');
     }
     if (uri.scheme != 'http' && uri.scheme != 'https') {
-      throw Exception('Redirect URI must be an http(s) loopback address when running on desktop. Got $redirectUri');
+      throw Exception(
+        'Redirect URI must be an http(s) loopback address when running on desktop. Got $redirectUri',
+      );
     }
 
     final callbackPath = uri.path.isEmpty ? '/' : uri.path;
-    final port = uri.hasPort ? uri.port : Uri.parse(OAuthRedirectHelper.loopbackRedirectUri).port;
+    final port = uri.hasPort
+        ? uri.port
+        : Uri.parse(OAuthRedirectHelper.loopbackRedirectUri).port;
 
     late HttpServer server;
     try {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     } catch (e) {
-      throw Exception('Unable to bind local redirect server on 127.0.0.1:$port. Ensure the port is free.');
+      throw Exception(
+        'Unable to bind local redirect server on 127.0.0.1:$port. Ensure the port is free.',
+      );
     }
 
     _activeServer = server;
@@ -585,14 +670,18 @@ class OAuthService {
       'client_id': config.clientId,
       'redirect_uri': redirectUri,
       'state': state,
-      if (config.usePkce && codeChallenge != null) 'code_challenge': codeChallenge,
-      if (config.usePkce && codeChallenge != null) 'code_challenge_method': 'S256',
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge': codeChallenge,
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge_method': 'S256',
     };
     final trimmedScope = config.scope.trim();
     if (trimmedScope.isNotEmpty) {
       authParams['scope'] = trimmedScope;
     }
-    final authUri = Uri.parse(config.authorizationEndpoint).replace(queryParameters: authParams);
+    final authUri = Uri.parse(
+      config.authorizationEndpoint,
+    ).replace(queryParameters: authParams);
 
     LoggerService.debug('OAuthService: Launching auth at: $authUri');
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
@@ -633,137 +722,185 @@ class OAuthService {
       await request.response.close();
     }
 
-    subscription = server.listen((HttpRequest request) async {
-      try {
-        if (handled || request.uri.path != callbackPath) {
-          request.response.statusCode = 404;
-          await request.response.close();
-          return;
-        }
+    subscription = server.listen(
+      (HttpRequest request) async {
+        try {
+          if (handled || request.uri.path != callbackPath) {
+            request.response.statusCode = 404;
+            await request.response.close();
+            return;
+          }
 
-        final params = Map<String, String>.from(request.uri.queryParameters);
-        if (request.method.toUpperCase() == 'POST') {
-          final contentType = request.headers.contentType;
-          if (contentType == null || contentType.mimeType == 'application/x-www-form-urlencoded' ||
-              contentType.mimeType == 'text/plain') {
-            final body = await utf8.decoder.bind(request).join();
-            if (body.isNotEmpty) {
-              params.addAll(Uri.splitQueryString(body));
+          final params = Map<String, String>.from(request.uri.queryParameters);
+          if (request.method.toUpperCase() == 'POST') {
+            final contentType = request.headers.contentType;
+            if (contentType == null ||
+                contentType.mimeType == 'application/x-www-form-urlencoded' ||
+                contentType.mimeType == 'text/plain') {
+              final body = await utf8.decoder.bind(request).join();
+              if (body.isNotEmpty) {
+                params.addAll(Uri.splitQueryString(body));
+              }
             }
           }
-        }
 
-        LoggerService.debug('OAuthService: Received callback with params: $params');
-
-        final errorParam = params['error'];
-        final errorDescription = params['error_description'] ?? params['errorDescription'];
-        if (errorParam != null) {
-          await respond(request,
-              '<html><body>Authentication failed: $errorParam${errorDescription != null ? ' - $errorDescription' : ''}. You can close this window.</body></html>');
-          await ensureClosed();
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}'));
-          }
-          return;
-        }
-
-        final code = params['code'];
-        if (code == null || code.isEmpty) {
-          await respond(request,
-              '<html><body>Authentication response missing authorization code. You can close this window.</body></html>');
-          await ensureClosed();
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('Authorization response missing code'));
-          }
-          return;
-        }
-
-        final returnedState = params['state'];
-        if (returnedState != null && returnedState != state) {
-          await respond(request, '<html><body>State parameter mismatch. You can close this window.</body></html>');
-          await ensureClosed();
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('Authorization response state mismatch'));
-          }
-          return;
-        }
-
-        handled = true;
-        await respond(request, '<html><body>You can close this window.</body></html>');
-
-        LoggerService.debug('OAuthService: Callback received, waiting for app foreground before token exchange...');
-        await Future.delayed(const Duration(milliseconds: 800));
-
-        final tokenBody = <String, String>{
-          'grant_type': 'authorization_code',
-          'code': code,
-          'client_id': config.clientId,
-          'redirect_uri': redirectUri,
-        };
-        if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
-          tokenBody['client_secret'] = config.clientSecret!;
-        }
-        if (config.usePkce && verifier != null) {
-          tokenBody['code_verifier'] = verifier;
-        }
-
-        try {
-          final tokenUri = Uri.parse(config.tokenEndpoint);
-          LoggerService.debug('OAuthService: Exchanging code for token at ${tokenUri.toString()}');
-          final tokenResp = await _postWithRetry(
-            uri: tokenUri,
-            body: tokenBody,
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          LoggerService.debug(
+            'OAuthService: Received callback with params: $params',
           );
 
-          LoggerService.debug('OAuthService: Token exchange response status: ${tokenResp.statusCode}');
+          final errorParam = params['error'];
+          final errorDescription =
+              params['error_description'] ?? params['errorDescription'];
+          if (errorParam != null) {
+            await respond(
+              request,
+              '<html><body>Authentication failed: $errorParam${errorDescription != null ? ' - $errorDescription' : ''}. You can close this window.</body></html>',
+            );
+            await ensureClosed();
+            if (!completer.isCompleted) {
+              completer.completeError(
+                Exception(
+                  'Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}',
+                ),
+              );
+            }
+            return;
+          }
 
-          if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
-            final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
-            final hasAccessToken = tokenData.containsKey('access_token');
-            final hasRefreshToken = tokenData.containsKey('refresh_token');
-            LoggerService.info(
-              'OAuthService: Token exchange succeeded. Has access_token: $hasAccessToken, Has refresh_token: $hasRefreshToken',
+          final code = params['code'];
+          if (code == null || code.isEmpty) {
+            await respond(
+              request,
+              '<html><body>Authentication response missing authorization code. You can close this window.</body></html>',
             );
+            await ensureClosed();
             if (!completer.isCompleted) {
-              completer.complete(tokenData);
-            } else {
-              LoggerService.warning('OAuthService: Completer already completed, ignoring successful token response');
+              completer.completeError(
+                Exception('Authorization response missing code'),
+              );
             }
-          } else {
-            LoggerService.error(
-              'OAuthService: Token exchange failed with status ${tokenResp.statusCode}. Body: ${tokenResp.body}',
+            return;
+          }
+
+          final returnedState = params['state'];
+          if (returnedState != null && returnedState != state) {
+            await respond(
+              request,
+              '<html><body>State parameter mismatch. You can close this window.</body></html>',
             );
+            await ensureClosed();
             if (!completer.isCompleted) {
-              completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
-            } else {
-              LoggerService.warning('OAuthService: Completer already completed, ignoring failed token response');
+              completer.completeError(
+                Exception('Authorization response state mismatch'),
+              );
             }
+            return;
+          }
+
+          handled = true;
+          await respond(
+            request,
+            '<html><body>You can close this window.</body></html>',
+          );
+
+          LoggerService.debug(
+            'OAuthService: Callback received, waiting for app foreground before token exchange...',
+          );
+          await Future.delayed(const Duration(milliseconds: 800));
+
+          final tokenBody = <String, String>{
+            'grant_type': 'authorization_code',
+            'code': code,
+            'client_id': config.clientId,
+            'redirect_uri': redirectUri,
+          };
+          if (!config.usePkce &&
+              config.clientSecret != null &&
+              config.clientSecret!.isNotEmpty) {
+            tokenBody['client_secret'] = config.clientSecret!;
+          }
+          if (config.usePkce && verifier != null) {
+            tokenBody['code_verifier'] = verifier;
+          }
+
+          try {
+            final tokenUri = Uri.parse(config.tokenEndpoint);
+            LoggerService.debug(
+              'OAuthService: Exchanging code for token at ${tokenUri.toString()}',
+            );
+            final tokenResp = await _postWithRetry(
+              uri: tokenUri,
+              body: tokenBody,
+              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            );
+
+            LoggerService.debug(
+              'OAuthService: Token exchange response status: ${tokenResp.statusCode}',
+            );
+
+            if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
+              final tokenData =
+                  jsonDecode(tokenResp.body) as Map<String, dynamic>;
+              final hasAccessToken = tokenData.containsKey('access_token');
+              final hasRefreshToken = tokenData.containsKey('refresh_token');
+              LoggerService.info(
+                'OAuthService: Token exchange succeeded. Has access_token: $hasAccessToken, Has refresh_token: $hasRefreshToken',
+              );
+              if (!completer.isCompleted) {
+                completer.complete(tokenData);
+              } else {
+                LoggerService.warning(
+                  'OAuthService: Completer already completed, ignoring successful token response',
+                );
+              }
+            } else {
+              LoggerService.error(
+                'OAuthService: Token exchange failed with status ${tokenResp.statusCode}. Body: ${tokenResp.body}',
+              );
+              if (!completer.isCompleted) {
+                completer.completeError(
+                  Exception(
+                    'Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}',
+                  ),
+                );
+              } else {
+                LoggerService.warning(
+                  'OAuthService: Completer already completed, ignoring failed token response',
+                );
+              }
+            }
+          } catch (e) {
+            LoggerService.error('OAuthService: Token exchange error: $e');
+            if (!completer.isCompleted) {
+              completer.completeError(
+                Exception('Network error contacting token endpoint: $e'),
+              );
+            } else {
+              LoggerService.warning(
+                'OAuthService: Completer already completed, ignoring token exchange error',
+              );
+            }
+          } finally {
+            await ensureClosed();
           }
         } catch (e) {
-          LoggerService.error('OAuthService: Token exchange error: $e');
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('Network error contacting token endpoint: $e'));
-          } else {
-            LoggerService.warning('OAuthService: Completer already completed, ignoring token exchange error');
-          }
-        } finally {
+          LoggerService.error('OAuthService: authorization flow error: $e');
           await ensureClosed();
+          if (!completer.isCompleted) {
+            completer.completeError(e);
+          }
         }
-      } catch (e) {
-        LoggerService.error('OAuthService: authorization flow error: $e');
+      },
+      onError: (Object error, StackTrace stackTrace) async {
+        LoggerService.error('OAuthService: Server listen error: $error');
         await ensureClosed();
         if (!completer.isCompleted) {
-          completer.completeError(e);
+          completer.completeError(
+            Exception('OAuth callback server error: $error'),
+          );
         }
-      }
-    }, onError: (Object error, StackTrace stackTrace) async {
-      LoggerService.error('OAuthService: Server listen error: $error');
-      await ensureClosed();
-      if (!completer.isCompleted) {
-        completer.completeError(Exception('OAuth callback server error: $error'));
-      }
-    });
+      },
+    );
 
     _activeSubscription = subscription;
 
@@ -787,16 +924,22 @@ class OAuthService {
       'client_id': config.clientId,
       'redirect_uri': redirectUri,
       'state': state,
-      if (config.usePkce && codeChallenge != null) 'code_challenge': codeChallenge,
-      if (config.usePkce && codeChallenge != null) 'code_challenge_method': 'S256',
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge': codeChallenge,
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge_method': 'S256',
     };
     final trimmedScope = config.scope.trim();
     if (trimmedScope.isNotEmpty) {
       authParams['scope'] = trimmedScope;
     }
-    final authUri = Uri.parse(config.authorizationEndpoint).replace(queryParameters: authParams);
+    final authUri = Uri.parse(
+      config.authorizationEndpoint,
+    ).replace(queryParameters: authParams);
 
-    LoggerService.debug('OAuthService: Launching auth with deep link redirect: $authUri');
+    LoggerService.debug(
+      'OAuthService: Launching auth with deep link redirect: $authUri',
+    );
 
     final completer = Completer<Map<String, dynamic>>();
     final redirectCompleter = Completer<Uri>();
@@ -817,12 +960,19 @@ class OAuthService {
 
     StreamSubscription<Uri?>? subscription;
     try {
-      subscription = appLinks.uriLinkStream.listen(handleUri, onError: (Object error) {
-        LoggerService.error('OAuthService: Deep link stream error: $error');
-      });
+      subscription = appLinks.uriLinkStream.listen(
+        handleUri,
+        onError: (Object error) {
+          LoggerService.error('OAuthService: Deep link stream error: $error');
+        },
+      );
     } on Exception catch (e) {
-      LoggerService.error('OAuthService: Unable to listen for deep link redirects: $e');
-      throw Exception('Unable to listen for OAuth callback. Ensure app_links is configured correctly.');
+      LoggerService.error(
+        'OAuthService: Unable to listen for deep link redirects: $e',
+      );
+      throw Exception(
+        'Unable to listen for OAuth callback. Ensure app_links is configured correctly.',
+      );
     }
 
     _activeLinkSubscription = subscription;
@@ -832,33 +982,48 @@ class OAuthService {
         final initialUri = await appLinks.getInitialLink();
         handleUri(initialUri);
       } on PlatformException catch (e) {
-        LoggerService.warning('OAuthService: Failed to obtain initial deep link URI: $e');
+        LoggerService.warning(
+          'OAuthService: Failed to obtain initial deep link URI: $e',
+        );
       } catch (e) {
-        LoggerService.warning('OAuthService: Unexpected error obtaining initial deep link URI: $e');
+        LoggerService.warning(
+          'OAuthService: Unexpected error obtaining initial deep link URI: $e',
+        );
       }
 
-      final launched = await launchUrl(authUri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        authUri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched) {
         throw Exception('Unable to open authorization URL.');
       }
 
-      final callbackUri = await redirectCompleter.future.timeout(_defaultFlowTimeout);
+      final callbackUri = await redirectCompleter.future.timeout(
+        _defaultFlowTimeout,
+      );
 
       final params = Map<String, String>.from(callbackUri.queryParameters);
       if (callbackUri.fragment.isNotEmpty) {
         try {
           params.addAll(Uri.splitQueryString(callbackUri.fragment));
         } catch (e) {
-          LoggerService.warning('OAuthService: Failed to parse fragment parameters: $e');
+          LoggerService.warning(
+            'OAuthService: Failed to parse fragment parameters: $e',
+          );
         }
       }
 
-      LoggerService.debug('OAuthService: Received deep link callback with params: $params');
+      LoggerService.debug(
+        'OAuthService: Received deep link callback with params: $params',
+      );
 
       final errorParam = params['error'];
-      final errorDescription = params['error_description'] ?? params['errorDescription'];
+      final errorDescription =
+          params['error_description'] ?? params['errorDescription'];
       if (errorParam != null) {
-        final message = 'Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}';
+        final message =
+            'Authorization server error: $errorParam${errorDescription != null ? ': $errorDescription' : ''}';
         if (!completer.isCompleted) {
           completer.completeError(Exception(message));
         }
@@ -868,7 +1033,9 @@ class OAuthService {
       final code = params['code'];
       if (code == null || code.isEmpty) {
         if (!completer.isCompleted) {
-          completer.completeError(Exception('Authorization response missing code'));
+          completer.completeError(
+            Exception('Authorization response missing code'),
+          );
         }
         return await completer.future;
       }
@@ -876,12 +1043,16 @@ class OAuthService {
       final returnedState = params['state'];
       if (returnedState != null && returnedState != state) {
         if (!completer.isCompleted) {
-          completer.completeError(Exception('Authorization response state mismatch'));
+          completer.completeError(
+            Exception('Authorization response state mismatch'),
+          );
         }
         return await completer.future;
       }
 
-      LoggerService.debug('OAuthService: Waiting for app foreground before token exchange...');
+      LoggerService.debug(
+        'OAuthService: Waiting for app foreground before token exchange...',
+      );
       await Future.delayed(const Duration(milliseconds: 800));
 
       final tokenBody = <String, String>{
@@ -890,7 +1061,9 @@ class OAuthService {
         'client_id': config.clientId,
         'redirect_uri': redirectUri,
       };
-      if (!config.usePkce && config.clientSecret != null && config.clientSecret!.isNotEmpty) {
+      if (!config.usePkce &&
+          config.clientSecret != null &&
+          config.clientSecret!.isNotEmpty) {
         tokenBody['client_secret'] = config.clientSecret!;
       }
       if (config.usePkce && verifier != null) {
@@ -899,14 +1072,18 @@ class OAuthService {
 
       try {
         final tokenUri = Uri.parse(config.tokenEndpoint);
-        LoggerService.debug('OAuthService: Exchanging code for token at ${tokenUri.toString()}');
+        LoggerService.debug(
+          'OAuthService: Exchanging code for token at ${tokenUri.toString()}',
+        );
         final tokenResp = await _postWithRetry(
           uri: tokenUri,
           body: tokenBody,
           headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         );
 
-        LoggerService.debug('OAuthService: Token exchange response status: ${tokenResp.statusCode}');
+        LoggerService.debug(
+          'OAuthService: Token exchange response status: ${tokenResp.statusCode}',
+        );
 
         if (tokenResp.statusCode >= 200 && tokenResp.statusCode < 300) {
           final tokenData = jsonDecode(tokenResp.body) as Map<String, dynamic>;
@@ -918,24 +1095,36 @@ class OAuthService {
           if (!completer.isCompleted) {
             completer.complete(tokenData);
           } else {
-            LoggerService.warning('OAuthService: Completer already completed, ignoring successful token response');
+            LoggerService.warning(
+              'OAuthService: Completer already completed, ignoring successful token response',
+            );
           }
         } else {
           LoggerService.error(
             'OAuthService: Token exchange failed with status ${tokenResp.statusCode}. Body: ${tokenResp.body}',
           );
           if (!completer.isCompleted) {
-            completer.completeError(Exception('Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}'));
+            completer.completeError(
+              Exception(
+                'Token exchange failed (${tokenResp.statusCode}): ${tokenResp.body}',
+              ),
+            );
           } else {
-            LoggerService.warning('OAuthService: Completer already completed, ignoring failed token response');
+            LoggerService.warning(
+              'OAuthService: Completer already completed, ignoring failed token response',
+            );
           }
         }
       } catch (e) {
         LoggerService.error('OAuthService: Token exchange error: $e');
         if (!completer.isCompleted) {
-          completer.completeError(Exception('Network error contacting token endpoint: $e'));
+          completer.completeError(
+            Exception('Network error contacting token endpoint: $e'),
+          );
         } else {
-          LoggerService.warning('OAuthService: Completer already completed, ignoring token exchange error');
+          LoggerService.warning(
+            'OAuthService: Completer already completed, ignoring token exchange error',
+          );
         }
       }
 
@@ -943,7 +1132,9 @@ class OAuthService {
       return result;
     } on TimeoutException catch (_) {
       if (!completer.isCompleted) {
-        completer.completeError(Exception('Timed out waiting for OAuth authorization response.'));
+        completer.completeError(
+          Exception('Timed out waiting for OAuth authorization response.'),
+        );
       }
       rethrow;
     } finally {
@@ -955,8 +1146,11 @@ class OAuthService {
       if (_activeLinkSubscription == subscription) {
         _activeLinkSubscription = null;
       }
-      if (_activeRedirectCompleter == redirectCompleter && !redirectCompleter.isCompleted) {
-        redirectCompleter.completeError(Exception('OAuth flow cancelled internally.'));
+      if (_activeRedirectCompleter == redirectCompleter &&
+          !redirectCompleter.isCompleted) {
+        redirectCompleter.completeError(
+          Exception('OAuth flow cancelled internally.'),
+        );
       }
       if (_activeRedirectCompleter == redirectCompleter) {
         _activeRedirectCompleter = null;
@@ -972,15 +1166,16 @@ class OAuthService {
 
   static bool _isDnsFailure(dynamic error) {
     if (error is SocketException) {
-      return error.message.contains('Failed host lookup') || 
-             error.message.contains('Name or service not known') ||
-             error.osError?.errorCode == 7; // errno = 7 is "No address associated with hostname"
+      return error.message.contains('Failed host lookup') ||
+          error.message.contains('Name or service not known') ||
+          error.osError?.errorCode ==
+              7; // errno = 7 is "No address associated with hostname"
     }
     if (error is http.ClientException) {
       final msg = error.toString().toLowerCase();
-      return msg.contains('failed host lookup') || 
-             msg.contains('no address associated with hostname') ||
-             (error.uri != null && error.toString().contains('SocketException'));
+      return msg.contains('failed host lookup') ||
+          msg.contains('no address associated with hostname') ||
+          (error.uri != null && error.toString().contains('SocketException'));
     }
     return false;
   }
@@ -995,7 +1190,7 @@ class OAuthService {
   }) async {
     // Give Android DNS a brief moment to stabilize (already waited before calling this)
     await Future.delayed(const Duration(milliseconds: 200));
-    
+
     var attempt = 0;
     Duration delayForAttempt(int attemptCount, bool isDns) {
       if (isDns) {
@@ -1015,16 +1210,18 @@ class OAuthService {
       try {
         attempt++;
         client = http.Client();
-        LoggerService.debug('OAuthService: Token request attempt $attempt/$maxAttempts to ${uri.toString()}');
-        
+        LoggerService.debug(
+          'OAuthService: Token request attempt $attempt/$maxAttempts to ${uri.toString()}',
+        );
+
         final response = await client
             .post(uri, headers: headers, body: body)
             .timeout(timeout);
-        
+
         LoggerService.info(
           'OAuthService: Token request attempt $attempt succeeded with status ${response.statusCode}',
         );
-        
+
         // Close client on success
         client.close();
         return response;
@@ -1103,8 +1300,9 @@ class OAuthService {
         await Future.delayed(delayForAttempt(attempt, false));
       }
     }
-    
-    throw lastError ?? Exception('Token request failed after $maxAttempts attempts');
+
+    throw lastError ??
+        Exception('Token request failed after $maxAttempts attempts');
   }
 
   static String _codeVerifier() {
@@ -1122,5 +1320,3 @@ class OAuthService {
 String _base64UrlNoPad(List<int> bytes) {
   return base64Url.encode(bytes).replaceAll('=', '');
 }
-
-

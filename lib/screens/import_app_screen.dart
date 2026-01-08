@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yaml/yaml.dart';
-import 'package:http/http.dart' as http;
+
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/network_provider.dart';
 
 class ImportAppScreen extends StatefulWidget {
   final String yamlFilePath;
@@ -477,7 +478,7 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         });
 
         try {
-          final response = await http.get(Uri.parse(link));
+          final response = await NetworkProvider.get(Uri.parse(link));
           if (response.statusCode == 200) {
             final bytes = response.bodyBytes;
             final localPath = Uri.parse(link).path;

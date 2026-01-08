@@ -118,6 +118,26 @@
   "systemSubtitle": "系统行为设置",
   "keepScreenOn": "保持屏幕常亮",
   "keepScreenOnSubtitle": "防止屏幕自动关闭",
+  "network": "网络",
+  "networkSubtitle": "HTTP协议与重试设置",
+  "protocolPreference": "协议偏好",
+  "protocolPreferenceSubtitle": "选择网络请求的HTTP协议模式",
+  "protocolAuto": "自动（升级到HTTP/3）",
+  "protocolHttp3Only": "仅HTTP/3",
+  "protocolHttp11Only": "仅HTTP/1.1",
+  "retryCount": "重试次数",
+  "retryCountSubtitle": "请求失败时的重试次数（0-5）",
+  "backoffBase": "退避基数",
+  "backoffBaseSubtitle": "指数退避的基础延迟秒数（1-10）",
+  "retryPattern": "重试间隔：{base}秒 → {second}秒 → {third}秒",
+  "@retryPattern": {
+    "placeholders": {
+      "base": {"type": "String"},
+      "second": {"type": "String"},
+      "third": {"type": "String"}
+    }
+  },
+  "networkSettingsUpdated": "网络设置已更新",
   "errorChangingLanguage": "更改语言时出错：{error}",
   "selected": "已选择",
   "linkSelectedNotes": "链接选中的笔记",

@@ -19,6 +19,8 @@ import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
 import '../services/wake_lock_service.dart' as wake_lock;
+import '../services/network_settings_service.dart';
+import '../services/network_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1334,6 +1336,307 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
                     value: _keepScreenOn,
                     onChanged: _toggleKeepScreenOn,
                     secondary: const Icon(Icons.brightness_7),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.wifi),
+                    title: Text(l10n.network),
+                    subtitle: Text(l10n.networkSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NetworkSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class NetworkSettingsScreen extends StatefulWidget {
+  const NetworkSettingsScreen({super.key});
+
+  @override
+  State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
+}
+
+class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
+  NetworkProtocolPreference _protocolPreference =
+      NetworkSettingsService.defaultProtocolPreference;
+  int _retryCount = NetworkSettingsService.defaultRetryCount;
+  int _backoffBase = NetworkSettingsService.defaultBackoffBase;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final protocol = await NetworkSettingsService.getProtocolPreference();
+    final retryCount = await NetworkSettingsService.getRetryCount();
+    final backoffBase = await NetworkSettingsService.getBackoffBase();
+    if (mounted) {
+      setState(() {
+        _protocolPreference = protocol;
+        _retryCount = retryCount;
+        _backoffBase = backoffBase;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateProtocolPreference(
+    NetworkProtocolPreference preference,
+  ) async {
+    setState(() {
+      _protocolPreference = preference;
+    });
+    await NetworkSettingsService.setProtocolPreference(preference);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateRetryCount(int count) async {
+    setState(() {
+      _retryCount = count;
+    });
+    await NetworkSettingsService.setRetryCount(count);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateBackoffBase(int seconds) async {
+    setState(() {
+      _backoffBase = seconds;
+    });
+    await NetworkSettingsService.setBackoffBase(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  String _getProtocolLabel(NetworkProtocolPreference preference) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (preference) {
+      case NetworkProtocolPreference.auto:
+        return l10n.protocolAuto;
+      case NetworkProtocolPreference.http3Only:
+        return l10n.protocolHttp3Only;
+      case NetworkProtocolPreference.http11Only:
+        return l10n.protocolHttp11Only;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.network)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Protocol Preference
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.speed),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.protocolPreference,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.protocolPreferenceSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<NetworkProtocolPreference>(
+                          value: _protocolPreference,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          items: NetworkProtocolPreference.values
+                              .map(
+                                (p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(_getProtocolLabel(p)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _updateProtocolPreference(value);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Retry Count
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.repeat),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.retryCount,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.retryCountSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '$_retryCount',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _retryCount.toDouble(),
+                          min: NetworkSettingsService.minRetryCount.toDouble(),
+                          max: NetworkSettingsService.maxRetryCount.toDouble(),
+                          divisions:
+                              NetworkSettingsService.maxRetryCount -
+                              NetworkSettingsService.minRetryCount,
+                          label: '$_retryCount',
+                          onChanged: (value) {
+                            setState(() {
+                              _retryCount = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateRetryCount(value.round()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Backoff Base
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.backoffBase,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.backoffBaseSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_backoffBase}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _backoffBase.toDouble(),
+                          min: NetworkSettingsService.minBackoffBase.toDouble(),
+                          max: NetworkSettingsService.maxBackoffBase.toDouble(),
+                          divisions:
+                              NetworkSettingsService.maxBackoffBase -
+                              NetworkSettingsService.minBackoffBase,
+                          label: '${_backoffBase}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _backoffBase = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateBackoffBase(value.round()),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.retryPattern(
+                            _backoffBase.toString(),
+                            (_backoffBase * 2).toString(),
+                            (_backoffBase * 4).toString(),
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

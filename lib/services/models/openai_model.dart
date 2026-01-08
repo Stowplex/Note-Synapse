@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
+
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
+import '../network_provider.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -684,7 +685,7 @@ class OpenAIModel implements AIModel {
       requestId: requestId,
     );
 
-    final response = await http.post(
+    final response = await NetworkProvider.post(
       Uri.parse(_config!.endpoint!),
       headers: {
         'Content-Type': 'application/json',
@@ -763,7 +764,7 @@ class OpenAIModel implements AIModel {
       requestId: requestId,
     );
 
-    final response = await http.post(
+    final response = await NetworkProvider.post(
       Uri.parse(_config!.endpoint!),
       headers: {
         'Content-Type': 'application/json',

@@ -412,6 +412,50 @@ class AppLocalizationsEn extends AppLocalizations {
       'Prevent screen from turning off automatically';
 
   @override
+  String get network => 'Network';
+
+  @override
+  String get networkSubtitle => 'HTTP protocol and retry settings';
+
+  @override
+  String get protocolPreference => 'Protocol Preference';
+
+  @override
+  String get protocolPreferenceSubtitle =>
+      'Choose HTTP protocol mode for network requests';
+
+  @override
+  String get protocolAuto => 'Auto (Upgrade to HTTP/3)';
+
+  @override
+  String get protocolHttp3Only => 'HTTP/3 Only';
+
+  @override
+  String get protocolHttp11Only => 'HTTP/1.1 Only';
+
+  @override
+  String get retryCount => 'Retry Count';
+
+  @override
+  String get retryCountSubtitle =>
+      'Number of retry attempts for failed requests (0-5)';
+
+  @override
+  String get backoffBase => 'Backoff Base';
+
+  @override
+  String get backoffBaseSubtitle =>
+      'Base delay for exponential backoff in seconds (1-10)';
+
+  @override
+  String retryPattern(String base, String second, String third) {
+    return 'Retry delays: ${base}s → ${second}s → ${third}s';
+  }
+
+  @override
+  String get networkSettingsUpdated => 'Network settings updated';
+
+  @override
   String errorChangingLanguage(Object error) {
     return 'Error changing language: $error';
   }

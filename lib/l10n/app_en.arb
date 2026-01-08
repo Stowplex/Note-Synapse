@@ -118,6 +118,26 @@
   "systemSubtitle": "System behavior settings",
   "keepScreenOn": "Keep Screen On",
   "keepScreenOnSubtitle": "Prevent screen from turning off automatically",
+  "network": "Network",
+  "networkSubtitle": "HTTP protocol and retry settings",
+  "protocolPreference": "Protocol Preference",
+  "protocolPreferenceSubtitle": "Choose HTTP protocol mode for network requests",
+  "protocolAuto": "Auto (Upgrade to HTTP/3)",
+  "protocolHttp3Only": "HTTP/3 Only",
+  "protocolHttp11Only": "HTTP/1.1 Only",
+  "retryCount": "Retry Count",
+  "retryCountSubtitle": "Number of retry attempts for failed requests (0-5)",
+  "backoffBase": "Backoff Base",
+  "backoffBaseSubtitle": "Base delay for exponential backoff in seconds (1-10)",
+  "retryPattern": "Retry delays: {base}s → {second}s → {third}s",
+  "@retryPattern": {
+    "placeholders": {
+      "base": {"type": "String"},
+      "second": {"type": "String"},
+      "third": {"type": "String"}
+    }
+  },
+  "networkSettingsUpdated": "Network settings updated",
   "errorChangingLanguage": "Error changing language: {error}",
   "selected": "selected",
   "linkSelectedNotes": "Link Selected Notes",

@@ -402,6 +402,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get keepScreenOnSubtitle => '防止屏幕自动关闭';
 
   @override
+  String get network => '网络';
+
+  @override
+  String get networkSubtitle => 'HTTP协议与重试设置';
+
+  @override
+  String get protocolPreference => '协议偏好';
+
+  @override
+  String get protocolPreferenceSubtitle => '选择网络请求的HTTP协议模式';
+
+  @override
+  String get protocolAuto => '自动（升级到HTTP/3）';
+
+  @override
+  String get protocolHttp3Only => '仅HTTP/3';
+
+  @override
+  String get protocolHttp11Only => '仅HTTP/1.1';
+
+  @override
+  String get retryCount => '重试次数';
+
+  @override
+  String get retryCountSubtitle => '请求失败时的重试次数（0-5）';
+
+  @override
+  String get backoffBase => '退避基数';
+
+  @override
+  String get backoffBaseSubtitle => '指数退避的基础延迟秒数（1-10）';
+
+  @override
+  String retryPattern(String base, String second, String third) {
+    return '重试间隔：$base秒 → $second秒 → $third秒';
+  }
+
+  @override
+  String get networkSettingsUpdated => '网络设置已更新';
+
+  @override
   String errorChangingLanguage(Object error) {
     return '更改语言时出错：$error';
   }

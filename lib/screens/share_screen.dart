@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:html2md/html2md.dart';
-import 'package:http/http.dart' as http;
+
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -17,6 +17,7 @@ import '../services/content_ingestion_service.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/media_attachment_service.dart';
+import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
@@ -1741,7 +1742,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _status = l10n.webExtractionStatusCheckingFileType;
         });
         try {
-          final headResponse = await http.head(Uri.parse(widget.url));
+          final headResponse = await NetworkProvider.head(
+            Uri.parse(widget.url),
+          );
           if (headResponse.statusCode == 200) {
             detectedContentType = headResponse.headers['content-type']
                 ?.toLowerCase();
@@ -1809,7 +1812,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
 
         try {
-          final response = await http.get(Uri.parse(widget.url));
+          final response = await NetworkProvider.get(Uri.parse(widget.url));
           if (response.statusCode == 200) {
             final content = response.body;
 
@@ -1906,7 +1909,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
 
         try {
-          final response = await http.get(Uri.parse(widget.url));
+          final response = await NetworkProvider.get(Uri.parse(widget.url));
 
           if (response.statusCode == 200) {
             final responseContentType =
