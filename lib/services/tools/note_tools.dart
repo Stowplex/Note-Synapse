@@ -1,7 +1,13 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
 import '../database_service.dart';
 import '../note_modification_service.dart';
+import '../logger_service.dart';
+import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
 import '../../models/generation_context.dart';
@@ -68,13 +74,19 @@ class NoteReadTool implements NativeTool {
 
   @override
   String get description => '''
-Read the content of a specific note. Supports granular reading modes:
-- 'full' (default):
-    - If `extraction_guide` is provided: Uses an AI model to extract specific information from the note AND its attachments based on your guide. Use this for efficient reading.
-    - If NO `extraction_guide`: Returns the textual note content and a list of attachment paths.
-    - HINT: If you read a note and see it has 'attachments' that you need to analyze, call this tool again WITH an `extraction_guide` describing what you need from them.
-- 'summary': Returns the note's summary block or first 500 chars.
-- 'toc': Returns the Table of Contents (headers).
+Read a note with progressive discovery modes:
+- 'stat' (default): Returns metadata including line count, attachment info with sizes/pages, PDF ToCs with real page numbers, and linked notes. Use this FIRST to understand the note structure.
+- 'lines': Read specific line range. Provide start_line and end_line (1-indexed, inclusive).
+- 'pdf_pages': Read specific pages from a PDF attachment as images. Provide attachment name, start_page and end_page (1-indexed).
+- 'summary': Returns summary block or first 500 chars.
+- 'toc': Returns table of contents (headers from markdown).
+- 'full': Returns full text content. If extraction_guide is provided, uses AI to extract info from content and specified attachments.
+
+Progressive discovery workflow:
+1. Call with mode='stat' to see note structure and attachment sizes
+2. Use mode='lines' or 'toc' to explore content sections
+3. Use mode='pdf_pages' to read specific PDF pages
+4. Use mode='full' with extraction_guide only when you need AI analysis of large attachments
 ''';
 
   @override
@@ -87,14 +99,44 @@ Read the content of a specific note. Supports granular reading modes:
       },
       'mode': {
         'type': 'string',
-        'enum': ['full', 'summary', 'toc'],
-        'description': 'Reading mode. Defaults to "full".',
-        'default': 'full',
+        'enum': ['stat', 'lines', 'pdf_pages', 'summary', 'toc', 'full'],
+        'description':
+            'Reading mode. Defaults to "stat" for progressive discovery.',
+        'default': 'stat',
+      },
+      'start_line': {
+        'type': 'integer',
+        'description': 'For "lines" mode: starting line number (1-indexed).',
+      },
+      'end_line': {
+        'type': 'integer',
+        'description':
+            'For "lines" mode: ending line number (1-indexed, inclusive).',
+      },
+      'attachment': {
+        'type': 'string',
+        'description': 'For "pdf_pages" mode: the attachment filename.',
+      },
+      'start_page': {
+        'type': 'integer',
+        'description':
+            'For "pdf_pages" mode: starting page number (1-indexed).',
+      },
+      'end_page': {
+        'type': 'integer',
+        'description':
+            'For "pdf_pages" mode: ending page number (1-indexed, inclusive).',
       },
       'extraction_guide': {
         'type': 'string',
         'description':
-            'Optional. If provided, uses AI to extract specific info from note and attachments.',
+            'For "full" mode: AI extraction guidance for analyzing note and attachments.',
+      },
+      'attachments': {
+        'type': 'array',
+        'items': {'type': 'string'},
+        'description':
+            'For "full" mode with extraction_guide: filter to specific attachment names.',
       },
     },
     'required': ['note_id'],
@@ -103,53 +145,373 @@ Read the content of a specific note. Supports granular reading modes:
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final noteId = args['note_id'] as String;
-    final mode = args['mode'] as String? ?? 'full';
-    final extractionGuide = args['extraction_guide'] as String?;
+    final mode = args['mode'] as String? ?? 'stat';
 
     final note = await _db.getNoteById(noteId);
-
     if (note == null) {
       return {'error': 'Note not found'};
     }
 
-    if (mode == 'summary') {
-      // Return custom summary block if exists, else first 500 chars
-      final summaryMatch = RegExp(
-        r'> \[!SUMMARY\]\n(.*?)(?=\n\n|$)',
-      ).firstMatch(note.content);
-      if (summaryMatch != null) {
-        return {'summary': summaryMatch.group(1)};
+    switch (mode) {
+      case 'stat':
+        return await _executeStat(note);
+      case 'lines':
+        return await _executeLines(note, args);
+      case 'pdf_pages':
+        return await _executePdfPages(note, args);
+      case 'summary':
+        return _executeSummary(note);
+      case 'toc':
+        return _executeToc(note);
+      case 'full':
+        return await _executeFull(note, args);
+      default:
+        return {'error': 'Unknown mode: $mode'};
+    }
+  }
+
+  /// Stat mode: Return comprehensive metadata for progressive discovery
+  Future<Map<String, dynamic>> _executeStat(note) async {
+    final lines = note.content.split('\n');
+    final lineCount = lines.length;
+
+    // Get attachments with detailed info
+    final attachmentInfos = <Map<String, dynamic>>[];
+    for (final path in note.attachmentPaths) {
+      final info = await _getAttachmentInfo(path);
+      if (info != null) {
+        attachmentInfos.add(info);
       }
-      return {'preview': note.content.take(500)};
-    } else if (mode == 'toc') {
-      // Extract headers
-      final headers = RegExp(r'^(#{1,6})\s+(.+)$', multiLine: true)
-          .allMatches(note.content)
-          .map((m) => {'level': m.group(1)!.length, 'text': m.group(2)})
-          .toList();
-      return {'toc': headers};
-    } else {
-      // Mode is 'full'
-      if (extractionGuide != null && extractionGuide.isNotEmpty) {
-        // AI Extraction Mode
+    }
+
+    // Get linked notes
+    final relationships = await _db.getRelationships(note.id);
+    final linkedNotes = <Map<String, dynamic>>[];
+    for (final rel in relationships) {
+      final linkedId = rel.fromNoteId == note.id
+          ? rel.toNoteId
+          : rel.fromNoteId;
+      final linkedNote = await _db.getNoteById(linkedId);
+      if (linkedNote != null) {
+        final direction = rel.fromNoteId == note.id ? '→' : '←';
+        linkedNotes.add({
+          'id': linkedNote.id,
+          'title': linkedNote.title,
+          'relation': '${rel.type} $direction',
+        });
+      }
+    }
+
+    return {
+      'id': note.id,
+      'title': note.title,
+      'line_count': lineCount,
+      'tags': note.tags,
+      'attachments': attachmentInfos,
+      'linked_notes': linkedNotes,
+      'subnotes': note.subNotes.map((s) => s.name).toList(),
+      'updated_at': note.updatedAt.toIso8601String(),
+      'hint':
+          'Use mode="lines" to read specific line ranges, mode="pdf_pages" to read PDF pages, or mode="toc" for headers.',
+    };
+  }
+
+  /// Get attachment info including PDF ToC with real page numbers
+  Future<Map<String, dynamic>?> _getAttachmentInfo(String path) async {
+    try {
+      final fullPath = await FileUtils.getFullFilePath(
+        path,
+        !path.startsWith('/'),
+      );
+      final file = File(fullPath);
+      if (!await file.exists()) {
+        return {'name': path.split('/').last, 'error': 'File not found'};
+      }
+
+      final fileName = path.split('/').last;
+      final extension = fileName.split('.').last.toLowerCase();
+      final sizeBytes = await file.length();
+      final sizeKb = (sizeBytes / 1024).round();
+
+      final info = <String, dynamic>{
+        'name': fileName,
+        'type': extension,
+        'size_kb': sizeKb,
+      };
+
+      // For PDFs, get page count and ToC
+      if (extension == 'pdf') {
         try {
-          final attachments = <PlatformFile>[];
-          for (final path in note.attachmentPaths) {
-            final file = File(path);
-            if (await file.exists()) {
-              attachments.add(
-                PlatformFile(
-                  name: path.split('/').last,
-                  path: path,
-                  size: await file.length(),
-                  bytes: await file.readAsBytes(),
-                ),
-              );
-            }
+          // Ensure Pdfrx cache directory is set
+          Pdfrx.getCacheDirectory ??= () async {
+            final tempDir = await getTemporaryDirectory();
+            return tempDir.path;
+          };
+
+          final pdfDoc = await PdfDocument.openFile(fullPath);
+          info['pages'] = pdfDoc.pages.length;
+
+          // Extract ToC with real page destinations
+          final outline = await pdfDoc.loadOutline();
+          if (outline.isNotEmpty) {
+            info['toc'] = _extractToc(outline, pdfDoc.pages.length);
           }
 
-          final prompt =
-              '''
+          pdfDoc.dispose();
+        } catch (e) {
+          LoggerService.warning('Failed to read PDF info: $e');
+          info['pdf_error'] = 'Could not read PDF metadata';
+        }
+      }
+
+      return info;
+    } catch (e) {
+      return {'name': path.split('/').last, 'error': e.toString()};
+    }
+  }
+
+  /// Extract PDF ToC with real page numbers (from dest.pageNumber)
+  List<Map<String, dynamic>> _extractToc(
+    List<PdfOutlineNode> nodes,
+    int totalPages, [
+    int depth = 0,
+  ]) {
+    final result = <Map<String, dynamic>>[];
+    for (final node in nodes) {
+      // Use real destination page number (0-indexed, convert to 1-indexed)
+      final pageNum = node.dest?.pageNumber != null
+          ? (node.dest!.pageNumber + 1).clamp(1, totalPages)
+          : null;
+
+      result.add({
+        'title': node.title,
+        'page': pageNum,
+        if (depth > 0) 'depth': depth,
+      });
+
+      // Recursively add children (limit depth to avoid huge ToCs)
+      if (node.children.isNotEmpty && depth < 2) {
+        result.addAll(_extractToc(node.children, totalPages, depth + 1));
+      }
+    }
+    return result;
+  }
+
+  /// Lines mode: Return specific line range
+  Future<Map<String, dynamic>> _executeLines(
+    note,
+    Map<String, dynamic> args,
+  ) async {
+    final lines = note.content.split('\n');
+    final totalLines = lines.length;
+
+    final startLine = (args['start_line'] as int?) ?? 1;
+    final endLine = (args['end_line'] as int?) ?? totalLines.clamp(1, 50);
+
+    // Validate and clamp
+    final actualStart = startLine.clamp(1, totalLines);
+    final actualEnd = endLine.clamp(actualStart, totalLines);
+
+    // Lines are 1-indexed, list is 0-indexed
+    final selectedLines = lines.sublist(actualStart - 1, actualEnd);
+
+    return {
+      'id': note.id,
+      'title': note.title,
+      'lines': selectedLines.join('\n'),
+      'start_line': actualStart,
+      'end_line': actualEnd,
+      'total_lines': totalLines,
+    };
+  }
+
+  /// PDF pages mode: Render specific pages as images
+  Future<dynamic> _executePdfPages(note, Map<String, dynamic> args) async {
+    final attachmentName = args['attachment'] as String?;
+    if (attachmentName == null) {
+      return {'error': 'attachment parameter is required for pdf_pages mode'};
+    }
+
+    final startPage = (args['start_page'] as int?) ?? 1;
+    final endPage = (args['end_page'] as int?) ?? startPage;
+
+    // Find the attachment path
+    String? attachmentPath;
+    for (final path in note.attachmentPaths) {
+      if (path.split('/').last == attachmentName) {
+        attachmentPath = path;
+        break;
+      }
+    }
+
+    if (attachmentPath == null) {
+      return {'error': 'Attachment not found: $attachmentName'};
+    }
+
+    // Validate that the attachment is a PDF
+    final extension = attachmentName.split('.').last.toLowerCase();
+    if (extension != 'pdf') {
+      return {
+        'error':
+            'Attachment "$attachmentName" is not a PDF (type: $extension). Use pdf_pages mode only for PDF attachments.',
+      };
+    }
+
+    try {
+      final fullPath = await FileUtils.getFullFilePath(
+        attachmentPath,
+        !attachmentPath.startsWith('/'),
+      );
+
+      // Ensure Pdfrx cache directory is set
+      Pdfrx.getCacheDirectory ??= () async {
+        final tempDir = await getTemporaryDirectory();
+        return tempDir.path;
+      };
+
+      final pdfDoc = await PdfDocument.openFile(fullPath);
+      final totalPages = pdfDoc.pages.length;
+
+      final actualStart = startPage.clamp(1, totalPages);
+      final actualEnd = endPage.clamp(actualStart, totalPages);
+
+      // Render pages as images and collect as PlatformFile attachments
+      final pageImages = <PlatformFile>[];
+      for (int pageNum = actualStart; pageNum <= actualEnd; pageNum++) {
+        final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
+
+        // Render at 2x resolution for clarity
+        final renderWidth = (page.width * 2).toInt();
+        final renderHeight = (page.height * 2).toInt();
+
+        final pdfImage = await page.render(
+          width: renderWidth,
+          height: renderHeight,
+        );
+
+        if (pdfImage != null) {
+          final uiImage = await pdfImage.createImage();
+          final byteData = await uiImage.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
+
+          if (byteData != null) {
+            final pngBytes = byteData.buffer.asUint8List();
+            pageImages.add(
+              PlatformFile(
+                name: '${attachmentName}_page$pageNum.png',
+                path: null,
+                size: pngBytes.length,
+                bytes: Uint8List.fromList(pngBytes),
+              ),
+            );
+          }
+          uiImage.dispose();
+        }
+      }
+
+      pdfDoc.dispose();
+
+      if (pageImages.isEmpty) {
+        return {'error': 'Failed to render PDF pages'};
+      }
+
+      // Use AI to describe the pages or return as attachments for the LLM
+      final prompt =
+          '''
+Describe the content of these PDF pages (${pageImages.length} page(s) from "$attachmentName", pages $actualStart-$actualEnd).
+Provide a detailed summary of what you see on each page.
+''';
+
+      final aiResponse = await AIService.generateWithAttachments(
+        prompt,
+        pageImages,
+        generationContext: GenerationContext(
+          values: {'type': 'pdf_page_extraction', 'noteId': note.id},
+        ),
+      );
+
+      return {
+        'id': note.id,
+        'attachment': attachmentName,
+        'pages_read': '$actualStart-$actualEnd',
+        'total_pages': totalPages,
+        'content': aiResponse,
+      };
+    } catch (e) {
+      LoggerService.error('Failed to read PDF pages: $e');
+      return {'error': 'Failed to read PDF pages: $e'};
+    }
+  }
+
+  /// Summary mode: Return summary block or preview
+  Map<String, dynamic> _executeSummary(note) {
+    final summaryMatch = RegExp(
+      r'> \[!SUMMARY\]\n(.*?)(?=\n\n|$)',
+    ).firstMatch(note.content);
+    if (summaryMatch != null) {
+      return {
+        'id': note.id,
+        'title': note.title,
+        'summary': summaryMatch.group(1),
+      };
+    }
+    return {
+      'id': note.id,
+      'title': note.title,
+      'preview': note.content.take(500),
+    };
+  }
+
+  /// ToC mode: Extract headers
+  Map<String, dynamic> _executeToc(note) {
+    final headers = RegExp(r'^(#{1,6})\s+(.+)$', multiLine: true)
+        .allMatches(note.content)
+        .map((m) => {'level': m.group(1)!.length, 'text': m.group(2)})
+        .toList();
+    return {'id': note.id, 'title': note.title, 'toc': headers};
+  }
+
+  /// Full mode: Return content with optional AI extraction
+  Future<Map<String, dynamic>> _executeFull(
+    note,
+    Map<String, dynamic> args,
+  ) async {
+    final extractionGuide = args['extraction_guide'] as String?;
+    final attachmentFilter = (args['attachments'] as List?)?.cast<String>();
+
+    if (extractionGuide != null && extractionGuide.isNotEmpty) {
+      // AI Extraction Mode
+      try {
+        final attachments = <PlatformFile>[];
+        for (final path in note.attachmentPaths) {
+          final fileName = path.split('/').last;
+
+          // Apply filter if specified
+          if (attachmentFilter != null &&
+              !attachmentFilter.contains(fileName)) {
+            continue;
+          }
+
+          final fullPath = await FileUtils.getFullFilePath(
+            path,
+            !path.startsWith('/'),
+          );
+          final file = File(fullPath);
+          if (await file.exists()) {
+            attachments.add(
+              PlatformFile(
+                name: fileName,
+                path: fullPath,
+                size: await file.length(),
+                bytes: await file.readAsBytes(),
+              ),
+            );
+          }
+        }
+
+        final prompt =
+            '''
 Analyze the following note and its attachments based on the Extraction Guide.
 
 Note Title: ${note.title}
@@ -160,36 +522,37 @@ Extraction Guide:
 $extractionGuide
 ''';
 
-          final aiResponse = await AIService.generateWithAttachments(
-            prompt,
-            attachments,
-            generationContext: GenerationContext(
-              values: {'type': 'tool_extraction', 'noteId': note.id},
-            ),
-          );
+        final aiResponse = await AIService.generateWithAttachments(
+          prompt,
+          attachments,
+          generationContext: GenerationContext(
+            values: {'type': 'tool_extraction', 'noteId': note.id},
+          ),
+        );
 
-          return {'id': note.id, 'title': note.title, 'extraction': aiResponse};
-        } catch (e) {
-          return {
-            'error': 'Failed to perform AI extraction: $e',
-            'content': note.content, // Fallback
-          };
-        }
-      } else {
-        // Standard Full Read
+        return {'id': note.id, 'title': note.title, 'extraction': aiResponse};
+      } catch (e) {
         return {
-          'id': note.id,
-          'title': note.title,
-          'content': note.content,
-          'attachments': note.attachmentPaths,
-          'hint':
-              'To analyze attachments, recall read_note with an extraction_guide.',
-          'metadata': {
-            'tags': note.tags,
-            'updatedAt': note.updatedAt.toIso8601String(),
-          },
+          'error': 'Failed to perform AI extraction: $e',
+          'content': note.content, // Fallback
         };
       }
+    } else {
+      // Standard Full Read - no AI, just return content and paths
+      return {
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'attachments': note.attachmentPaths
+            .map((p) => p.split('/').last)
+            .toList(),
+        'hint':
+            'Use mode="stat" for attachment details, or provide extraction_guide to analyze with AI.',
+        'metadata': {
+          'tags': note.tags,
+          'updatedAt': note.updatedAt.toIso8601String(),
+        },
+      };
     }
   }
 }
