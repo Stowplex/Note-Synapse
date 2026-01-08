@@ -296,6 +296,36 @@ abstract class AppLocalizations {
   /// **'Maximum words per finding\'s bullet point details.'**
   String get findingMaxWordsDescription;
 
+  /// No description provided for @maxTurns.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Turns'**
+  String get maxTurns;
+
+  /// No description provided for @maxTurnsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of iterations allowed per task.'**
+  String get maxTurnsDescription;
+
+  /// No description provided for @turnIncrement.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Increment'**
+  String get turnIncrement;
+
+  /// No description provided for @turnIncrementDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of turns to add when resuming a paused task.'**
+  String get turnIncrementDescription;
+
+  /// No description provided for @turnsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} turns'**
+  String turnsValue(Object count);
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:

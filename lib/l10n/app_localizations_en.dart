@@ -126,6 +126,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Maximum words per finding\'s bullet point details.';
 
   @override
+  String get maxTurns => 'Max Turns';
+
+  @override
+  String get maxTurnsDescription =>
+      'Maximum number of iterations allowed per task.';
+
+  @override
+  String get turnIncrement => 'Turn Increment';
+
+  @override
+  String get turnIncrementDescription =>
+      'Number of turns to add when resuming a paused task.';
+
+  @override
+  String turnsValue(Object count) {
+    return '$count turns';
+  }
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override

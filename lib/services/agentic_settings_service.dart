@@ -11,11 +11,15 @@ class AgenticSettingsService {
   static const String _compactionThresholdKey = 'agentic_compaction_threshold';
   static const String _findingLimitKey = 'agentic_finding_limit';
   static const String _findingMaxWordsKey = 'agentic_finding_max_words';
+  static const String _maxTurnsKey = 'agentic_max_turns';
+  static const String _turnIncrementKey = 'agentic_turn_increment';
 
   // Defaults
   static const int defaultCompactionThreshold = 100000;
   static const int defaultFindingLimit = 10;
   static const int defaultFindingMaxWords = 500;
+  static const int defaultMaxTurns = 10;
+  static const int defaultTurnIncrement = 10;
 
   // Constraints
   static const int minCompactionThreshold = 10000;
@@ -24,6 +28,10 @@ class AgenticSettingsService {
   static const int maxFindingLimit = 50;
   static const int minFindingMaxWords = 100;
   static const int maxFindingMaxWords = 2000;
+  static const int minMaxTurns = 1;
+  static const int maxMaxTurns = 100;
+  static const int minTurnIncrement = 5;
+  static const int maxTurnIncrement = 30;
 
   // ==========================================================================
   // Compaction Threshold
@@ -139,6 +147,84 @@ class AgenticSettingsService {
     } catch (e, stackTrace) {
       LoggerService.error(
         'Failed to save finding max words: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // ==========================================================================
+  // Max Turns
+  // ==========================================================================
+
+  /// Gets the maximum number of turns for an agent task.
+  static Future<int> getMaxTurns() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_maxTurnsKey);
+      if (stored == null) {
+        return defaultMaxTurns;
+      }
+      return stored.clamp(minMaxTurns, maxMaxTurns);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to read max turns: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return defaultMaxTurns;
+    }
+  }
+
+  /// Sets the maximum number of turns for an agent task.
+  static Future<void> setMaxTurns(int value) async {
+    final sanitized = value.clamp(minMaxTurns, maxMaxTurns);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_maxTurnsKey, sanitized);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to save max turns: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // ==========================================================================
+  // Turn Increment
+  // ==========================================================================
+
+  /// Gets the number of turns to add when resuming a paused task.
+  static Future<int> getTurnIncrement() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_turnIncrementKey);
+      if (stored == null) {
+        return defaultTurnIncrement;
+      }
+      return stored.clamp(minTurnIncrement, maxTurnIncrement);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to read turn increment: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return defaultTurnIncrement;
+    }
+  }
+
+  /// Sets the number of turns to add when resuming a paused task.
+  static Future<void> setTurnIncrement(int value) async {
+    final sanitized = value.clamp(minTurnIncrement, maxTurnIncrement);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_turnIncrementKey, sanitized);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to save turn increment: $e',
         error: e,
         stackTrace: stackTrace,
       );

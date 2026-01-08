@@ -594,32 +594,33 @@ $sourceContent
 
 1. Extract ONLY verifiable facts with clear sources
 2. Each finding MUST have:
-   - fact: A specific data point, statistic, or claim (1-2 sentences)
+   - finding: A specific data point, statistic, or claim (1-2 sentences, max $maxWords words)
    - source: The organization or publication name (e.g., "CDC", "USDA", "NSF 2024")
    - url: The actual URL if mentioned in the observations, otherwise use empty string ""
-   - details: An array of 1-5 bullet points with supporting details, context, or related data (max $maxWords words total)
+   - artifacts: An array of structured data objects associated with this finding. Each artifact must have:
+     - type: "bulletpoint", "text", "code", or "image"
+     - content: The actual content. For "image", this MUST be a URI (e.g., synapseresource://... or https://...), NOT base64.
+   - (The total word count for finding + artifacts should be around $maxWords words)
 
 3. CRITICAL: URLs are present in the observations - extract them accurately
 4. Do NOT use placeholders like "Not specified" or "Unspecified" for URLs
 5. If no URL is available, use empty string: "url": ""
 6. Maximum $findingLimit findings per task
-7. Each finding's details should expand on the fact with specific supporting information
+7. Use artifacts to preserve rich data like code snippets, detailed lists, or resource URIs.
 
 ## OUTPUT FORMAT
 
 Return ONLY valid JSON array:
 [
   {
-    "fact": "Specific finding with numbers",
+    "finding": "Specific finding with numbers",
     "source": "Organization Name",
     "url": "https://...",
-    "details": ["Supporting detail 1", "Additional context", "Related statistic"]
-  },
-  {
-    "fact": "Another finding",
-    "source": "Report Name 2024",
-    "url": "",
-    "details": ["Key insight from this finding"]
+    "artifacts": [
+      {"type": "bulletpoint", "content": "Supporting detail 1"},
+      {"type": "code", "content": "print('hello world')"},
+      {"type": "image", "content": "synapseresource://note/123/attachment/1.png"}
+    ]
   }
 ]
 
@@ -675,20 +676,31 @@ If no findings worth preserving, return: []
           url = '';
         }
 
-        // Parse details as a list of strings
-        List<String> details = [];
-        if (map['details'] != null && map['details'] is List) {
-          details = (map['details'] as List)
-              .map((d) => d.toString().trim())
-              .where((d) => d.isNotEmpty)
+        // Parse artifacts
+        List<Map<String, String>> artifacts = [];
+        if (map['artifacts'] != null && map['artifacts'] is List) {
+          for (final a in map['artifacts']) {
+            if (a is Map) {
+              artifacts.add({
+                'type': (a['type'] ?? 'text').toString(),
+                'content': (a['content'] ?? '').toString(),
+              });
+            }
+          }
+        } else if (map['details'] != null && map['details'] is List) {
+          // Backward compatibility for old "details" field
+          artifacts = (map['details'] as List)
+              .map(
+                (d) => {'type': 'bulletpoint', 'content': d.toString().trim()},
+              )
               .toList();
         }
 
         return <String, dynamic>{
-          'fact': (map['fact'] ?? '').toString().trim(),
+          'finding': (map['finding'] ?? map['fact'] ?? '').toString().trim(),
           'source': (map['source'] ?? '').toString().trim(),
           'url': url,
-          'details': details,
+          'artifacts': artifacts,
         };
       }).toList();
     } catch (e) {
@@ -930,9 +942,13 @@ Please fix and regenerate the plan.
           generationContext: genContext,
         );
 
+        // Load configurable max turns
+        final defaultMaxTurns = await AgenticSettingsService.getMaxTurns();
+
         final List<AgentTask> tasks = _parseTasksFromJson(
           response,
           activeTools: getAllToolNames(),
+          defaultMaxTurns: defaultMaxTurns,
         );
 
         // Validate dependency graph
@@ -1027,6 +1043,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
           ..._nativeTools.map((t) => t.name),
           ..._externalTools.values.expand((l) => l.map((t) => t.name)),
         ],
+        defaultMaxTurns: await AgenticSettingsService.getMaxTurns(),
       );
       _tasks = tasks.map((t) {
         t.status = AgentTaskStatus.pending;
@@ -1108,10 +1125,11 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
   // Intervention Methods
 
   /// Resumes a paused task, optionally increasing its turn limit.
-  void resumeTask(String taskId, {bool increaseLimit = false}) {
+  void resumeTask(String taskId, {bool increaseLimit = false}) async {
     final task = _tasks.firstWhere((t) => t.id == taskId);
     if (increaseLimit) {
-      task.maxTurns += 10;
+      final increment = await AgenticSettingsService.getTurnIncrement();
+      task.maxTurns += increment;
     }
     // Restart execution
     executePlan();
@@ -1138,6 +1156,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
   List<AgentTask> _parseTasksFromJson(
     String response, {
     required List<String> activeTools,
+    int? defaultMaxTurns,
   }) {
     // Robust parsing for List
     String cleanResponse = response.trim();
@@ -1195,6 +1214,7 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
           allowedTools: activeTools,
           isFinalDeliverable: isFinalDeliverable,
           extractFindings: extractFindings,
+          maxTurns: defaultMaxTurns ?? 10,
         );
       }).toList();
     } catch (e) {

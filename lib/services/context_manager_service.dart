@@ -357,12 +357,12 @@ Provide a summary (2-5 paragraphs):
 
       for (var i = 0; i < _accumulatedFindings.length; i++) {
         final f = _accumulatedFindings[i];
-        final fact = (f['fact'] ?? '').toString();
+        final finding = (f['finding'] ?? f['fact'] ?? '').toString();
         final source = (f['source'] ?? '').toString();
         final url = (f['url'] ?? '').toString();
-        final details = f['details'];
+        final artifacts = f['artifacts'] as List<dynamic>?;
 
-        buffer.writeln('${i + 1}. **$fact**');
+        buffer.writeln('${i + 1}. **$finding**');
         if (source.isNotEmpty) {
           if (url.isNotEmpty) {
             buffer.writeln('   — Source: $source ($url)');
@@ -370,10 +370,24 @@ Provide a summary (2-5 paragraphs):
             buffer.writeln('   — Source: $source');
           }
         }
-        // Include bullet point details if present
-        if (details != null && details is List && details.isNotEmpty) {
-          for (final detail in details) {
-            buffer.writeln('   • $detail');
+
+        // Render Artifacts
+        if (artifacts != null && artifacts.isNotEmpty) {
+          for (final a in artifacts) {
+            if (a is Map) {
+              final type = a['type']?.toString() ?? 'text';
+              final content = a['content']?.toString() ?? '';
+
+              if (type == 'bulletpoint') {
+                buffer.writeln('   • $content');
+              } else if (type == 'code') {
+                buffer.writeln('   ```\n   $content\n   ```');
+              } else if (type == 'image') {
+                buffer.writeln('   🖼️ Resource: $content');
+              } else {
+                buffer.writeln('   $content');
+              }
+            }
           }
         }
         buffer.writeln();

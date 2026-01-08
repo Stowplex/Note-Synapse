@@ -16,6 +16,8 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
   int _compactionThreshold = AgenticSettingsService.defaultCompactionThreshold;
   int _findingLimit = AgenticSettingsService.defaultFindingLimit;
   int _findingMaxWords = AgenticSettingsService.defaultFindingMaxWords;
+  int _maxTurns = AgenticSettingsService.defaultMaxTurns;
+  int _turnIncrement = AgenticSettingsService.defaultTurnIncrement;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -29,11 +31,15 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
     final compaction = await AgenticSettingsService.getCompactionThreshold();
     final limit = await AgenticSettingsService.getFindingLimit();
     final maxWords = await AgenticSettingsService.getFindingMaxWords();
+    final maxTurns = await AgenticSettingsService.getMaxTurns();
+    final turnIncrement = await AgenticSettingsService.getTurnIncrement();
     if (!mounted) return;
     setState(() {
       _compactionThreshold = compaction;
       _findingLimit = limit;
       _findingMaxWords = maxWords;
+      _maxTurns = maxTurns;
+      _turnIncrement = turnIncrement;
       _isLoading = false;
     });
   }
@@ -68,6 +74,30 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
       await AgenticSettingsService.setFindingMaxWords(value);
       if (!mounted) return;
       setState(() => _findingMaxWords = value);
+      _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _updateMaxTurns(int value) async {
+    setState(() => _isSaving = true);
+    try {
+      await AgenticSettingsService.setMaxTurns(value);
+      if (!mounted) return;
+      setState(() => _maxTurns = value);
+      _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _updateTurnIncrement(int value) async {
+    setState(() => _isSaving = true);
+    try {
+      await AgenticSettingsService.setTurnIncrement(value);
+      if (!mounted) return;
+      setState(() => _turnIncrement = value);
       _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -176,6 +206,37 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
                   onChanged: (v) =>
                       setState(() => _findingMaxWords = (v ~/ 100) * 100),
                   onChangeEnd: (v) => _updateFindingMaxWords((v ~/ 100) * 100),
+                ),
+                const SizedBox(height: 12),
+
+                // Max Turns
+                _buildSettingCard(
+                  title: l10n.maxTurns,
+                  description: l10n.maxTurnsDescription,
+                  value: _maxTurns,
+                  displayValue: l10n.turnsValue(_maxTurns),
+                  min: AgenticSettingsService.minMaxTurns.toDouble(),
+                  max: AgenticSettingsService.maxMaxTurns.toDouble(),
+                  divisions:
+                      AgenticSettingsService.maxMaxTurns -
+                      AgenticSettingsService.minMaxTurns,
+                  onChanged: (v) => setState(() => _maxTurns = v.round()),
+                  onChangeEnd: (v) => _updateMaxTurns(v.round()),
+                ),
+                const SizedBox(height: 12),
+
+                // Turn Increment
+                _buildSettingCard(
+                  title: l10n.turnIncrement,
+                  description: l10n.turnIncrementDescription,
+                  value: _turnIncrement,
+                  displayValue: '+${l10n.turnsValue(_turnIncrement)}',
+                  min: AgenticSettingsService.minTurnIncrement.toDouble(),
+                  max: AgenticSettingsService.maxTurnIncrement.toDouble(),
+                  divisions: 5, // (30 - 5) / 5
+                  onChanged: (v) =>
+                      setState(() => _turnIncrement = (v ~/ 5) * 5),
+                  onChangeEnd: (v) => _updateTurnIncrement((v ~/ 5) * 5),
                 ),
               ],
             ),

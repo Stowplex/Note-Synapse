@@ -78,7 +78,7 @@ class AgentTask {
     List<String>? toolNames,
     this.userComment,
     List<String>? executionHistory,
-    this.maxTurns = 20,
+    this.maxTurns = 10,
     List<String>? allowedTools,
     List<String>? contextNoteIds,
     List<String>? spawnedSubtaskIds,

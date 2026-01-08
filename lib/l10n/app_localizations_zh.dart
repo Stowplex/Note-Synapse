@@ -122,6 +122,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get findingMaxWordsDescription => '每个发现的要点详情的最大字数。';
 
   @override
+  String get maxTurns => 'Max Turns';
+
+  @override
+  String get maxTurnsDescription =>
+      'Maximum number of iterations allowed per task.';
+
+  @override
+  String get turnIncrement => 'Turn Increment';
+
+  @override
+  String get turnIncrementDescription =>
+      'Number of turns to add when resuming a paused task.';
+
+  @override
+  String turnsValue(Object count) {
+    return '$count turns';
+  }
+
+  @override
   String get darkMode => '深色模式';
 
   @override

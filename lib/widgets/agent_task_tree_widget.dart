@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/agent_task.dart';
 import '../models/context_node.dart';
 import '../services/agent_service.dart';
+import '../services/agentic_settings_service.dart';
 import 'add_note_dialog.dart';
 
 /// Widget for displaying hierarchical agent task execution.
@@ -25,14 +26,25 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
     with SingleTickerProviderStateMixin {
   final Set<String> _expandedNodes = {};
   late AnimationController _pulseController;
+  int _turnIncrement = AgenticSettingsService.defaultTurnIncrement;
 
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
+  }
+
+  Future<void> _loadSettings() async {
+    final increment = await AgenticSettingsService.getTurnIncrement();
+    if (mounted) {
+      setState(() {
+        _turnIncrement = increment;
+      });
+    }
   }
 
   @override
@@ -796,9 +808,9 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                     ),
-                    child: const Text(
-                      '+10 Turns',
-                      style: TextStyle(fontSize: 12),
+                    child: Text(
+                      '+$_turnIncrement Turns',
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ),
@@ -850,17 +862,19 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                   separatorBuilder: (_, __) => const Divider(height: 16),
                   itemBuilder: (listContext, index) {
                     final f = findings[index];
-                    final fact = (f['fact'] ?? '').toString();
+                    final finding = (f['finding'] ?? f['fact'] ?? '')
+                        .toString();
                     final source = (f['source'] ?? '').toString();
                     final url = (f['url'] ?? '').toString();
-                    final details = f['details'];
+                    final artifacts = f['artifacts'] as List<dynamic>?;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${index + 1}. $fact',
-                          style: Theme.of(listContext).textTheme.bodyMedium,
+                          '${index + 1}. $finding',
+                          style: Theme.of(listContext).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         if (source.isNotEmpty)
                           Padding(
@@ -877,46 +891,21 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                                   ),
                             ),
                           ),
-                        // Display bullet point details
-                        if (details != null &&
-                            details is List &&
-                            details.isNotEmpty)
+                        // Display structured artifacts
+                        if (artifacts != null && artifacts.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6, left: 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                for (final detail in details)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
+                                for (final a in artifacts)
+                                  if (a is Map)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      child: _buildArtifactItem(listContext, a),
                                     ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '•  ',
-                                          style: Theme.of(listContext)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: Theme.of(
-                                                  listContext,
-                                                ).colorScheme.primary,
-                                              ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            detail.toString(),
-                                            style: Theme.of(
-                                              listContext,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -955,23 +944,36 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
 
     for (int i = 0; i < findings.length; i++) {
       final f = findings[i];
-      final fact = (f['fact'] ?? '').toString();
+      final finding = (f['finding'] ?? f['fact'] ?? '').toString();
       final source = (f['source'] ?? '').toString();
       final url = (f['url'] ?? '').toString();
-      final details = f['details'];
+      final artifacts = f['artifacts'] as List<dynamic>?;
 
-      buffer.writeln('${i + 1}. **$fact**');
+      buffer.writeln('${i + 1}. **$finding**');
       if (source.isNotEmpty) {
         buffer.writeln('   - Source: $source');
       }
       if (url.isNotEmpty) {
         buffer.writeln('   - URL: $url');
       }
-      // Include bullet point details
-      if (details != null && details is List && details.isNotEmpty) {
-        buffer.writeln('   - Details:');
-        for (final detail in details) {
-          buffer.writeln('     - $detail');
+
+      // Render artifacts in Markdown
+      if (artifacts != null && artifacts.isNotEmpty) {
+        for (final a in artifacts) {
+          if (a is Map) {
+            final type = a['type']?.toString() ?? 'text';
+            final content = a['content']?.toString() ?? '';
+
+            if (type == 'bulletpoint') {
+              buffer.writeln('     - $content');
+            } else if (type == 'code') {
+              buffer.writeln('\n     ```\n     $content\n     ```\n');
+            } else if (type == 'image') {
+              buffer.writeln('     - ![Resource]($content)');
+            } else {
+              buffer.writeln('     - $content');
+            }
+          }
         }
       }
       buffer.writeln();
@@ -988,6 +990,94 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
 
     // Use the AddNoteDialog to let user choose create new or append
     await AddNoteDialog.show(context: context, content: content);
+  }
+
+  Widget _buildArtifactItem(
+    BuildContext context,
+    Map<dynamic, dynamic> artifact,
+  ) {
+    final type = artifact['type']?.toString() ?? 'text';
+    final content = artifact['content']?.toString() ?? '';
+
+    if (type == 'bulletpoint') {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '•  ',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            child: Text(content, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+      );
+    } else if (type == 'code') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Text(
+          content,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontFamily: 'monospace',
+            fontSize: 11,
+          ),
+        ),
+      );
+    } else if (type == 'image') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.image_outlined,
+                size: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  content,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (content.startsWith('http'))
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.network(
+                  content,
+                  height: 150,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
+                ),
+              ),
+            ),
+        ],
+      );
+    } else {
+      return Text(content, style: Theme.of(context).textTheme.bodySmall);
+    }
   }
 
   String _truncate(String text, int maxLength) {
