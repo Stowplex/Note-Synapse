@@ -2229,7 +2229,7 @@ class _MarkdownPdfRenderer {
           );
         case 'latex':
           // Block LaTeX
-          final tex = node.textContent;
+          final tex = _unescapeHtml(node.textContent);
           final imageBytes = await MathRendererService.renderMathToImage(
             tex,
             context,
@@ -2509,7 +2509,7 @@ class _MarkdownPdfRenderer {
     pw.TextStyle style,
   ) async {
     if (node is md.Text) {
-      final text = node.text;
+      final text = _unescapeHtml(node.text);
       if (text.isEmpty) {
         return const [];
       }
@@ -2570,7 +2570,7 @@ class _MarkdownPdfRenderer {
         return imageSpan ?? const [];
       case 'latex':
         // Inline LaTeX
-        final tex = node.textContent;
+        final tex = _unescapeHtml(node.textContent);
         // Use a smaller scale or adjustment for inline
         final imageBytes = await MathRendererService.renderMathToImage(
           tex,
@@ -2691,7 +2691,7 @@ class _MarkdownPdfRenderer {
 
   String _extractPlainText(md.Node node) {
     if (node is md.Text) {
-      return node.text;
+      return _unescapeHtml(node.text);
     }
     if (node is md.Element) {
       final buffer = StringBuffer();
@@ -2701,6 +2701,17 @@ class _MarkdownPdfRenderer {
       return buffer.toString();
     }
     return '';
+  }
+
+  /// Unescape common HTML entities that the markdown parser may produce.
+  String _unescapeHtml(String text) {
+    return text
+        .replaceAll('&quot;', '"')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&#039;', "'")
+        .replaceAll('&apos;', "'")
+        .replaceAll('&amp;', '&'); // Must be last to avoid double-unescaping
   }
 }
 

@@ -8,6 +8,7 @@ import '../models/agent_task.dart';
 import '../models/context_node.dart';
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
+import '../models/model_config.dart';
 import 'tools/note_tools.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
@@ -83,6 +84,14 @@ class AgentService extends ChangeNotifier {
   List<String> get globalContextNoteIds =>
       List.unmodifiable(_globalContextNoteIds);
 
+  /// Optional model override for agent LLM calls.
+  ModelConfig? _modelOverride;
+  ModelConfig? get modelOverride => _modelOverride;
+  set modelOverride(ModelConfig? value) {
+    _modelOverride = value;
+    notifyListeners();
+  }
+
   /// Adds a note to the global context.
   void addGlobalContextNote(String noteId) {
     if (!_globalContextNoteIds.contains(noteId)) {
@@ -132,6 +141,8 @@ class AgentService extends ChangeNotifier {
     _isPaused = false;
     _boundConversationId = null;
     _currentCheckpoint = null;
+    // Clear model override
+    _modelOverride = null;
     notifyListeners();
   }
 
@@ -529,10 +540,12 @@ When referring to notes or conversations, use inline markdown links with the syn
 Respond directly to: "$objective"
 ''';
 
+    final genContext = GenerationContext(values: {'type': 'agent_summary'});
+    if (_modelOverride != null) genContext.modelOverride = _modelOverride;
     final response = await AIService.generateWithAttachments(
       prompt,
       [],
-      generationContext: GenerationContext(values: {'type': 'agent_summary'}),
+      generationContext: genContext,
     );
 
     _finalAnswer = response;
@@ -613,12 +626,14 @@ Return ONLY valid JSON array:
 If no findings worth preserving, return: []
 ''';
 
+    final genContext = GenerationContext(
+      values: {'type': 'extract_findings', 'taskId': task.id},
+    );
+    if (_modelOverride != null) genContext.modelOverride = _modelOverride;
     final response = await AIService.generateWithAttachments(
       prompt,
       [],
-      generationContext: GenerationContext(
-        values: {'type': 'extract_findings', 'taskId': task.id},
-      ),
+      generationContext: genContext,
     );
 
     return _parseFindings(response);
@@ -906,10 +921,12 @@ Please fix and regenerate the plan.
 
         final fullPrompt = prompt + retryFeedback;
 
+        final genContext = GenerationContext(values: {'type': 'agent_plan'});
+        if (_modelOverride != null) genContext.modelOverride = _modelOverride;
         final response = await AIService.generateWithAttachments(
           fullPrompt,
           contextAttachments,
-          generationContext: GenerationContext(values: {'type': 'agent_plan'}),
+          generationContext: genContext,
         );
 
         final List<AgentTask> tasks = _parseTasksFromJson(
@@ -993,12 +1010,14 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
 ''';
 
     try {
+      final genContext = GenerationContext(
+        values: {'type': 'agent_revise_plan'},
+      );
+      if (_modelOverride != null) genContext.modelOverride = _modelOverride;
       final response = await AIService.generateWithAttachments(
         prompt,
         [],
-        generationContext: GenerationContext(
-          values: {'type': 'agent_revise_plan'},
-        ),
+        generationContext: genContext,
       );
 
       final tasks = _parseTasksFromJson(
@@ -1433,12 +1452,14 @@ $formatInstructions
         return;
       }
 
+      final genContext = GenerationContext(
+        values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
+      );
+      if (_modelOverride != null) genContext.modelOverride = _modelOverride;
       final response = await AIService.generateWithAttachments(
         prompt,
         [],
-        generationContext: GenerationContext(
-          values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
-        ),
+        generationContext: genContext,
       );
 
       // Checkpoint: After LLM response
@@ -1562,12 +1583,15 @@ The actual content (answer text, or tool call details, or reasoning)
 ''';
 
         try {
+          final verdictGenContext = GenerationContext(
+            values: {'type': 'agent_verdict', 'taskId': task.id},
+          );
+          if (_modelOverride != null)
+            verdictGenContext.modelOverride = _modelOverride;
           final verdictResponse = await AIService.generateWithAttachments(
             verdictPrompt,
             [],
-            generationContext: GenerationContext(
-              values: {'type': 'agent_verdict', 'taskId': task.id},
-            ),
+            generationContext: verdictGenContext,
           );
 
           final verdictMatch = RegExp(
@@ -1904,12 +1928,12 @@ ${parentContext.executionLog.join('\n')}
 Write a focused briefing for this subtask:
 ''';
 
+    final genContext = GenerationContext(values: {'type': 'subtask_briefing'});
+    if (_modelOverride != null) genContext.modelOverride = _modelOverride;
     return await AIService.generateWithAttachments(
       prompt,
       [],
-      generationContext: GenerationContext(
-        values: {'type': 'subtask_briefing'},
-      ),
+      generationContext: genContext,
     );
   }
 }

@@ -8,6 +8,7 @@ import '../services/user_app_service.dart';
 import '../models/user_app.dart';
 import '../screens/note_selection_dialog.dart';
 import '../l10n/app_localizations.dart';
+import 'model_selector_button.dart';
 
 class AgentPlanReviewWidget extends StatefulWidget {
   final VoidCallback onProceed;
@@ -494,26 +495,41 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                       label: const Text('Revise Plan'),
                     ),
                     const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: (_isRevising || isRunning)
-                          ? null
-                          : () {
-                              // Ensure any pending comment edits are saved?
-                              // Not strictly necessary as executePlan uses strict tasks list
-                              // but good practice if we were persisting.
-                              widget.onProceed();
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: (_isRevising || isRunning)
+                              ? null
+                              : () {
+                                  // Ensure any pending comment edits are saved?
+                                  // Not strictly necessary as executePlan uses strict tasks list
+                                  // but good practice if we were persisting.
+                                  widget.onProceed();
+                                },
+                          icon: isRunning
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimary,
+                                  ),
+                                )
+                              : const Icon(Icons.play_arrow),
+                          label: Text(isRunning ? 'Executing...' : 'Proceed'),
+                        ),
+                        if (!isRunning)
+                          ModelSelectorButton(
+                            selectedModel: agentService.modelOverride,
+                            onModelSelected: (model) {
+                              agentService.modelOverride = model;
                             },
-                      icon: isRunning
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Theme.of(context).colorScheme.onPrimary,
-                              ),
-                            )
-                          : const Icon(Icons.play_arrow),
-                      label: Text(isRunning ? 'Executing...' : 'Proceed'),
+                            isSendButton: true,
+                          ),
+                      ],
                     ),
                   ],
                 ),
