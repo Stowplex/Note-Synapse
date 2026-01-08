@@ -413,10 +413,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aiModelSettings)),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openModelConfiguration(),
-        child: const Icon(Icons.add),
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -470,11 +466,21 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                Text(
-                  'Configured Models',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Configured Models',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () => _openModelConfiguration(),
+                      tooltip: 'Add Model',
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
 
