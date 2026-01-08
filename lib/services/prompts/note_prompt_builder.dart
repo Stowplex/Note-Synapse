@@ -694,6 +694,16 @@ class NotePromptBuilder {
       return;
     }
 
+    // Load attachments for this note to check includeInAIContext flag
+    List<Attachment> noteAttachments = [];
+    try {
+      noteAttachments = await _databaseService.getAttachmentsForNote(note.id);
+    } catch (e) {
+      LoggerService.warning(
+        'Failed to load attachments for remote image filtering: $e',
+      );
+    }
+
     for (final image in remoteImages) {
       try {
         final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
@@ -707,11 +717,33 @@ class NotePromptBuilder {
         if (!await file.exists()) {
           continue;
         }
+
+        // Check if this remote image has a corresponding attachment in the DB
+        // and if so, respect its includeInAIContext flag
+        final fileName = absolutePath.split('/').last;
+        final matchingAttachment = noteAttachments
+            .cast<Attachment?>()
+            .firstWhere(
+              (a) =>
+                  a?.fileName == fileName ||
+                  a?.filePath.endsWith(fileName) == true,
+              orElse: () => null,
+            );
+
+        if (matchingAttachment != null &&
+            !matchingAttachment.includeInAIContext) {
+          // Skip this image as user has explicitly excluded it from AI context
+          LoggerService.debug(
+            'Skipping remote image $fileName from AI context (includeInAIContext=false)',
+          );
+          continue;
+        }
+
         processed.add(absolutePath);
         final bytes = await file.readAsBytes();
         target.add(
           PlatformFile(
-            name: absolutePath.split('/').last,
+            name: fileName,
             path: absolutePath,
             size: bytes.length,
             bytes: bytes,
