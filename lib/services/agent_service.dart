@@ -1349,14 +1349,12 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
         ? '''
 
 IMPORTANT: This is the FINAL DELIVERABLE task.
-Your answer will be shown DIRECTLY to the user without further processing.
-- Produce the complete, detailed output the user requested (report, analysis, etc.)
-- Do NOT summarize - give the full deliverable
-- Format with Markdown for readability
-- Include all relevant data, citations, and findings from the context above
-
-OUTPUT FORMAT (NO JSON for final deliverable):
-Just write your complete report/deliverable directly in Markdown. Do NOT wrap it in JSON.
+- If you have all the information you need, provide the complete, detailed output the user requested (report, analysis, etc.).
+- You can provide your final result as a JSON action: ```json { "answer": "Full result here..." } ``` OR just write the result directly in Markdown.
+- If you still need more information to fulfill the specific request of this task, you MUST use tool calls in JSON format.
+- Do NOT provide a generic summary - give the full, detailed deliverable requested.
+- Format with Markdown for readability.
+- Include all relevant data, citations, and findings from the context above.
 '''
         : '';
 
@@ -1364,8 +1362,11 @@ Just write your complete report/deliverable directly in Markdown. Do NOT wrap it
     final formatInstructions = task.isFinalDeliverable
         ? '''
 FORMAT:
-Since this is the FINAL DELIVERABLE, just write your complete response directly.
-Do NOT use JSON format - output the full report/analysis in Markdown.
+1. "My thought: [your reasoning about what's missing or how to structure the result]"
+2. ONE action:
+   - Use JSON format if you need a tool: ```json { "tool": "tool_name", "args": { ... } } ```
+   - Use JSON format to finalize: ```json { "answer": "..." } ```
+   - OR just write your complete Markdown result directly (fallback).
 '''
         : '''
 FORMAT:
@@ -1390,7 +1391,7 @@ OR
 ACTION GUIDANCE:
 - **think**: Analyze/reason about data ALREADY in execution history - don't reload files
 - **tool**: Fetch NEW data not yet in context
-- **spawn_subtasks**: Delegate complex work by spawning 1-5 focused subtasks at once (max depth: ${kMaxSubtaskDepth})
+- **spawn_subtasks**: Delegate complex work by spawning 1-5 focused subtasks at once (max depth: $kMaxSubtaskDepth)
   Use when: task needs parallel investigation, can be decomposed into independent parts, or benefits from context isolation
   Each subtask runs with isolated context but inherits parent findings
 - **answer**: Conclude when objective is satisfied
@@ -1475,29 +1476,6 @@ $formatInstructions
       // ... Parsing Logic (Similar to before but inside this function) ...
       // Re-using existing ReAct parsing logic but ensuring it matches new flow
 
-      // SPECIAL HANDLING: For final deliverable tasks, use the full response as the answer
-      // (no JSON parsing needed since we told LLM to output directly in Markdown)
-      if (task.isFinalDeliverable) {
-        // Strip any "My thought:" prefix if present
-        String result = response;
-        final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
-        result = result.replaceFirst(thoughtPrefix, '').trim();
-
-        task.result = result;
-        task.status = AgentTaskStatus.completed;
-        task.executionHistory.add('Turn $turn:');
-        task.executionHistory.add('Final deliverable produced.');
-
-        if (task.contextNodeId != null) {
-          _contextManager
-              .getContext(task.contextNodeId!)
-              ?.log('Turn $turn - Final deliverable produced');
-        }
-
-        notifyListeners();
-        return;
-      }
-
       // Extract thought and JSON action
       String? jsonStr;
       String thought = '';
@@ -1559,6 +1537,30 @@ $formatInstructions
       }
 
       if (jsonStr == null) {
+        // SPECIAL HANDLING: If no JSON found but it's a final deliverable,
+        // treat the entire response as the answer (backward compatibility)
+        if (task.isFinalDeliverable) {
+          // Strip any "My thought:" prefix if present
+          String result = response;
+          final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
+          result = result.replaceFirst(thoughtPrefix, '').trim();
+
+          task.result = result;
+          task.status = AgentTaskStatus.completed;
+          task.executionHistory.add('Turn $turn:');
+          task.executionHistory.add('Final deliverable produced directly.');
+
+          if (task.contextNodeId != null) {
+            _contextManager
+                .getContext(task.contextNodeId!)
+                ?.log('Turn $turn - Final deliverable produced directly');
+          }
+
+          _currentThought = "Delivered final result.";
+          notifyListeners();
+          return;
+        }
+
         // LLM-based verdict extraction: ask LLM to classify its own response
         // using tag format to avoid JSON parsing issues
         final verdictPrompt =
@@ -1586,8 +1588,9 @@ The actual content (answer text, or tool call details, or reasoning)
           final verdictGenContext = GenerationContext(
             values: {'type': 'agent_verdict', 'taskId': task.id},
           );
-          if (_modelOverride != null)
+          if (_modelOverride != null) {
             verdictGenContext.modelOverride = _modelOverride;
+          }
           final verdictResponse = await AIService.generateWithAttachments(
             verdictPrompt,
             [],
