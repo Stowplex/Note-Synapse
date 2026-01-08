@@ -834,3 +834,130 @@ class ModifyNoteTool implements NativeTool {
     }
   }
 }
+
+class CreateNotesTool implements NativeTool {
+  final NoteModificationService _service = NoteModificationService();
+
+  @override
+  String get name => 'create_notes';
+
+  @override
+  String get description =>
+      'Create one or more new notes. Supports title, content, type (note/task), tags, subnotes, and attachments. For attachments, use filenames or synapsetemp:// URIs obtained from previous steps. IMPORTANT: Completion of this tool will assign new UUIDs to created notes.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': {
+      'notes': {
+        'type': 'array',
+        'description': 'A list of note objects to create.',
+        'items': {
+          'type': 'object',
+          'properties': {
+            'title': {
+              'type': 'string',
+              'description': 'The title of the note.',
+            },
+            'content': {
+              'type': 'string',
+              'description': 'The markdown content of the note.',
+            },
+            'type': {
+              'type': 'string',
+              'enum': ['note', 'task'],
+              'description': 'The type of note.',
+              'default': 'note',
+            },
+            'tags': {
+              'type': 'array',
+              'items': {'type': 'string'},
+              'description': 'Optional tags to add.',
+            },
+            'attachments': {
+              'type': 'array',
+              'items': {
+                'type': 'string',
+                'description':
+                    'Filename or synapsetemp:// URI. DO NOT PROVIDE BASE64 DATA.',
+              },
+              'description': 'Optional list of attachment identifiers.',
+            },
+            'subnotes': {
+              'type': 'array',
+              'items': {
+                'type': 'object',
+                'properties': {
+                  'name': {'type': 'string'},
+                  'content': {'type': 'string'},
+                  'is_completed': {'type': 'boolean', 'default': false},
+                },
+                'required': ['name'],
+              },
+              'description': 'Optional list of subnotes/tasks.',
+            },
+            'scheduled_at': {
+              'type': 'string',
+              'description':
+                  'For tasks: ISO 8601 timestamp for when it is scheduled.',
+            },
+            'complete_by': {
+              'type': 'string',
+              'description':
+                  'For tasks: ISO 8601 timestamp for when it should be completed.',
+            },
+            'status': {
+              'type': 'string',
+              'enum': ['todo', 'in_progress', 'complete', 'abandoned'],
+              'description': 'For tasks: current status.',
+              'default': 'todo',
+            },
+          },
+          'required': ['title', 'content'],
+        },
+      },
+    },
+    'required': ['notes'],
+  };
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    final notesData = args['notes'] as List<dynamic>;
+    final createdNotes = <Map<String, String>>[];
+
+    for (final noteData in notesData) {
+      if (noteData is! Map<String, dynamic>) continue;
+
+      // Strict validation: Ensure no base64-like strings in attachments
+      if (noteData.containsKey('attachments')) {
+        final attachments = noteData['attachments'] as List<dynamic>;
+        for (final att in attachments) {
+          if (att is! String) {
+            return {
+              'error': 'Invalid attachment format. Must be a string (URI).',
+            };
+          }
+          if (att.length > 2048 || att.contains(';base64,')) {
+            return {
+              'error':
+                  'Base64 data is not allowed in create_notes. Use synapsetemp:// URIs or filenames instead.',
+            };
+          }
+        }
+      }
+
+      try {
+        final note = await _service.createNote(noteData);
+        createdNotes.add({'id': note.id, 'title': note.title});
+      } catch (e) {
+        return {'error': 'Failed to create note "${noteData['title']}": $e'};
+      }
+    }
+
+    return {
+      'status': 'success',
+      'created_count': createdNotes.length,
+      'notes': createdNotes,
+    };
+  }
+}

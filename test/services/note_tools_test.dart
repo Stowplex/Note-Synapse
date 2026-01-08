@@ -158,6 +158,45 @@ void main() {
     });
   });
 
+  group('CreateNotesTool', () {
+    late CreateNotesTool tool;
+
+    setUp(() {
+      tool = CreateNotesTool();
+    });
+
+    test('has correct name', () {
+      expect(tool.name, 'create_notes');
+    });
+
+    test('requires notes parameter', () {
+      final schema = tool.inputSchema;
+      expect(schema['required'], ['notes']);
+    });
+
+    test('schema has task fields', () {
+      final noteItems = tool.inputSchema['properties']['notes']['items'];
+      expect(noteItems['properties']['scheduled_at'], isNotNull);
+      expect(noteItems['properties']['complete_by'], isNotNull);
+      expect(noteItems['properties']['status'], isNotNull);
+    });
+
+    test('validation rejects base64 data', () async {
+      final result = await tool.execute({
+        'notes': [
+          {
+            'title': 'Test',
+            'content': 'Test',
+            'attachments': [
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+            ],
+          },
+        ],
+      });
+      expect(result['error'], contains('Base64 data is not allowed'));
+    });
+  });
+
   group('StringExtension', () {
     test('take returns substring up to n characters', () {
       expect('hello world'.take(5), 'hello');

@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
 import 'database_service.dart';
+import '../utils/file_utils.dart';
+import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
 
 class NoteModificationService {
@@ -142,5 +145,217 @@ class NoteModificationService {
     }
 
     return updatedNote;
+  }
+
+  /// Creates a new note from the provided data.
+  Future<Note> createNote(Map<String, dynamic> data) async {
+    final title = data['title']?.toString().trim() ?? 'Untitled Note';
+    final content = data['content']?.toString().trim() ?? '';
+    final typeString = data['type']?.toString() ?? 'note';
+    final type = _parseNoteType(typeString);
+
+    final now = DateTime.now();
+
+    // Process subnotes
+    final subNotes = <SubNote>[];
+    if (data['subNotes'] is List) {
+      for (final subNoteData in (data['subNotes'] as List)) {
+        if (subNoteData is Map<String, dynamic>) {
+          subNotes.add(_createSubNote(subNoteData));
+        }
+      }
+    } else if (data['subnote'] is Map<String, dynamic>) {
+      // Handle "subnote" property (added list) from schema if provided
+      final subMod = data['subnote'] as Map<String, dynamic>;
+      final addedSubnotes = (subMod['added'] as List?) ?? [];
+      for (final s in addedSubnotes) {
+        if (s is Map<String, dynamic>) {
+          subNotes.add(_createSubNote(s));
+        }
+      }
+    }
+
+    // Process tags
+    final tags =
+        (data['tags'] as List?)?.map((e) => e.toString()).toList() ??
+        const <String>[];
+
+    // Process attachments
+    final attachmentPaths = <String>[];
+    if (data['attachments'] is List) {
+      for (final attachment in (data['attachments'] as List)) {
+        attachmentPaths.add(await processAttachment(attachment));
+      }
+    }
+
+    // Task fields
+    String? scheduledAt;
+    String? completeBy;
+    TaskStatus? status;
+    double? completionPercentage;
+
+    if (type == NoteType.task) {
+      scheduledAt =
+          data['scheduledAt']?.toString() ?? data['scheduled_at']?.toString();
+      completeBy =
+          data['completeBy']?.toString() ?? data['complete_by']?.toString();
+      status = data['status'] != null
+          ? _parseTaskStatus(data['status'].toString())
+          : TaskStatus.todo;
+      completionPercentage =
+          (data['completionPercentage'] ?? data['completion_percentage']) !=
+              null
+          ? (data['completionPercentage'] ??
+                    data['completion_percentage'] as num)
+                .toDouble()
+          : 0.0;
+    }
+
+    final note = Note(
+      id: _uuid.v4(),
+      title: title,
+      content: content,
+      type: type,
+      createdAt: now,
+      updatedAt: now,
+      subNotes: subNotes,
+      tags: tags,
+      attachmentPaths: attachmentPaths,
+      scheduledAt: scheduledAt,
+      completeBy: completeBy,
+      status: status,
+      completionPercentage: completionPercentage,
+      pinned: data['pinned'] == true,
+      isArchived: data['isArchived'] == true,
+    );
+
+    await _db.insertNote(note);
+
+    // If there are links (relationships)
+    if (data.containsKey('link')) {
+      final links = (data['link'] as List?) ?? [];
+      for (final link in links) {
+        if (link is Map<String, dynamic>) {
+          final relationType = link['relation'] as String? ?? 'related';
+          final targetId = link['target'] as String?;
+
+          if (targetId != null) {
+            await _db.insertRelationship(
+              Relationship(
+                id: _uuid.v4(),
+                fromNoteId: note.id,
+                toNoteId: targetId,
+                type: relationType,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return note;
+  }
+
+  /// Processes an attachment, promoting temporary files or handling base64.
+  Future<String> processAttachment(dynamic attachment) async {
+    if (attachment is String) {
+      if (SynapseTempUtils.isSynapseTempUri(attachment)) {
+        return await _promoteSynapseTempAttachment(attachment);
+      }
+
+      final isValid = await _db.verifyAttachmentPath(attachment);
+      if (isValid) {
+        return attachment;
+      }
+
+      // If it's just a filename that exists in the database already (as a relative path)
+      // This is helpful for tools that might only pass the name.
+      if (!attachment.contains('/')) {
+        // Could search or just assume it's valid if it meets some criteria
+        // But usually we prefer full relative paths or synapsetemp
+      }
+
+      throw Exception(
+        'Invalid attachment path: $attachment - file not found in database',
+      );
+    } else if (attachment is Map<String, dynamic>) {
+      if (attachment['type'] == 'base64' &&
+          attachment['data'] != null &&
+          attachment['fileName'] != null) {
+        return await FileUtils.saveFileToPrivateStorage(
+          _decodeBase64(attachment['data']),
+          attachment['fileName'],
+        );
+      }
+    }
+
+    throw Exception('Invalid attachment format: $attachment');
+  }
+
+  List<int> _decodeBase64(String data) {
+    var base64String = data;
+    if (base64String.contains(',')) {
+      base64String = base64String.split(',').last;
+    }
+    return base64Decode(base64String);
+  }
+
+  Future<String> _promoteSynapseTempAttachment(String uri) async {
+    try {
+      final tempFile = await SynapseTempUtils.loadFile(uri);
+      final relativePath = await FileUtils.saveFileToPrivateStorage(
+        tempFile.bytes,
+        tempFile.fileName,
+      );
+      LoggerService.debug(
+        '[NoteModificationService] Promoted temporary attachment ${tempFile.fileName} to $relativePath',
+      );
+      return relativePath;
+    } catch (e) {
+      LoggerService.error(
+        '[NoteModificationService] Error promoting temporary attachment from $uri: $e',
+        error: e,
+      );
+      throw Exception('Failed to promote temporary attachment: $e');
+    }
+  }
+
+  SubNote _createSubNote(Map<String, dynamic> data) {
+    final name =
+        (data['name'] ?? data['title'])?.toString().trim() ?? 'Untitled Task';
+    return SubNote(
+      id: _uuid.v4(),
+      name: name,
+      content: data['content']?.toString().trim() ?? '',
+      createdAt: DateTime.now(),
+      isCompleted: data['isCompleted'] == true || data['is_completed'] == true,
+    );
+  }
+
+  NoteType _parseNoteType(String typeString) {
+    switch (typeString.toLowerCase()) {
+      case 'note':
+        return NoteType.note;
+      case 'task':
+        return NoteType.task;
+      default:
+        return NoteType.note;
+    }
+  }
+
+  TaskStatus _parseTaskStatus(String statusString) {
+    switch (statusString.toLowerCase()) {
+      case 'todo':
+        return TaskStatus.todo;
+      case 'in_progress':
+        return TaskStatus.inProgress;
+      case 'complete':
+        return TaskStatus.complete;
+      case 'abandoned':
+        return TaskStatus.abandoned;
+      default:
+        return TaskStatus.todo;
+    }
   }
 }

@@ -718,6 +718,7 @@ If no findings worth preserving, return: []
     RunSqlTool(),
     ListFiltersTool(),
     ModifyNoteTool(),
+    CreateNotesTool(),
   ];
   List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
 
