@@ -128,6 +128,49 @@ class GeminiModel implements AIModel {
     );
   }
 
+  /// Generate a multi-part response from a prompt request.
+  ///
+  /// Returns a list of parts where each part is a map with 'type' ('text' or 'image')
+  /// and 'content' (text string or base64 data URL for images).
+  Future<List<Map<String, dynamic>>> generateFromPromptMultiPart(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    final actualRequestId = context.ensureRequestId();
+    return await _withErrorHandling('generation multi-part', () async {
+      final apiKey = await _validateApiKey(requestId: actualRequestId);
+
+      final generationConfig = {
+        'temperature': 1.0,
+        'topK': topK ?? 32,
+        'topP': topP ?? 1,
+        'maxOutputTokens': maxOutputTokens ?? _config?.maxOutputTokens ?? 65536,
+      };
+
+      final messages = request.buildFullMessageList();
+      final sanitizedMessages = await _sanitizeMessages(
+        messages,
+        actualRequestId,
+      );
+
+      final requestBody = _buildRequestBodyFromMessages(
+        sanitizedMessages,
+        generationConfig: generationConfig,
+      );
+
+      return await _makeRequestMultiPart(
+        apiKey,
+        requestBody,
+        requestId: actualRequestId,
+      );
+    }, requestId: actualRequestId);
+  }
+
   @override
   Future<String> generateWithMessages(
     List<PromptMessage> messages, {
@@ -934,6 +977,164 @@ class GeminiModel implements AIModel {
         error:
             'Failed to process request: ${response.statusCode} - ${response.body}',
         endpoint: '$endpoint/models/$modelName:generateContent',
+        requestId: actualRequestId,
+        duration: duration,
+      );
+      throw Exception(
+        'Failed to process request: ${response.statusCode} - ${response.body}',
+      );
+    }
+  }
+
+  /// Make a request and return multi-part response (text and images).
+  ///
+  /// Unlike _makeRequest which saves images to temp files and returns markdown,
+  /// this method returns structured data with base64 data URLs for images.
+  Future<List<Map<String, dynamic>>> _makeRequestMultiPart(
+    String apiKey,
+    Map<String, dynamic> requestBody, {
+    String? requestId,
+  }) async {
+    final actualRequestId =
+        requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+
+    final endpoint =
+        _config?.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta';
+    final modelName = _config?.modelName ?? 'gemini-2.5-flash';
+
+    LoggerService.logAiRequest(
+      endpoint: '$endpoint/models/$modelName:generateContent',
+      headers: {'Content-Type': 'application/json'},
+      requestBody: requestBody,
+      requestId: actualRequestId,
+    );
+
+    final response = await NetworkProvider.post(
+      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(requestBody),
+    );
+
+    final duration = DateTime.now().difference(startTime);
+    final parts = <Map<String, dynamic>>[];
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: data,
+        requestId: actualRequestId,
+        duration: duration,
+      );
+
+      if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+        final candidate = data['candidates'][0];
+        final content = candidate['content'];
+
+        if (content is Map<String, dynamic>) {
+          final responseParts = content['parts'];
+          if (responseParts is List && responseParts.isNotEmpty) {
+            final textBuffer = StringBuffer();
+
+            for (final part in responseParts) {
+              if (part is Map<String, dynamic>) {
+                // Skip thought parts
+                if (part['thought'] == true) {
+                  continue;
+                }
+
+                // Handle text - accumulate into buffer
+                final text = part['text'];
+                if (text is String && text.isNotEmpty) {
+                  textBuffer.write(text);
+                }
+
+                // Handle executableCode
+                final executableCode = part['executableCode'];
+                if (executableCode is Map<String, dynamic>) {
+                  final language = executableCode['language'] ?? 'python';
+                  final code = executableCode['code'] ?? '';
+                  textBuffer.writeln(
+                    '\n```${language.toString().toLowerCase()}',
+                  );
+                  textBuffer.writeln(code);
+                  textBuffer.writeln('```\n');
+                }
+
+                // Handle codeExecutionResult
+                final codeExecutionResult = part['codeExecutionResult'];
+                if (codeExecutionResult is Map<String, dynamic>) {
+                  final outcome = codeExecutionResult['outcome'];
+                  final output = codeExecutionResult['output'] ?? '';
+                  textBuffer.writeln('```text');
+                  textBuffer.writeln('Execution Result ($outcome)');
+                  textBuffer.writeln('---------- OUTPUT -----------');
+                  textBuffer.writeln('$output');
+                  textBuffer.writeln('```\n');
+                }
+
+                // Handle inline_data (images)
+                final inlineData = part['inlineData'];
+                if (inlineData is Map<String, dynamic>) {
+                  final mimeType = inlineData['mimeType'] as String?;
+                  final imageData = inlineData['data'] as String?;
+
+                  if (mimeType != null &&
+                      imageData != null &&
+                      mimeType.startsWith('image/')) {
+                    // First, flush any accumulated text
+                    if (textBuffer.isNotEmpty) {
+                      parts.add({
+                        'type': 'text',
+                        'content': textBuffer.toString(),
+                      });
+                      textBuffer.clear();
+                    }
+                    // Add image part with base64 data URL
+                    parts.add({
+                      'type': 'image',
+                      'content': 'data:$mimeType;base64,$imageData',
+                    });
+                  }
+                }
+              } else if (part is String && part.isNotEmpty) {
+                textBuffer.write(part);
+              }
+            }
+
+            // Flush any remaining text
+            if (textBuffer.isNotEmpty) {
+              parts.add({'type': 'text', 'content': textBuffer.toString()});
+            }
+
+            if (parts.isNotEmpty) {
+              LoggerService.debug(
+                'Gemini API multi-part request completed',
+                error: {
+                  'partsCount': parts.length,
+                  'requestId': actualRequestId,
+                  'duration': '${duration.inMilliseconds}ms',
+                },
+              );
+              return parts;
+            }
+          }
+        }
+      }
+
+      LoggerService.error(
+        'No content in Gemini API response',
+        error: {'responseData': data, 'requestId': actualRequestId},
+      );
+      throw Exception('No content in Gemini API response');
+    } else {
+      LoggerService.logAiResponse(
+        statusCode: response.statusCode,
+        headers: response.headers,
+        responseBody: response.body,
         requestId: actualRequestId,
         duration: duration,
       );

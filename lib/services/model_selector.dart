@@ -248,6 +248,70 @@ class ModelSelector {
     );
   }
 
+  /// Generate a multi-part response from a prompt request.
+  ///
+  /// Returns a list of parts where each part is a map with 'type' ('text' or 'image')
+  /// and 'content' (text string or base64 data URL for images).
+  Future<List<Map<String, dynamic>>> generateFromPromptMultiPart(
+    PromptRequest request, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    final modelOverride = context.modelOverride;
+
+    AIModel? modelToUse = _currentModel;
+
+    if (modelOverride != null) {
+      try {
+        final tempModel = _createModel(modelOverride.type);
+        await tempModel.initialize(config: modelOverride);
+        if (await tempModel.isReady()) {
+          modelToUse = tempModel;
+        }
+      } catch (e) {
+        LoggerService.error(
+          'ModelSelector: Failed to initialize override model: $e',
+        );
+      }
+    }
+
+    if (modelToUse == null) {
+      throw Exception(
+        'No model is currently selected. Please select a model first.',
+      );
+    }
+
+    // Check if the model supports multi-part response
+    if (modelToUse is GeminiModel) {
+      return await modelToUse.generateFromPromptMultiPart(
+        request,
+        temperature: temperature,
+        topK: topK,
+        topP: topP,
+        maxOutputTokens: maxOutputTokens,
+        generationContext: context,
+      );
+    }
+
+    // For models that don't support multi-part, fall back to text-only response
+    final textResponse = await modelToUse.generateFromPrompt(
+      request,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      generationContext: context,
+    );
+
+    return [
+      {'type': 'text', 'content': textResponse},
+    ];
+  }
+
   Future<Map<String, dynamic>> generateWithTools(
     String prompt,
     List<PlatformFile> attachedFiles,
@@ -348,5 +412,81 @@ class ModelSelector {
       case ModelType.openaiCompatible:
         return OpenAIModel();
     }
+  }
+
+  /// Find a model with specified capability hints.
+  ///
+  /// Priority:
+  /// 1. First checks the current model (or overridden model) - if it matches, returns null
+  ///    (caller should use the current model as-is, no override needed)
+  /// 2. If current model doesn't match, searches configured models for a match
+  ///
+  /// Supported hints:
+  /// - 'image_gen': Model supports image generation
+  /// - 'audio': Model supports audio processing
+  /// - 'video': Model supports video processing
+  /// - 'documents': Model supports document understanding
+  /// - 'images': Model supports image input
+  ///
+  /// Returns null if current model matches (no override needed) or no model found.
+  /// Returns a ModelConfig if an alternative model with the capability was found.
+  Future<ModelConfig?> getModelByHint(
+    List<String> hints, {
+    ModelConfig? currentOverride,
+  }) async {
+    if (hints.isEmpty) return null;
+
+    // First, check the current model or override
+    final currentConfig = currentOverride ?? _currentModelConfig;
+    if (currentConfig != null && _modelMatchesHints(currentConfig, hints)) {
+      LoggerService.debug(
+        'ModelSelector: Current model ${currentConfig.displayName} matches hints $hints, no override needed',
+      );
+      return null; // Current model is fine, no need to override
+    }
+
+    // Current model doesn't match, search for an alternative
+    final models = await ModelStorageService.getConfiguredModels();
+    for (final model in models) {
+      if (_modelMatchesHints(model, hints)) {
+        LoggerService.debug(
+          'ModelSelector: Found alternative model matching hints $hints: ${model.displayName}',
+        );
+        return model;
+      }
+    }
+
+    LoggerService.debug('ModelSelector: No model found matching hints $hints');
+    return null;
+  }
+
+  /// Checks if a model matches all specified capability hints.
+  bool _modelMatchesHints(ModelConfig model, List<String> hints) {
+    final capabilities = model.customCapabilitiesObject;
+    if (capabilities == null) return false;
+
+    for (final hint in hints) {
+      switch (hint) {
+        case 'image_gen':
+          if (!capabilities.supportsImageGeneration) return false;
+          break;
+        case 'audio':
+          if (!capabilities.supportsAudio) return false;
+          break;
+        case 'video':
+          if (!capabilities.supportsVideo) return false;
+          break;
+        case 'documents':
+          if (!capabilities.supportsDocuments) return false;
+          break;
+        case 'images':
+          if (!capabilities.supportsImages) return false;
+          break;
+        default:
+          // Unknown hint - ignore
+          break;
+      }
+    }
+    return true;
   }
 }

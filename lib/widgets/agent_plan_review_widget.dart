@@ -495,42 +495,75 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                       label: const Text('Revise Plan'),
                     ),
                     const SizedBox(width: 8),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: (_isRevising || isRunning)
-                              ? null
-                              : () {
-                                  // Ensure any pending comment edits are saved?
-                                  // Not strictly necessary as executePlan uses strict tasks list
-                                  // but good practice if we were persisting.
-                                  widget.onProceed();
-                                },
-                          icon: isRunning
-                              ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onPrimary,
-                                  ),
-                                )
-                              : const Icon(Icons.play_arrow),
-                          label: Text(isRunning ? 'Executing...' : 'Proceed'),
-                        ),
-                        if (!isRunning)
-                          ModelSelectorButton(
-                            selectedModel: agentService.modelOverride,
-                            onModelSelected: (model) {
-                              agentService.modelOverride = model;
-                            },
-                            isSendButton: true,
+                    if (isRunning)
+                      FilledButton.icon(
+                        onPressed: null,
+                        icon: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
                           ),
-                      ],
-                    ),
+                        ),
+                        label: const Text('Executing...'),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _isRevising ? null : widget.onProceed,
+                                borderRadius: const BorderRadius.horizontal(
+                                  left: Radius.circular(20),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.play_arrow,
+                                        size: 18,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Proceed',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            ModelSelectorButton(
+                              selectedModel: agentService.modelOverride,
+                              onModelSelected: (model) {
+                                agentService.modelOverride = model;
+                              },
+                              isElliptical: true,
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ],

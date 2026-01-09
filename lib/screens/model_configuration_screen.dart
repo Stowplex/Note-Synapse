@@ -42,6 +42,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsDocuments = false;
   bool _supportsAudio = false;
   bool _supportsVideo = false;
+  bool _supportsImageGeneration = false;
 
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
@@ -176,6 +177,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           preset.customCapabilitiesObject?.supportsDocuments ?? false;
       _supportsAudio = preset.customCapabilitiesObject?.supportsAudio ?? false;
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
+      _supportsImageGeneration =
+          preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
       _supportedAttachmentMimeTypesController.text =
           preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
 
@@ -215,6 +218,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsAudio ?? false;
           _supportsVideo =
               config.customCapabilitiesObject?.supportsVideo ?? false;
+          _supportsImageGeneration =
+              config.customCapabilitiesObject?.supportsImageGeneration ?? false;
           _supportedAttachmentMimeTypesController.text =
               config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           _existingModelFeatures = config.modelFeatures;
@@ -261,6 +266,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsDocuments: _supportsDocuments,
         supportsAudio: _supportsAudio,
         supportsVideo: _supportsVideo,
+        supportsImageGeneration: _supportsImageGeneration,
       );
 
       // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
@@ -824,6 +830,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               onChanged: (value) {
                 setState(() {
                   _supportsVideo = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Generate Image'),
+              subtitle: const Text(
+                'Model can generate images from text prompts',
+              ),
+              value: _supportsImageGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsImageGeneration = value ?? false;
                 });
               },
             ),

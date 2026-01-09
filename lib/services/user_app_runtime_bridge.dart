@@ -475,19 +475,48 @@ class UserAppRuntimeBridge {
             validated.attachments,
           );
 
-          final response = await AIService.chatAI(
-            prompt,
-            temperature: validated.temperature,
-            topK: validated.topK,
-            topP: validated.topP,
-            attachedFiles: attachments,
-          );
+          // Extract new options for model hint and response type
+          final modelHintRaw = options?['model_hint'];
+          final List<String>? modelHint = modelHintRaw is List
+              ? modelHintRaw.map((e) => e.toString()).toList()
+              : null;
+          final responseType = options?['response_type'] as String? ?? 'string';
+          final isMultiPart = responseType == 'multi_part';
 
-          final duration = DateTime.now().difference(startTime);
-          LoggerService.debug(
-            '[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms',
-          );
-          return {'success': true, 'response': response};
+          if (isMultiPart) {
+            LoggerService.debug(
+              '[Synapse.chatAI] Using multi-part response mode',
+            );
+            final response = await AIService.chatAIMultiPart(
+              prompt,
+              temperature: validated.temperature,
+              topK: validated.topK,
+              topP: validated.topP,
+              attachedFiles: attachments,
+              modelHint: modelHint,
+            );
+
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.debug(
+              '[Synapse.chatAI] Multi-part success - ${response.length} parts in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'response': response};
+          } else {
+            final response = await AIService.chatAI(
+              prompt,
+              temperature: validated.temperature,
+              topK: validated.topK,
+              topP: validated.topP,
+              attachedFiles: attachments,
+              modelHint: modelHint,
+            );
+
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.debug(
+              '[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'response': response};
+          }
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
