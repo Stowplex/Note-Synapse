@@ -330,7 +330,10 @@ class AgentService extends ChangeNotifier {
         }
 
         // If we exited loop without being paused, task should be completed or failed.
+        // If task is still inProgress but !_isRunning, mark it as paused for proper resumption.
         if (!_isRunning && task.status == AgentTaskStatus.inProgress) {
+          task.status = AgentTaskStatus.paused;
+          taskContext.status = ContextNodeStatus.paused;
           return;
         }
 
@@ -1497,6 +1500,7 @@ $formatInstructions
       _currentCheckpoint = AgentCheckpoint.beforeLlmCall;
       notifyListeners();
       if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused before LLM call';
         notifyListeners();
         return;
@@ -1516,6 +1520,7 @@ $formatInstructions
       _currentCheckpoint = AgentCheckpoint.afterLlmResponse;
       notifyListeners();
       if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after LLM response';
         task.executionHistory.add('Turn $turn: (paused after LLM response)');
         notifyListeners();
@@ -1736,6 +1741,7 @@ The actual content (answer text, or tool call details, or reasoning)
       _currentCheckpoint = AgentCheckpoint.beforeToolCall;
       notifyListeners();
       if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused before tool call: $toolName';
         task.executionHistory.add(
           'Turn $turn: (paused before tool call: $toolName)',
@@ -1814,6 +1820,7 @@ The actual content (answer text, or tool call details, or reasoning)
       _currentCheckpoint = AgentCheckpoint.afterToolResult;
       notifyListeners();
       if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after tool result';
         notifyListeners();
         return;
