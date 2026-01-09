@@ -1691,14 +1691,85 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     );
   }
 
+  /// Parse SVG content to extract aspect ratio from viewBox or width/height attributes
+  double? _parseSvgAspectRatio(String svgContent) {
+    // Try to parse viewBox first: viewBox="minX minY width height"
+    final viewBoxMatch = RegExp(
+      r'viewBox\s*=\s*["\x27]([^"\x27]+)["\x27]',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+    if (viewBoxMatch != null) {
+      final parts = viewBoxMatch.group(1)!.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 4) {
+        final width = double.tryParse(parts[2]);
+        final height = double.tryParse(parts[3]);
+        if (width != null && height != null && width > 0 && height > 0) {
+          return height / width;
+        }
+      }
+    }
+
+    // Fall back to width/height attributes
+    final widthMatch = RegExp(
+      r'<svg[^>]*\swidth\s*=\s*["\x27]?([\d.]+)',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+    final heightMatch = RegExp(
+      r'<svg[^>]*\sheight\s*=\s*["\x27]?([\d.]+)',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+
+    if (widthMatch != null && heightMatch != null) {
+      final width = double.tryParse(widthMatch.group(1)!);
+      final height = double.tryParse(heightMatch.group(1)!);
+      if (width != null && height != null && width > 0 && height > 0) {
+        return height / width;
+      }
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If explicit height is provided (e.g., preview mode), use it without LayoutBuilder
+    if (widget.height != null) {
+      return _buildWebView(widget.width, widget.height!);
+    }
+
+    // Use LayoutBuilder to get actual available width and calculate height
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : widget.width ?? 400.0;
+
+        // Parse SVG to get aspect ratio
+        final aspectRatio = _parseSvgAspectRatio(widget.svgContent);
+
+        // Calculate height: if we have aspect ratio, use it; otherwise default to 0.75
+        // Cap height at 500px for non-preview mode
+        final double calculatedHeight;
+        if (aspectRatio != null) {
+          calculatedHeight = (availableWidth * aspectRatio).clamp(100.0, 500.0);
+        } else {
+          // Default aspect ratio of 0.75 (4:3)
+          calculatedHeight = (availableWidth * 0.75).clamp(100.0, 500.0);
+        }
+
+        return _buildWebView(
+          constraints.maxWidth.isFinite ? null : widget.width,
+          calculatedHeight,
+        );
+      },
+    );
+  }
+
+  Widget _buildWebView(double? width, double height) {
     final htmlContent = _createSvgHtmlWrapper(
       widget.svgContent,
       isDarkBackground: _isDarkBackground,
     );
-    final webViewHeight =
-        widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
 
     return SelectionContainer.disabled(
       child: GestureDetector(
@@ -1706,8 +1777,8 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
         onVerticalDragStart: (_) {},
         onHorizontalDragStart: (_) {},
         child: SizedBox(
-          width: widget.width,
-          height: webViewHeight,
+          width: width,
+          height: height,
           child: InAppWebView(
             initialData: InAppWebViewInitialData(
               data: htmlContent,
@@ -1759,6 +1830,7 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
   }) {
     final backgroundColor = isDarkBackground ? '#1e1e1e' : '#ffffff';
     // Create sandboxed iframe with SVG content
+    // CSS updated to make SVG fill width while maintaining aspect ratio
     final svgDataUrl =
         'data:text/html;charset=utf-8,' +
         Uri.encodeComponent('''
@@ -1771,7 +1843,7 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     html, body { width: 100%; height: 100%; overflow: hidden; background-color: $backgroundColor; }
     body { display: flex; align-items: center; justify-content: center; }
     #svg-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-    svg { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+    svg { width: 100%; height: auto; max-height: 100%; display: block; }
   </style>
   <script src="synapse://svg.pan-zoom.min.js"></script>
 </head>
@@ -1915,40 +1987,41 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
       future: _determineImageSourceType(widget.imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
-        return IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(4),
-                ),
-                child: _SvgWebViewWidget(
-                  key: _svgWebViewKey,
+        // Note: We don't use IntrinsicWidth here because LayoutBuilder
+        // (used inside _SvgWebViewWidget) doesn't support intrinsic dimensions.
+        // Since we want SVG to span full width anyway, Column with stretch is correct.
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+              child: _SvgWebViewWidget(
+                key: _svgWebViewKey,
+                svgContent: widget.svgContent,
+                width: widget.width,
+                height: widget.height,
+              ),
+            ),
+            _ImageInfoBar(
+              sourceType: sourceType,
+              isSvg: true,
+              onBackgroundToggle: () {
+                _svgWebViewKey.currentState?.toggleBackground();
+              },
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
                   svgContent: widget.svgContent,
-                  width: widget.width,
-                  height: widget.height,
-                ),
-              ),
-              _ImageInfoBar(
-                sourceType: sourceType,
-                isSvg: true,
-                onBackgroundToggle: () {
-                  _svgWebViewKey.currentState?.toggleBackground();
-                },
-                onFullscreen: () {
-                  _FullscreenViewer.show(
-                    context,
-                    svgContent: widget.svgContent,
-                    title: 'SVG',
-                  );
-                },
-                onEdit: null, // Hide edit button for SVGs
-              ),
-            ],
-          ),
+                  title: 'SVG',
+                );
+              },
+              onEdit: null, // Hide edit button for SVGs
+            ),
+          ],
         );
       },
     );
