@@ -75,6 +75,10 @@ class AgentTraceView extends StatelessWidget {
         icon = Icons.pause_circle_filled;
         color = Colors.orange;
         break;
+      case AgentTaskStatus.waitingForSubtasks:
+        icon = Icons.hourglass_bottom;
+        color = Colors.purple;
+        break;
     }
 
     return Card(

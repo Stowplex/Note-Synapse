@@ -1,4 +1,11 @@
-enum AgentTaskStatus { pending, inProgress, completed, failed, paused }
+enum AgentTaskStatus {
+  pending,
+  inProgress,
+  waitingForSubtasks,
+  completed,
+  failed,
+  paused,
+}
 
 class AgentTask {
   final String id;

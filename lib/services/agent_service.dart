@@ -217,11 +217,39 @@ class AgentService extends ChangeNotifier {
         _tasks.any(
           (t) =>
               t.status == AgentTaskStatus.pending ||
+              t.status == AgentTaskStatus.waitingForSubtasks ||
               t.status == AgentTaskStatus.paused,
         )) {
       // Find a task whose dependencies are all met
       final task = _tasks.cast<AgentTask?>().firstWhere((t) {
         if (t == null) return false;
+        // Tasks waiting for subtasks need special handling
+        if (t.status == AgentTaskStatus.waitingForSubtasks) {
+          // Check if all spawned subtasks are completed
+          final allSubtasksCompleted = t.spawnedSubtaskIds.every((subtaskId) {
+            final subtask = _tasks.where((s) => s.id == subtaskId).firstOrNull;
+            return subtask == null ||
+                subtask.status == AgentTaskStatus.completed;
+          });
+          if (allSubtasksCompleted) {
+            // Append subtask results to parent's execution history
+            for (final subtaskId in t.spawnedSubtaskIds) {
+              final subtask = _tasks
+                  .where((s) => s.id == subtaskId)
+                  .firstOrNull;
+              if (subtask != null &&
+                  subtask.status == AgentTaskStatus.completed) {
+                t.executionHistory.add(
+                  'Subtask "${subtask.description}" result: ${subtask.condensedSummary ?? subtask.result ?? "completed"}',
+                );
+              }
+            }
+            // Resume parent task - set back to inProgress
+            t.status = AgentTaskStatus.inProgress;
+            return true;
+          }
+          return false; // Still waiting for subtasks
+        }
         if (t.status != AgentTaskStatus.pending &&
             t.status != AgentTaskStatus.paused) {
           return false;
@@ -1918,6 +1946,8 @@ The actual content (answer text, or tool call details, or reasoning)
     );
     _currentThought =
         'Spawned ${createdSubtasks.length} subtasks for parallel investigation';
+    // Set parent to wait for subtasks - this breaks the inner ReAct loop
+    parentTask.status = AgentTaskStatus.waitingForSubtasks;
     notifyListeners();
   }
 

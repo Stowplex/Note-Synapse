@@ -594,6 +594,12 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
           size: 18,
           color: Theme.of(context).colorScheme.tertiary,
         );
+      case AgentTaskStatus.waitingForSubtasks:
+        return Icon(
+          Icons.hourglass_bottom,
+          size: 18,
+          color: Theme.of(context).colorScheme.secondary,
+        );
     }
   }
 
