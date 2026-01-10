@@ -512,6 +512,9 @@ class AIService {
         },
       );
 
+      // Add 'generateCode' hint to context
+      context.setValue('modelHints', ['generateCode']);
+
       final request = _singleTurnRequest(
         taskContext:
             'Create a self-contained HTML/CSS/JS application that satisfies the user specification and uses attached assets if provided.',
