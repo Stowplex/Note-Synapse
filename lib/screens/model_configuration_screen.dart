@@ -43,6 +43,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsAudio = false;
   bool _supportsVideo = false;
   bool _supportsImageGeneration = false;
+  bool _supportsCodeGeneration = false;
 
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
@@ -179,6 +180,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
       _supportsImageGeneration =
           preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
+      _supportsCodeGeneration =
+          preset.customCapabilitiesObject?.supportsCodeGeneration ?? false;
       _supportedAttachmentMimeTypesController.text =
           preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
 
@@ -220,6 +223,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsVideo ?? false;
           _supportsImageGeneration =
               config.customCapabilitiesObject?.supportsImageGeneration ?? false;
+          _supportsCodeGeneration =
+              config.customCapabilitiesObject?.supportsCodeGeneration ?? false;
           _supportedAttachmentMimeTypesController.text =
               config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           _existingModelFeatures = config.modelFeatures;
@@ -267,6 +272,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsAudio: _supportsAudio,
         supportsVideo: _supportsVideo,
         supportsImageGeneration: _supportsImageGeneration,
+        supportsCodeGeneration: _supportsCodeGeneration,
       );
 
       // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
@@ -842,6 +848,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               onChanged: (value) {
                 setState(() {
                   _supportsImageGeneration = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Code Generation'),
+              subtitle: const Text(
+                'Model is optimized for writing and debugging code',
+              ),
+              value: _supportsCodeGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsCodeGeneration = value ?? false;
                 });
               },
             ),
