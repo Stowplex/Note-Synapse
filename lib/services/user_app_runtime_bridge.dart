@@ -36,6 +36,8 @@ typedef SqlWriteApprovalCallback =
       String sql,
       SqlQueryType queryType,
     );
+typedef DeletionApprovalCallback =
+    Future<bool> Function(UserAppRuntimeBridge source, List<String> noteIds);
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
@@ -53,6 +55,7 @@ class UserAppRuntimeBridge {
     this.onOpenAIActions,
     this.onModificationRequest,
     this.onSqlWriteApprovalRequest,
+    this.onDeletionApprovalRequest,
   }) : _selectedNotes = selectedNotes ?? const [];
 
   final UserApp app;
@@ -65,9 +68,11 @@ class UserAppRuntimeBridge {
   final OpenAIActionsCallback? onOpenAIActions;
   final ModificationRequestCallback? onModificationRequest;
   final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
+  final DeletionApprovalCallback? onDeletionApprovalRequest;
 
   bool _sessionApprovedModifications = false;
   bool _sessionApprovedSqlWrites = false;
+  bool _sessionApprovedDeletions = false;
 
   void approveSession() {
     _sessionApprovedModifications = true;
@@ -77,6 +82,13 @@ class UserAppRuntimeBridge {
     _sessionApprovedSqlWrites = true;
     LoggerService.debug(
       '[UserAppRuntimeBridge] SQL write operations approved for session',
+    );
+  }
+
+  void approveDeletionsForSession() {
+    _sessionApprovedDeletions = true;
+    LoggerService.debug(
+      '[UserAppRuntimeBridge] Note deletions approved for session',
     );
   }
 
@@ -1383,7 +1395,8 @@ class UserAppRuntimeBridge {
   }
 
   Future<int> _deleteNotesFromJavaScript(List<dynamic> noteIdsData) async {
-    var deletedCount = 0;
+    // Validate and collect note IDs first
+    final noteIds = <String>[];
     for (final noteIdData in noteIdsData) {
       if (noteIdData is! String || noteIdData.trim().isEmpty) {
         LoggerService.warning(
@@ -1391,14 +1404,41 @@ class UserAppRuntimeBridge {
         );
         continue;
       }
+      noteIds.add(noteIdData.trim());
+    }
+
+    if (noteIds.isEmpty) {
+      return 0;
+    }
+
+    // Check approval before deleting
+    if (!_sessionApprovedDeletions) {
+      if (onDeletionApprovalRequest != null) {
+        final approved = await onDeletionApprovalRequest!(this, noteIds);
+        if (!approved) {
+          LoggerService.debug(
+            '[Synapse.deleteNotes] User denied deletion of ${noteIds.length} notes',
+          );
+          throw Exception('User denied the note deletion.');
+        }
+      } else {
+        // No approval callback - block delete operations
+        LoggerService.warning(
+          '[Synapse.deleteNotes] No approval callback, blocking deletion',
+        );
+        throw Exception('Note deletion requires user approval.');
+      }
+    }
+
+    var deletedCount = 0;
+    for (final noteId in noteIds) {
       try {
-        final noteId = noteIdData.trim();
         await appProvider.deleteNote(noteId);
         deletedCount++;
         LoggerService.debug('[Synapse.deleteNotes] Deleted note: $noteId');
       } catch (e) {
         LoggerService.error(
-          '[Synapse.deleteNotes] Error deleting note $noteIdData: $e',
+          '[Synapse.deleteNotes] Error deleting note $noteId: $e',
           error: e,
         );
       }

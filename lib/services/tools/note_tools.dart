@@ -1018,3 +1018,81 @@ class CreateNotesTool implements NativeTool {
     };
   }
 }
+
+/// Tool for deleting notes.
+/// Requires user approval before deletion.
+class DeleteNoteTool implements NativeTool {
+  final DatabaseService _databaseService = DatabaseService();
+
+  @override
+  String get name => 'delete_notes';
+
+  @override
+  String get description =>
+      'Delete one or more notes by their IDs. IMPORTANT: This action cannot be undone. Requires user approval.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': {
+      'note_ids': {
+        'type': 'array',
+        'description': 'List of note IDs to delete.',
+        'items': {'type': 'string'},
+      },
+    },
+    'required': ['note_ids'],
+  };
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    final noteIdsRaw = args['note_ids'];
+    if (noteIdsRaw is! List) {
+      return {'error': 'note_ids must be a list of strings.'};
+    }
+
+    final noteIds = noteIdsRaw.whereType<String>().toList();
+    if (noteIds.isEmpty) {
+      return {'error': 'No valid note IDs provided.'};
+    }
+
+    // Check approval before deletion
+    if (!ApprovalService.sessionApprovedNoteDeletions) {
+      final approved = await ApprovalService.requestNoteDeletionApproval(
+        noteIds: noteIds,
+        source: 'Agent',
+      );
+      if (!approved) {
+        return {'error': 'User denied the note deletion.'};
+      }
+    }
+
+    final deletedIds = <String>[];
+    final failedIds = <String, String>{};
+
+    for (final noteId in noteIds) {
+      try {
+        final note = await _databaseService.getNote(noteId);
+        if (note == null) {
+          failedIds[noteId] = 'Note not found';
+          continue;
+        }
+        await _databaseService.deleteNote(noteId);
+        deletedIds.add(noteId);
+      } catch (e) {
+        failedIds[noteId] = e.toString();
+      }
+    }
+
+    if (deletedIds.isEmpty && failedIds.isNotEmpty) {
+      return {'error': 'Failed to delete all notes.', 'failed': failedIds};
+    }
+
+    return {
+      'status': 'success',
+      'deleted_count': deletedIds.length,
+      'deleted_ids': deletedIds,
+      if (failedIds.isNotEmpty) 'failed': failedIds,
+    };
+  }
+}

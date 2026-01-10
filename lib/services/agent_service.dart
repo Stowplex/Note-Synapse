@@ -762,6 +762,7 @@ If no findings worth preserving, return: []
     ListFiltersTool(),
     ModifyNoteTool(),
     CreateNotesTool(),
+    DeleteNoteTool(),
   ];
   List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
 

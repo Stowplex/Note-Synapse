@@ -5,7 +5,7 @@ import 'logger_service.dart';
 import 'sql_query_service.dart';
 
 /// Type of approval being requested.
-enum ApprovalType { sqlWrite, noteModification }
+enum ApprovalType { sqlWrite, noteModification, noteDeletion }
 
 /// Encapsulates details of an approval request.
 class ApprovalRequest {
@@ -84,6 +84,24 @@ class ApprovalRequest {
       sessionApprovalLabel: 'Allow for this session',
     );
   }
+
+  /// Create a note deletion approval request.
+  factory ApprovalRequest.noteDeletion({
+    required List<String> noteIds,
+    String? source,
+  }) {
+    final isBatch = noteIds.length > 1;
+    return ApprovalRequest(
+      type: ApprovalType.noteDeletion,
+      title: isBatch ? 'Allow Note Deletion?' : 'Allow Note Deletion?',
+      description: source != null
+          ? '$source wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:'
+          : 'The operation wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:',
+      details: {'noteIds': noteIds, 'count': noteIds.length},
+      warningMessage: 'This action cannot be undone.',
+      sessionApprovalLabel: 'Allow for this session',
+    );
+  }
 }
 
 /// Result of an approval request.
@@ -114,12 +132,16 @@ class ApprovalService {
   /// Whether note modifications have been approved for this session.
   static bool sessionApprovedNoteModifications = false;
 
+  /// Whether note deletions have been approved for this session.
+  static bool sessionApprovedNoteDeletions = false;
+
   /// Whether SQL writes have been approved for this session.
   static bool sessionApprovedSqlWrites = false;
 
   /// Reset all session approvals.
   static void resetSession() {
     sessionApprovedNoteModifications = false;
+    sessionApprovedNoteDeletions = false;
     sessionApprovedSqlWrites = false;
     LoggerService.debug('[ApprovalService] Session approvals reset');
   }
@@ -215,6 +237,54 @@ class ApprovalService {
           sessionApprovedNoteModifications = true;
           LoggerService.debug(
             '[ApprovalService] Note modifications approved for session',
+          );
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+      return false;
+    }
+  }
+
+  /// Request approval for note deletion.
+  ///
+  /// Returns true if approved, false if denied.
+  /// Automatically approves if [sessionApprovedNoteDeletions] is true.
+  static Future<bool> requestNoteDeletionApproval({
+    required List<String> noteIds,
+    String? source,
+  }) async {
+    // Check session approval first
+    if (sessionApprovedNoteDeletions) {
+      LoggerService.debug(
+        '[ApprovalService] Note deletion auto-approved (session)',
+      );
+      return true;
+    }
+
+    // Check if approval callback is registered
+    if (onApprovalRequest == null) {
+      LoggerService.warning(
+        '[ApprovalService] No approval callback registered for note deletion',
+      );
+      return false;
+    }
+
+    // Request approval
+    final request = ApprovalRequest.noteDeletion(
+      noteIds: noteIds,
+      source: source,
+    );
+
+    try {
+      final result = await onApprovalRequest!(request);
+      if (result.approved) {
+        if (result.approvedForSession) {
+          sessionApprovedNoteDeletions = true;
+          LoggerService.debug(
+            '[ApprovalService] Note deletions approved for session',
           );
         }
         return true;

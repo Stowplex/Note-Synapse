@@ -645,6 +645,23 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
         }
         return false;
       },
+      onDeletionApprovalRequest: (source, noteIds) async {
+        if (!mounted) return false;
+
+        final request = ApprovalRequest.noteDeletion(
+          noteIds: noteIds,
+          source: 'App: ${widget.app.name}',
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+
+        if (result.approved) {
+          if (result.approvedForSession) {
+            source.approveDeletionsForSession();
+          }
+          return true;
+        }
+        return false;
+      },
     );
 
     return Stack(

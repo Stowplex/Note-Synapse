@@ -70,6 +70,10 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
               const SizedBox(height: 4),
               _buildNoteIdDisplay(colorScheme),
             ],
+            if (widget.request.type == ApprovalType.noteDeletion) ...[
+              const SizedBox(height: 4),
+              _buildNoteIdsDisplay(colorScheme),
+            ],
             const SizedBox(height: 8),
             _buildDetailsContainer(colorScheme),
             if (widget.request.warningMessage != null) ...[
@@ -115,6 +119,41 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     );
   }
 
+  Widget _buildNoteIdsDisplay(ColorScheme colorScheme) {
+    final details = widget.request.details;
+    final noteIds = details is Map
+        ? (details['noteIds'] as List<dynamic>?)?.cast<String>() ?? []
+        : <String>[];
+
+    if (noteIds.isEmpty) {
+      return const Text('No notes specified');
+    }
+
+    return Container(
+      width: double.maxFinite,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: noteIds
+            .map(
+              (id) => SelectableText(
+                '• $id',
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
   Widget _buildDetailsContainer(ColorScheme colorScheme) {
     String displayText;
     if (widget.request.type == ApprovalType.noteModification) {
@@ -130,6 +169,10 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           displayText = modification.toString();
         }
       }
+    } else if (widget.request.type == ApprovalType.noteDeletion) {
+      // For deletion, the note IDs are already shown above
+      // Don't show the details container for deletion
+      return const SizedBox.shrink();
     } else {
       displayText = widget.request.formattedDetails;
     }
