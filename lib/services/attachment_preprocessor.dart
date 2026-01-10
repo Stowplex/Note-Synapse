@@ -60,6 +60,30 @@ class MessageSanitizationOutcome {
 
 /// Normalizes attachments before they are sent to model adapters.
 class AttachmentPreprocessor {
+  /// Detect required capabilities from attachments.
+  /// Returns set of capability hints: 'images', 'video', 'documents', 'audio'.
+  static Future<Set<String>> detectRequiredCapabilities(
+    List<PlatformFile> attachments,
+  ) async {
+    final caps = <String>{};
+    for (final file in attachments) {
+      final bytes = await _readBytes(file);
+      if (bytes == null) continue;
+
+      final mime = _detectMimeType(file, bytes);
+
+      if (mime.startsWith('image/')) caps.add('images');
+      if (mime.startsWith('audio/')) caps.add('audio');
+      if (mime.startsWith('video/')) caps.add('video');
+      if (mime.startsWith('application/pdf') ||
+          mime.startsWith('text/') ||
+          mime.contains('document')) {
+        caps.add('documents');
+      }
+    }
+    return caps;
+  }
+
   AttachmentPreprocessor._();
 
   static Future<AttachmentFilterOutcome> sanitizeAttachments(

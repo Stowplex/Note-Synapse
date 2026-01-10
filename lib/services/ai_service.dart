@@ -14,6 +14,7 @@ import 'prompts/prompt_models.dart';
 import 'prompts/system_prompt_builder.dart';
 import 'prompts/note_prompt_builder.dart';
 import '../models/generation_context.dart';
+import 'attachment_preprocessor.dart';
 
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
@@ -114,19 +115,31 @@ class AIService {
     }, requestId: requestId);
   }
 
-  /// Generate content with attachments (Simple interface)
   static Future<String> generateWithAttachments(
     String prompt,
     List<PlatformFile> attachedFiles, {
     GenerationContext? generationContext,
-  }) {
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    if (context.modelOverride == null && attachedFiles.isNotEmpty) {
+      final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+        attachedFiles,
+      );
+      if (caps.isNotEmpty) {
+        final preferred = await ModelSelector.instance.selectModelByPreference(
+          caps,
+        );
+        if (preferred != null) context.modelOverride = preferred;
+      }
+    }
+
     final request = _singleTurnRequest(
       taskContext:
           'You are a helpful assistant analyzing the attached documents.',
       userInstruction: prompt,
       attachments: attachedFiles,
     );
-    return executePrompt(request, generationContext: generationContext);
+    return executePrompt(request, generationContext: context);
   }
 
   /// New note creation
@@ -138,6 +151,20 @@ class AIService {
   }) async {
     final context = generationContext ?? GenerationContext();
     final requestId = context.ensureRequestId();
+
+    if (context.modelOverride == null &&
+        attachedFiles != null &&
+        attachedFiles.isNotEmpty) {
+      final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+        attachedFiles,
+      );
+      if (caps.isNotEmpty) {
+        final preferred = await ModelSelector.instance.selectModelByPreference(
+          caps,
+        );
+        if (preferred != null) context.modelOverride = preferred;
+      }
+    }
 
     return await _withErrorHandling('new note creation', () async {
       LoggerService.debug(
@@ -203,9 +230,15 @@ class AIService {
         attachments: [audioFile],
       );
 
+      GenerationContext context = _contextFromRequestId(requestId);
+      final preferred = await ModelSelector.instance.selectModelByPreference({
+        'audio',
+      });
+      if (preferred != null) context.modelOverride = preferred;
+
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
 
       LoggerService.debug(
@@ -256,9 +289,15 @@ class AIService {
         attachments: [audioFile],
       );
 
+      GenerationContext genContext = _contextFromRequestId(requestId);
+      final preferred = await ModelSelector.instance.selectModelByPreference({
+        'audio',
+      });
+      if (preferred != null) genContext.modelOverride = preferred;
+
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: genContext,
       );
 
       LoggerService.debug(
@@ -344,9 +383,15 @@ class AIService {
         attachments: [imageFile],
       );
 
+      GenerationContext context = _contextFromRequestId(requestId);
+      final preferred = await ModelSelector.instance.selectModelByPreference({
+        'images',
+      });
+      if (preferred != null) context.modelOverride = preferred;
+
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
 
       LoggerService.debug(
@@ -389,9 +434,15 @@ class AIService {
         attachments: [pdfFile],
       );
 
+      GenerationContext context = _contextFromRequestId(requestId);
+      final preferred = await ModelSelector.instance.selectModelByPreference({
+        'documents',
+      });
+      if (preferred != null) context.modelOverride = preferred;
+
       final response = await ModelSelector.instance.generateFromPrompt(
         request,
-        generationContext: _contextFromRequestId(requestId),
+        generationContext: context,
       );
 
       LoggerService.debug(

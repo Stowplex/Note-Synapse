@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import '../services/attachment_preprocessor.dart';
 import '../providers/app_provider.dart';
 import 'models/ai_model.dart';
 import 'models/gemini_model.dart';
@@ -9,6 +10,7 @@ import 'prompts/prompt_models.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
 import '../models/generation_context.dart';
+import 'model_preference_service.dart';
 
 /// Service for selecting and managing AI models
 class ModelSelector {
@@ -214,6 +216,17 @@ class ModelSelector {
     GenerationContext? generationContext,
   }) async {
     final context = generationContext ?? GenerationContext();
+
+    // Auto-select model based on capabilities if no override is set
+    if (context.modelOverride == null) {
+      final allMessages = [
+        request.systemMessage,
+        ...request.contextMessages,
+        ...request.conversationMessages,
+      ];
+      await _autoSelectModelForCapabilities(allMessages, context);
+    }
+
     final modelOverride = context.modelOverride;
 
     AIModel? modelToUse = _currentModel;
@@ -261,6 +274,17 @@ class ModelSelector {
     GenerationContext? generationContext,
   }) async {
     final context = generationContext ?? GenerationContext();
+
+    // Auto-select model based on capabilities if no override is set
+    if (context.modelOverride == null) {
+      final allMessages = [
+        request.systemMessage,
+        ...request.contextMessages,
+        ...request.conversationMessages,
+      ];
+      await _autoSelectModelForCapabilities(allMessages, context);
+    }
+
     final modelOverride = context.modelOverride;
 
     AIModel? modelToUse = _currentModel;
@@ -323,6 +347,18 @@ class ModelSelector {
     GenerationContext? generationContext,
   }) async {
     final context = generationContext ?? GenerationContext();
+
+    // Auto-select model based on capabilities
+    if (context.modelOverride == null) {
+      // Create a temporary message to check capabilities for this prompt + attachments
+      final tempMsg = PromptMessage(
+        role: PromptRole.user,
+        content: prompt,
+        attachments: attachedFiles,
+      );
+      await _autoSelectModelForCapabilities([tempMsg], context);
+    }
+
     final modelOverride = context.modelOverride;
 
     AIModel? modelToUse = _currentModel;
@@ -369,6 +405,12 @@ class ModelSelector {
     GenerationContext? generationContext,
   }) async {
     final context = generationContext ?? GenerationContext();
+
+    // Auto-select model based on capabilities if no override is set
+    if (context.modelOverride == null) {
+      await _autoSelectModelForCapabilities(messages, context);
+    }
+
     final modelOverride = context.modelOverride;
 
     AIModel? modelToUse = _currentModel;
@@ -402,6 +444,35 @@ class ModelSelector {
       maxOutputTokens: maxOutputTokens,
       generationContext: context,
     );
+  }
+
+  /// Helper to auto-select a model based on capabilities found in messages
+  Future<void> _autoSelectModelForCapabilities(
+    List<PromptMessage> messages,
+    GenerationContext context,
+  ) async {
+    final allAttachments = <PlatformFile>[];
+    final allContent = StringBuffer();
+
+    // Collect attachments and content from messages
+    for (final msg in messages) {
+      allAttachments.addAll(msg.attachments);
+      allContent.write(msg.content);
+    }
+
+    final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+      allAttachments,
+    );
+
+    if (caps.isNotEmpty) {
+      final preferredModel = await selectModelByPreference(caps);
+      if (preferredModel != null) {
+        LoggerService.debug(
+          'ModelSelector: Auto-selected model ${preferredModel.displayName} based on capabilities: $caps',
+        );
+        context.modelOverride = preferredModel;
+      }
+    }
   }
 
   /// Create a model instance for the given model type
@@ -455,9 +526,94 @@ class ModelSelector {
         return model;
       }
     }
-
     LoggerService.debug('ModelSelector: No model found matching hints $hints');
     return null;
+  }
+
+  /// Select model based on preference list and required capabilities.
+  /// Candidates = [Active Model] + [Preference List]
+  /// Priority: image_gen > (video = audio = image = document)
+  /// If no perfect match AND no image_gen required → use active/default model.
+  Future<ModelConfig?> selectModelByPreference(Set<String> requiredCaps) async {
+    // 1. Prepare candidates: Active Model + Preference List
+    final activeModel = await ModelStorageService.getActiveModel();
+    if (activeModel == null)
+      return null; // Should not happen if app initialized
+
+    final preferenceListIds = await ModelPreferenceService.instance
+        .getPreferenceList();
+    final allModels = await ModelStorageService.getConfiguredModels();
+
+    final candidates = <ModelConfig>[
+      activeModel,
+      ...preferenceListIds
+          .map(
+            (id) => allModels.firstWhere(
+              (m) => m.id == id,
+              orElse: () =>
+                  activeModel, // Fallback to active to avoid null, filtered out later if needed or assumes distinct IDs usually
+            ),
+          )
+          .where(
+            (m) => m.id != activeModel.id,
+          ), // Avoid duplicates if active is in preference list
+    ];
+
+    // 2. Find perfect match in candidates
+    for (final model in candidates) {
+      if (_modelMatchesHints(model, requiredCaps.toList())) {
+        // Interesting log check: Is this the active model?
+        if (model.id != activeModel.id) {
+          _logSelection(model, 'perfect_match', requiredCaps);
+        }
+        return model;
+      }
+    }
+
+    // 3. No perfect match - fallback by priority (image_gen > others)
+    // 3. No perfect match - fallback by priority (image_gen > others)
+    if (requiredCaps.contains('image_gen')) {
+      // Try to find image gen support in candidates first (respecting preference)
+      for (final model in candidates) {
+        if (model.customCapabilitiesObject?.supportsImageGeneration == true) {
+          _logSelection(model, 'image_gen_priority_candidate', requiredCaps);
+          return model;
+        }
+      }
+
+      // Then try any configured model
+      for (final model in allModels) {
+        // Skip if already checked in candidates
+        if (candidates.any((c) => c.id == model.id)) continue;
+
+        if (model.customCapabilitiesObject?.supportsImageGeneration == true) {
+          _logSelection(model, 'image_gen_priority_global', requiredCaps);
+          return model;
+        }
+      }
+    }
+
+    // 4. Fallback to active model (default)
+    // This is "uninteresting" so we don't log it unless strictly debugging
+    return activeModel;
+  }
+
+  void _logSelection(
+    ModelConfig model,
+    String reason,
+    Set<String> requiredCaps,
+  ) {
+    LoggerService.logAiRequest(
+      endpoint: 'model_preference_selection',
+      headers: {},
+      requestBody: {
+        'action': 'model_selected',
+        'selectedModel': model.displayName,
+        'reason': reason,
+        'requiredCaps': requiredCaps.toList(),
+      },
+      // Generate a temporary ID if not in a request context yet, or pass from caller
+    );
   }
 
   /// Checks if a model matches all specified capability hints.

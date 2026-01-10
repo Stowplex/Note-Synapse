@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../l10n/app_localizations.dart';
 import '../models/note.dart';
@@ -12,6 +13,8 @@ import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
 import '../widgets/drawing_editor.dart';
+import '../services/attachment_preprocessor.dart';
+import '../services/model_selector.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
   const UserAppCreationScreen({super.key});
@@ -349,6 +352,34 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
       final generationContext = GenerationContext();
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
+      } else {
+        // Collect all attachments from paths and potential notes
+        final attachmentsToScan = <PlatformFile>[];
+        // Loading files from paths for capability check
+        for (final path in _attachmentPaths) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            attachmentsToScan.add(
+              PlatformFile(
+                name: path.split('/').last,
+                size: bytes.length,
+                bytes: bytes,
+                path: path,
+              ),
+            );
+          }
+        }
+        final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+          attachmentsToScan,
+        );
+        if (caps.isNotEmpty) {
+          final preferredModel = await ModelSelector.instance
+              .selectModelByPreference(caps);
+          if (preferredModel != null) {
+            generationContext.modelOverride = preferredModel;
+          }
+        }
       }
 
       final app = await appProvider.createUserApp(

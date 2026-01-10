@@ -33,6 +33,7 @@ import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/conversation_settings_service.dart';
 import '../services/model_selector.dart';
+import '../services/attachment_preprocessor.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
@@ -4063,6 +4064,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final generationContext = GenerationContext();
     if (_selectedModel != null) {
       generationContext.modelOverride = _selectedModel;
+    } else {
+      final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+        attachments,
+      );
+      if (caps.isNotEmpty) {
+        final preferredModel = await ModelSelector.instance
+            .selectModelByPreference(caps);
+        if (preferredModel != null) {
+          generationContext.modelOverride = preferredModel;
+        }
+      }
     }
     final requestId = generationContext.ensureRequestId();
     _currentRequestId = requestId;

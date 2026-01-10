@@ -418,6 +418,9 @@ class _AIActionScreenState extends State<AIActionScreen> {
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
       }
+      // Note: No backend auto-selection here.
+      // Attachments are passed down, and ModelSelector will handle capability detection
+      // centered in generateFromPrompt/generateWithToolsAndMessages.
 
       switch (_selectedAction) {
         case AIInteractionType.noteTransformation:

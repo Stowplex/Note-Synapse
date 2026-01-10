@@ -15,6 +15,7 @@ import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
 import 'agentic_settings_screen.dart';
 import 'getting_started_screen.dart';
+import 'model_preference_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
@@ -460,6 +461,21 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AgenticSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.sort_rounded),
+                    title: const Text('Model Preferences'),
+                    subtitle: const Text('Set capability-based model priority'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ModelPreferenceScreen(),
                       ),
                     ),
                   ),

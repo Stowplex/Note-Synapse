@@ -16,6 +16,7 @@ import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
 import '../services/model_selector.dart';
+import '../services/attachment_preprocessor.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
@@ -783,6 +784,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
       }
+      // Note: Capability detection is now handled in ConversationAiEngine
       requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
 
