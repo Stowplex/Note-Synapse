@@ -562,19 +562,9 @@ class AIService {
         },
       );
 
-      // If model hints are provided, try to find a matching model
+      // Pass model hints to context for ModelSelector to handle
       if (modelHint != null && modelHint.isNotEmpty) {
-        final hintedModel = await ModelSelector.instance.getModelByHint(
-          modelHint,
-          currentOverride: context.modelOverride,
-        );
-        if (hintedModel != null) {
-          context.modelOverride = hintedModel;
-          LoggerService.debug(
-            'chat AI: Using alternative model ${hintedModel.displayName} for hints $modelHint',
-          );
-        }
-        // If null, current model already matches the hints or no model found - use current model
+        context.setValue('modelHints', modelHint);
       }
 
       final request = _singleTurnRequest(
@@ -626,19 +616,9 @@ class AIService {
         },
       );
 
-      // If model hints are provided, try to find a matching model
+      // Pass model hints to context for ModelSelector to handle
       if (modelHint != null && modelHint.isNotEmpty) {
-        final hintedModel = await ModelSelector.instance.getModelByHint(
-          modelHint,
-          currentOverride: context.modelOverride,
-        );
-        if (hintedModel != null) {
-          context.modelOverride = hintedModel;
-          LoggerService.debug(
-            'chat AI multi-part: Using alternative model ${hintedModel.displayName}',
-          );
-        }
-        // If null, current model already matches the hints or no model found - use current model
+        context.setValue('modelHints', modelHint);
       }
 
       // Enable multi-part mode in context

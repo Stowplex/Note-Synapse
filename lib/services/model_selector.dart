@@ -460,9 +460,15 @@ class ModelSelector {
       allContent.write(msg.content);
     }
 
-    final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
-      allAttachments,
-    );
+    // Start with explicitly provided hints from context
+    final Set<String> caps = {};
+    if (context.getValue<List<String>>('modelHints') != null) {
+      caps.addAll(context.getValue<List<String>>('modelHints')!);
+    }
+
+    final detectedCaps =
+        await AttachmentPreprocessor.detectRequiredCapabilities(allAttachments);
+    caps.addAll(detectedCaps);
 
     if (caps.isNotEmpty) {
       final preferredModel = await selectModelByPreference(caps);
