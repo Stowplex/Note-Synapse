@@ -495,41 +495,65 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
                       label: const Text('Revise Plan'),
                     ),
                     const SizedBox(width: 8),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: (_isRevising || isRunning)
-                              ? null
-                              : () {
-                                  // Ensure any pending comment edits are saved?
-                                  // Not strictly necessary as executePlan uses strict tasks list
-                                  // but good practice if we were persisting.
-                                  widget.onProceed();
-                                },
-                          icon: isRunning
-                              ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onPrimary,
-                                  ),
-                                )
-                              : const Icon(Icons.play_arrow),
-                          label: Text(isRunning ? 'Executing...' : 'Proceed'),
-                        ),
-                        if (!isRunning)
-                          ModelSelectorButton(
-                            selectedModel: agentService.modelOverride,
-                            onModelSelected: (model) {
-                              agentService.modelOverride = model;
-                            },
-                            isSendButton: true,
+                    IntrinsicHeight(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: (_isRevising || isRunning)
+                                ? null
+                                : () {
+                                    // Ensure any pending comment edits are saved?
+                                    // Not strictly necessary as executePlan uses strict tasks list
+                                    // but good practice if we were persisting.
+                                    widget.onProceed();
+                                  },
+                            style: FilledButton.styleFrom(
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.horizontal(
+                                  left: Radius.circular(20),
+                                  right: Radius.zero,
+                                ),
+                              ),
+                            ),
+                            icon: isRunning
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimary,
+                                    ),
+                                  )
+                                : const Icon(Icons.play_arrow),
+                            label: Text(isRunning ? 'Executing...' : 'Proceed'),
                           ),
-                      ],
+                          if (!isRunning)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: const BorderRadius.horizontal(
+                                  right: Radius.circular(20),
+                                ),
+                              ),
+                              child: Center(
+                                child: ModelSelectorButton(
+                                  selectedModel: agentService.modelOverride,
+                                  onModelSelected: (model) {
+                                    agentService.modelOverride = model;
+                                  },
+                                  isElliptical: true,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
