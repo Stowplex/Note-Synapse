@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../services/logger_service.dart';
@@ -35,8 +35,6 @@ class RemoteImageDownloadReport {
 }
 
 class MediaAttachmentService {
-  static const _maxWidth = 1080;
-  static const _maxHeight = 1920;
   static const _supportedExtensions = {
     'png',
     'jpg',
@@ -163,41 +161,11 @@ class MediaAttachmentService {
     String extension,
   ) async {
     try {
-      final image = img.decodeImage(Uint8List.fromList(bytes));
-      if (image == null) {
-        return bytes;
-      }
-
-      final width = image.width;
-      final height = image.height;
-      final widthScale = width > _maxWidth ? _maxWidth / width : 1.0;
-      final heightScale = height > _maxHeight ? _maxHeight / height : 1.0;
-      final scale = math.min(widthScale, heightScale);
-
-      if (scale >= 1.0) {
-        return bytes;
-      }
-
-      final resized = img.copyResize(
-        image,
-        width: (width * scale).round(),
-        height: (height * scale).round(),
-        interpolation: img.Interpolation.average,
+      // Offload CPU-intensive image processing to a background isolate
+      return await compute(
+        _processResizeInIsolate,
+        _ResizeRequest(bytes, extension),
       );
-
-      switch (extension) {
-        case 'jpg':
-        case 'jpeg':
-          return img.encodeJpg(resized, quality: 90);
-        case 'png':
-          return img.encodePng(resized);
-        case 'gif':
-          return img.encodeGif(resized);
-        case 'webp':
-          return bytes;
-        default:
-          return img.encodePng(resized);
-      }
     } catch (e, stackTrace) {
       LoggerService.warning(
         'Image resize failed, storing original bytes',
@@ -225,5 +193,65 @@ class MediaAttachmentService {
       return file;
     }
     return null;
+  }
+}
+
+class _ResizeRequest {
+  final List<int> bytes;
+  final String extension;
+
+  _ResizeRequest(this.bytes, this.extension);
+}
+
+Future<List<int>> _processResizeInIsolate(_ResizeRequest request) async {
+  final bytes = request.bytes;
+  final extension = request.extension;
+
+  final image = img.decodeImage(Uint8List.fromList(bytes));
+  if (image == null) {
+    return bytes;
+  }
+
+  // Constants must be duplicated here or made public if they were private in the class
+  // Since they are private in the class and this is a top-level function,
+  // we either need to start using them from the class (if public) or redefining them.
+  // The safest way for a top-level function in the same file is to access them if they are in scope,
+  // but static private members of a class are NOT in scope for a top-level function outside the class unless I move them out.
+  // OR I can just hardcode them or pass them in the request.
+  // Let's check the original file. _maxWidth and _maxHeight are static const private members.
+  // I will move them to top-level constants or just redefine them locally to avoid visibility issues if I can't change the class structure easily.
+  // Actually, I can just change the class members to public or internal, OR just redefine them here. Re-defining is safest to avoid changing too much.
+  const maxWidth = 1080;
+  const maxHeight = 1920;
+
+  final width = image.width;
+  final height = image.height;
+  final widthScale = width > maxWidth ? maxWidth / width : 1.0;
+  final heightScale = height > maxHeight ? maxHeight / height : 1.0;
+  final scale = math.min(widthScale, heightScale);
+
+  if (scale >= 1.0) {
+    return bytes;
+  }
+
+  final resized = img.copyResize(
+    image,
+    width: (width * scale).round(),
+    height: (height * scale).round(),
+    interpolation: img.Interpolation.average,
+  );
+
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return img.encodeJpg(resized, quality: 90);
+    case 'png':
+      return img.encodePng(resized);
+    case 'gif':
+      return img.encodeGif(resized);
+    case 'webp':
+      return bytes;
+    default:
+      return img.encodePng(resized);
   }
 }
