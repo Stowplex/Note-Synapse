@@ -340,6 +340,9 @@ class SplitView extends StatelessWidget {
     if (caps.supportsImageGeneration) {
       icons.add(_buildIcon(Icons.brush, 'Image Gen', Colors.pink));
     }
+    if (caps.supportsCodeGeneration) {
+      icons.add(_buildIcon(Icons.code, 'Code Gen', Colors.teal));
+    }
 
     if (icons.isEmpty) return const SizedBox.shrink();
 
@@ -396,6 +399,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
                     DataColumn(label: Text('Video In')),
                     DataColumn(label: Text('Audio')),
                     DataColumn(label: Text('Img Gen')),
+                    DataColumn(label: Text('Code Gen')),
                     DataColumn(label: Text('Docs')),
                   ],
                   rows: models.map((model) {
@@ -429,6 +433,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
                         _buildBoolCell(caps?.supportsVideo ?? false),
                         _buildBoolCell(caps?.supportsAudio ?? false),
                         _buildBoolCell(caps?.supportsImageGeneration ?? false),
+                        _buildBoolCell(caps?.supportsCodeGeneration ?? false),
                         _buildBoolCell(caps?.supportsDocuments ?? false),
                       ],
                     );

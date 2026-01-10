@@ -8,6 +8,7 @@ model_capabilities:
   - support_video
   - support_document_understanding
   - support_image
+  - support_code_generation
 max_input_token: 131072
 max_output_token: 65536
 supported_attachment_mime_types:

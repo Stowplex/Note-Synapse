@@ -74,6 +74,8 @@ class ModelPresetService {
                 doc['model_capabilities']?.contains('support_video') ?? false,
             supportsImageGeneration:
                 doc['model_capabilities']?.contains('generate_image') ?? false,
+            supportsCodeGeneration:
+                doc['model_capabilities']?.contains('support_code_generation') ?? false,
           );
 
           final supportedAttachmentMimeTypes =

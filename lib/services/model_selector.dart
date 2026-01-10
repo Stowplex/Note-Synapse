@@ -536,10 +536,51 @@ class ModelSelector {
     return null;
   }
 
+  bool _modelMatchesHints(ModelConfig model, List<String> hints) {
+    if (hints.isEmpty) return true;
+
+    final caps = model.customCapabilitiesObject;
+    if (caps == null) return false;
+
+    for (final hint in hints) {
+      switch (hint) {
+        case 'images':
+          if (!caps.supportsImages) return false;
+          break;
+        case 'video':
+          if (!caps.supportsVideo) return false;
+          break;
+        case 'audio':
+          if (!caps.supportsAudio) return false;
+          break;
+        case 'documents':
+          if (!caps.supportsDocuments) return false;
+          break;
+        case 'image_gen':
+          if (!caps.supportsImageGeneration) return false;
+          break;
+        case 'generateCode':
+          if (!caps.supportsCodeGeneration) return false;
+          break;
+        // Ignore unknown hints
+      }
+    }
+    return true;
+  }
+
   /// Select model based on preference list and required capabilities.
   /// Candidates = [Active Model] + [Preference List]
-  /// Priority: image_gen > (video = audio = image = document)
-  /// If no perfect match AND no image_gen required → use active/default model.
+  /// Priority:
+  /// 1. Perfect Match (supports ALL required caps)
+  /// 2. Media Capabilities (Video, Image, Audio, Documents) - Strongest priority
+  /// 3. Image Generation - Medium priority
+  /// 4. Code Generation - Lower priority
+  ///
+  /// If no perfect match:
+  /// - If media required: Find model supporting media (ignoring other missing caps if needed, but primarily focusing on media support).
+  /// - If image_gen required: Find model supporting image_gen.
+  /// - If generateCode required: Find model supporting generateCode.
+  /// - Fallback: Active/Default model.
   Future<ModelConfig?> selectModelByPreference(Set<String> requiredCaps) async {
     // 1. Prepare candidates: Active Model + Preference List
     final activeModel = await ModelStorageService.getActiveModel();
@@ -576,10 +617,39 @@ class ModelSelector {
       }
     }
 
-    // 3. No perfect match - fallback by priority (image_gen > others)
-    // 3. No perfect match - fallback by priority (image_gen > others)
+    // 3. No perfect match - fallback by priority
+
+    // Priority A: Media Capabilities (Video, Image, Audio, Documents)
+    // These are critical for understanding input. If missing, the model fails to process request.
+    final mediaCaps = requiredCaps.intersection({
+      'video',
+      'images',
+      'audio',
+      'documents',
+    });
+    if (mediaCaps.isNotEmpty) {
+      for (final model in candidates) {
+        // Check if model supports ALL required media types
+        bool supportsMedia = true;
+        for (final cap in mediaCaps) {
+          if (!_modelMatchesHints(model, [cap])) {
+            supportsMedia = false;
+            break;
+          }
+        }
+
+        if (supportsMedia) {
+          _logSelection(model, 'media_caps_priority', requiredCaps);
+          return model;
+        }
+      }
+      // If no candidate supports all media, we might want to fall through or return null?
+      // For now, fall through to other checks or default.
+    }
+
+    // Priority B: Image Generation
     if (requiredCaps.contains('image_gen')) {
-      // Try to find image gen support in candidates first (respecting preference)
+      // Try to find image gen support in candidates first
       for (final model in candidates) {
         if (model.customCapabilitiesObject?.supportsImageGeneration == true) {
           _logSelection(model, 'image_gen_priority_candidate', requiredCaps);
@@ -587,9 +657,8 @@ class ModelSelector {
         }
       }
 
-      // Then try any configured model
+      // Then try any configured model (global search)
       for (final model in allModels) {
-        // Skip if already checked in candidates
         if (candidates.any((c) => c.id == model.id)) continue;
 
         if (model.customCapabilitiesObject?.supportsImageGeneration == true) {
@@ -599,8 +668,26 @@ class ModelSelector {
       }
     }
 
+    // Priority C: Code Generation
+    // Only checked if media/image_gen didn't force a decision (or weren't required).
+    // Or if they were required but no model found, we still check this?
+    // Logic: If I need [Image, Code], and I found no [Image, Code] perfect match.
+    // I checked [Image] capability above. If I found an Image model, I returned it.
+    // So here I only reach if:
+    // 1. No media caps required.
+    // OR
+    // 2. Media caps required but found NO model supporting them (unlikely, but possible).
+
+    if (requiredCaps.contains('generateCode')) {
+      for (final model in candidates) {
+        if (model.customCapabilitiesObject?.supportsCodeGeneration == true) {
+          _logSelection(model, 'code_gen_priority', requiredCaps);
+          return model;
+        }
+      }
+    }
+
     // 4. Fallback to active model (default)
-    // This is "uninteresting" so we don't log it unless strictly debugging
     return activeModel;
   }
 
@@ -620,35 +707,5 @@ class ModelSelector {
       },
       // Generate a temporary ID if not in a request context yet, or pass from caller
     );
-  }
-
-  /// Checks if a model matches all specified capability hints.
-  bool _modelMatchesHints(ModelConfig model, List<String> hints) {
-    final capabilities = model.customCapabilitiesObject;
-    if (capabilities == null) return false;
-
-    for (final hint in hints) {
-      switch (hint) {
-        case 'image_gen':
-          if (!capabilities.supportsImageGeneration) return false;
-          break;
-        case 'audio':
-          if (!capabilities.supportsAudio) return false;
-          break;
-        case 'video':
-          if (!capabilities.supportsVideo) return false;
-          break;
-        case 'documents':
-          if (!capabilities.supportsDocuments) return false;
-          break;
-        case 'images':
-          if (!capabilities.supportsImages) return false;
-          break;
-        default:
-          // Unknown hint - ignore
-          break;
-      }
-    }
-    return true;
   }
 }
