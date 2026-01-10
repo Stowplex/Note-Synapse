@@ -5,7 +5,6 @@ model_display_name: Gemini 3 Pro Image Preview
 api_key_url: https://aistudio.google.com/app/apikey
 model_capabilities:
   - support_audio
-  - support_video
   - support_document_understanding
   - support_image
   - generate_image
