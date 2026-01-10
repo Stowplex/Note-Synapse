@@ -526,15 +526,6 @@ class AIService {
     }, requestId: requestId);
   }
 
-  /// Deprecated: Use generateApp with attachedFiles parameter instead
-  @Deprecated('Use generateApp with attachedFiles parameter instead')
-  static Future<String> generateAppWithAttachments(
-    String prompt,
-    List<PlatformFile>? attachedFiles,
-  ) async {
-    return generateApp(prompt, attachedFiles: attachedFiles);
-  }
-
   /// Chat AI with configurable parameters
   static Future<String> chatAI(
     String prompt, {
