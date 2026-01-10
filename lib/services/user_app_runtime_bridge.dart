@@ -18,6 +18,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'note_modification_service.dart';
+import 'sql_query_service.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
@@ -28,6 +29,12 @@ typedef ModificationRequestCallback =
       UserAppRuntimeBridge source,
       String noteId,
       Map<String, dynamic> modification,
+    );
+typedef SqlWriteApprovalCallback =
+    Future<bool> Function(
+      UserAppRuntimeBridge source,
+      String sql,
+      SqlQueryType queryType,
     );
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
@@ -45,6 +52,7 @@ class UserAppRuntimeBridge {
     this.onOpenConversations,
     this.onOpenAIActions,
     this.onModificationRequest,
+    this.onSqlWriteApprovalRequest,
   }) : _selectedNotes = selectedNotes ?? const [];
 
   final UserApp app;
@@ -56,14 +64,26 @@ class UserAppRuntimeBridge {
   final OpenConversationsCallback? onOpenConversations;
   final OpenAIActionsCallback? onOpenAIActions;
   final ModificationRequestCallback? onModificationRequest;
+  final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
 
   bool _sessionApprovedModifications = false;
+  bool _sessionApprovedSqlWrites = false;
 
   void approveSession() {
     _sessionApprovedModifications = true;
   }
 
+  void approveSqlWritesForSession() {
+    _sessionApprovedSqlWrites = true;
+    LoggerService.debug(
+      '[UserAppRuntimeBridge] SQL write operations approved for session',
+    );
+  }
+
   final DatabaseService _databaseService = DatabaseService();
+  late final SqlQueryService _sqlQueryService = SqlQueryService(
+    databaseService: _databaseService,
+  );
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -246,12 +266,61 @@ class UserAppRuntimeBridge {
         try {
           final sql = args.first as String;
           LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
-          final result = await _databaseService.executeRawQuery(sql);
-          final duration = DateTime.now().difference(startTime);
+
+          // Detect query type using SqlQueryService
+          final queryType = _sqlQueryService.getQueryType(sql);
+          final isReadOnly = _sqlQueryService.isReadOnlyQuery(sql);
+
           LoggerService.debug(
-            '[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms',
+            '[Synapse.runQuery] Query type: ${_sqlQueryService.getQueryTypeDescription(queryType)}, read-only: $isReadOnly',
           );
-          return {'success': true, 'data': result};
+
+          // If it's a write operation, check for approval
+          if (!isReadOnly) {
+            if (!_sessionApprovedSqlWrites) {
+              if (onSqlWriteApprovalRequest != null) {
+                final approved = await onSqlWriteApprovalRequest!(
+                  this,
+                  sql,
+                  queryType,
+                );
+                if (!approved) {
+                  return {
+                    'success': false,
+                    'error': 'User denied the SQL write operation.',
+                  };
+                }
+                LoggerService.debug(
+                  '[Synapse.runQuery] Write operation approved by user',
+                );
+              } else {
+                return {
+                  'success': false,
+                  'error':
+                      'Write operations require user approval. This context does not support write operations.',
+                };
+              }
+            }
+          }
+
+          // Execute the query
+          final result = await _sqlQueryService.executeQuery(
+            sql,
+            requireApprovalForWrites: false, // Already checked above
+            allowWriteOperations: true,
+          );
+
+          final duration = DateTime.now().difference(startTime);
+
+          if (result.success) {
+            LoggerService.debug(
+              '[Synapse.runQuery] Success - Returned ${result.data?.length ?? 0} rows in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'data': result.data ?? []};
+          } else {
+            LoggerService.error('[Synapse.runQuery] Error: ${result.error}');
+            return {'success': false, 'error': result.error};
+          }
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(

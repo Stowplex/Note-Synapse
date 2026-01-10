@@ -4,9 +4,11 @@ import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
+import '../approval_service.dart';
 import '../database_service.dart';
 import '../note_modification_service.dart';
 import '../logger_service.dart';
+import '../sql_query_service.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
@@ -558,14 +560,38 @@ $extractionGuide
 }
 
 class RunSqlTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  final SqlQueryService _sqlService = SqlQueryService();
+
+  /// Legacy static callback for backwards compatibility.
+  /// Prefer using ApprovalService.onApprovalRequest instead.
+  @Deprecated('Use ApprovalService.onApprovalRequest instead')
+  static Future<bool> Function(String sql, SqlQueryType queryType)?
+  onWriteApprovalRequest;
+
+  /// Whether write operations have been approved for this session.
+  /// Now delegates to ApprovalService.
+  static bool get _sessionApprovedWrites =>
+      ApprovalService.sessionApprovedSqlWrites;
+
+  /// Approve writes for this session (called after user approves).
+  /// Now delegates to ApprovalService.
+  static void approveWritesForSession() {
+    ApprovalService.sessionApprovedSqlWrites = true;
+    LoggerService.debug('[RunSqlTool] Write operations approved for session');
+  }
+
+  /// Reset session approval (called when agent session ends).
+  /// Now delegates to ApprovalService.
+  static void resetSessionApproval() {
+    ApprovalService.resetSession();
+  }
 
   @override
   String get name => 'run_sql';
 
   @override
   String get description =>
-      'Run a read-only SQL query on the local database. Tables: notes(id, title, content, tags, ...), tags(id, name), conversations(...). Useful for counting, aggregating, or finding patterns not covered by FTS.';
+      'Run a SQL query on the local database. Supports SELECT, INSERT, UPDATE, DELETE. Write operations require user approval. Tables: notes(id, title, content, tags, ...), tags(id, name), conversations(...). Useful for counting, aggregating, or finding patterns not covered by FTS.';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -573,7 +599,8 @@ class RunSqlTool implements NativeTool {
     'properties': {
       'query': {
         'type': 'string',
-        'description': 'The SQL SELECT query to run.',
+        'description':
+            'The SQL query to run (SELECT, INSERT, UPDATE, DELETE, etc.).',
       },
     },
     'required': ['query'],
@@ -582,37 +609,55 @@ class RunSqlTool implements NativeTool {
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final query = args['query'] as String;
-    if (!query.trim().toUpperCase().startsWith('SELECT')) {
-      return {'error': 'Only SELECT queries are allowed.'};
-    }
 
-    try {
-      final results = await _db.runRawQuery(query);
-      if (results.isEmpty) return 'No results found.';
-      if (results.length > 50) {
+    // Check if this is a write operation that needs approval
+    final isReadOnly = _sqlService.isReadOnlyQuery(query);
+
+    if (!isReadOnly && !_sessionApprovedWrites) {
+      // Use ApprovalService for approval
+      final queryType = _sqlService.getQueryType(query);
+      final approved = await ApprovalService.requestSqlWriteApproval(
+        sql: query,
+        queryType: queryType,
+        queryTypeDescription: _sqlService.getQueryTypeDescription(queryType),
+        source: 'Agent',
+      );
+      if (!approved) {
         return {
-          'warning': 'Result truncated to 50 rows',
-          'data': _formatTable(results.take(50).toList()),
+          'error': 'User denied the SQL write operation.',
+          'query_type': _sqlService.getQueryTypeDescription(queryType),
         };
       }
-      return _formatTable(results);
-    } catch (e) {
-      return {'error': e.toString()};
     }
-  }
 
-  String _formatTable(List<Map<String, dynamic>> rows) {
-    if (rows.isEmpty) return '';
-    final headers = rows.first.keys.toList();
-    final buffer = StringBuffer();
-    buffer.write('| ${headers.join(' | ')} |\n');
-    buffer.write('| ${headers.map((_) => '---').join(' | ')} |\n');
-    for (final row in rows) {
-      buffer.write(
-        '| ${headers.map((h) => row[h]?.toString().replaceAll('\n', ' ') ?? '').join(' | ')} |\n',
-      );
+    // Execute the query
+    final result = await _sqlService.executeQuery(
+      query,
+      allowWriteOperations: true,
+      requireApprovalForWrites: false, // Already handled above
+      maxRows: 50,
+    );
+
+    if (!result.success) {
+      return {'error': result.error};
     }
-    return buffer.toString();
+
+    if (result.data == null || result.data!.isEmpty) {
+      if (isReadOnly) {
+        return 'No results found.';
+      } else {
+        return 'Query executed successfully (no rows returned).';
+      }
+    }
+
+    if (result.data!.length == 50) {
+      return {
+        'warning': 'Result truncated to 50 rows',
+        'data': result.toMarkdownTable(),
+      };
+    }
+
+    return result.toMarkdownTable();
   }
 }
 
@@ -817,6 +862,18 @@ class ModifyNoteTool implements NativeTool {
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final noteId = args['note_id'] as String;
     final modification = args['modification'] as Map<String, dynamic>;
+
+    // Check approval before modification
+    if (!ApprovalService.sessionApprovedNoteModifications) {
+      final approved = await ApprovalService.requestNoteModificationApproval(
+        noteId: noteId,
+        modification: modification,
+        source: 'Agent',
+      );
+      if (!approved) {
+        return {'error': 'User denied the note modification.'};
+      }
+    }
 
     try {
       final updatedNote = await _service.applyModifications(

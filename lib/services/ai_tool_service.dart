@@ -60,10 +60,21 @@ class AiToolAppBundle {
 }
 
 class AiToolRuntime {
-  AiToolRuntime({required this.bundle, required this.appProvider});
+  AiToolRuntime({
+    required this.bundle,
+    required this.appProvider,
+    this.onModificationRequest,
+    this.onSqlWriteApprovalRequest,
+  });
 
   final AiToolAppBundle bundle;
   final AppProvider appProvider;
+
+  /// Optional callback for note modification approval.
+  final ModificationRequestCallback? onModificationRequest;
+
+  /// Optional callback for SQL write approval.
+  final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
 
   HeadlessInAppWebView? _headlessWebView;
   InAppWebViewController? _controller;
@@ -93,6 +104,8 @@ class AiToolRuntime {
       revisionNumber: bundle.revision.revisionNumber,
       isInteractive: false,
       selectedNotes: const <Note>[],
+      onModificationRequest: onModificationRequest,
+      onSqlWriteApprovalRequest: onSqlWriteApprovalRequest,
     );
 
     _headlessWebView = HeadlessInAppWebView(

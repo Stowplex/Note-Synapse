@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import '../widgets/drawing_editor.dart';
+import '../widgets/approval_dialog.dart';
 import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
@@ -22,6 +23,7 @@ import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/ai_tool_service.dart';
+import '../services/approval_service.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/prompts/prompt_configuration_service.dart';
@@ -50,6 +52,8 @@ import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
 import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/tools/note_tools.dart';
+import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 
@@ -122,7 +126,32 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _selectedModel = widget.initialModelOverride;
     _loadMcpEndpoints();
     _loadIterationPreference();
+    _setupSqlWriteApprovalCallback();
     // Listener managed in didChangeDependencies
+  }
+
+  /// Sets up the unified approval callback for agentic mode.
+  /// Shows a dialog when the agent tries to execute sensitive operations.
+  void _setupSqlWriteApprovalCallback() {
+    // Register unified approval callback
+    ApprovalService.onApprovalRequest = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return await ApprovalDialog.showWithContext(context, request);
+    };
+
+    // Keep legacy callback for backwards compatibility
+    RunSqlTool.onWriteApprovalRequest = (sql, queryType) async {
+      if (!mounted) return false;
+      final result = await ApprovalService.requestSqlWriteApproval(
+        sql: sql,
+        queryType: queryType,
+        queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+          queryType,
+        ),
+        source: 'Agent',
+      );
+      return result;
+    };
   }
 
   @override
@@ -714,9 +743,42 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
     );
     _aiToolRuntimes[serviceName] = runtime;
     return runtime;
+  }
+
+  /// Handle note modification approval requests from AI tools.
+  Future<bool> _handleModificationRequest(
+    dynamic source,
+    String noteId,
+    Map<String, dynamic> modification,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestNoteModificationApproval(
+      noteId: noteId,
+      modification: modification,
+      source: 'AI Tool',
+    );
+  }
+
+  /// Handle SQL write approval requests from AI tools.
+  Future<bool> _handleSqlWriteApprovalRequest(
+    dynamic source,
+    String sql,
+    SqlQueryType queryType,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestSqlWriteApproval(
+      sql: sql,
+      queryType: queryType,
+      queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+        queryType,
+      ),
+      source: 'AI Tool',
+    );
   }
 
   Future<void> _sendMessage() async {
@@ -3262,6 +3324,10 @@ $historyBuffer
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _agentService?.removeListener(_onAgentStateChange);
+
+    // Clean up SQL approval callback and session state
+    RunSqlTool.onWriteApprovalRequest = null;
+    RunSqlTool.resetSessionApproval();
 
     _resolveIterationPrompt(null);
     _messageController.dispose();

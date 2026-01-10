@@ -798,8 +798,12 @@ IMPORTANT:
   static String _buildApiDocumentationSection() {
     return '''
    - Synapse.runQuery(sql: string) - Query the app's database by running the sql query
-     Param format: a string of SQL query to execute
+     Param format: a string of SQL query to execute (SELECT, INSERT, UPDATE, DELETE, etc.)
      Response format: {success: boolean, data: array, error?: string}
+     Notes:
+       * Read-only queries (SELECT, PRAGMA) execute immediately
+       * Write operations (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER) require user approval
+       * Users can choose to "Allow for this session" to skip approval for subsequent write queries
    - Synapse.storeAppState(state: object) - Store JSON serialized state to the app's database
      Response format: {success: boolean, error?: string}
    - Synapse.loadAppState() - Load saved JSON serialized state from the app's database

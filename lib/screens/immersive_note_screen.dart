@@ -25,6 +25,7 @@ import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
+import '../services/approval_service.dart';
 import '../services/conversation_service.dart';
 import '../services/conversation_ai_engine.dart';
 import '../services/database_service.dart';
@@ -40,11 +41,13 @@ import '../services/prompts/prompt_models.dart';
 import '../services/prompts/prompt_configuration_service.dart';
 import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/system_prompt_builder.dart';
+import '../services/sql_query_service.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../widgets/approval_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
@@ -204,6 +207,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _noteOrder = widget.notes.map((note) => note.id).toList();
     _conversationNotes = List<Note>.from(widget.notes);
     _loadIterationPreference();
+    _setupApprovalCallback();
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
@@ -240,6 +244,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _loadAiTools();
       _loadModelFeatures();
     });
+  }
+
+  /// Sets up the unified approval callback for AI tools.
+  void _setupApprovalCallback() {
+    ApprovalService.onApprovalRequest = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return await ApprovalDialog.showWithContext(context, request);
+    };
   }
 
   ModelConfig? _previousModelConfig;
@@ -778,9 +790,42 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
     );
     _aiToolRuntimes[serviceName] = runtime;
     return runtime;
+  }
+
+  /// Handle note modification approval requests from AI tools.
+  Future<bool> _handleModificationRequest(
+    dynamic source,
+    String noteId,
+    Map<String, dynamic> modification,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestNoteModificationApproval(
+      noteId: noteId,
+      modification: modification,
+      source: 'AI Tool',
+    );
+  }
+
+  /// Handle SQL write approval requests from AI tools.
+  Future<bool> _handleSqlWriteApprovalRequest(
+    dynamic source,
+    String sql,
+    SqlQueryType queryType,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestSqlWriteApproval(
+      sql: sql,
+      queryType: queryType,
+      queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+        queryType,
+      ),
+      source: 'AI Tool',
+    );
   }
 
   // --- Bookmark Management ---

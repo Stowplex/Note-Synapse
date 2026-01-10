@@ -11,11 +11,14 @@ import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
+import '../services/approval_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../services/sql_query_service.dart';
 import '../services/global_library_service.dart';
 import '../utils/file_utils.dart';
+import '../widgets/approval_dialog.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
@@ -52,6 +55,39 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   bool _isLoading = true;
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
+
+  String _getQueryTypeDescription(SqlQueryType queryType) {
+    switch (queryType) {
+      case SqlQueryType.insert:
+        return 'INSERT (add data)';
+      case SqlQueryType.update:
+        return 'UPDATE (modify data)';
+      case SqlQueryType.delete:
+        return 'DELETE (remove data)';
+      case SqlQueryType.createTable:
+        return 'CREATE TABLE';
+      case SqlQueryType.createIndex:
+        return 'CREATE INDEX';
+      case SqlQueryType.createTrigger:
+        return 'CREATE TRIGGER';
+      case SqlQueryType.createView:
+        return 'CREATE VIEW';
+      case SqlQueryType.dropTable:
+        return 'DROP TABLE';
+      case SqlQueryType.dropIndex:
+        return 'DROP INDEX';
+      case SqlQueryType.dropTrigger:
+        return 'DROP TRIGGER';
+      case SqlQueryType.dropView:
+        return 'DROP VIEW';
+      case SqlQueryType.alterTable:
+        return 'ALTER TABLE';
+      case SqlQueryType.select:
+      case SqlQueryType.pragma:
+      case SqlQueryType.other:
+        return 'SQL';
+    }
+  }
 
   @override
   void initState() {
@@ -575,90 +611,35 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
       onModificationRequest: (source, noteId, modification) async {
         if (!mounted) return false;
 
-        bool allowSession = false;
-
-        final result = await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return StatefulBuilder(
-              builder: (context, setState) {
-                return AlertDialog(
-                  title: const Text('Allow Note Modification?'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('The app wants to modify note:'),
-                        SelectableText(
-                          noteId,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Details:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Container(
-                          width: double.maxFinite,
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            const JsonEncoder.withIndent(
-                              '  ',
-                            ).convert(modification),
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 10,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: allowSession,
-                              onChanged: (val) {
-                                setState(() {
-                                  allowSession = val ?? false;
-                                });
-                              },
-                            ),
-                            const Expanded(
-                              child: Text('Allow for this session'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Deny'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Approve'),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
+        final request = ApprovalRequest.noteModification(
+          noteId: noteId,
+          modification: modification,
+          source: 'App: ${widget.app.name}',
         );
+        final result = await ApprovalDialog.showWithContext(context, request);
 
-        if (result == true) {
-          if (allowSession) {
+        if (result.approved) {
+          if (result.approvedForSession) {
             source.approveSession();
+          }
+          return true;
+        }
+        return false;
+      },
+      onSqlWriteApprovalRequest: (source, sql, queryType) async {
+        if (!mounted) return false;
+
+        final request = ApprovalRequest.sqlWrite(
+          sql: sql,
+          queryType: queryType,
+          queryTypeDescription: _getQueryTypeDescription(queryType),
+          source: 'App: ${widget.app.name}',
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+
+        if (result.approved) {
+          if (result.approvedForSession) {
+            source.approveSqlWritesForSession();
           }
           return true;
         }
