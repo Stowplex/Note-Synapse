@@ -2680,7 +2680,6 @@ class DatabaseService {
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
       'htmlContent': app.htmlContent,
-      'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
@@ -2688,6 +2687,10 @@ class DatabaseService {
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
+
+    if (app.appState != null) {
+      json['appState'] = jsonEncode(app.appState);
+    }
 
     await db.update('user_apps', json, where: 'id = ?', whereArgs: [app.id]);
   }
