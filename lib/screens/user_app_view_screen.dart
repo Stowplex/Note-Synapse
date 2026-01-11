@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import '../services/database_service.dart'; // Add DatabaseService import
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -611,10 +612,29 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
       onModificationRequest: (source, noteId, modification) async {
         if (!mounted) return false;
 
+        // Fetch note details
+        String? title;
+        String? snippet;
+        try {
+          final db = DatabaseService();
+          final note = await db.getNote(noteId);
+          if (note != null) {
+            title = note.title;
+            final content = note.content;
+            snippet = content.length > 200
+                ? '${content.substring(0, 200)}...'
+                : content;
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to fetch note details: $e');
+        }
+
         final request = ApprovalRequest.noteModification(
           noteId: noteId,
           modification: modification,
           source: 'App: ${widget.app.name}',
+          noteTitle: title,
+          noteSnippet: snippet,
         );
         final result = await ApprovalDialog.showWithContext(context, request);
 
@@ -648,9 +668,30 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
       onDeletionApprovalRequest: (source, noteIds) async {
         if (!mounted) return false;
 
+        // Fetch note details
+        final noteDetails = <Map<String, String>>[];
+        try {
+          final db = DatabaseService();
+          final notes = await db.getNotesByIds(noteIds);
+          for (final note in notes) {
+            final content = note.content;
+            final snippet = content.length > 100
+                ? '${content.substring(0, 100)}...'
+                : content;
+            noteDetails.add({
+              'id': note.id,
+              'title': note.title,
+              'snippet': snippet,
+            });
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to fetch note details: $e');
+        }
+
         final request = ApprovalRequest.noteDeletion(
           noteIds: noteIds,
           source: 'App: ${widget.app.name}',
+          noteDetails: noteDetails,
         );
         final result = await ApprovalDialog.showWithContext(context, request);
 

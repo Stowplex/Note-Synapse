@@ -888,18 +888,60 @@ class UserAppRuntimeBridge {
           // Check approval before any modifications
           if (!_sessionApprovedModifications) {
             if (onModificationRequest != null) {
-              // Build a summary of all modifications for approval
-              final summaryMod = <String, dynamic>{
-                'noteCount': notesData.length,
-                'noteIds': notesData
-                    .whereType<Map<String, dynamic>>()
-                    .map((n) => n['id']?.toString() ?? 'unknown')
-                    .toList(),
-              };
+              // Build specific modification data if single note, otherwise summary
+              String targetNoteId = 'batch-update';
+              Map<String, dynamic> modificationData;
+
+              if (notesData.length == 1 &&
+                  notesData.first is Map<String, dynamic>) {
+                final noteData = notesData.first as Map<String, dynamic>;
+                targetNoteId = noteData['id']?.toString() ?? 'unknown';
+
+                // If granular modification, pass that. Otherwise pass the note data.
+                if (noteData.containsKey('modification') &&
+                    noteData['modification'] is Map) {
+                  modificationData = noteData['modification'];
+                } else {
+                  modificationData = Map.from(noteData)..remove('id');
+                }
+              } else {
+                // Batch update: Itemize first 20 notes
+                final updates = <Map<String, dynamic>>[];
+                final NOTE_LIMIT = 20;
+
+                for (var i = 0; i < notesData.length && i < NOTE_LIMIT; i++) {
+                  final item = notesData[i];
+                  if (item is Map<String, dynamic>) {
+                    final id = item['id']?.toString() ?? 'unknown';
+                    // Extract modification similar to single case
+                    Map<String, dynamic> changes;
+                    if (item.containsKey('modification') &&
+                        item['modification'] is Map) {
+                      changes = item['modification'];
+                    } else {
+                      changes = Map.from(item)..remove('id');
+                    }
+
+                    updates.add({'id': id, 'changes': changes});
+                  }
+                }
+
+                modificationData = <String, dynamic>{
+                  'isBatch': true,
+                  'count': notesData.length,
+                  'updates': updates,
+                  // Keep noteIds for legacy/other checks if needed?
+                  'noteIds': notesData
+                      .whereType<Map<String, dynamic>>()
+                      .map((n) => n['id']?.toString() ?? 'unknown')
+                      .toList(),
+                };
+              }
+
               final approved = await onModificationRequest!(
                 this,
-                'batch-update',
-                summaryMod,
+                targetNoteId,
+                modificationData,
               );
               if (!approved) {
                 return {'success': false, 'error': 'User denied modification.'};

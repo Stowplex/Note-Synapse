@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'logger_service.dart';
 import 'sql_query_service.dart';
+import 'database_service.dart';
 
 /// Type of approval being requested.
 enum ApprovalType { sqlWrite, noteModification, noteDeletion }
@@ -72,6 +73,8 @@ class ApprovalRequest {
     required String noteId,
     required Map<String, dynamic> modification,
     String? source,
+    String? noteTitle,
+    String? noteSnippet,
   }) {
     return ApprovalRequest(
       type: ApprovalType.noteModification,
@@ -79,7 +82,12 @@ class ApprovalRequest {
       description: source != null
           ? '$source wants to modify note:'
           : 'The operation wants to modify note:',
-      details: {'noteId': noteId, 'modification': modification},
+      details: {
+        'noteId': noteId,
+        'modification': modification,
+        if (noteTitle != null) 'noteTitle': noteTitle,
+        if (noteSnippet != null) 'noteSnippet': noteSnippet,
+      },
       warningMessage: null,
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -89,15 +97,24 @@ class ApprovalRequest {
   factory ApprovalRequest.noteDeletion({
     required List<String> noteIds,
     String? source,
+    List<Map<String, String>>? noteDetails,
   }) {
     final isBatch = noteIds.length > 1;
+    final details = <String, dynamic>{
+      'noteIds': noteIds,
+      'count': noteIds.length,
+    };
+    if (noteDetails != null) {
+      details['noteDetails'] = noteDetails;
+    }
+
     return ApprovalRequest(
       type: ApprovalType.noteDeletion,
       title: isBatch ? 'Allow Note Deletion?' : 'Allow Note Deletion?',
       description: source != null
           ? '$source wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:'
           : 'The operation wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:',
-      details: {'noteIds': noteIds, 'count': noteIds.length},
+      details: details,
       warningMessage: 'This action cannot be undone.',
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -223,11 +240,32 @@ class ApprovalService {
       return false;
     }
 
+    // Fetch note details for better context
+    String? title;
+    String? snippet;
+    try {
+      final db = DatabaseService();
+      final note = await db.getNote(noteId);
+      if (note != null) {
+        title = note.title;
+        final content = note.content;
+        snippet = content.length > 200
+            ? '${content.substring(0, 200)}...'
+            : content;
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ApprovalService] Failed to fetch note details: $e',
+      );
+    }
+
     // Request approval
     final request = ApprovalRequest.noteModification(
       noteId: noteId,
       modification: modification,
       source: source,
+      noteTitle: title,
+      noteSnippet: snippet,
     );
 
     try {
@@ -272,10 +310,36 @@ class ApprovalService {
       return false;
     }
 
+    // Fetch note details
+    final noteDetails = <Map<String, String>>[];
+    try {
+      final db = DatabaseService();
+      final notes = await db.getNotesByIds(noteIds);
+      for (final note in notes) {
+        final content = note.content;
+        final snippet = content.length > 100
+            ? '${content.substring(0, 100)}...'
+            : content;
+        noteDetails.add({
+          'id': note.id,
+          'title': note.title,
+          'snippet': snippet,
+        });
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ApprovalService] Failed to fetch note details: $e',
+      );
+    }
+
     // Request approval
+    // noteDeletion factory creates details: {'noteIds': noteIds, 'count': noteIds.length}
+    // I need to inject noteDetails.
+    // I will modify the factory to accept it.
     final request = ApprovalRequest.noteDeletion(
       noteIds: noteIds,
       source: source,
+      noteDetails: noteDetails, // New parameter
     );
 
     try {
