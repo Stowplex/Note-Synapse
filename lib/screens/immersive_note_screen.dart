@@ -189,11 +189,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   static const double _aiHandleHeight = 76.0;
   static const double _aiHandleWidth = 420.0;
   static const double _aiPanelHeightFraction = 0.45;
-  static const double _aiLandscapePanelFraction = 0.4;
+  double _aiLandscapePanelFraction = 0.4;
   static const double _aiHandleMargin = 12.0;
   static const double _aiHandlePadding = 12.0;
   static const double _aiHandleControlWidth = 44.0;
   static const double _aiHandleControlGap = 8.0;
+  static const double _kMinVerticalHeightForSplit = 600.0;
   double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
   _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
@@ -1320,7 +1321,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   List<Widget> _buildAiOverlays(Size size, AppLocalizations l10n) {
     final isLandscape = size.width > size.height;
-    if (isLandscape) {
+    // Use horizontal split layout only if we are in landscape AND have limited vertical space (like phones).
+    // Tablets in landscape usually have enough height to support the vertical bottom-sheet style,
+    // which is often preferred to avoid taking up horizontal space side-by-side.
+    if (isLandscape && size.height < _kMinVerticalHeightForSplit) {
       return _buildHorizontalAiOverlays(size, l10n);
     }
     return _buildVerticalAiOverlays(size, l10n);
@@ -1332,7 +1336,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
     final panelHeight = _computePanelExtent(totalHeight, handleHeight);
-    final effectiveSide = _effectivePanelSide(false);
+
+    final effectiveSide = _effectivePanelSide(size);
 
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
@@ -1387,7 +1392,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       maxHandleTop,
     );
 
-    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+    final handleWidth = min(
+      size.width - (_aiHandleMargin * 2),
+      max(_aiHandleWidth, size.width * 0.8),
+    );
     overlays.add(
       Positioned(
         left: _aiHandleMargin,
@@ -1410,7 +1418,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
-    final effectiveSide = _effectivePanelSide(true);
+    final effectiveSide = _effectivePanelSide(size);
 
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
@@ -1424,7 +1432,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         : _aiHandleFraction * trackHeight;
     handleTop = _clampToRange(handleTop, minHandleTop, maxHandleTop);
 
-    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+    final handleWidth = min(
+      size.width - (_aiHandleMargin * 2),
+      max(400.0, size.width * 0.45), // Min 400, max 45% of screen
+    );
 
     double panelWidth = 0.0;
     if (_isAiPanelExpanded) {
@@ -1521,7 +1532,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     final minWidth = min(totalWidth * 0.25, available);
-    final maxWidth = min(totalWidth * 0.6, available);
+    final maxWidth = min(totalWidth * 0.5, available);
 
     return _clampToRange(
       totalWidth * _aiLandscapePanelFraction,
@@ -1530,8 +1541,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
-  _AiPanelSide _effectivePanelSide(bool isLandscape) {
-    if (isLandscape) {
+  bool _isVerticalLayout(Size size) {
+    if (size.width <= size.height) return true; // Portrait
+    return size.height >= _kMinVerticalHeightForSplit; // Tablet Landscape
+  }
+
+  _AiPanelSide _effectivePanelSide(Size size) {
+    if (!_isVerticalLayout(size)) {
       if (_aiPanelSide == _AiPanelSide.left ||
           _aiPanelSide == _AiPanelSide.right) {
         return _aiPanelSide;
@@ -1546,8 +1562,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  _AiPanelSide _normalizePanelSide(_AiPanelSide side, bool isLandscape) {
-    if (isLandscape) {
+  _AiPanelSide _normalizePanelSide(_AiPanelSide side, Size size) {
+    if (!_isVerticalLayout(size)) {
       if (side == _AiPanelSide.left || side == _AiPanelSide.right) {
         return side;
       }
@@ -2539,14 +2555,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _expandAiPanel(_AiPanelSide side, Size canvasSize) {
-    final isLandscape = canvasSize.width > canvasSize.height;
-    final normalizedSide = _normalizePanelSide(side, isLandscape);
+    final normalizedSide = _normalizePanelSide(side, canvasSize);
 
     setState(() {
       _isAiPanelExpanded = true;
       _aiPanelSide = normalizedSide;
 
-      if (isLandscape) {
+      if (!_isVerticalLayout(canvasSize)) {
         return;
       }
 
@@ -2874,6 +2889,32 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _updateHandleDrag(Offset delta, Size canvasSize) {
+    // Handle horizontal resizing in landscape mode when expanded
+    if (!_isVerticalLayout(canvasSize) &&
+        _isAiPanelExpanded &&
+        delta.dx.abs() > delta.dy.abs()) {
+      final effectiveSide = _effectivePanelSide(canvasSize);
+      double widthDelta = 0;
+      if (effectiveSide == _AiPanelSide.right) {
+        widthDelta = -delta.dx; // Drag left increases width
+      } else if (effectiveSide == _AiPanelSide.left) {
+        widthDelta = delta.dx; // Drag right increases width
+      }
+
+      if (widthDelta != 0) {
+        final totalWidth = canvasSize.width;
+        final currentWidth = totalWidth * _aiLandscapePanelFraction;
+        final newWidth = currentWidth + widthDelta;
+
+        setState(() {
+          _aiLandscapePanelFraction = (newWidth / totalWidth)
+              .clamp(0.2, 0.8)
+              .toDouble();
+        });
+        return;
+      }
+    }
+
     final totalHeight = canvasSize.height;
     final handleHeight = _currentHandleHeight();
     final handleTravel = max(0.0, totalHeight - handleHeight);
