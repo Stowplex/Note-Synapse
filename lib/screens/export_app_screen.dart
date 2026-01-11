@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/app_provider.dart';
+
 import '../models/user_app.dart';
 import '../services/database_service.dart';
 
@@ -78,10 +78,6 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
         license: _licenseController.text.trim(),
         updatedAt: DateTime.now(),
       );
-
-      // Update the app in the database
-      final appProvider = context.read<AppProvider>();
-      await appProvider.updateUserApp(updatedApp);
 
       // Generate YAML content
       final yamlContent = await _generateYamlContent(updatedApp);
