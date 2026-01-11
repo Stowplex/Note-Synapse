@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String _protocolPreferenceKey = 'network_protocol_preference';
 const String _retryCountKey = 'network_retry_count';
 const String _backoffBaseKey = 'network_backoff_base';
+const String _timeoutKey = 'network_timeout';
 
 /// Network protocol preference for HTTP requests.
 enum NetworkProtocolPreference {
@@ -39,6 +40,15 @@ class NetworkSettingsService {
 
   /// Maximum backoff base in seconds.
   static const int maxBackoffBase = 10;
+
+  /// Default timeout in seconds (10 minutes).
+  static const int defaultTimeout = 600;
+
+  /// Minimum timeout in seconds (30 seconds).
+  static const int minTimeout = 30;
+
+  /// Maximum timeout in seconds (30 minutes).
+  static const int maxTimeout = 1800;
 
   /// Get the current protocol preference.
   static Future<NetworkProtocolPreference> getProtocolPreference() async {
@@ -92,5 +102,22 @@ class NetworkSettingsService {
     final prefs = await SharedPreferences.getInstance();
     final clampedSeconds = seconds.clamp(minBackoffBase, maxBackoffBase);
     await prefs.setInt(_backoffBaseKey, clampedSeconds);
+  }
+
+  /// Get the current timeout in seconds.
+  static Future<int> getTimeout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_timeoutKey);
+    if (value == null || value < minTimeout || value > maxTimeout) {
+      return defaultTimeout;
+    }
+    return value;
+  }
+
+  /// Set the timeout in seconds.
+  static Future<void> setTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clampedSeconds = seconds.clamp(minTimeout, maxTimeout);
+    await prefs.setInt(_timeoutKey, clampedSeconds);
   }
 }

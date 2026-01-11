@@ -1393,6 +1393,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
       NetworkSettingsService.defaultProtocolPreference;
   int _retryCount = NetworkSettingsService.defaultRetryCount;
   int _backoffBase = NetworkSettingsService.defaultBackoffBase;
+  int _timeout = NetworkSettingsService.defaultTimeout;
   bool _isLoading = true;
 
   @override
@@ -1405,11 +1406,13 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     final protocol = await NetworkSettingsService.getProtocolPreference();
     final retryCount = await NetworkSettingsService.getRetryCount();
     final backoffBase = await NetworkSettingsService.getBackoffBase();
+    final timeout = await NetworkSettingsService.getTimeout();
     if (mounted) {
       setState(() {
         _protocolPreference = protocol;
         _retryCount = retryCount;
         _backoffBase = backoffBase;
+        _timeout = timeout;
         _isLoading = false;
       });
     }
@@ -1438,6 +1441,14 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
       _backoffBase = seconds;
     });
     await NetworkSettingsService.setBackoffBase(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateTimeout(int seconds) async {
+    setState(() {
+      _timeout = seconds;
+    });
+    await NetworkSettingsService.setTimeout(seconds);
     await NetworkProvider.instance.reloadSettings();
   }
 
@@ -1656,6 +1667,67 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                                   context,
                                 ).colorScheme.onSurface.withOpacity(0.7),
                               ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Request Timeout
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Request Timeout',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Maximum duration for network requests',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_timeout}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _timeout.toDouble(),
+                          min: NetworkSettingsService.minTimeout.toDouble(),
+                          max: NetworkSettingsService.maxTimeout.toDouble(),
+                          divisions:
+                              (NetworkSettingsService.maxTimeout -
+                                  NetworkSettingsService.minTimeout) ~/
+                              30,
+                          label: '${_timeout}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _timeout = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) => _updateTimeout(value.round()),
                         ),
                       ],
                     ),

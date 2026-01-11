@@ -38,6 +38,7 @@ class NetworkProvider {
       NetworkSettingsService.defaultProtocolPreference;
   int _retryCount = NetworkSettingsService.defaultRetryCount;
   int _backoffBase = NetworkSettingsService.defaultBackoffBase;
+  int _timeout = NetworkSettingsService.defaultTimeout;
 
   /// Timer for idle connection cleanup.
   Timer? _idleCleanupTimer;
@@ -72,9 +73,15 @@ class NetworkProvider {
   /// Reload settings from storage (call after settings change).
   Future<void> reloadSettings() async {
     await _loadSettings();
+    // Recreate clients to apply new settings (especially timeout)
+    await _createHttp11Client();
+    // Close HTTP/3 client so it's recreated with new settings on next use
+    _http3Client?.close();
+    _http3Client = null;
+
     LoggerService.info(
       'NetworkProvider settings reloaded: protocol=$_protocolPreference, '
-      'retryCount=$_retryCount, backoffBase=$_backoffBase',
+      'retryCount=$_retryCount, backoffBase=$_backoffBase, timeout=${_timeout}s',
     );
   }
 
@@ -82,18 +89,19 @@ class NetworkProvider {
     _protocolPreference = await NetworkSettingsService.getProtocolPreference();
     _retryCount = await NetworkSettingsService.getRetryCount();
     _backoffBase = await NetworkSettingsService.getBackoffBase();
+    _timeout = await NetworkSettingsService.getTimeout();
   }
 
   Future<void> _createHttp11Client() async {
     _http11Client?.close();
     _http11Client = await RhttpCompatibleClient.create(
-      settings: const ClientSettings(
+      settings: ClientSettings(
         httpVersionPref: HttpVersionPref.http1_1,
         timeoutSettings: TimeoutSettings(
-          timeout: Duration(seconds: 120),
-          connectTimeout: Duration(seconds: 30),
-          keepAliveTimeout: Duration(seconds: 60),
-          keepAlivePing: Duration(seconds: 30),
+          timeout: Duration(seconds: _timeout),
+          connectTimeout: const Duration(seconds: 30),
+          keepAliveTimeout: const Duration(seconds: 60),
+          keepAlivePing: const Duration(seconds: 30),
         ),
       ),
     );
@@ -102,13 +110,13 @@ class NetworkProvider {
   Future<RhttpCompatibleClient> _getHttp3Client() async {
     if (_http3Client == null) {
       _http3Client = await RhttpCompatibleClient.create(
-        settings: const ClientSettings(
+        settings: ClientSettings(
           httpVersionPref: HttpVersionPref.http3,
           timeoutSettings: TimeoutSettings(
-            timeout: Duration(seconds: 120),
-            connectTimeout: Duration(seconds: 30),
-            keepAliveTimeout: Duration(seconds: 60),
-            keepAlivePing: Duration(seconds: 30),
+            timeout: Duration(seconds: _timeout),
+            connectTimeout: const Duration(seconds: 30),
+            keepAliveTimeout: const Duration(seconds: 60),
+            keepAlivePing: const Duration(seconds: 30),
           ),
         ),
       );
