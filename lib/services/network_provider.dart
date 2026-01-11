@@ -108,19 +108,17 @@ class NetworkProvider {
   }
 
   Future<RhttpCompatibleClient> _getHttp3Client() async {
-    if (_http3Client == null) {
-      _http3Client = await RhttpCompatibleClient.create(
-        settings: ClientSettings(
-          httpVersionPref: HttpVersionPref.http3,
-          timeoutSettings: TimeoutSettings(
-            timeout: Duration(seconds: _timeout),
-            connectTimeout: const Duration(seconds: 30),
-            keepAliveTimeout: const Duration(seconds: 60),
-            keepAlivePing: const Duration(seconds: 30),
-          ),
+    _http3Client ??= await RhttpCompatibleClient.create(
+      settings: ClientSettings(
+        httpVersionPref: HttpVersionPref.http3,
+        timeoutSettings: TimeoutSettings(
+          timeout: Duration(seconds: _timeout),
+          connectTimeout: const Duration(seconds: 30),
+          keepAliveTimeout: const Duration(seconds: 60),
+          keepAlivePing: const Duration(seconds: 30),
         ),
-      );
-    }
+      ),
+    );
     return _http3Client!;
   }
 
