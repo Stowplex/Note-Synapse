@@ -1944,8 +1944,27 @@ class DatabaseService {
     );
 
     // For each note, add the new tag if it doesn't already exist
+    // For each note, add the new tag if it doesn't already exist
     for (final noteTagMap in noteTagMaps) {
       final noteId = noteTagMap['noteId'] as String;
+
+      // Verify note exists to avoid Foreign Key violations (orphaned tags)
+      final noteExists = await db.query(
+        'notes',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+
+      if (noteExists.isEmpty) {
+        // Cleanup orphan
+        LoggerService.warning(
+          'Found orphaned note_tag for noteId: $noteId. Cleaning up.',
+        );
+        await db.delete('note_tags', where: 'noteId = ?', whereArgs: [noteId]);
+        continue;
+      }
 
       // Check if this note already has the new tag
       final existingNewTag = await db.query(
