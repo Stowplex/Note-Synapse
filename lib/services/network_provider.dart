@@ -141,25 +141,26 @@ class NetworkProvider {
   }
 
   /// Determine which client to use based on protocol preference and host capabilities.
-  Future<RhttpCompatibleClient> _getClientForHost(String host) async {
+  /// Returns a tuple of (client, protocol version string).
+  Future<(RhttpCompatibleClient, String)> _getClientForHost(String host) async {
     switch (_protocolPreference) {
       case NetworkProtocolPreference.http11Only:
-        return _http11Client!;
+        return (_http11Client!, 'HTTP/1.1');
 
       case NetworkProtocolPreference.http3Only:
         // Try HTTP/3, but fall back if host has failed before
         if (_http3FailedHosts.contains(host)) {
-          return _http11Client!;
+          return (_http11Client!, 'HTTP/1.1 (fallback)');
         }
-        return await _getHttp3Client();
+        return (await _getHttp3Client(), 'HTTP/3');
 
       case NetworkProtocolPreference.auto:
         // Use HTTP/3 only if we've detected support via alt-svc
         if (_http3SupportedHosts[host] == true &&
             !_http3FailedHosts.contains(host)) {
-          return await _getHttp3Client();
+          return (await _getHttp3Client(), 'HTTP/3');
         }
-        return _http11Client!;
+        return (_http11Client!, 'HTTP/1.1');
     }
   }
 
@@ -179,10 +180,10 @@ class NetworkProvider {
     Uri url, {
     Map<String, String>? headers,
   }) async {
-    return instance._performRequest(() async {
-      final client = await instance._getClientForHost(url.host);
+    return instance._performRequest('GET', url, () async {
+      final (client, _) = await instance._getClientForHost(url.host);
       return client.get(url, headers: headers);
-    }, url);
+    });
   }
 
   /// Perform a POST request with retry logic.
@@ -192,10 +193,10 @@ class NetworkProvider {
     Object? body,
     String? encoding,
   }) async {
-    return instance._performRequest(() async {
-      final client = await instance._getClientForHost(url.host);
+    return instance._performRequest('POST', url, () async {
+      final (client, _) = await instance._getClientForHost(url.host);
       return client.post(url, headers: headers, body: body);
-    }, url);
+    });
   }
 
   /// Perform a PUT request with retry logic.
@@ -204,10 +205,10 @@ class NetworkProvider {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    return instance._performRequest(() async {
-      final client = await instance._getClientForHost(url.host);
+    return instance._performRequest('PUT', url, () async {
+      final (client, _) = await instance._getClientForHost(url.host);
       return client.put(url, headers: headers, body: body);
-    }, url);
+    });
   }
 
   /// Perform a DELETE request with retry logic.
@@ -216,10 +217,10 @@ class NetworkProvider {
     Map<String, String>? headers,
     Object? body,
   }) async {
-    return instance._performRequest(() async {
-      final client = await instance._getClientForHost(url.host);
+    return instance._performRequest('DELETE', url, () async {
+      final (client, _) = await instance._getClientForHost(url.host);
       return client.delete(url, headers: headers, body: body);
-    }, url);
+    });
   }
 
   /// Perform a HEAD request with retry logic.
@@ -227,18 +228,31 @@ class NetworkProvider {
     Uri url, {
     Map<String, String>? headers,
   }) async {
-    return instance._performRequest(() async {
-      final client = await instance._getClientForHost(url.host);
+    return instance._performRequest('HEAD', url, () async {
+      final (client, _) = await instance._getClientForHost(url.host);
       return client.head(url, headers: headers);
-    }, url);
+    });
   }
 
   /// Core request execution with retry logic.
   Future<http.Response> _performRequest(
-    Future<http.Response> Function() requestFn,
+    String method,
     Uri url,
+    Future<http.Response> Function() requestFn,
   ) async {
     _lastRequestTime = DateTime.now();
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+
+    // Get protocol version for logging
+    final (_, protocolVersion) = await _getClientForHost(url.host);
+
+    // Log request start
+    LoggerService.logAiConsole(
+      consoleOutput: '🌐 $method ${url.host}${url.path} [$protocolVersion]',
+      endpoint: url.toString(),
+      requestId: requestId,
+    );
 
     int attempt = 0;
     http.Response? lastResponse;
@@ -256,6 +270,13 @@ class NetworkProvider {
         if (retriableStatusCodes.contains(response.statusCode) &&
             attempt < _retryCount) {
           final delay = _calculateBackoff(attempt);
+          LoggerService.logAiConsole(
+            consoleOutput:
+                '🔄 Retry ${attempt + 1}/$_retryCount: $method ${url.host} '
+                '(status ${response.statusCode}, waiting ${delay.inMilliseconds}ms)',
+            endpoint: url.toString(),
+            requestId: requestId,
+          );
           LoggerService.warning(
             'Retriable status ${response.statusCode} for ${url.host}, '
             'attempt ${attempt + 1}/$_retryCount, retrying in ${delay.inMilliseconds}ms',
@@ -264,6 +285,16 @@ class NetworkProvider {
           attempt++;
           continue;
         }
+
+        // Log success
+        final duration = DateTime.now().difference(startTime);
+        LoggerService.logAiConsole(
+          consoleOutput:
+              '✅ $method ${url.host} completed: ${response.statusCode}',
+          endpoint: url.toString(),
+          requestId: requestId,
+          duration: duration,
+        );
 
         return response;
       } on RhttpException catch (e) {
@@ -274,6 +305,12 @@ class NetworkProvider {
             !_http3FailedHosts.contains(url.host) &&
             (_http3SupportedHosts[url.host] == true ||
                 _protocolPreference == NetworkProtocolPreference.http3Only)) {
+          LoggerService.logAiConsole(
+            consoleOutput:
+                '⚠️ HTTP/3 failed for ${url.host}, falling back to HTTP/1.1',
+            endpoint: url.toString(),
+            requestId: requestId,
+          );
           LoggerService.warning(
             'HTTP/3 failed for ${url.host}, falling back to HTTP/1.1: $e',
           );
@@ -284,6 +321,13 @@ class NetworkProvider {
 
         if (attempt < _retryCount) {
           final delay = _calculateBackoff(attempt);
+          LoggerService.logAiConsole(
+            consoleOutput:
+                '🔄 Retry ${attempt + 1}/$_retryCount: $method ${url.host} '
+                '(error, waiting ${delay.inMilliseconds}ms)',
+            endpoint: url.toString(),
+            requestId: requestId,
+          );
           LoggerService.warning(
             'Request failed for ${url.host}, attempt ${attempt + 1}/$_retryCount, '
             'retrying in ${delay.inMilliseconds}ms: $e',
@@ -292,12 +336,28 @@ class NetworkProvider {
           attempt++;
           continue;
         }
+
+        // Log final failure
+        final duration = DateTime.now().difference(startTime);
+        LoggerService.logAiError(
+          error: 'Network request failed: $e',
+          endpoint: url.toString(),
+          requestId: requestId,
+          duration: duration,
+        );
         rethrow;
       } catch (e) {
         lastError = e;
 
         if (attempt < _retryCount) {
           final delay = _calculateBackoff(attempt);
+          LoggerService.logAiConsole(
+            consoleOutput:
+                '🔄 Retry ${attempt + 1}/$_retryCount: $method ${url.host} '
+                '(error, waiting ${delay.inMilliseconds}ms)',
+            endpoint: url.toString(),
+            requestId: requestId,
+          );
           LoggerService.warning(
             'Request failed for ${url.host}, attempt ${attempt + 1}/$_retryCount, '
             'retrying in ${delay.inMilliseconds}ms: $e',
@@ -306,6 +366,15 @@ class NetworkProvider {
           attempt++;
           continue;
         }
+
+        // Log final failure
+        final duration = DateTime.now().difference(startTime);
+        LoggerService.logAiError(
+          error: 'Network request failed: $e',
+          endpoint: url.toString(),
+          requestId: requestId,
+          duration: duration,
+        );
         rethrow;
       }
     }
@@ -314,6 +383,13 @@ class NetworkProvider {
     if (lastResponse != null) {
       return lastResponse;
     }
+    final duration = DateTime.now().difference(startTime);
+    LoggerService.logAiError(
+      error: 'Request failed after $_retryCount retries',
+      endpoint: url.toString(),
+      requestId: requestId,
+      duration: duration,
+    );
     throw lastError ?? Exception('Request failed after $_retryCount retries');
   }
 
