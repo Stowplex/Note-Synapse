@@ -3566,114 +3566,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     required int depth,
     required BuildContext context,
   }) {
-    final fileName = attachment.split(Platform.pathSeparator).last;
-    final extension = attachment.split('.').last.toLowerCase();
-    final isPdf = extension == 'pdf';
-    final leftPadding = 16.0 + (depth * 32);
-
-    // Check if this PDF has an outline
+    final isPdf = attachment.toLowerCase().endsWith('.pdf');
     final pdfOutline = isPdf ? _pdfOutlines[attachment] : null;
     final hasOutline = pdfOutline != null && pdfOutline.isNotEmpty;
+    final isActive = attachment == _activeAttachmentPath;
 
-    if (!hasOutline) {
-      // Simple list tile for non-PDF or PDF without outline
-      return ListTile(
-        contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
-        leading: Icon(_iconForAttachment(attachment)),
-        title: Text(fileName, overflow: TextOverflow.ellipsis),
-        onTap: () {
-          setState(() {
-            _activeNoteIndex = noteIndex;
-            _activeAttachmentPath = attachment;
-          });
-          Navigator.pop(context);
-        },
-      );
-    }
-
-    // ExpansionTile for PDFs with outline
-    return ExpansionTile(
-      tilePadding: EdgeInsets.only(left: leftPadding, right: 16),
-      leading: Icon(_iconForAttachment(attachment)),
-      title: Text(fileName, overflow: TextOverflow.ellipsis),
-      initiallyExpanded: false,
-      children: [
-        // Tap to view PDF button
-        ListTile(
-          contentPadding: EdgeInsets.only(left: leftPadding + 24, right: 16),
-          leading: const Icon(Icons.visibility, size: 20),
-          title: Text(
-            'View PDF',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          onTap: () {
-            setState(() {
-              _activeNoteIndex = noteIndex;
-              _activeAttachmentPath = attachment;
-            });
-            Navigator.pop(context);
-          },
-        ),
-        // PDF outline items
-        ..._buildPdfOutlineItems(
-          attachmentPath: attachment,
-          nodes: pdfOutline,
-          noteIndex: noteIndex,
-          depth: 0,
-          context: context,
-        ),
-      ],
+    return _AttachmentOutlineItem(
+      attachment: attachment,
+      noteIndex: noteIndex,
+      depth: depth,
+      isPdf: isPdf,
+      hasOutline: hasOutline,
+      isActive: isActive,
+      pdfOutline: pdfOutline,
+      currentPage: isPdf ? _pdfCurrentPages[attachment] : null,
+      onTap: () {
+        setState(() {
+          _activeNoteIndex = noteIndex;
+          _activeAttachmentPath = attachment;
+        });
+        Navigator.pop(context);
+      },
+      onNodeTap: (node) {
+        setState(() {
+          _activeNoteIndex = noteIndex;
+          _activeAttachmentPath = attachment;
+        });
+        Navigator.pop(context);
+        _navigateToPdfOutlineDestination(attachment, node);
+      },
+      onResolvePageNumber: (node) async {
+        // Try to access pageNumber directly from the destination
+        if (node.dest != null) {
+          return node.dest!.pageNumber;
+        }
+        return null;
+      },
     );
-  }
-
-  /// Build PDF outline tree items recursively
-  List<Widget> _buildPdfOutlineItems({
-    required String attachmentPath,
-    required List<PdfOutlineNode> nodes,
-    required int noteIndex,
-    required int depth,
-    required BuildContext context,
-  }) {
-    final widgets = <Widget>[];
-    final leftPadding = 80.0 + (depth * 16);
-
-    for (final node in nodes) {
-      widgets.add(
-        ListTile(
-          contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
-          leading: const Icon(Icons.bookmark_outline, size: 18),
-          title: Text(
-            node.title,
-            style: Theme.of(context).textTheme.bodySmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-          onTap: () {
-            setState(() {
-              _activeNoteIndex = noteIndex;
-              _activeAttachmentPath = attachmentPath;
-            });
-            Navigator.pop(context);
-            // Navigate to the outline destination after the sheet closes
-            _navigateToPdfOutlineDestination(attachmentPath, node);
-          },
-        ),
-      );
-
-      // Recursively add children
-      if (node.children.isNotEmpty) {
-        widgets.addAll(
-          _buildPdfOutlineItems(
-            attachmentPath: attachmentPath,
-            nodes: node.children,
-            noteIndex: noteIndex,
-            depth: depth + 1,
-            context: context,
-          ),
-        );
-      }
-    }
-
-    return widgets;
   }
 
   /// Navigate to a PDF outline destination
@@ -3690,6 +3619,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         controller.goToDest(node.dest!);
       }
     });
+  }
+
+  IconData _iconForAttachment(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+      return Icons.image;
+    } else if (['mp4', 'mov', 'avi'].contains(ext)) {
+      return Icons.movie;
+    } else if (['mp3', 'wav', 'm4a'].contains(ext)) {
+      return Icons.audiotrack;
+    } else if (ext == 'pdf') {
+      return Icons.picture_as_pdf;
+    }
+    return Icons.insert_drive_file;
   }
 
   /// Check if a PDF has a custom AI context configuration
@@ -5030,25 +4973,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return null;
   }
 
-  IconData _iconForAttachment(String path) {
-    final extension = FileTypeUtils.getFileExtension(path);
-    switch (extension) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'svg':
-        return Icons.photo_size_select_large;
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-      case 'gif':
-      case 'webp':
-      case 'bmp':
-        return Icons.image;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
   int? _findNoteIndexForAttachment(String attachmentPath, List<Note> notes) {
     for (var i = 0; i < notes.length; i++) {
       if (notes[i].attachmentPaths.contains(attachmentPath)) {
@@ -5403,3 +5327,247 @@ class _DrawingLayerPainter extends CustomPainter {
 }
 
 enum _AiPanelSide { top, bottom, left, right }
+
+class _AttachmentOutlineItem extends StatefulWidget {
+  final String attachment;
+  final int noteIndex;
+  final int depth;
+  final bool isPdf;
+  final bool hasOutline;
+  final bool isActive;
+  final int? currentPage;
+  final List<PdfOutlineNode>? pdfOutline;
+  final VoidCallback onTap;
+  final Function(PdfOutlineNode) onNodeTap;
+  final Future<int?> Function(PdfOutlineNode) onResolvePageNumber;
+
+  const _AttachmentOutlineItem({
+    required this.attachment,
+    required this.noteIndex,
+    required this.depth,
+    required this.isPdf,
+    required this.hasOutline,
+    required this.isActive,
+    required this.currentPage,
+    required this.pdfOutline,
+    required this.onTap,
+    required this.onNodeTap,
+    required this.onResolvePageNumber,
+  });
+
+  @override
+  State<_AttachmentOutlineItem> createState() => _AttachmentOutlineItemState();
+}
+
+class _AttachmentOutlineItemState extends State<_AttachmentOutlineItem> {
+  bool _isExpanded = false;
+  PdfOutlineNode? _activeNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _findActiveNode();
+  }
+
+  @override
+  void didUpdateWidget(_AttachmentOutlineItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentPage != oldWidget.currentPage ||
+        widget.pdfOutline != oldWidget.pdfOutline) {
+      _findActiveNode();
+    }
+  }
+
+  Future<void> _findActiveNode() async {
+    if (widget.pdfOutline == null || widget.currentPage == null) {
+      if (mounted && _activeNode != null) setState(() => _activeNode = null);
+      return;
+    }
+
+    final flatList = <MapEntry<PdfOutlineNode, int>>[];
+
+    Future<void> traverse(List<PdfOutlineNode> nodes) async {
+      for (final node in nodes) {
+        final page = await widget.onResolvePageNumber(node);
+        if (page != null) {
+          flatList.add(MapEntry(node, page));
+        }
+        if (node.children.isNotEmpty) {
+          await traverse(node.children);
+        }
+      }
+    }
+
+    await traverse(widget.pdfOutline!);
+    flatList.sort((a, b) => a.value.compareTo(b.value));
+
+    PdfOutlineNode? active;
+    final current = widget.currentPage!;
+
+    for (int i = 0; i < flatList.length; i++) {
+      final entry = flatList[i];
+      final page = entry.value;
+
+      if (page <= current) {
+        if (i + 1 < flatList.length) {
+          final nextPage = flatList[i + 1].value;
+          // Provide a small buffer or strictly less
+          if (current < nextPage) {
+            active = entry.key;
+            break;
+          }
+        } else {
+          active = entry.key;
+        }
+      }
+    }
+
+    if (mounted && _activeNode != active) {
+      setState(() => _activeNode = active);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileName = widget.attachment.split(Platform.pathSeparator).last;
+    final leftPadding = 16.0 + (widget.depth * 32);
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.primaryContainer.withValues(
+      alpha: 0.3,
+    );
+
+    if (!widget.hasOutline) {
+      return ListTile(
+        contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+        leading: Icon(_iconForAttachment(widget.attachment)),
+        title: Text(fileName, overflow: TextOverflow.ellipsis),
+        tileColor: widget.isActive ? highlightColor : null,
+        onTap: widget.onTap,
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          child: Container(
+            color: widget.isActive ? highlightColor : null,
+            padding: EdgeInsets.only(
+              left: leftPadding,
+              right: 16,
+              top: 12,
+              bottom: 12,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _iconForAttachment(widget.attachment),
+                  color: theme.iconTheme.color,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    fileName,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                ),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: theme.iconTheme.color?.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isExpanded)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.only(
+                  left: leftPadding + 24,
+                  right: 16,
+                ),
+                leading: const Icon(Icons.visibility, size: 20),
+                title: Text('View PDF', style: theme.textTheme.bodyMedium),
+                onTap: widget.onTap,
+              ),
+              ..._buildPdfOutlineItems(
+                attachmentPath: widget.attachment,
+                nodes: widget.pdfOutline!,
+                noteIndex: widget.noteIndex,
+                depth: 0,
+                context: context,
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  IconData _iconForAttachment(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+      return Icons.image;
+    } else if (['mp4', 'mov', 'avi'].contains(ext)) {
+      return Icons.movie;
+    } else if (['mp3', 'wav', 'm4a'].contains(ext)) {
+      return Icons.audiotrack;
+    } else if (ext == 'pdf') {
+      return Icons.picture_as_pdf;
+    }
+    return Icons.insert_drive_file;
+  }
+
+  List<Widget> _buildPdfOutlineItems({
+    required String attachmentPath,
+    required List<PdfOutlineNode> nodes,
+    required int noteIndex,
+    required int depth,
+    required BuildContext context,
+  }) {
+    final widgets = <Widget>[];
+    final leftPadding = 80.0 + (depth * 16);
+    final theme = Theme.of(context);
+
+    for (final node in nodes) {
+      final isActiveSection = _activeNode == node;
+
+      widgets.add(
+        ListTile(
+          contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+          leading: const Icon(Icons.bookmark_outline, size: 18),
+          title: Text(
+            node.title,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: isActiveSection ? theme.colorScheme.primary : null,
+              fontWeight: isActiveSection ? FontWeight.bold : null,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => widget.onNodeTap(node),
+        ),
+      );
+
+      if (node.children.isNotEmpty) {
+        widgets.addAll(
+          _buildPdfOutlineItems(
+            attachmentPath: attachmentPath,
+            nodes: node.children,
+            noteIndex: noteIndex,
+            depth: depth + 1,
+            context: context,
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+}
