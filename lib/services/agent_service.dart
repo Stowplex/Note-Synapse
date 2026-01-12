@@ -18,6 +18,7 @@ import 'logger_service.dart';
 import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
 import 'database_service.dart';
+import 'prompts/ai_prompts.dart';
 
 /// Callback for executing an external tool (MCP or local AI tool).
 typedef ToolExecutor =
@@ -562,7 +563,11 @@ This is NOT a summary of what you did - this IS the deliverable the user asked f
 - If they asked for writing, provide the writing
 - If they asked for information, provide that information
 
-Format your response with Markdown for readability.
+## Formatting Requirements
+- Structure with proper markdown (headers, lists, code blocks, emphasis)
+- When including math formulas, use LaTeX:
+  - Inline: \\( formula \\) (e.g., \\( E = mc^2 \\))
+  - Display: \\[ formula \\] (e.g., \\[ \\int_{0}^{\\infty} e^{-x^2} dx \\])
 
 When referring to notes or conversations, use inline markdown links with the synapseresource:// URI scheme:
 - For notes: [Note Title](synapseresource://note/<note_id>)
@@ -1406,8 +1411,9 @@ IMPORTANT: This is the FINAL DELIVERABLE task.
 - You can provide your final result as a JSON action: ```json { "answer": "Full result here..." } ``` OR just write the result directly in Markdown.
 - If you still need more information to fulfill the specific request of this task, you MUST use tool calls in JSON format.
 - Do NOT provide a generic summary - give the full, detailed deliverable requested.
-- Format with Markdown for readability.
 - Include all relevant data, citations, and findings from the context above.
+
+${AIPrompts.agenticDeliverableGuidelines}
 '''
         : '';
 
