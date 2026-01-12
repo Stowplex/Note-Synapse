@@ -627,7 +627,7 @@ class _InteractiveCheckboxMarkdownState
       onFullscreen: () {
         _FullscreenViewer.show(
           context,
-          imageWidget: imageWidget,
+          imageWidget: Image.network(url, fit: BoxFit.contain),
           title: 'Image',
         );
       },
@@ -2639,7 +2639,7 @@ class _FullscreenViewer extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: SafeArea(child: Center(child: _buildContent(context))),
+      body: _buildContent(context),
     );
   }
 
@@ -2687,13 +2687,12 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
     if (_webViewController == null) return;
     final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
     _webViewController!.evaluateJavascript(
-      source:
-          '''
+      source: '''
       (function() {
         const iframe = document.querySelector('iframe');
         if (iframe && iframe.contentWindow) {
           try {
-            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '\$backgroundColor'}, '*');
           } catch (e) {
             console.log('Cannot set background:', e);
           }
@@ -2710,56 +2709,59 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
       isDarkBackground: _isDarkBackground,
     );
 
-    return Stack(
-      children: [
-        InAppWebView(
-          initialData: InAppWebViewInitialData(
-            data: htmlContent,
-            mimeType: 'text/html',
-            encoding: 'utf8',
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: htmlContent,
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              supportZoom: true,
+              transparentBackground: true,
+              disableContextMenu: false,
+              resourceCustomSchemes: ['synapse'],
+              useHybridComposition: true,
+            ),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+            },
+            onWebViewCreated: (controller) {
+              _webViewController = controller;
+            },
+            onLoadStop: (controller, url) {
+              _webViewController = controller;
+            },
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              if (request.url.scheme.toLowerCase() == 'synapse') {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/\${request.url.host}",
+                );
+                return CustomSchemeResponse(
+                  contentType: 'application/javascript',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              }
+              return null;
+            },
           ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            supportZoom: true,
-            transparentBackground: true,
-            disableContextMenu: false,
-            resourceCustomSchemes: ['synapse'],
-            useHybridComposition: true,
+          Positioned(
+            bottom: 32, // Adjusted for SafeArea removal
+            right: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white.withValues(alpha: 0.9),
+              foregroundColor: Colors.black87,
+              onPressed: _toggleBackground,
+              child: const Icon(Icons.contrast, size: 20),
+            ),
           ),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-          onWebViewCreated: (controller) {
-            _webViewController = controller;
-          },
-          onLoadStop: (controller, url) {
-            _webViewController = controller;
-          },
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'application/javascript',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
-            }
-            return null;
-          },
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton(
-            mini: true,
-            backgroundColor: Colors.white.withOpacity(0.9),
-            foregroundColor: Colors.black87,
-            onPressed: _toggleBackground,
-            child: const Icon(Icons.contrast, size: 20),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2917,18 +2919,20 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
               : const Color(0xFFFFFFFF),
           child: Center(
             child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
+              minScale: 0.1,
+              maxScale: 10.0,
+              boundaryMargin: const EdgeInsets.all(double.infinity),
+              clipBehavior: Clip.none,
               child: widget.imageWidget,
             ),
           ),
         ),
         Positioned(
-          bottom: 16,
+          bottom: 32, // Adjusted for SafeArea removal
           right: 16,
           child: FloatingActionButton(
             mini: true,
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: Colors.white.withValues(alpha: 0.9),
             foregroundColor: Colors.black87,
             onPressed: _toggleBackground,
             child: const Icon(Icons.contrast, size: 20),
