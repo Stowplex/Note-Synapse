@@ -188,7 +188,53 @@ class ConversationAiEngine {
               error: {'functionName': functionName, 'args': rawArgs},
             );
 
+            String? serviceName;
+            String? toolName;
+            Map<String, dynamic>? params;
+
             if (functionName != 'call_tool') {
+              // Model called a tool directly by name instead of using call_tool wrapper
+              // Return an error with helpful guidance (like "command not found" helper)
+              final errorMessage = _buildUnknownToolErrorMessage(
+                functionName,
+                rawArgs,
+                activeTools,
+              );
+
+              LoggerService.warning(
+                'Unknown function call: $functionName, returning error to LLM',
+              );
+
+              final errorResult = 'Error: $errorMessage';
+              toolResults.add(errorResult);
+              conversationParts.add(
+                '[Tool error: Unknown function "$functionName"]',
+              );
+
+              // Build proper tool error message based on model type
+              if (ModelSelector.instance.currentModelConfig?.type ==
+                  ModelType.openaiCompatible) {
+                // OpenAI: Use the original tool_call_id from the API response
+                final toolCallId =
+                    functionCall['id'] as String? ??
+                    't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i';
+                toolCallsWithResults.add({
+                  'id': toolCallId,
+                  'function_call': functionCall,
+                  'result': errorResult,
+                });
+              } else {
+                // Gemini: Store with function metadata for proper functionResponse format
+                toolCallsWithResults.add({
+                  'function_name': functionName,
+                  'function_args': rawArgs,
+                  'result': errorResult,
+                  // Preserve thought_signature for Gemini 3+ models
+                  if (functionCall.containsKey('thoughtSignature'))
+                    'thought_signature': functionCall['thoughtSignature'],
+                });
+              }
+
               continue;
             }
 
@@ -203,9 +249,9 @@ class ConversationAiEngine {
               continue;
             }
 
-            final serviceName = parsedArgs['service_name'] as String;
-            final toolName = parsedArgs['tool_name'] as String;
-            final params = parsedArgs['params'] as Map<String, dynamic>;
+            serviceName = parsedArgs['service_name'] as String;
+            toolName = parsedArgs['tool_name'] as String;
+            params = parsedArgs['params'] as Map<String, dynamic>;
 
             LoggerService.info('Executing: $serviceName.$toolName');
             LoggerService.debug('Tool parameters', error: params);
@@ -224,12 +270,10 @@ class ConversationAiEngine {
 
               if (ModelSelector.instance.currentModelConfig?.type ==
                   ModelType.openaiCompatible) {
-                final timestamp = DateTime.now().millisecondsSinceEpoch
-                    .toRadixString(36);
-                final shortName = toolName.length > 10
-                    ? toolName.substring(0, 10)
-                    : toolName;
-                final toolCallId = 't_${timestamp}_${shortName}_$i';
+                // Use the original tool_call_id from the API response if available
+                final toolCallId =
+                    functionCall['id'] as String? ??
+                    't_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_${toolName.length > 10 ? toolName.substring(0, 10) : toolName}_$i';
                 toolCallsWithResults.add({
                   'id': toolCallId,
                   'function_call': functionCall,
@@ -316,21 +360,39 @@ class ConversationAiEngine {
                 ...toolMessages,
               ];
             } else {
+              // Gemini: Use PromptRole.tool with function metadata for proper functionResponse format
               final toolMessages = <PromptMessage>[];
               for (int i = 0; i < toolResults.length; i++) {
                 final functionCall = i < functionCalls.length
                     ? functionCalls[i]
                     : null;
+                final toolCallResult = i < toolCallsWithResults.length
+                    ? toolCallsWithResults[i]
+                    : null;
+
+                // Build metadata with function info and thought_signature
+                final metadata = <String, dynamic>{};
+                if (functionCall != null) {
+                  metadata['function_name'] = functionCall['name'];
+                  metadata['function_args'] = functionCall['args'];
+                  // Preserve thought_signature for Gemini 3+ models
+                  if (functionCall.containsKey('thoughtSignature')) {
+                    metadata['thought_signature'] =
+                        functionCall['thoughtSignature'];
+                  }
+                }
+                // Also check toolCallResult for thought_signature (for error cases)
+                if (toolCallResult != null &&
+                    toolCallResult.containsKey('thought_signature')) {
+                  metadata['thought_signature'] =
+                      toolCallResult['thought_signature'];
+                }
+
                 toolMessages.add(
                   PromptMessage(
-                    role: PromptRole.user,
+                    role: PromptRole.tool,
                     content: toolResults[i],
-                    metadata: functionCall != null
-                        ? {
-                            'function_name': functionCall['name'],
-                            'function_args': functionCall['args'],
-                          }
-                        : null,
+                    metadata: metadata.isNotEmpty ? metadata : null,
                   ),
                 );
               }
@@ -393,5 +455,50 @@ class ConversationAiEngine {
         metadata: {'is_client_synthetic': true},
       );
     }
+  }
+
+  /// Build a helpful error message for unrecognized tool calls.
+  /// Similar to Linux's "command not found" helper that suggests similar commands.
+  String _buildUnknownToolErrorMessage(
+    String functionName,
+    dynamic rawArgs,
+    Map<String, List<McpTool>> activeTools,
+  ) {
+    final buffer = StringBuffer();
+    buffer.writeln('ERROR: Unrecognized function "$functionName"');
+    buffer.writeln();
+    buffer.writeln(
+      'You must call tools through the "call_tool" function with:',
+    );
+    buffer.writeln('  - service_name: The endpoint/service name');
+    buffer.writeln('  - tool_name: The tool name within the service');
+    buffer.writeln('  - params: Object containing the tool parameters');
+    buffer.writeln();
+
+    // Search for matching tools (command not found helper)
+    final matches = <MapEntry<String, String>>[]; // (tool_name, service_name)
+    for (final entry in activeTools.entries) {
+      final serviceName = entry.key;
+      for (final tool in entry.value) {
+        if (tool.name == functionName ||
+            tool.name.toLowerCase().contains(functionName.toLowerCase()) ||
+            functionName.toLowerCase().contains(tool.name.toLowerCase())) {
+          matches.add(MapEntry(tool.name, serviceName));
+        }
+      }
+    }
+
+    if (matches.isNotEmpty) {
+      buffer.writeln('Did you mean to call one of these?');
+      for (final match in matches) {
+        buffer.writeln(
+          '  call_tool(service_name="${match.value}", tool_name="${match.key}", params={...})',
+        );
+      }
+    } else if (activeTools.isNotEmpty) {
+      buffer.writeln('Available services: ${activeTools.keys.join(", ")}');
+    }
+
+    return buffer.toString();
   }
 }

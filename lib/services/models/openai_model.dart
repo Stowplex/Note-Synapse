@@ -816,7 +816,12 @@ class OpenAIModel implements AIModel {
             } catch (_) {
               parsedArgs = {};
             }
-            return {'name': fn['name'], 'args': parsedArgs};
+            return {
+              'name': fn['name'],
+              'args': parsedArgs,
+              'id':
+                  tc['id'], // Preserve tool call ID for proper message threading
+            };
           }).toList();
 
           return {
