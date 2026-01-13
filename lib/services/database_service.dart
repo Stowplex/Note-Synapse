@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 32; // Target schema version
+  static const int DATABASE_VERSION = 36; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -703,6 +703,11 @@ class DatabaseService {
           'Add metadata column to attachments table for PDF bookmarks and AI context config',
       execute: _migrateToVersion32,
     ),
+    36: MigrationStep(
+      description:
+          'Fix notes_fts FTS5 table by removing incorrect content_rowid option',
+      execute: _migrateToVersion36,
+    ),
   };
 
   static Future<void> _migrateToVersion28(
@@ -730,107 +735,47 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
-    bool useFts5 = true;
-    // 1. Create notes_fts virtual table using FTS5 with fallback to FTS4
-    try {
-      await db.execute('''
-        CREATE VIRTUAL TABLE notes_fts USING fts5(
-          title, 
-          content, 
-          content_rowid=id
-        );
-      ''');
-    } catch (e) {
-      LoggerService.warning('FTS5 creation failed, falling back to FTS4: $e');
-      useFts5 = false;
-      await db.execute('''
-        CREATE VIRTUAL TABLE notes_fts USING fts4(
-          title, 
-          content, 
-          content='notes'
-        );
-      ''');
-    }
+    // 1. Create notes_fts virtual table using FTS4 (universally supported on all platforms)
+    await db.execute('''
+      CREATE VIRTUAL TABLE notes_fts USING fts4(
+        title, 
+        content
+      );
+    ''');
 
     // 2. Populate notes_fts with existing data
-    // Both FTS5 (external Content) and FTS4 (content=) need initial population or rebuild
-    if (useFts5) {
-      await db.execute('''
-        INSERT INTO notes_fts(rowid, title, content)
-        SELECT rowid, title, content FROM notes;
-      ''');
-    } else {
-      // FTS4 with content='notes' can be rebuilt using 'rebuild' command
-      await db.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')");
-    }
+    await db.execute('''
+      INSERT INTO notes_fts(docid, title, content)
+      SELECT rowid, title, content FROM notes;
+    ''');
 
     // 3. Create Triggers to keep notes_fts in sync
-    if (useFts5) {
-      // INSERT Trigger
-      await db.execute('''
-        CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
-        BEGIN
-          INSERT INTO notes_fts(rowid, title, content)
-          VALUES (new.rowid, new.title, new.content);
-        END;
-      ''');
+    // INSERT Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+      BEGIN
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+    ''');
 
-      // DELETE Trigger
-      await db.execute('''
-        CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
-        BEGIN
-          INSERT INTO notes_fts(notes_fts, rowid, title, content)
-          VALUES('delete', old.rowid, old.title, old.content);
-        END;
-      ''');
+    // DELETE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+      END;
+    ''');
 
-      // UPDATE Trigger
-      await db.execute('''
-        CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
-        BEGIN
-          INSERT INTO notes_fts(notes_fts, rowid, title, content)
-          VALUES('delete', old.rowid, old.title, old.content);
-          INSERT INTO notes_fts(rowid, title, content)
-          VALUES (new.rowid, new.title, new.content);
-        END;
-      ''');
-    } else {
-      // FTS4 Triggers for content='notes'
-      // Actually for content='notes', we just need to notify FTS4 of changes
-      // INSERT
-      await db.execute('''
-         CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
-         BEGIN
-           INSERT INTO notes_fts(docid, title, content)
-           VALUES(new.rowid, new.title, new.content);
-         END;
-       ''');
-
-      // DELETE
-      // Note: For FTS4 external content, implementation varies.
-      // Often simpler to just execute DELETE FROM notes_fts WHERE docid = old.rowid
-      // But 'old.rowid' might be problematic if 'id' is TEXT.
-      // Wait, 'id' in notes is TEXT (UUID). 'rowid' is internal integer.
-      // FTS always uses integer rowid/docid.
-      // We should rely on standard rowid mapping if possible.
-
-      await db.execute('''
-         CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
-         BEGIN
-           DELETE FROM notes_fts WHERE docid = old.rowid;
-         END;
-       ''');
-
-      // UPDATE
-      await db.execute('''
-         CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
-         BEGIN
-           DELETE FROM notes_fts WHERE docid = old.rowid;
-           INSERT INTO notes_fts(docid, title, content)
-           VALUES(new.rowid, new.title, new.content);
-         END;
-       ''');
-    }
+    // UPDATE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+    ''');
 
     // 4. Create tag_ai_configs table
     await db.execute('''
@@ -1230,6 +1175,76 @@ class DatabaseService {
       }
     } catch (e) {
       LoggerService.error('Error in migration to version 32: $e', error: e);
+      rethrow;
+    }
+  }
+
+  // Migration to version 36: Fix notes_fts table by recreating it with FTS4
+  // The original migration had issues (FTS5 with incorrect content_rowid option on iOS,
+  // and mixed FTS4/FTS5 code paths). This migration drops and recreates the FTS table
+  // using only FTS4 for cross-platform compatibility.
+  static Future<void> _migrateToVersion36(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 33: Recreating notes_fts as FTS4',
+    );
+
+    try {
+      // Drop existing triggers first (they may reference wrong FTS variant)
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_insert');
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_delete');
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_update');
+
+      // Drop existing FTS table (could be FTS4 or FTS5)
+      await db.execute('DROP TABLE IF EXISTS notes_fts');
+
+      // Create FTS4 table (universally supported)
+      await db.execute('''
+        CREATE VIRTUAL TABLE notes_fts USING fts4(
+          title, 
+          content
+        );
+      ''');
+
+      // Repopulate notes_fts with existing data
+      await db.execute('''
+        INSERT INTO notes_fts(docid, title, content)
+        SELECT rowid, title, content FROM notes;
+      ''');
+
+      // Create triggers for FTS4
+      // INSERT Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+        BEGIN
+          INSERT INTO notes_fts(docid, title, content)
+          VALUES(new.rowid, new.title, new.content);
+        END;
+      ''');
+
+      // DELETE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+        BEGIN
+          DELETE FROM notes_fts WHERE docid = old.rowid;
+        END;
+      ''');
+
+      // UPDATE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+        BEGIN
+          DELETE FROM notes_fts WHERE docid = old.rowid;
+          INSERT INTO notes_fts(docid, title, content)
+          VALUES(new.rowid, new.title, new.content);
+        END;
+      ''');
+
+      LoggerService.info('Successfully recreated notes_fts table using FTS4');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 33: $e', error: e);
       rethrow;
     }
   }
