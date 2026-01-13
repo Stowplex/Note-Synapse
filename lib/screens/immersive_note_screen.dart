@@ -2271,8 +2271,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
-                    // Built-in Tools
-                    if (BuiltInToolsService.tools.isNotEmpty) ...[
+                    // TODO(kkspeed): Built-in Tools section is hidden because agentic mode
+                    // is not yet implemented in immersive mode. The checkbox does nothing
+                    // and won't spawn the agent mode widget like in conversation_chat_screen.
+                    // Re-enable this section when agentic UX for immersive mode is defined.
+                    // ignore: dead_code
+                    if (false && BuiltInToolsService.tools.isNotEmpty) ...[
                       Row(
                         children: [
                           Icon(
