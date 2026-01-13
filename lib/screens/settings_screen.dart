@@ -57,36 +57,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.palette),
-              title: Text(l10n.appearance),
-              subtitle: Text(l10n.appearanceSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AppearanceSettingsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.language),
-              title: Text(l10n.language),
-              subtitle: Text(l10n.languageSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LanguageSettingsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
               leading: const Icon(Icons.psychology),
               title: Text(l10n.aiApi),
               subtitle: Text(l10n.aiApiSubtitle),
@@ -102,21 +72,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.apps),
-              title: const Text('User App'),
-              subtitle: const Text('Manage user app settings and libraries'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const UserAppSettingsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
               leading: const Icon(Icons.bug_report),
               title: Text(l10n.aiDebugOverlay),
               subtitle: Text(l10n.aiDebugOverlaySubtitle),
@@ -125,6 +80,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AIDebugOverlayScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.apps),
+              title: const Text('User App'),
+              subtitle: const Text('Manage user app settings and libraries'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const UserAppSettingsScreen(),
                 ),
               ),
             ),
@@ -1351,6 +1321,24 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Dark Mode
+                Card(
+                  child: Consumer<AppProvider>(
+                    builder: (context, appProvider, child) {
+                      return SwitchListTile(
+                        title: Text(l10n.darkMode),
+                        subtitle: Text(l10n.darkModeSubtitle),
+                        value: appProvider.isDarkMode,
+                        onChanged: (value) {
+                          appProvider.toggleTheme();
+                        },
+                        secondary: const Icon(Icons.dark_mode),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Keep Screen On
                 Card(
                   child: SwitchListTile(
                     title: Text(l10n.keepScreenOn),
@@ -1361,6 +1349,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Network
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.wifi),
@@ -1375,8 +1364,84 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                // Language
+                Card(
+                  child: Consumer<AppProvider>(
+                    builder: (context, appProvider, child) {
+                      return ListTile(
+                        leading: const Icon(Icons.language),
+                        title: Text(l10n.language),
+                        subtitle: Text(
+                          _getLanguageLabel(appProvider.locale, l10n),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            _showLanguageDialog(context, appProvider, l10n),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
+    );
+  }
+
+  String _getLanguageLabel(Locale? locale, AppLocalizations l10n) {
+    if (locale == null) return l10n.english;
+    if (locale.languageCode == 'zh') return l10n.chineseSimplified;
+    return l10n.english;
+  }
+
+  void _showLanguageDialog(
+    BuildContext context,
+    AppProvider appProvider,
+    AppLocalizations l10n,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.language),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<Locale>(
+              title: Text(l10n.english),
+              value: const Locale('en', ''),
+              groupValue: appProvider.locale,
+              onChanged: (Locale? value) {
+                if (value != null) {
+                  appProvider.changeLanguage(value);
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(l10n.languageChanged),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+            RadioListTile<Locale>(
+              title: Text(l10n.chineseSimplified),
+              value: const Locale('zh', ''),
+              groupValue: appProvider.locale,
+              onChanged: (Locale? value) {
+                if (value != null) {
+                  appProvider.changeLanguage(value);
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(l10n.languageChanged),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
