@@ -422,10 +422,12 @@ class _InteractiveCheckboxMarkdownState
 
         final commaIndex = dataString.indexOf(',');
         if (commaIndex == -1) {
-          return _buildPlaceholder(
-            effectiveWidth,
-            effectiveHeight,
-            'Invalid data URL format',
+          return wrapWithDragTarget(
+            _buildPlaceholder(
+              effectiveWidth,
+              effectiveHeight,
+              'Invalid data URL format',
+            ),
           );
         }
 
@@ -464,20 +466,24 @@ class _InteractiveCheckboxMarkdownState
             if (kDebugMode) {
               debugPrint('Error decoding SVG from data URL: $e');
             }
-            return _buildPlaceholder(
-              effectiveWidth,
-              effectiveHeight,
-              'Failed to decode SVG',
+            return wrapWithDragTarget(
+              _buildPlaceholder(
+                effectiveWidth,
+                effectiveHeight,
+                'Failed to decode SVG',
+              ),
             );
           }
         }
 
         if (mimetype.startsWith('image/')) {
           if (!isBase64) {
-            return _buildPlaceholder(
-              effectiveWidth,
-              effectiveHeight,
-              'Only base64 encoded images are supported',
+            return wrapWithDragTarget(
+              _buildPlaceholder(
+                effectiveWidth,
+                effectiveHeight,
+                'Only base64 encoded images are supported',
+              ),
             );
           }
 
@@ -487,10 +493,12 @@ class _InteractiveCheckboxMarkdownState
             key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
             fit: effectiveFit,
             errorBuilder: (context, error, stackTrace) {
-              return _buildPlaceholder(
-                effectiveWidth,
-                effectiveHeight,
-                'Failed to render image',
+              return wrapWithDragTarget(
+                _buildPlaceholder(
+                  effectiveWidth,
+                  effectiveHeight,
+                  'Failed to render image',
+                ),
               );
             },
           );
@@ -514,16 +522,20 @@ class _InteractiveCheckboxMarkdownState
           );
         }
 
-        return _buildPlaceholder(
-          effectiveWidth,
-          effectiveHeight,
-          'Unsupported image type: $mimetype',
+        return wrapWithDragTarget(
+          _buildPlaceholder(
+            effectiveWidth,
+            effectiveHeight,
+            'Unsupported image type: $mimetype',
+          ),
         );
       } catch (e) {
-        return _buildPlaceholder(
-          effectiveWidth,
-          effectiveHeight,
-          'Error loading image: $e',
+        return wrapWithDragTarget(
+          _buildPlaceholder(
+            effectiveWidth,
+            effectiveHeight,
+            'Error loading image: $e',
+          ),
         );
       }
     }
@@ -620,10 +632,12 @@ class _InteractiveCheckboxMarkdownState
                           key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
                           fit: effectiveFit,
                           errorBuilder: (context, error, stackTrace) {
-                            return _buildPlaceholder(
-                              effectiveWidth,
-                              effectiveHeight,
-                              'Failed to render local image bytes',
+                            return wrapWithDragTarget(
+                              _buildPlaceholder(
+                                effectiveWidth,
+                                effectiveHeight,
+                                'Failed to render local image bytes',
+                              ),
                             );
                           },
                         ),
