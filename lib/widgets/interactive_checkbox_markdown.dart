@@ -435,12 +435,14 @@ class _InteractiveCheckboxMarkdownState
                 ? utf8.decode(base64.decode(data))
                 : Uri.decodeComponent(data);
             widget.hasWebViewNotifier?.value = true;
-            return _SvgWebViewWithInfoBar(
-              svgContent: svgContent,
-              imageUrl: url,
-              width: effectiveWidth,
-              height: effectiveHeight,
-              noteId: widget.noteId,
+            return wrapWithDragTarget(
+              _SvgWebViewWithInfoBar(
+                svgContent: svgContent,
+                imageUrl: url,
+                width: effectiveWidth,
+                height: effectiveHeight,
+                noteId: widget.noteId,
+              ),
             );
           } catch (e) {
             if (kDebugMode) {
@@ -476,21 +478,23 @@ class _InteractiveCheckboxMarkdownState
               );
             },
           );
-          return _wrapImageWithInfoBar(
-            image: SizedBox(
-              width: effectiveWidth,
-              height: effectiveHeight,
-              child: imageWidget,
+          return wrapWithDragTarget(
+            _wrapImageWithInfoBar(
+              image: SizedBox(
+                width: effectiveWidth,
+                height: effectiveHeight,
+                child: imageWidget,
+              ),
+              imageUrl: url,
+              isSvg: false,
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  imageWidget: Image.memory(bytes, fit: BoxFit.contain),
+                  title: 'Image',
+                );
+              },
             ),
-            imageUrl: url,
-            isSvg: false,
-            onFullscreen: () {
-              _FullscreenViewer.show(
-                context,
-                imageWidget: Image.memory(bytes, fit: BoxFit.contain),
-                title: 'Image',
-              );
-            },
           );
         }
 
@@ -563,12 +567,14 @@ class _InteractiveCheckboxMarkdownState
           if (source != null) {
             if (source.svgContent != null) {
               widget.hasWebViewNotifier?.value = true;
-              return _SvgWebViewWithInfoBar(
-                svgContent: source.svgContent!,
-                imageUrl: url,
-                width: effectiveWidth,
-                height: effectiveHeight,
-                noteId: widget.noteId,
+              return wrapWithDragTarget(
+                _SvgWebViewWithInfoBar(
+                  svgContent: source.svgContent!,
+                  imageUrl: url,
+                  width: effectiveWidth,
+                  height: effectiveHeight,
+                  noteId: widget.noteId,
+                ),
               );
             }
             final imageFile = File(source.path);
@@ -588,35 +594,37 @@ class _InteractiveCheckboxMarkdownState
                       'InteractiveCheckboxMarkdown: Read ${byteSnapshot.data!.length} bytes from disk for $url',
                     );
                   }
-                  return _wrapImageWithInfoBar(
-                    image: SizedBox(
-                      width: effectiveWidth,
-                      height: effectiveHeight,
-                      child: Image.memory(
-                        byteSnapshot.data!,
-                        key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
-                        fit: effectiveFit,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildPlaceholder(
-                            effectiveWidth,
-                            effectiveHeight,
-                            'Failed to render local image bytes',
-                          );
-                        },
-                      ),
-                    ),
-                    imageUrl: url,
-                    isSvg: false,
-                    onFullscreen: () {
-                      _FullscreenViewer.show(
-                        context,
-                        imageWidget: Image.memory(
+                  return wrapWithDragTarget(
+                    _wrapImageWithInfoBar(
+                      image: SizedBox(
+                        width: effectiveWidth,
+                        height: effectiveHeight,
+                        child: Image.memory(
                           byteSnapshot.data!,
-                          fit: BoxFit.contain,
+                          key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
+                          fit: effectiveFit,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildPlaceholder(
+                              effectiveWidth,
+                              effectiveHeight,
+                              'Failed to render local image bytes',
+                            );
+                          },
                         ),
-                        title: 'Image',
-                      );
-                    },
+                      ),
+                      imageUrl: url,
+                      isSvg: false,
+                      onFullscreen: () {
+                        _FullscreenViewer.show(
+                          context,
+                          imageWidget: Image.memory(
+                            byteSnapshot.data!,
+                            fit: BoxFit.contain,
+                          ),
+                          title: 'Image',
+                        );
+                      },
+                    ),
                   );
                 }
                 return _buildLoadingPlaceholder(
@@ -632,12 +640,14 @@ class _InteractiveCheckboxMarkdownState
     }
 
     if (SynapseTempUtils.isSynapseTempUri(url)) {
-      return _buildGenericSynapseTempImage(
-        context,
-        url,
-        effectiveWidth,
-        effectiveHeight,
-        fit: effectiveFit,
+      return wrapWithDragTarget(
+        _buildGenericSynapseTempImage(
+          context,
+          url,
+          effectiveWidth,
+          effectiveHeight,
+          fit: effectiveFit,
+        ),
       );
     }
 
@@ -1142,16 +1152,31 @@ class _InteractiveCheckboxMarkdownState
 
     final components = [
       CodeBlockMd(),
-      LatexMathMultiLine(),
+      DragTargetLatexMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
       NewLines(),
-      BlockQuote(),
-      TableMd(),
+      DragTargetBlockQuoteMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
+      DragTargetTableMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
       DragTargetSafeHTag(
         onBlockEditRequested: widget.onBlockEditRequested,
         getOccurrence: getOccurrence,
       ),
-      UnOrderedList(),
-      OrderedList(),
+      DragTargetUnorderedListMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
+      DragTargetOrderedListMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
       RadioButtonMd(),
       if (widget.onContentChanged != null)
         InteractiveCheckboxMd(

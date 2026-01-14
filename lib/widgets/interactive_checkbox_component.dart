@@ -285,3 +285,131 @@ class InteractiveCustomCb extends StatelessWidget {
     );
   }
 }
+
+/// Table component with drag-to-edit support
+class DragTargetTableMd extends TableMd {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetTableMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final child = super.build(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+    return child;
+  }
+}
+
+/// BlockQuote component with drag-to-edit support
+/// Note: BlockQuote extends InlineMd, so we override span() not build()
+class DragTargetBlockQuoteMd extends BlockQuote {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetBlockQuoteMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final childSpan = super.span(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      // Wrap the entire span in a WidgetSpan with DragTargetBlockWrapper
+      return TextSpan(
+        children: [
+          WidgetSpan(
+            child: DragTargetBlockWrapper(
+              blockContent: text,
+              occurrenceIndex: occurrence,
+              onBlockEditRequested: onBlockEditRequested,
+              child: Text.rich(childSpan as TextSpan),
+            ),
+          ),
+        ],
+      );
+    }
+    return childSpan;
+  }
+}
+
+/// OrderedList component with drag-to-edit support
+class DragTargetOrderedListMd extends OrderedList {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetOrderedListMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final child = super.build(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+    return child;
+  }
+}
+
+/// UnorderedList component with drag-to-edit support
+class DragTargetUnorderedListMd extends UnOrderedList {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetUnorderedListMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final child = super.build(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+    return child;
+  }
+}
+
+/// LatexMathMultiLine component with drag-to-edit support
+class DragTargetLatexMd extends LatexMathMultiLine {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetLatexMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final child = super.build(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+    return child;
+  }
+}
