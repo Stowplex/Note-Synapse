@@ -101,10 +101,11 @@ class MarkdownBlockTracker {
     final blocks = parseBlocks(content);
     int currentOccurrence = 0;
 
+    final normalizedSearchContent = _normalizeForMatching(blockContent);
+
     for (final block in blocks) {
-      // Normalize whitespace for comparison
-      final normalizedBlockContent = block.content.trim();
-      final normalizedSearchContent = blockContent.trim();
+      // Normalize whitespace and prefixes for comparison
+      final normalizedBlockContent = _normalizeForMatching(block.content);
 
       if (normalizedBlockContent == normalizedSearchContent) {
         if (currentOccurrence == occurrenceIndex) {
@@ -114,6 +115,17 @@ class MarkdownBlockTracker {
       }
     }
     return null;
+  }
+
+  /// Normalizes block content for matching.
+  /// Strips leading list markers (- * +) and whitespace to handle
+  /// differences between gpt_markdown component text and parsed content.
+  String _normalizeForMatching(String content) {
+    var normalized = content.trim();
+    // Strip leading list markers: - * + followed by space
+    final listPrefixPattern = RegExp(r'^[-*+]\s+');
+    normalized = normalized.replaceFirst(listPrefixPattern, '');
+    return normalized;
   }
 
   /// Replaces a block in the content with new content.
@@ -177,8 +189,10 @@ class MarkdownBlockTracker {
 
     for (final match in fencedPattern.allMatches(content)) {
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -211,8 +225,10 @@ class MarkdownBlockTracker {
         if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
         final blockContent = match.group(0)!;
-        final occurrence = occurrences[blockContent] ?? 0;
-        occurrences[blockContent] = occurrence + 1;
+        // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+        final occurrenceKey = blockContent.trim();
+        final occurrence = occurrences[occurrenceKey] ?? 0;
+        occurrences[occurrenceKey] = occurrence + 1;
 
         blocks.add(
           MarkdownBlock(
@@ -241,8 +257,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -270,8 +288,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -300,8 +320,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!.trimRight();
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -329,8 +351,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -359,8 +383,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -388,8 +414,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -417,8 +445,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!;
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -450,8 +480,10 @@ class MarkdownBlockTracker {
       if (_isInProtectedRange(match.start, protectedRanges)) continue;
 
       final blockContent = match.group(0)!.trimRight();
-      final occurrence = occurrences[blockContent] ?? 0;
-      occurrences[blockContent] = occurrence + 1;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
 
       blocks.add(
         MarkdownBlock(
@@ -579,10 +611,21 @@ class MarkdownBlockTracker {
 class BlockOccurrenceTracker {
   final Map<String, int> _occurrenceCounts = {};
 
+  /// Normalizes block content for matching.
+  /// Strips leading list markers (- * +) and whitespace to handle
+  /// differences between gpt_markdown component text and parsed content.
+  static String normalizeForMatching(String content) {
+    var normalized = content.trim();
+    // Strip leading list markers: - * + followed by space
+    final listPrefixPattern = RegExp(r'^[-*+]\s+');
+    normalized = normalized.replaceFirst(listPrefixPattern, '');
+    return normalized;
+  }
+
   /// Returns the next occurrence index for the given block content
   /// and increments the counter.
   int nextOccurrence(String blockContent) {
-    final normalizedContent = blockContent.trim();
+    final normalizedContent = normalizeForMatching(blockContent);
     final count = _occurrenceCounts[normalizedContent] ?? 0;
     _occurrenceCounts[normalizedContent] = count + 1;
     return count;

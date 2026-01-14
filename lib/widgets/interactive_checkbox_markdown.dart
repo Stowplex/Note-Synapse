@@ -269,7 +269,7 @@ class _InteractiveCheckboxMarkdownState
     // Use LayoutBuilder to ensure proper constraints are provided to the child
     // This prevents layout errors when selection containers try to access widget sizes
     // The key is providing finite vertical constraints even when the parent has infinite height
-    return LayoutBuilder(
+    Widget result = LayoutBuilder(
       builder: (context, constraints) {
         // Provide a finite maxHeight to prevent layout issues with transforms in selection containers
         // Use a large but finite value if constraints are unbounded
@@ -288,6 +288,22 @@ class _InteractiveCheckboxMarkdownState
         );
       },
     );
+
+    // For block-level LaTeX (not inline), wrap with DragTarget for editing
+    // We reconstruct a normalized LaTeX block format for the occurrence key
+    if (!inline && widget.onBlockEditRequested != null) {
+      // Block LaTeX is typically \[...\] format
+      final latexBlock = '\\[$tex\\]';
+      final occurrence = _occurrenceTracker.nextOccurrence(latexBlock);
+      result = DragTargetBlockWrapper(
+        blockContent: latexBlock,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: widget.onBlockEditRequested,
+        child: result,
+      );
+    }
+
+    return result;
   }
 
   Widget _buildGenericSynapseTempImage(
@@ -1126,16 +1142,22 @@ class _InteractiveCheckboxMarkdownState
     // Reset occurrence tracker for each build cycle
     _occurrenceTracker.reset();
 
-    // We need to handle _EmbeddedWebViewMd updates
-    // Let's recreate inlineComponents only if needed, or just insert the dynamic one.
-    // Actually, creating the list is cheap. The *elements* being new instances might be the issue?
-    // GptMarkdown likely iterates them.
-    // Let's stick to fixing the FutureBuilder loop first as it's the critical bug.
-
+    // Filter out components we want to handle with DragTarget versions
+    // TableMd and LatexMathMultiLine are in both lists, we want our versions
+    final excludedInlineTypes = {
+      ATagMd,
+      TableMd,
+      LatexMathMultiLine,
+      BlockQuote,
+    };
     final inlineComponents = [
       CustomATagMd(),
+      DragTargetBlockQuoteMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: (content) => _occurrenceTracker.nextOccurrence(content),
+      ),
       ...MarkdownComponent.inlineComponents.where(
-        (e) => e.runtimeType != ATagMd,
+        (e) => !excludedInlineTypes.contains(e.runtimeType),
       ),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
