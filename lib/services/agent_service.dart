@@ -1352,9 +1352,13 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       return;
     }
 
-    // If no tools AND not a final deliverable, simple thought step
-    // Final deliverable tasks need LLM to synthesize even without tools
-    if (task.toolNames.isEmpty && !task.isFinalDeliverable) {
+    // If no tools AND not a final deliverable AND not extracting findings,
+    // it's a pure no-op task. Skip LLM invocation.
+    // BUT: tasks with extractFindings=true need LLM to generate content
+    // even without external tools (e.g., creative writing, analysis).
+    if (task.toolNames.isEmpty &&
+        !task.isFinalDeliverable &&
+        !task.extractFindings) {
       task.result = "Thought step completed.";
       task.status = AgentTaskStatus.completed;
       notifyListeners();
