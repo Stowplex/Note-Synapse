@@ -291,9 +291,9 @@ class _InteractiveCheckboxMarkdownState
 
     // For block-level LaTeX (not inline), wrap with DragTarget for editing
     // We reconstruct a normalized LaTeX block format for the occurrence key
-    if (!inline && widget.onBlockEditRequested != null) {
-      // Block LaTeX is typically \[...\] format
-      final latexBlock = '\\[$tex\\]';
+    if (widget.onBlockEditRequested != null) {
+      // Block LaTeX is typically \[...\] format, inline is \(...\)
+      final latexBlock = inline ? '\\($tex\\)' : '\\[$tex\\]';
       final occurrence = _occurrenceTracker.nextOccurrence(latexBlock);
       result = DragTargetBlockWrapper(
         blockContent: latexBlock,
@@ -1151,7 +1151,10 @@ class _InteractiveCheckboxMarkdownState
       BlockQuote,
     };
     final inlineComponents = [
-      CustomATagMd(),
+      DragTargetATagMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: (content) => _occurrenceTracker.nextOccurrence(content),
+      ),
       DragTargetBlockQuoteMd(
         onBlockEditRequested: widget.onBlockEditRequested,
         getOccurrence: (content) => _occurrenceTracker.nextOccurrence(content),
@@ -3162,5 +3165,45 @@ class CustomATagMd extends ATagMd {
     );
     var textSpan = TextSpan(children: [child, ...endingSpans]);
     return textSpan;
+  }
+}
+
+/// Link component with drag-to-edit support
+class DragTargetATagMd extends CustomATagMd {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetATagMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final childSpan = super.span(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      // Get the link markdown text (format: [text](url))
+      final linkMarkdown = text.trim();
+      // Only use the main link part, not any trailing text
+      final match = RegExp(r'^\[.*?\]\([^\s]*\)').firstMatch(linkMarkdown);
+      if (match != null) {
+        final linkOnly = match.group(0)!;
+        final occurrence = getOccurrence!(linkOnly);
+        // Wrap the entire span in a WidgetSpan with DragTargetBlockWrapper
+        return TextSpan(
+          children: [
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: DragTargetBlockWrapper(
+                blockContent: linkOnly,
+                occurrenceIndex: occurrence,
+                onBlockEditRequested: onBlockEditRequested,
+                child: Text.rich(childSpan as TextSpan),
+              ),
+            ),
+          ],
+        );
+      }
+    }
+    return childSpan;
   }
 }

@@ -38,18 +38,27 @@ class BlockEditorData {
 /// A dialog for editing a specific markdown block
 class BlockEditorDialog extends StatefulWidget {
   final String initialContent;
+  final VoidCallback? onPickImage;
 
-  const BlockEditorDialog({super.key, required this.initialContent});
+  const BlockEditorDialog({
+    super.key,
+    required this.initialContent,
+    this.onPickImage,
+  });
 
   /// Shows the block editor dialog and returns the result
   static Future<BlockEditorData?> show(
     BuildContext context,
-    String initialContent,
-  ) async {
+    String initialContent, {
+    VoidCallback? onPickImage,
+  }) async {
     return showDialog<BlockEditorData>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => BlockEditorDialog(initialContent: initialContent),
+      builder: (context) => BlockEditorDialog(
+        initialContent: initialContent,
+        onPickImage: onPickImage,
+      ),
     );
   }
 
@@ -181,6 +190,7 @@ class _BlockEditorDialogState extends State<BlockEditorDialog> {
                   controller: _controller,
                   focusNode: _focusNode,
                   language: 'markdown',
+                  onPickImage: widget.onPickImage,
                 ),
               ),
             ),
