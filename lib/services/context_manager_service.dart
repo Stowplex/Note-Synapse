@@ -269,34 +269,76 @@ Output structured, scannable context. Not prose:
     return response.trim();
   }
 
-  /// Generates a final condensed summary when a node completes.
-  Future<String> generateFinalSummary(ContextNode node) async {
+  /// Generates a context-aware output transformation when a node completes.
+  ///
+  /// Instead of always summarizing, this method considers:
+  /// - The current task's nature (creative, research, analysis)
+  /// - What consuming tasks need from this output
+  ///
+  /// [consumingTaskDescriptions] - Optional list of dependent task descriptions
+  /// that will use this output. Helps determine appropriate transformation.
+  Future<String> generateFinalSummary(
+    ContextNode node, {
+    List<String> consumingTaskDescriptions = const [],
+  }) async {
+    // Determine the transformation approach based on context
+    final consumingTasksContext = consumingTaskDescriptions.isNotEmpty
+        ? '''
+## Consuming Tasks (these tasks depend on your output):
+${consumingTaskDescriptions.map((d) => '- $d').join('\n')}
+
+Consider what these tasks need when deciding how to format your output.
+'''
+        : '';
+
     final prompt =
         '''
+## OUTPUT TRANSFORMATION
+
 You have completed the task: "${node.objective}"
 
-Generate a concise, well-grounded summary of the results for the parent task.
-
-Requirements:
-- Include all key findings, facts, and data points
-- Preserve citations and sources
-- Be concise but complete
-- Structure for easy integration into broader context
-
+$consumingTasksContext
 Execution Log:
 ${node.executionLog.join('\n')}
 
 Child Task Results:
 ${node.getCompletedChildSummaries().join('\n\n')}
 
-Provide a summary (2-5 paragraphs):
+## TRANSFORMATION RULES
+
+Based on the task type and consuming tasks, choose the appropriate output format:
+
+### PRESERVE FULL OUTPUT when:
+- Task is creative/generative (write, create, expand, design, compose)
+- Consuming task needs to build upon or extend this work
+- Output is structured content (outlines, stories, code, specifications)
+- Information loss would harm downstream tasks
+
+### COMPRESS/SUMMARIZE when:
+- Task is research/investigation (search, find, look up)  
+- Output contains verbose raw data that's been processed
+- Consuming task only needs conclusions, not raw data
+- Token limits are a concern
+
+### TRANSFORM STRATEGICALLY when:
+- Extract key findings while preserving essential structure
+- Keep citations, sources, and references
+- Maintain data that consuming tasks explicitly need
+
+## YOUR TASK
+
+Analyze the current task objective and consuming tasks (if any).
+Produce an output that BEST SERVES the downstream workflow.
+
+If this is creative/generative work, output the FULL content.
+If this is research/analysis, output structured findings.
 ''';
 
     final response = await AIService.generateWithAttachments(
       prompt,
       [],
       generationContext: GenerationContext(
-        values: {'type': 'final_summary', 'nodeId': node.id},
+        values: {'type': 'context_transform', 'nodeId': node.id},
       ),
     );
 
@@ -307,7 +349,7 @@ Provide a summary (2-5 paragraphs):
     if (node.parentId != null) {
       final parent = _contextMap[node.parentId];
       parent?.log('← Subtask completed: ${node.objective}');
-      parent?.log('Summary: ${node.summary}');
+      parent?.log('Output: ${node.summary}');
     }
 
     return node.summary!;

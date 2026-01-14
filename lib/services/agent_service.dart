@@ -389,8 +389,21 @@ class AgentService extends ChangeNotifier {
             taskContext.log('Final deliverable preserved (no summarization)');
           } else {
             try {
+              // Find tasks that depend on this task (consuming tasks)
+              final consumingTaskDescriptions = <String>[];
+              if (task.name != null) {
+                for (final t in _tasks) {
+                  if (t.dependsOn.contains(task.name)) {
+                    consumingTaskDescriptions.add(t.description);
+                  }
+                }
+              }
+
               task.condensedSummary = await _contextManager
-                  .generateFinalSummary(taskContext);
+                  .generateFinalSummary(
+                    taskContext,
+                    consumingTaskDescriptions: consumingTaskDescriptions,
+                  );
               taskContext.log('Task completed with result: ${task.result}');
             } catch (e) {
               LoggerService.error('Failed to generate task summary: $e');
@@ -1466,7 +1479,7 @@ OR
 ```
 OR
 ```json
-{ "answer": "Final summary when task is complete" }
+{ "answer": "Your complete task output" }
 ```
 
 ACTION GUIDANCE:
@@ -1475,7 +1488,9 @@ ACTION GUIDANCE:
 - **spawn_subtasks**: Delegate complex work by spawning 1-5 focused subtasks at once (max depth: $kMaxSubtaskDepth)
   Use when: task needs parallel investigation, can be decomposed into independent parts, or benefits from context isolation
   Each subtask runs with isolated context but inherits parent findings
-- **answer**: Conclude when objective is satisfied
+- **answer**: Provide your COMPLETE task output. For creative/generative tasks (write, create, expand),
+  output the FULL content. For research tasks, output structured findings. The system will
+  transform this appropriately for consuming tasks.
 
 Current task depth: ${task.depth} / $kMaxSubtaskDepth
 ''';
