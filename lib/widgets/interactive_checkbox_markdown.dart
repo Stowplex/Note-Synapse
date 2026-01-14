@@ -2917,13 +2917,13 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
           color: _isDarkBackground
               ? const Color(0xFF1E1E1E)
               : const Color(0xFFFFFFFF),
-          child: Center(
+          child: SizedBox.expand(
             child: InteractiveViewer(
               minScale: 0.1,
               maxScale: 10.0,
               boundaryMargin: const EdgeInsets.all(double.infinity),
               clipBehavior: Clip.none,
-              child: widget.imageWidget,
+              child: Center(child: widget.imageWidget),
             ),
           ),
         ),
