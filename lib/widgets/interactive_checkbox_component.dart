@@ -413,3 +413,27 @@ class DragTargetLatexMd extends LatexMathMultiLine {
     return child;
   }
 }
+
+/// IndentMd component with drag-to-edit support (for indented regular text)
+class DragTargetIndentMd extends IndentMd {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetIndentMd({this.onBlockEditRequested, this.getOccurrence});
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final child = super.build(context, text, config);
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+    return child;
+  }
+}

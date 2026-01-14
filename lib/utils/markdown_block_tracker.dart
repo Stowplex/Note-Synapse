@@ -150,6 +150,9 @@ class MarkdownBlockTracker {
   String _normalizeForMatching(String content) {
     var normalized = content.trim();
 
+    // Strip leading whitespace (for indented list items)
+    normalized = normalized.replaceFirst(RegExp(r'^[ \t]+'), '');
+
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');
     normalized = normalized.replaceFirst(listPrefixPattern, '');
@@ -435,8 +438,8 @@ class MarkdownBlockTracker {
     List<MarkdownBlock> blocks,
     List<(int, int)> protectedRanges,
   ) {
-    // Ordered list items: 1. item
-    final pattern = RegExp(r'^\d+\.\s+.+$', multiLine: true);
+    // Ordered list items: 1. item (with optional leading whitespace for indentation)
+    final pattern = RegExp(r'^[ \t]*\d+\.\s+.+$', multiLine: true);
     final occurrences = <String, int>{};
 
     for (final match in pattern.allMatches(content)) {
@@ -466,9 +469,9 @@ class MarkdownBlockTracker {
     List<MarkdownBlock> blocks,
     List<(int, int)> protectedRanges,
   ) {
-    // Unordered list items: - item, * item, + item
+    // Unordered list items: - item, * item, + item (with optional leading whitespace)
     // But NOT checkboxes (- [ ] or - [x])
-    final pattern = RegExp(r'^[-*+]\s+(?!\[[ x]\]).+$', multiLine: true);
+    final pattern = RegExp(r'^[ \t]*[-*+]\s+(?!\[[ x]\]).+$', multiLine: true);
     final occurrences = <String, int>{};
 
     for (final match in pattern.allMatches(content)) {
@@ -498,8 +501,8 @@ class MarkdownBlockTracker {
     List<MarkdownBlock> blocks,
     List<(int, int)> protectedRanges,
   ) {
-    // Checkboxes: - [ ] item or - [x] item (with or without dash prefix)
-    final pattern = RegExp(r'^(?:-\s+)?\[[ x]\]\s+.+$', multiLine: true);
+    // Checkboxes: - [ ] item or - [x] item (with optional leading whitespace for indentation)
+    final pattern = RegExp(r'^[ \t]*(?:-\s+)?\[[ x]\]\s+.+$', multiLine: true);
     final occurrences = <String, int>{};
 
     for (final match in pattern.allMatches(content)) {
@@ -709,6 +712,9 @@ class BlockOccurrenceTracker {
   /// Also normalizes code blocks to handle whitespace variations.
   static String normalizeForMatching(String content) {
     var normalized = content.trim();
+
+    // Strip leading whitespace (for indented list items)
+    normalized = normalized.replaceFirst(RegExp(r'^[ \t]+'), '');
 
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');

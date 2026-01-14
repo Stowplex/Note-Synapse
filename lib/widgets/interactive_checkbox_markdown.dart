@@ -1227,7 +1227,10 @@ class _InteractiveCheckboxMarkdownState
       else
         CheckBoxMd(),
       HrLine(),
-      IndentMd(),
+      DragTargetIndentMd(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
     ];
 
     return KeyedSubtree(
