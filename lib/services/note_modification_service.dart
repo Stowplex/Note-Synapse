@@ -147,8 +147,9 @@ class NoteModificationService {
     return updatedNote;
   }
 
-  /// Creates a new note from the provided data.
-  Future<Note> createNote(Map<String, dynamic> data) async {
+  /// Builds a Note object from data without persisting to database.
+  /// Use this when you need to handle insertion separately (e.g., via AppProvider.addNote).
+  Future<Note> buildNote(Map<String, dynamic> data) async {
     final title = data['title']?.toString().trim() ?? 'Untitled Note';
     final content = data['content']?.toString().trim() ?? '';
     final typeString = data['type']?.toString() ?? 'note';
@@ -156,10 +157,11 @@ class NoteModificationService {
 
     final now = DateTime.now();
 
-    // Process subnotes
+    // Process subnotes - support both 'subNotes' array and 'subnotes' (case insensitive)
     final subNotes = <SubNote>[];
-    if (data['subNotes'] is List) {
-      for (final subNoteData in (data['subNotes'] as List)) {
+    final subNotesData = data['subNotes'] ?? data['subnotes'];
+    if (subNotesData is List) {
+      for (final subNoteData in subNotesData) {
         if (subNoteData is Map<String, dynamic>) {
           subNotes.add(_createSubNote(subNoteData));
         }
@@ -211,7 +213,7 @@ class NoteModificationService {
           : 0.0;
     }
 
-    final note = Note(
+    return Note(
       id: _uuid.v4(),
       title: title,
       content: content,
@@ -228,7 +230,11 @@ class NoteModificationService {
       pinned: data['pinned'] == true,
       isArchived: data['isArchived'] == true,
     );
+  }
 
+  /// Creates and persists a new note. For UI-aware insertion, use buildNote + AppProvider.addNote.
+  Future<Note> createNote(Map<String, dynamic> data) async {
+    final note = await buildNote(data);
     await _db.insertNote(note);
 
     // If there are links (relationships)

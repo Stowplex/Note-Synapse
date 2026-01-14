@@ -15,7 +15,6 @@ import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
-import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'note_modification_service.dart';
 import 'sql_query_service.dart';
@@ -1416,11 +1415,12 @@ class UserAppRuntimeBridge {
   }
 
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
+    final modificationService = NoteModificationService();
     var savedCount = 0;
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
       try {
-        final note = await _createNoteFromJavaScriptData(noteData);
+        final note = await modificationService.buildNote(noteData);
         await appProvider.addNote(note);
         savedCount++;
         LoggerService.debug(
@@ -1486,192 +1486,6 @@ class UserAppRuntimeBridge {
       }
     }
     return deletedCount;
-  }
-
-  Future<Note> _createNoteFromJavaScriptData(Map<String, dynamic> data) async {
-    final title = data['title']?.toString().trim() ?? '';
-    if (title.isEmpty) {
-      throw Exception('Note title is required and cannot be empty');
-    }
-    if (!data.containsKey('content')) {
-      throw Exception('Note content is required and cannot be empty');
-    }
-    if (!data.containsKey('type')) {
-      throw Exception('Note type is required');
-    }
-
-    final now = DateTime.now();
-    final noteType = _parseNoteType(data['type'].toString());
-
-    final subNotes = <SubNote>[];
-    if (data['subNotes'] is List) {
-      for (final subNoteData in (data['subNotes'] as List)) {
-        if (subNoteData is Map<String, dynamic>) {
-          subNotes.add(_createSubNoteFromJavaScriptData(subNoteData));
-        }
-      }
-    }
-
-    final attachmentPaths = <String>[];
-    if (data['attachments'] is List) {
-      for (final attachment in (data['attachments'] as List)) {
-        attachmentPaths.add(await _processAttachmentFromJavaScript(attachment));
-      }
-    }
-
-    String? scheduledAt;
-    String? completeBy;
-    TaskStatus? status;
-    double? completionPercentage;
-    if (noteType == NoteType.task) {
-      scheduledAt = data['scheduledAt']?.toString();
-      completeBy = data['completeBy']?.toString();
-      status = data['status'] != null
-          ? _parseTaskStatus(data['status'].toString())
-          : TaskStatus.todo;
-      completionPercentage = data['completionPercentage'] != null
-          ? (data['completionPercentage'] as num).toDouble()
-          : 0.0;
-    }
-
-    return Note(
-      id: const Uuid().v4(),
-      title: title,
-      content: data['content'].toString().trim(),
-      type: noteType,
-      createdAt: now,
-      updatedAt: now,
-      subNotes: subNotes,
-      tags: const [],
-      attachmentPaths: attachmentPaths,
-      scheduledAt: scheduledAt,
-      completeBy: completeBy,
-      status: status,
-      completionPercentage: completionPercentage,
-      pinned: data['pinned'] == true,
-      isArchived: data['isArchived'] == true,
-    );
-  }
-
-  SubNote _createSubNoteFromJavaScriptData(Map<String, dynamic> data) {
-    final name = data['name']?.toString().trim() ?? '';
-    if (name.isEmpty) {
-      throw Exception('SubNote name is required and cannot be empty');
-    }
-
-    return SubNote(
-      id: const Uuid().v4(),
-      name: name,
-      content: data['content']?.toString().trim() ?? '',
-      createdAt: DateTime.now(),
-      isCompleted: data['isCompleted'] == true,
-    );
-  }
-
-  NoteType _parseNoteType(String typeString) {
-    switch (typeString.toLowerCase()) {
-      case 'note':
-        return NoteType.note;
-      case 'task':
-        return NoteType.task;
-      default:
-        throw Exception('Invalid note type: $typeString');
-    }
-  }
-
-  TaskStatus _parseTaskStatus(String statusString) {
-    switch (statusString.toLowerCase()) {
-      case 'todo':
-        return TaskStatus.todo;
-      case 'in_progress':
-        return TaskStatus.inProgress;
-      case 'complete':
-        return TaskStatus.complete;
-      case 'abandoned':
-        return TaskStatus.abandoned;
-      default:
-        return TaskStatus.todo;
-    }
-  }
-
-  Future<String> _processAttachmentFromJavaScript(dynamic attachment) async {
-    if (attachment is String) {
-      if (SynapseTempUtils.isSynapseTempUri(attachment)) {
-        return await _promoteSynapseTempAttachment(attachment);
-      }
-
-      final isValid = await _databaseService.verifyAttachmentPath(attachment);
-      if (isValid) {
-        return attachment;
-      }
-      throw Exception(
-        'Invalid attachment path: $attachment - file not found in database',
-      );
-    } else if (attachment is Map<String, dynamic>) {
-      if (attachment['type'] == 'base64' &&
-          attachment['data'] != null &&
-          attachment['fileName'] != null) {
-        return await _saveBase64Attachment(
-          attachment['data'],
-          attachment['fileName'],
-        );
-      }
-      throw Exception(
-        'Invalid base64 attachment format: missing type, data, or fileName',
-      );
-    }
-
-    throw Exception(
-      'Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}',
-    );
-  }
-
-  Future<String> _promoteSynapseTempAttachment(String uri) async {
-    try {
-      final tempFile = await SynapseTempUtils.loadFile(uri);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(
-        tempFile.bytes,
-        tempFile.fileName,
-      );
-      LoggerService.debug(
-        '[Synapse.saveNotes] Promoted temporary attachment ${tempFile.fileName} to $relativePath',
-      );
-      return relativePath;
-    } catch (e) {
-      LoggerService.error(
-        '[Synapse.saveNotes] Error promoting temporary attachment from $uri: $e',
-        error: e,
-      );
-      throw Exception('Failed to promote temporary attachment: $e');
-    }
-  }
-
-  Future<String> _saveBase64Attachment(
-    String base64Data,
-    String fileName,
-  ) async {
-    try {
-      var base64String = base64Data;
-      if (base64String.contains(',')) {
-        base64String = base64String.split(',').last;
-      }
-
-      final bytes = base64Decode(base64String);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(
-        bytes,
-        fileName,
-      );
-      LoggerService.debug(
-        '[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $relativePath',
-      );
-      return relativePath;
-    } catch (e) {
-      LoggerService.error(
-        '[Synapse.saveNotes] Error saving base64 attachment: $e',
-        error: e,
-      );
-      rethrow;
-    }
   }
 
   String _getExtensionFromMimeType(String mimeType) {
@@ -1772,7 +1586,9 @@ class UserAppRuntimeBridge {
             if (attMod != null && attMod.containsKey('added')) {
               final addedPaths = <String>[];
               for (final att in (attMod['added'] as List? ?? [])) {
-                addedPaths.add(await _processAttachmentFromJavaScript(att));
+                addedPaths.add(
+                  await modificationService.processAttachment(att),
+                );
               }
               modification['attachments'] = {...attMod, 'added': addedPaths};
             }
@@ -1819,16 +1635,33 @@ class UserAppRuntimeBridge {
 
     NoteType type = existing.type;
     if (changes.containsKey('type')) {
-      type = _parseNoteType(changes['type'].toString());
+      final typeStr = changes['type'].toString().toLowerCase();
+      type = typeStr == 'task' ? NoteType.task : NoteType.note;
     }
 
     // Subnotes: replace entire list if present
     List<SubNote> subNotes = existing.subNotes;
-    if (changes.containsKey('subNotes') && changes['subNotes'] is List) {
+    final subNotesData = changes['subNotes'] ?? changes['subnotes'];
+    if (subNotesData is List) {
       subNotes = [];
-      for (final subNoteData in (changes['subNotes'] as List)) {
+      for (final subNoteData in subNotesData) {
         if (subNoteData is Map<String, dynamic>) {
-          subNotes.add(_createSubNoteFromJavaScriptData(subNoteData));
+          final name =
+              (subNoteData['name'] ?? subNoteData['title'])
+                  ?.toString()
+                  .trim() ??
+              'Untitled Task';
+          subNotes.add(
+            SubNote(
+              id: const Uuid().v4(),
+              name: name,
+              content: subNoteData['content']?.toString().trim() ?? '',
+              createdAt: DateTime.now(),
+              isCompleted:
+                  subNoteData['isCompleted'] == true ||
+                  subNoteData['is_completed'] == true,
+            ),
+          );
         }
       }
     }
@@ -1840,11 +1673,14 @@ class UserAppRuntimeBridge {
     }
 
     // Attachments: replace entire list if present
+    final modificationService = NoteModificationService();
     List<String> attachmentPaths = existing.attachmentPaths;
     if (changes.containsKey('attachments') && changes['attachments'] is List) {
       attachmentPaths = [];
       for (final attachment in (changes['attachments'] as List)) {
-        attachmentPaths.add(await _processAttachmentFromJavaScript(attachment));
+        attachmentPaths.add(
+          await modificationService.processAttachment(attachment),
+        );
       }
     }
 
@@ -1859,7 +1695,23 @@ class UserAppRuntimeBridge {
 
     TaskStatus? status = existing.status;
     if (changes.containsKey('status')) {
-      status = _parseTaskStatus(changes['status'].toString());
+      final statusStr = changes['status'].toString().toLowerCase();
+      switch (statusStr) {
+        case 'todo':
+          status = TaskStatus.todo;
+          break;
+        case 'in_progress':
+          status = TaskStatus.inProgress;
+          break;
+        case 'complete':
+          status = TaskStatus.complete;
+          break;
+        case 'abandoned':
+          status = TaskStatus.abandoned;
+          break;
+        default:
+          status = TaskStatus.todo;
+      }
     }
 
     double? completionPercentage = existing.completionPercentage;
