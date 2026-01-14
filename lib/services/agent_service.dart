@@ -623,7 +623,7 @@ Extract key findings from this research task for final synthesis.
 
 Task: ${task.description}
 
-RAW TOOL OBSERVATIONS (preserve URLs and specific data):
+TASK EXECUTION CONTENT (observations, analysis, and reasoning):
 $sourceContent
 
 ## EXTRACTION RULES
@@ -677,12 +677,30 @@ If no findings worth preserving, return: []
   }
 
   /// Extracts raw observation content from task execution history.
-  /// Returns list of observation strings (tool outputs) before LLM summarization.
+  /// Returns list of observation strings (tool outputs, analysis, answers, thoughts)
+  /// before LLM summarization.
   List<String> _getRawObservations(AgentTask task) {
     final observations = <String>[];
     for (final entry in task.executionHistory) {
+      // Capture tool observation outputs
       if (entry.startsWith('Observation:')) {
         observations.add(entry.substring('Observation:'.length).trim());
+      }
+      // Capture analysis from "think" actions - these contain valuable reasoning
+      else if (entry.startsWith('Analysis:')) {
+        observations.add(entry.substring('Analysis:'.length).trim());
+      }
+      // Capture answer content - the primary output of generative tasks
+      else if (entry.startsWith('Answer:')) {
+        observations.add(entry.substring('Answer:'.length).trim());
+      }
+      // Capture substantive thoughts (skip short/generic ones)
+      else if (entry.startsWith('Thought:')) {
+        final thought = entry.substring('Thought:'.length).trim();
+        // Only include thoughts with substantial content (> 50 chars)
+        if (thought.length > 50) {
+          observations.add(thought);
+        }
       }
     }
     return observations;
@@ -1676,7 +1694,11 @@ The actual content (answer text, or tool call details, or reasoning)
             if (verdict == 'answer' && content.isNotEmpty) {
               task.result = content;
               task.status = AgentTaskStatus.completed;
-              task.executionHistory.add('Answer extracted via verdict check.');
+              // Store full answer content for findings extraction and context propagation
+              task.executionHistory.add('Answer: $content');
+              _contextManager
+                  .getContext(task.contextNodeId ?? '')
+                  ?.log('Task Result: $content');
               notifyListeners();
               return;
             } else if (verdict == 'think') {
@@ -1706,8 +1728,14 @@ The actual content (answer text, or tool call details, or reasoning)
       }
 
       if (decision.containsKey('answer')) {
-        task.result = decision['answer'];
+        final answerContent = decision['answer'].toString();
+        task.result = answerContent;
         task.status = AgentTaskStatus.completed;
+        // Store full answer content for findings extraction and context propagation
+        task.executionHistory.add('Answer: $answerContent');
+        _contextManager
+            .getContext(task.contextNodeId ?? '')
+            ?.log('Task Result: $answerContent');
         notifyListeners();
         return;
       }
