@@ -596,6 +596,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  /// Similar to _showImagePicker but returns the markdown string instead of inserting
+  Future<String?> _pickImageAndReturnMarkdown(BuildContext context) async {
+    // Load existing image attachments
+    final attachments = widget.isNewNote
+        ? <Attachment>[]
+        : await _databaseService.getAttachmentsForNote(widget.note.id);
+
+    final imageAttachments = attachments.where((a) {
+      final lower = a.filePath.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _ImagePickerDialog(
+        initialAltText: '',
+        existingAttachments: imageAttachments,
+        onSaveNote: () async {
+          // Save note if new with no title
+          if (widget.isNewNote && !_hasBeenSaved) {
+            final l10n = AppLocalizations.of(context)!;
+            if (_titleController.text.trim().isEmpty) {
+              _titleController.text = l10n.untitled;
+            }
+            await _autoSave();
+          }
+          return widget.note.id;
+        },
+        onAddAttachment: (File imageFile, String fileName) async {
+          // Use existing attachment logic
+          final bytes = await imageFile.readAsBytes();
+          final relativePath = await FileUtils.saveFileToPrivateStorage(
+            bytes,
+            fileName,
+          );
+
+          // Add to note's attachments
+          if (!context.mounted) return relativePath;
+          final currentNote = context.read<AppProvider>().notes.firstWhere(
+            (note) => note.id == widget.note.id,
+            orElse: () => widget.note,
+          );
+          final updatedAttachmentPaths = List<String>.from(
+            currentNote.attachmentPaths,
+          )..add(relativePath);
+          final updatedNote = currentNote.copyWith(
+            attachmentPaths: updatedAttachmentPaths,
+            updatedAt: DateTime.now(),
+          );
+          await context.read<AppProvider>().updateNote(updatedNote);
+
+          return relativePath;
+        },
+      ),
+    );
+
+    if (result != null) {
+      return '![${result['alt']}](${result['src']})';
+    }
+    return null;
+  }
+
   void _insertText(String text, {int selectionOffset = 0}) {
     final selection = _codeController.selection;
     final codeLines = _codeController.value.codeLines;
@@ -3481,7 +3547,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final result = await BlockEditorDialog.show(
       context,
       blockContent,
-      onPickImage: () => _showImagePicker(context),
+      onPickImage: () => _pickImageAndReturnMarkdown(context),
     );
     if (result == null || result.result == BlockEditorResult.cancelled) {
       return;

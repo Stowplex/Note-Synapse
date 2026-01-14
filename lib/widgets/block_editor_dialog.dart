@@ -35,10 +35,13 @@ class BlockEditorData {
       editedContent = content;
 }
 
+/// Callback type for image picker that returns markdown string
+typedef ImagePickerCallback = Future<String?> Function();
+
 /// A dialog for editing a specific markdown block
 class BlockEditorDialog extends StatefulWidget {
   final String initialContent;
-  final VoidCallback? onPickImage;
+  final ImagePickerCallback? onPickImage;
 
   const BlockEditorDialog({
     super.key,
@@ -50,7 +53,7 @@ class BlockEditorDialog extends StatefulWidget {
   static Future<BlockEditorData?> show(
     BuildContext context,
     String initialContent, {
-    VoidCallback? onPickImage,
+    ImagePickerCallback? onPickImage,
   }) async {
     return showDialog<BlockEditorData>(
       context: context,
@@ -127,6 +130,31 @@ class _BlockEditorDialogState extends State<BlockEditorDialog> {
     Navigator.of(context).pop(const BlockEditorData.cancelled());
   }
 
+  /// Handle image picking by calling the callback and inserting result into our controller
+  Future<void> _handlePickImage() async {
+    if (widget.onPickImage == null) return;
+
+    final markdown = await widget.onPickImage!();
+    if (markdown != null && markdown.isNotEmpty && mounted) {
+      // Insert markdown at current cursor position in our controller
+      final sel = _controller.selection;
+      final text = _controller.text;
+      final lines = _controller.value.codeLines;
+
+      // Calculate offset
+      int offset = 0;
+      for (int i = 0; i < sel.start.index && i < lines.length; i++) {
+        offset += lines[i].text.length + 1;
+      }
+      offset += sel.start.offset;
+
+      // Insert markdown
+      final newText =
+          text.substring(0, offset) + markdown + text.substring(offset);
+      _controller.text = newText;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -190,7 +218,9 @@ class _BlockEditorDialogState extends State<BlockEditorDialog> {
                   controller: _controller,
                   focusNode: _focusNode,
                   language: 'markdown',
-                  onPickImage: widget.onPickImage,
+                  onPickImage: widget.onPickImage != null
+                      ? _handlePickImage
+                      : null,
                 ),
               ),
             ),
