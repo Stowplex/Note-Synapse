@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 enum MarkdownBlockType {
   codeBlock,
   image,
+  link,
   heading,
   orderedList,
   unorderedList,
@@ -62,6 +63,7 @@ class MarkdownBlockTracker {
     // Phase 3: Parse all other block types, respecting protected ranges
     _parseHeadings(content, blocks, protectedRanges);
     _parseImages(content, blocks, protectedRanges);
+    _parseLinks(content, blocks, protectedRanges);
     _parseBlockquotes(content, blocks, protectedRanges);
     _parseOrderedLists(content, blocks, protectedRanges);
     _parseUnorderedLists(content, blocks, protectedRanges);
@@ -105,11 +107,23 @@ class MarkdownBlockTracker {
     final normalizedSearchContent = _normalizeForMatching(blockContent);
 
     debugPrint(
-      'findBlockByContentAndOccurrence: searching for normalized="${normalizedSearchContent.substring(0, normalizedSearchContent.length > 50 ? 50 : normalizedSearchContent.length)}...", occurrenceIndex=$occurrenceIndex',
+      'findBlockByContentAndOccurrence: searching for normalized="${normalizedSearchContent.substring(0, normalizedSearchContent.length > 80 ? 80 : normalizedSearchContent.length)}...", occurrenceIndex=$occurrenceIndex',
     );
     debugPrint(
       'findBlockByContentAndOccurrence: found ${blocks.length} blocks',
     );
+
+    // Debug: print first few image blocks for comparison
+    int imageCount = 0;
+    for (final block in blocks) {
+      if (block.type == MarkdownBlockType.image && imageCount < 3) {
+        final normalizedBlock = _normalizeForMatching(block.content);
+        debugPrint(
+          '  Image block $imageCount: "${normalizedBlock.substring(0, normalizedBlock.length > 80 ? 80 : normalizedBlock.length)}..."',
+        );
+        imageCount++;
+      }
+    }
 
     for (final block in blocks) {
       // Normalize whitespace and prefixes for comparison
@@ -139,6 +153,16 @@ class MarkdownBlockTracker {
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');
     normalized = normalized.replaceFirst(listPrefixPattern, '');
+
+    // Normalize image markdown: extract just the URL, ignoring alt text
+    // This handles the case where imageBuilder only receives URL but source has alt text
+    // Converts ![alt text](url) to ![](url) for matching
+    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+)\)$');
+    final imageMatch = imagePattern.firstMatch(normalized);
+    if (imageMatch != null) {
+      final url = imageMatch.group(2);
+      normalized = '![]($url)';
+    }
 
     // Normalize code blocks: standardize whitespace around fences
     // Handle both ``` and ~~~ fences
@@ -312,7 +336,12 @@ class MarkdownBlockTracker {
     List<(int, int)> protectedRanges,
   ) {
     // Images: ![alt](url) or ![alt](url "title")
-    final pattern = RegExp(r'!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)');
+    // Use a regex that handles URLs with parentheses by matching up to the last closing paren
+    // or matching balanced parentheses
+    final pattern = RegExp(
+      r'!\[([^\]]*)\]\((.+?)\)(?=\s|$|[^\(])',
+      multiLine: true,
+    );
     final occurrences = <String, int>{};
 
     for (final match in pattern.allMatches(content)) {
@@ -334,6 +363,38 @@ class MarkdownBlockTracker {
         ),
       );
       protectedRanges.add((match.start, match.end));
+    }
+  }
+
+  void _parseLinks(
+    String content,
+    List<MarkdownBlock> blocks,
+    List<(int, int)> protectedRanges,
+  ) {
+    // Links: [text](url) - but NOT images which start with !
+    // Use negative lookbehind to exclude images
+    final pattern = RegExp(r'(?<!!)\[([^\]]+)\]\(([^)]+)\)', multiLine: true);
+    final occurrences = <String, int>{};
+
+    for (final match in pattern.allMatches(content)) {
+      if (_isInProtectedRange(match.start, protectedRanges)) continue;
+
+      final blockContent = match.group(0)!;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
+
+      blocks.add(
+        MarkdownBlock(
+          type: MarkdownBlockType.link,
+          content: blockContent,
+          startOffset: match.start,
+          endOffset: match.end,
+          occurrenceIndex: occurrence,
+        ),
+      );
+      // Note: Don't add to protectedRanges as links can be inside other blocks
     }
   }
 
@@ -652,6 +713,16 @@ class BlockOccurrenceTracker {
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');
     normalized = normalized.replaceFirst(listPrefixPattern, '');
+
+    // Normalize image markdown: extract just the URL, ignoring alt text
+    // This handles the case where imageBuilder only receives URL but source has alt text
+    // Converts ![alt text](url) to ![](url) for matching
+    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+)\)$');
+    final imageMatch = imagePattern.firstMatch(normalized);
+    if (imageMatch != null) {
+      final url = imageMatch.group(2);
+      normalized = '![]($url)';
+    }
 
     // Normalize code blocks: standardize whitespace around fences
     // Handle both ``` and ~~~ fences
