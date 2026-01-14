@@ -132,11 +132,30 @@ class MarkdownBlockTracker {
   /// Normalizes block content for matching.
   /// Strips leading list markers (- * +) and whitespace to handle
   /// differences between gpt_markdown component text and parsed content.
+  /// Also normalizes code blocks to handle whitespace variations.
   String _normalizeForMatching(String content) {
     var normalized = content.trim();
+
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');
     normalized = normalized.replaceFirst(listPrefixPattern, '');
+
+    // Normalize code blocks: standardize whitespace around fences
+    // Handle both ``` and ~~~ fences
+    if (normalized.startsWith('```') || normalized.startsWith('~~~')) {
+      // Split into lines and normalize each line's trailing whitespace
+      final lines = normalized.split('\n');
+      final normalizedLines = lines.map((line) => line.trimRight()).toList();
+
+      // Remove empty lines at the end before closing fence
+      while (normalizedLines.length > 2 &&
+          normalizedLines[normalizedLines.length - 2].isEmpty) {
+        normalizedLines.removeAt(normalizedLines.length - 2);
+      }
+
+      normalized = normalizedLines.join('\n');
+    }
+
     return normalized;
   }
 
@@ -626,11 +645,30 @@ class BlockOccurrenceTracker {
   /// Normalizes block content for matching.
   /// Strips leading list markers (- * +) and whitespace to handle
   /// differences between gpt_markdown component text and parsed content.
+  /// Also normalizes code blocks to handle whitespace variations.
   static String normalizeForMatching(String content) {
     var normalized = content.trim();
+
     // Strip leading list markers: - * + followed by space
     final listPrefixPattern = RegExp(r'^[-*+]\s+');
     normalized = normalized.replaceFirst(listPrefixPattern, '');
+
+    // Normalize code blocks: standardize whitespace around fences
+    // Handle both ``` and ~~~ fences
+    if (normalized.startsWith('```') || normalized.startsWith('~~~')) {
+      // Split into lines and normalize each line's trailing whitespace
+      final lines = normalized.split('\n');
+      final normalizedLines = lines.map((line) => line.trimRight()).toList();
+
+      // Remove empty lines at the end before closing fence
+      while (normalizedLines.length > 2 &&
+          normalizedLines[normalizedLines.length - 2].isEmpty) {
+        normalizedLines.removeAt(normalizedLines.length - 2);
+      }
+
+      normalized = normalizedLines.join('\n');
+    }
+
     return normalized;
   }
 

@@ -3478,7 +3478,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       orElse: () => widget.note,
     );
 
-    final result = await BlockEditorDialog.show(context, blockContent);
+    final result = await BlockEditorDialog.show(
+      context,
+      blockContent,
+      onPickImage: () => _showImagePicker(context),
+    );
     if (result == null || result.result == BlockEditorResult.cancelled) {
       return;
     }
