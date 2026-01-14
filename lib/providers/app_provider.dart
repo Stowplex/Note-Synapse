@@ -457,14 +457,17 @@ class AppProvider extends ChangeNotifier {
       for (int i = 0; i < _notes.length; i++) {
         if (_notes[i].tags.contains(oldTagName)) {
           final updatedTags = List<String>.from(_notes[i].tags);
-          final oldTagIndex = updatedTags.indexOf(oldTagName);
-          if (oldTagIndex != -1) {
-            updatedTags[oldTagIndex] = newTagName;
-            _notes[i] = _notes[i].copyWith(
-              tags: updatedTags,
-              updatedAt: DateTime.now(),
-            );
+          // Remove the old tag
+          updatedTags.remove(oldTagName);
+          // Only add the new tag if the note doesn't already have it
+          // (handles dedup case where note has both A and B, and A is being replaced with B)
+          if (!updatedTags.contains(newTagName)) {
+            updatedTags.add(newTagName);
           }
+          _notes[i] = _notes[i].copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
         }
       }
 
