@@ -1,4 +1,5 @@
 // Markdown block tracking utilities for drag-to-edit feature
+import 'package:flutter/foundation.dart';
 
 /// Represents a type of markdown block
 enum MarkdownBlockType {
@@ -103,17 +104,28 @@ class MarkdownBlockTracker {
 
     final normalizedSearchContent = _normalizeForMatching(blockContent);
 
+    debugPrint(
+      'findBlockByContentAndOccurrence: searching for normalized="${normalizedSearchContent.substring(0, normalizedSearchContent.length > 50 ? 50 : normalizedSearchContent.length)}...", occurrenceIndex=$occurrenceIndex',
+    );
+    debugPrint(
+      'findBlockByContentAndOccurrence: found ${blocks.length} blocks',
+    );
+
     for (final block in blocks) {
       // Normalize whitespace and prefixes for comparison
       final normalizedBlockContent = _normalizeForMatching(block.content);
 
       if (normalizedBlockContent == normalizedSearchContent) {
+        debugPrint(
+          'findBlockByContentAndOccurrence: MATCH at occurrence $currentOccurrence, type=${block.type}',
+        );
         if (currentOccurrence == occurrenceIndex) {
           return block;
         }
         currentOccurrence++;
       }
     }
+    debugPrint('findBlockByContentAndOccurrence: NO MATCH FOUND');
     return null;
   }
 
