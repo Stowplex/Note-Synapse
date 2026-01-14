@@ -3,9 +3,93 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/custom_divider.dart';
 
-/// Safe heading component that handles null cases gracefully
-/// This is a fixed version of HTag that doesn't crash on null values
-class SafeHTag extends BlockMd {
+// Constants
+const String kBlockEditDragData = 'block_edit_drag';
+
+// Typedefs
+typedef BlockEditRequestedCallback =
+    void Function(String blockContent, int occurrenceIndex);
+
+typedef BlockOccurrenceCallback = int Function(String blockContent);
+
+/// A wrapper widget that makes markdown blocks draggable drop targets for editing
+class DragTargetBlockWrapper extends StatefulWidget {
+  final Widget child;
+  final String blockContent;
+  final int occurrenceIndex;
+  final BlockEditRequestedCallback? onBlockEditRequested;
+
+  const DragTargetBlockWrapper({
+    super.key,
+    required this.child,
+    required this.blockContent,
+    required this.occurrenceIndex,
+    this.onBlockEditRequested,
+  });
+
+  @override
+  State<DragTargetBlockWrapper> createState() => _DragTargetBlockWrapperState();
+}
+
+class _DragTargetBlockWrapperState extends State<DragTargetBlockWrapper> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // If no callback is set, don't wrap with DragTarget
+    if (widget.onBlockEditRequested == null) {
+      return widget.child;
+    }
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) {
+        debugPrint('DragTarget: onWillAcceptWithDetails data=${details.data}');
+        if (details.data == kBlockEditDragData) {
+          setState(() => _isHovering = true);
+          return true;
+        }
+        return false;
+      },
+      onLeave: (_) {
+        debugPrint('DragTarget: onLeave');
+        setState(() => _isHovering = false);
+      },
+      onAcceptWithDetails: (details) {
+        debugPrint('DragTarget: onAcceptWithDetails data=${details.data}');
+        setState(() => _isHovering = false);
+        if (details.data == kBlockEditDragData) {
+          widget.onBlockEditRequested?.call(
+            widget.blockContent,
+            widget.occurrenceIndex,
+          );
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          foregroundDecoration: BoxDecoration(
+            border: _isHovering
+                ? Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  )
+                : Border.all(color: Colors.transparent, width: 2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
+
+/// Safe heading component that handles null cases gracefully and supports drag-to-edit
+class DragTargetSafeHTag extends BlockMd {
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  DragTargetSafeHTag({this.onBlockEditRequested, this.getOccurrence});
+
   @override
   String get expString => (r"(?<hash>#{1,6})\ (?<data>[^\n]+?)$");
 
@@ -17,50 +101,82 @@ class SafeHTag extends BlockMd {
   ) {
     var theme = GptMarkdownTheme.of(context);
     var match = exp.firstMatch(text.trim());
+
+    Widget contentWidget;
+
     if (match == null) {
-      return config.getRich(TextSpan(text: text, style: config.style));
-    }
-    var hashGroup = match.namedGroup('hash');
-    var dataGroup = match.namedGroup('data');
-    if (hashGroup == null || dataGroup == null) {
-      return config.getRich(TextSpan(text: text, style: config.style));
-    }
-    var hashLength = hashGroup.length;
-    if (hashLength < 1 || hashLength > 6) {
-      return config.getRich(TextSpan(text: text, style: config.style));
-    }
-    var conf = config.copyWith(
-      style: [
-        theme.h1,
-        theme.h2,
-        theme.h3,
-        theme.h4,
-        theme.h5,
-        theme.h6,
-      ][hashLength - 1],
-    );
-    return config.getRich(
-      TextSpan(
-        children: [
-          ...(MarkdownComponent.generate(context, dataGroup, conf, false)),
-          if (hashLength == 1) ...[
-            const TextSpan(
-              text: "\n ",
-              style: TextStyle(fontSize: 0, height: 0),
+      contentWidget = config.getRich(TextSpan(text: text, style: config.style));
+    } else {
+      var hashGroup = match.namedGroup('hash');
+      var dataGroup = match.namedGroup('data');
+      if (hashGroup == null || dataGroup == null) {
+        contentWidget = config.getRich(
+          TextSpan(text: text, style: config.style),
+        );
+      } else {
+        var hashLength = hashGroup.length;
+        if (hashLength < 1 || hashLength > 6) {
+          contentWidget = config.getRich(
+            TextSpan(text: text, style: config.style),
+          );
+        } else {
+          var conf = config.copyWith(
+            style: [
+              theme.h1,
+              theme.h2,
+              theme.h3,
+              theme.h4,
+              theme.h5,
+              theme.h6,
+            ][hashLength - 1],
+          );
+          contentWidget = config.getRich(
+            TextSpan(
+              children: [
+                ...(MarkdownComponent.generate(
+                  context,
+                  dataGroup,
+                  conf,
+                  false,
+                )),
+                if (hashLength == 1) ...[
+                  const TextSpan(
+                    text: "\n ",
+                    style: TextStyle(fontSize: 0, height: 0),
+                  ),
+                  WidgetSpan(
+                    child: CustomDivider(
+                      height: theme.hrLineThickness,
+                      color:
+                          config.style?.color ??
+                          Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ],
             ),
-            WidgetSpan(
-              child: CustomDivider(
-                height: theme.hrLineThickness,
-                color:
-                    config.style?.color ??
-                    Theme.of(context).colorScheme.outline,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
+          );
+        }
+      }
+    }
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: contentWidget,
+      );
+    }
+
+    return contentWidget;
   }
+}
+
+/// SafeHTag for backward compatibility if needed, but we'll use DragTargetSafeHTag
+class SafeHTag extends DragTargetSafeHTag {
+  SafeHTag() : super();
 }
 
 /// Custom checkbox component that extends BlockMd and provides interactive behavior
@@ -68,7 +184,15 @@ class InteractiveCheckboxMd extends BlockMd {
   final void Function(String checkboxLine, String checkboxText, bool newValue)
   onToggle;
 
-  InteractiveCheckboxMd({required this.onToggle});
+  // Optional drag support for checkbox lines (less common but possible)
+  final BlockEditRequestedCallback? onBlockEditRequested;
+  final BlockOccurrenceCallback? getOccurrence;
+
+  InteractiveCheckboxMd({
+    required this.onToggle,
+    this.onBlockEditRequested,
+    this.getOccurrence,
+  });
 
   @override
   String get expString => (r"\[((?:\x|\ ))\]\ (\S[^\n]*?)$");
@@ -84,7 +208,7 @@ class InteractiveCheckboxMd extends BlockMd {
     final checkboxText = "${match?[2]}";
     final originalLine = text.trim();
 
-    return InteractiveCustomCb(
+    Widget child = InteractiveCustomCb(
       value: checkboxState,
       textDirection: config.textDirection,
       onChanged: (newValue) {
@@ -92,11 +216,22 @@ class InteractiveCheckboxMd extends BlockMd {
       },
       child: MdWidget(context, checkboxText, false, config: config),
     );
+
+    if (onBlockEditRequested != null && getOccurrence != null) {
+      final occurrence = getOccurrence!(text);
+      return DragTargetBlockWrapper(
+        blockContent: text,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: onBlockEditRequested,
+        child: child,
+      );
+    }
+
+    return child;
   }
 }
 
 /// Custom checkbox widget with interactive behavior
-/// Similar to CustomCb but with actual onChanged handler
 class InteractiveCustomCb extends StatelessWidget {
   const InteractiveCustomCb({
     super.key,

@@ -4213,4 +4213,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get agentConflictSwitch => 'Switch to Conversation';
+
+  @override
+  String get editBlock => 'Edit Block';
+
+  @override
+  String get deleteBlock => 'Delete Block';
+
+  @override
+  String get deleteBlockConfirmation =>
+      'Are you sure you want to delete this block? This action cannot be undone.';
 }

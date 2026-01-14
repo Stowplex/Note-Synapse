@@ -7309,6 +7309,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch to Conversation'**
   String get agentConflictSwitch;
+
+  /// No description provided for @editBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Block'**
+  String get editBlock;
+
+  /// No description provided for @deleteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Block'**
+  String get deleteBlock;
+
+  /// No description provided for @deleteBlockConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this block? This action cannot be undone.'**
+  String get deleteBlockConfirmation;
 }
 
 class _AppLocalizationsDelegate

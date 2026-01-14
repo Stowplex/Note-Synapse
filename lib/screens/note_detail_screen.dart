@@ -18,9 +18,12 @@ import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../widgets/interactive_checkbox_component.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
+import '../widgets/block_editor_dialog.dart';
+import '../utils/markdown_block_tracker.dart';
 
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
@@ -350,9 +353,34 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                   ),
                 ] else ...[
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: _startEditing,
+                  LongPressDraggable<String>(
+                    data: kBlockEditDragData,
+                    feedback: Material(
+                      elevation: 4.0,
+                      shape: const CircleBorder(),
+                      child: CircleAvatar(
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        child: Icon(
+                          Icons.edit,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color: Theme.of(context).disabledColor,
+                      ),
+                      onPressed: null,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: _startEditing,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.psychology),
@@ -649,6 +677,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               // No truncation in detail view - show full content
               maxLines: null,
               overflow: null,
+              // Enable drag-to-edit for blocks
+              onBlockEditRequested: _handleBlockEditRequest,
             ),
           ),
           if (currentNote.subNotes.isNotEmpty) ...[
@@ -3430,6 +3460,59 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         setState(() {
           _hasChanges = false;
         });
+      }
+    }
+  }
+
+  /// Handle block edit request from drag-and-drop
+  Future<void> _handleBlockEditRequest(
+    String blockContent,
+    int occurrenceIndex,
+  ) async {
+    debugPrint(
+      '_handleBlockEditRequest: content=$blockContent, occurrence=$occurrenceIndex',
+    );
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final result = await BlockEditorDialog.show(context, blockContent);
+    if (result == null || result.result == BlockEditorResult.cancelled) {
+      return;
+    }
+
+    final tracker = MarkdownBlockTracker();
+
+    if (result.result == BlockEditorResult.deleted) {
+      // Find the block and delete it
+      final block = tracker.findBlockByContentAndOccurrence(
+        currentNote.content,
+        blockContent,
+        occurrenceIndex,
+      );
+
+      if (block != null) {
+        final newContent = tracker.deleteBlock(currentNote.content, block);
+        _updateNoteContent(newContent);
+      }
+    } else if (result.result == BlockEditorResult.saved &&
+        result.editedContent != null) {
+      // Find the block and replace it
+      final block = tracker.findBlockByContentAndOccurrence(
+        currentNote.content,
+        blockContent,
+        occurrenceIndex,
+      );
+
+      if (block != null) {
+        final newContent = tracker.replaceBlock(
+          currentNote.content,
+          block,
+          result.editedContent!,
+        );
+        _updateNoteContent(newContent);
       }
     }
   }

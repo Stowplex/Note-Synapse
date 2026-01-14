@@ -1641,5 +1641,8 @@
     }
   },
   "agentConflictStop": "停止智能体",
-  "agentConflictSwitch": "切换到会话"
+  "agentConflictSwitch": "切换到会话",
+  "editBlock": "编辑区块",
+  "deleteBlock": "删除区块",
+  "deleteBlockConfirmation": "您确定要删除此区块吗？此操作无法撤消。"
 }

@@ -31,9 +31,17 @@ import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'interactive_checkbox_component.dart';
 import '../widgets/drawing_editor.dart';
+import '../utils/markdown_block_tracker.dart';
 
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
+
+/// Callback for when a block edit is requested via drag-and-drop.
+///
+/// [blockContent] is the markdown snippet for the block.
+/// [occurrenceIndex] identifies which occurrence of identical content this is.
+typedef BlockEditRequestedCallback =
+    void Function(String blockContent, int occurrenceIndex);
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
 /// with a custom checkbox component that handles state updates.
@@ -48,6 +56,10 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
   final String? noteId;
   final Size defaultWebViewSize;
 
+  /// Callback when a block edit is requested via drag-and-drop.
+  /// If this is null, drag-to-edit functionality is disabled.
+  final BlockEditRequestedCallback? onBlockEditRequested;
+
   const InteractiveCheckboxMarkdown({
     super.key,
     required this.originalContent,
@@ -60,6 +72,7 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.noteId,
     this.defaultWebViewSize = const Size(640, 400),
     this.hasWebViewNotifier,
+    this.onBlockEditRequested,
   });
 
   final ValueNotifier<bool>? hasWebViewNotifier;
@@ -72,6 +85,9 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
 class _InteractiveCheckboxMarkdownState
     extends State<InteractiveCheckboxMarkdown> {
   late String _currentContent;
+
+  /// Tracks block occurrences during rendering for drag-to-edit
+  final BlockOccurrenceTracker _occurrenceTracker = BlockOccurrenceTracker();
 
   @override
   void initState() {
@@ -360,6 +376,21 @@ class _InteractiveCheckboxMarkdownState
     double? width,
     double? height,
   }) {
+    // Track this image for drag-to-edit functionality
+    // We reconstruct the markdown as ![](url) since we don't have the alt text
+    final imageMarkdown = '![]($url)';
+    final occurrence = _occurrenceTracker.nextOccurrence(imageMarkdown);
+
+    // Helper to wrap the final result
+    Widget wrapWithDragTarget(Widget child) {
+      return DragTargetBlockWrapper(
+        blockContent: imageMarkdown,
+        occurrenceIndex: occurrence,
+        onBlockEditRequested: widget.onBlockEditRequested,
+        child: child,
+      );
+    }
+
     // If we are in "preview mode" (indicated by maxLines being set),
     // we want to enforce a stable image height to prevent scroll jumping in lists.
     // We also use BoxFit.cover to fill the banner area nicely.
@@ -616,21 +647,23 @@ class _InteractiveCheckboxMarkdownState
       effectiveHeight,
       fit: effectiveFit,
     );
-    return _wrapImageWithInfoBar(
-      image: SizedBox(
-        width: effectiveWidth,
-        height: effectiveHeight,
-        child: imageWidget,
+    return wrapWithDragTarget(
+      _wrapImageWithInfoBar(
+        image: SizedBox(
+          width: effectiveWidth,
+          height: effectiveHeight,
+          child: imageWidget,
+        ),
+        imageUrl: url,
+        isSvg: false,
+        onFullscreen: () {
+          _FullscreenViewer.show(
+            context,
+            imageWidget: Image.network(url, fit: BoxFit.contain),
+            title: 'Image',
+          );
+        },
       ),
-      imageUrl: url,
-      isSvg: false,
-      onFullscreen: () {
-        _FullscreenViewer.show(
-          context,
-          imageWidget: Image.network(url, fit: BoxFit.contain),
-          title: 'Image',
-        );
-      },
     );
   }
 
@@ -1060,15 +1093,29 @@ class _InteractiveCheckboxMarkdownState
     String code,
     bool closed,
   ) {
-    return _HighlightedCodeBlock(
+    // Reconstruct the full markdown for this code block
+    final fullMarkdown = '```$name\n$code\n```';
+    final occurrence = _occurrenceTracker.nextOccurrence(fullMarkdown);
+
+    final codeWidget = _HighlightedCodeBlock(
       code: code,
       languageHint: name,
       textStyle: widget.style,
+    );
+
+    return DragTargetBlockWrapper(
+      blockContent: fullMarkdown,
+      occurrenceIndex: occurrence,
+      onBlockEditRequested: widget.onBlockEditRequested,
+      child: codeWidget,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Reset occurrence tracker for each build cycle
+    _occurrenceTracker.reset();
+
     // We need to handle _EmbeddedWebViewMd updates
     // Let's recreate inlineComponents only if needed, or just insert the dynamic one.
     // Actually, creating the list is cheap. The *elements* being new instances might be the issue?
@@ -1089,13 +1136,20 @@ class _InteractiveCheckboxMarkdownState
 
     // For components, we can reuse the list if onContentChanged is stable?
     // widget.onContentChanged is a callback.
+    // Callback to get occurrence index for components
+    int getOccurrence(String content) =>
+        _occurrenceTracker.nextOccurrence(content);
+
     final components = [
       CodeBlockMd(),
       LatexMathMultiLine(),
       NewLines(),
       BlockQuote(),
       TableMd(),
-      SafeHTag(),
+      DragTargetSafeHTag(
+        onBlockEditRequested: widget.onBlockEditRequested,
+        getOccurrence: getOccurrence,
+      ),
       UnOrderedList(),
       OrderedList(),
       RadioButtonMd(),
@@ -1103,6 +1157,8 @@ class _InteractiveCheckboxMarkdownState
         InteractiveCheckboxMd(
           onToggle: (line, text, value) =>
               _handleCheckboxToggle(line, text, value),
+          onBlockEditRequested: widget.onBlockEditRequested,
+          getOccurrence: getOccurrence,
         )
       else
         CheckBoxMd(),

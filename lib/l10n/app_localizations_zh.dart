@@ -4023,4 +4023,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get agentConflictSwitch => '切换到会话';
+
+  @override
+  String get editBlock => '编辑区块';
+
+  @override
+  String get deleteBlock => '删除区块';
+
+  @override
+  String get deleteBlockConfirmation => '您确定要删除此区块吗？此操作无法撤消。';
 }
