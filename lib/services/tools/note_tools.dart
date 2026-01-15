@@ -29,8 +29,17 @@ class NoteSearchTool implements NativeTool {
   String get name => 'search_notes';
 
   @override
-  String get description =>
-      'Search for notes using full-text search. Returns a list of relevant notes with titles and IDs. Supports optional tag filtering.';
+  String get description => '''
+Search for notes using full-text search. Returns matching notes with titles, IDs, snippets, and tags.
+Supports optional tag filtering for more targeted results.
+
+DISCOVERY TIP: Use this for keyword-based filtering across notes.
+Priority order for exploring user's notes:
+1. ls / run_sql → metadata exploration (no content loading) - PREFERRED
+2. search_notes → keyword-based filtering
+3. read_note mode='toc'/'summary' → structural overview
+4. read_note mode='full' → only for targeted deep reads
+''';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -590,8 +599,22 @@ class RunSqlTool implements NativeTool {
   String get name => 'run_sql';
 
   @override
-  String get description =>
-      'Run a SQL query on the local database. Supports SELECT, INSERT, UPDATE, DELETE. Write operations require user approval. Tables: notes(id, title, content, tags, ...), tags(id, name), conversations(...). Useful for counting, aggregating, or finding patterns not covered by FTS.';
+  String get description => '''
+Run a SQL query on the local database. Supports SELECT, INSERT, UPDATE, DELETE.
+Write operations require user approval.
+
+KEY TABLES:
+- notes(id TEXT PK, title, content, type, tags, createdAt, updatedAt, pinned, isArchived)
+- tags(id TEXT PK, name UNIQUE, color, usageCount)
+- note_tags(noteId, tagId) - Links notes to tags
+- filters(id, name, includeTags JSON, excludeTags JSON, noteTypes JSON) - Saved search filters
+- conversations(id, title, createdAt, updatedAt, isArchived)
+- attachments(id, noteId, filePath, fileName, fileType)
+- subnotes(id, noteId, name, content, isCompleted) - Task items within notes
+
+DISCOVERY TIP: Use for metadata exploration before loading note content.
+Example: SELECT id, title, tags FROM notes WHERE tags LIKE '%topic%' ORDER BY updatedAt DESC LIMIT 10
+''';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -672,8 +695,15 @@ class ListFiltersTool implements NativeTool {
   String get name => 'ls';
 
   @override
-  String get description =>
-      'Lists all tag filters (folders) in a tree structure. Use this to understand the organization of notes.';
+  String get description => '''
+Lists all tag filters (folders) in a tree structure. Use this to understand the organization of notes.
+Filters define sets of tags for organizing notes into logical groups.
+
+DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
+- Returns hierarchical structure of how notes are organized
+- Each filter shows its included tags and note count
+- Use this before search_notes or run_sql to understand the note taxonomy
+''';
 
   @override
   Map<String, dynamic> get inputSchema => {'type': 'object', 'properties': {}};

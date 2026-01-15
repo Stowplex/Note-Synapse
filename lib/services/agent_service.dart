@@ -918,8 +918,37 @@ If no findings worth preserving, return: []
         ? "\nAdditional Context:\n$context\n"
         : "";
 
-    // Get table schema dynamically
-    final dbSchema = DatabaseService.getSchemaDescription();
+    // Conditionally include DB Schema only when run_sql is enabled
+    final hasRunSql = enabledNativeTools.any((t) => t.name == 'run_sql');
+    final dbSchemaSection = hasRunSql
+        ? '\nDatabase Schema (for run_sql):\n${DatabaseService.getSchemaDescription()}\n'
+        : '';
+
+    // Conditionally include Note Exploration guidance only when note tools are enabled
+    final noteToolNames = {'search_notes', 'read_note', 'ls', 'run_sql'};
+    final hasNoteTools = enabledNativeTools.any(
+      (t) => noteToolNames.contains(t.name),
+    );
+    final noteExplorationSection = hasNoteTools
+        ? '''
+
+## NOTE EXPLORATION (when working with user's notes)
+
+DON'T read full note content immediately!
+
+Tool Priority for Note Discovery:
+1. `ls` / `run_sql` → metadata exploration (no content loading) - PREFERRED
+2. `search_notes` → keyword-based filtering
+3. `read_note` mode='toc'/'summary' → structural overview
+4. `read_note` mode='full' → only for targeted deep reads
+
+Example: "identify knowledge gaps in transformer notes":
+1. `run_sql` → SELECT id, title, tags FROM notes WHERE tags LIKE '%transformer%'
+2. `ls` → find relevant filters
+3. `read_note` mode='toc' → scan structure of key notes
+4. `read_note` full only for specific sections needed
+'''
+        : '';
 
     final prompt =
         '''
@@ -930,10 +959,7 @@ $contextSection
 Available Tools:
 $nativeToolsDesc
 $externalToolsDesc
-
-Database Schema (for run_sql):
-$dbSchema
-
+$dbSchemaSection
 ## EXECUTION STRATEGY GUIDANCE
 
 Choose an appropriate strategy based on the objective and available tools:
@@ -954,22 +980,7 @@ Choose an appropriate strategy based on the objective and available tools:
 - Tasks with dependencies (read → modify → verify)
 - Each step builds on previous results
 - Example: "Find notes about X and summarize them"
-
-## NOTE EXPLORATION (when working with user's notes)
-
-DON'T read full note content immediately!
-
-Tool Priority for Note Discovery:
-1. `ls` / `run_sql` → metadata exploration (no content loading) - PREFERRED
-2. `search_notes` → keyword-based filtering
-3. `read_note` mode='toc'/'summary' → structural overview
-4. `read_note` mode='full' → only for targeted deep reads
-
-Example: "identify knowledge gaps in transformer notes":
-1. `run_sql` → SELECT id, title, tags FROM notes WHERE tags LIKE '%transformer%'
-2. `ls` → find relevant filters
-3. `read_note` mode='toc' → scan structure of key notes
-4. `read_note` full only for specific sections needed
+$noteExplorationSection
 
 ## TASK CONFIGURATION
 
@@ -1113,8 +1124,11 @@ Please fix and regenerate the plan.
           .toList(),
     );
 
-    // Get table schema dynamically
-    final dbSchema = DatabaseService.getSchemaDescription();
+    // Conditionally include DB Schema only when run_sql is enabled
+    final hasRunSql = enabledNativeTools.any((t) => t.name == 'run_sql');
+    final dbSchemaSection = hasRunSql
+        ? '\nDB Schema:\n${DatabaseService.getSchemaDescription()}\n'
+        : '';
 
     final prompt =
         '''
@@ -1123,10 +1137,7 @@ $currentPlanJson
 
 General User Feedback:
 $feedback
-
-DB Schema:
-$dbSchema
-
+$dbSchemaSection
 Update the plan based on the feedback.
 Address specific feedback for items if present.
 Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["..."]}]
