@@ -1255,6 +1255,18 @@ class _InteractiveCheckboxMarkdownState
         codeBuilder: _buildCodeBlock,
         components: components,
         inlineComponents: inlineComponents,
+        richTextBuilder: widget.onBlockEditRequested != null
+            ? (textWidget, text) {
+                // Wrap text paragraphs with DragTargetBlockWrapper for drag-to-edit
+                final occurrence = _occurrenceTracker.nextOccurrence(text);
+                return DragTargetBlockWrapper(
+                  blockContent: text,
+                  occurrenceIndex: occurrence,
+                  onBlockEditRequested: widget.onBlockEditRequested,
+                  child: textWidget,
+                );
+              }
+            : null,
       ),
     );
   }
