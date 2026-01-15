@@ -1730,7 +1730,7 @@ Was this response:
 Respond ONLY in this exact format (no JSON):
 <verdict>answer|tool|think</verdict>
 <content>
-The actual content (answer text, or tool call details, or reasoning)
+Properly extracted content from the JSON string.
 </content>
 ''';
 
