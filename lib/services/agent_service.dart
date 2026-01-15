@@ -88,6 +88,10 @@ class AgentService extends ChangeNotifier {
   /// Optional model override for agent LLM calls.
   ModelConfig? _modelOverride;
   ModelConfig? get modelOverride => _modelOverride;
+
+  /// Enabled native tool names. If null, all native tools are enabled.
+  /// This is set from the activeTools map when generating a plan.
+  Set<String>? _enabledNativeToolNames;
   set modelOverride(ModelConfig? value) {
     _modelOverride = value;
     notifyListeners();
@@ -123,6 +127,16 @@ class AgentService extends ChangeNotifier {
   List<AgentTask> get tasks => List.unmodifiable(_tasks);
   Map<String, List<McpTool>> get externalTools =>
       Map.unmodifiable(_externalTools);
+
+  /// Returns only the native tools that are currently enabled.
+  /// If no native tools are explicitly enabled via activeTools, returns all.
+  List<NativeTool> get enabledNativeTools {
+    if (_enabledNativeToolNames == null) return _nativeTools;
+    return _nativeTools
+        .where((t) => _enabledNativeToolNames!.contains(t.name))
+        .toList();
+  }
+
   bool get isRunning => _isRunning;
   String? get currentThought => _currentThought;
   String? get finalAnswer => _finalAnswer;
@@ -144,6 +158,8 @@ class AgentService extends ChangeNotifier {
     _currentCheckpoint = null;
     // Clear model override
     _modelOverride = null;
+    // Clear enabled native tools filter
+    _enabledNativeToolNames = null;
     notifyListeners();
   }
 
@@ -816,9 +832,11 @@ If no findings worth preserving, return: []
   }
 
   List<String> getAllToolNames() {
-    final names = _nativeTools.map((t) => t.name).toList();
-    for (final list in _externalTools.values) {
-      names.addAll(list.map((t) => t.name));
+    final names = enabledNativeTools.map((t) => t.name).toList();
+    for (final entry in _externalTools.entries) {
+      // Skip 'System' as it's already included via enabledNativeTools
+      if (entry.key == 'System') continue;
+      names.addAll(entry.value.map((t) => t.name));
     }
     return names;
   }
@@ -841,6 +859,23 @@ If no findings worth preserving, return: []
     _finalAnswer = null;
     _finalMetadata = null;
 
+    // Extract enabled native tool names from activeTools.
+    // Native tools are passed under the 'System' key if explicitly selected.
+    // If the 'System' key is not present or empty, all native tools are disabled
+    // (unless no activeTools at all, in which case all are enabled for backwards compatibility).
+    if (activeTools.isEmpty) {
+      // No external tools configured at all - enable all native tools (legacy behavior)
+      _enabledNativeToolNames = null;
+    } else {
+      final systemTools = activeTools['System'];
+      if (systemTools != null && systemTools.isNotEmpty) {
+        _enabledNativeToolNames = systemTools.map((t) => t.name).toSet();
+      } else {
+        // 'System' key not present or empty - no native tools enabled
+        _enabledNativeToolNames = {};
+      }
+    }
+
     // Store objective and initialize root context for hierarchical management
     _currentObjective = objective;
     _contextManager.clear();
@@ -856,11 +891,13 @@ If no findings worth preserving, return: []
     notifyListeners();
 
     // Build descriptions for external tools if available
-    // Build descriptions for external tools
+    // Build descriptions for external tools (excluding 'System' which is handled separately)
     String externalToolsDesc = '';
     if (_externalTools.isNotEmpty) {
       externalToolsDesc = '\nExternal Tools:\n';
       for (final entry in _externalTools.entries) {
+        // Skip 'System' as native tools are handled separately
+        if (entry.key == 'System') continue;
         externalToolsDesc += 'Service: ${entry.key}\n';
         for (final tool in entry.value) {
           externalToolsDesc +=
@@ -869,7 +906,8 @@ If no findings worth preserving, return: []
       }
     }
 
-    final nativeToolsDesc = _nativeTools
+    // Use enabledNativeTools instead of _nativeTools to respect tool config
+    final nativeToolsDesc = enabledNativeTools
         .map(
           (t) =>
               '- ${t.name}: ${t.description}\n  Args: ${t.inputSchema['properties']}',
@@ -1108,8 +1146,10 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       final tasks = _parseTasksFromJson(
         response,
         activeTools: [
-          ..._nativeTools.map((t) => t.name),
-          ..._externalTools.values.expand((l) => l.map((t) => t.name)),
+          ...enabledNativeTools.map((t) => t.name),
+          ..._externalTools.entries
+              .where((e) => e.key != 'System')
+              .expand((e) => e.value.map((t) => t.name)),
         ],
         defaultMaxTurns: await AgenticSettingsService.getMaxTurns(),
       );
@@ -1408,8 +1448,9 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     // If `task.toolNames` is NOT empty, we restrict execution to those tools?
 
     List<NativeTool> allowedNativeFn() {
-      if (task.toolNames.isEmpty) return _nativeTools;
-      return _nativeTools
+      // Use enabledNativeTools to respect tool config settings
+      if (task.toolNames.isEmpty) return enabledNativeTools;
+      return enabledNativeTools
           .where((t) => task.toolNames.contains(t.name))
           .toList();
     }
@@ -1815,8 +1856,8 @@ The actual content (answer text, or tool call details, or reasoning)
 
       dynamic result;
       try {
-        // Try Native
-        final nativeTool = _nativeTools.firstWhere(
+        // Try Native - use enabledNativeTools to respect tool config
+        final nativeTool = enabledNativeTools.firstWhere(
           (t) => t.name == toolName,
           orElse: () => _UnknownTool(),
         );

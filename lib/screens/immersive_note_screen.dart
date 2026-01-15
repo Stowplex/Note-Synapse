@@ -43,6 +43,7 @@ import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_service.dart';
+import '../services/agent_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/native_capture_utils.dart';
@@ -174,6 +175,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   // Built-in Tools
   final Set<String> _selectedBuiltInTools = {};
+
+  // System Tools (native tools from AgentService)
+  final Set<String> _selectedSystemTools = {};
 
   // Drawing State
   List<DrawingAction> _drawingActions = [];
@@ -561,6 +565,29 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           .toList();
       if (builtInTools.isNotEmpty) {
         combined['Built-in'] = builtInTools;
+      }
+    }
+
+    // Add System Tools (native tools from AgentService)
+    if (_selectedSystemTools.isNotEmpty) {
+      final agentService = context.read<AgentService>();
+      final systemTools = _selectedSystemTools
+          .map((id) {
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == id)
+                .firstOrNull;
+            if (nativeTool == null) return null;
+            return McpTool(
+              name: nativeTool.name,
+              description: nativeTool.description,
+              inputSchema: nativeTool.inputSchema,
+            );
+          })
+          .where((t) => t != null)
+          .cast<McpTool>()
+          .toList();
+      if (systemTools.isNotEmpty) {
+        combined[BuiltInToolsService.systemToolsServiceKey] = systemTools;
       }
     }
 
@@ -2198,11 +2225,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
     final activeBuiltInToolsCount = _selectedBuiltInTools.length;
+    final activeSystemToolsCount = _selectedSystemTools.length;
     final totalActiveCount =
         activeMcpCount +
         activeLocalCount +
         activeModelFeaturesCount +
-        activeBuiltInToolsCount;
+        activeBuiltInToolsCount +
+        activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
@@ -2442,6 +2471,67 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                               Icons.smart_toy,
                               size: 16,
                               color: selected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    // System Tools (native tools from AgentService)
+                    if (BuiltInToolsService.systemTools.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.memory,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'System Tools',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeSystemToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeSystemToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: BuiltInToolsService.systemTools.map((tool) {
+                          final isSelected = _selectedSystemTools.contains(
+                            tool.id,
+                          );
+                          return FilterChip(
+                            label: Text(tool.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedSystemTools.add(tool.id);
+                                } else {
+                                  _selectedSystemTools.remove(tool.id);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              tool.icon,
+                              size: 16,
+                              color: isSelected
                                   ? theme.colorScheme.primary
                                   : theme.colorScheme.onSurface.withOpacity(
                                       0.6,
@@ -4425,11 +4515,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
+          // Handle AI Tools
           if (_aiToolBundles.containsKey(serviceName)) {
             final runtime = await _getAiToolRuntime(serviceName);
             return runtime.invoke(toolName, params, context);
           }
 
+          // Handle System Tools (native tools from AgentService)
+          if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+            final agentService = this.context.read<AgentService>();
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == toolName)
+                .firstOrNull;
+            if (nativeTool != null) {
+              final result = await nativeTool.execute(params);
+              return result is String ? result : result.toString();
+            }
+            return 'Error: System tool "$toolName" not found';
+          }
+
+          // Handle MCP Tools
           return McpToolIntegrationService.executeToolCall(
             serviceName: serviceName,
             toolName: toolName,

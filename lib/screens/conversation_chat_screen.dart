@@ -115,6 +115,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // Built-in Tools
   final Set<String> _selectedBuiltInTools = {};
 
+  // System Tools (native tools from AgentService)
+  final Set<String> _selectedSystemTools = {};
+
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
   AgentService? _agentService;
@@ -511,6 +514,29 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
+    // Add System Tools (native tools from AgentService)
+    if (_selectedSystemTools.isNotEmpty) {
+      final agentService = context.read<AgentService>();
+      final systemTools = _selectedSystemTools
+          .map((id) {
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == id)
+                .firstOrNull;
+            if (nativeTool == null) return null;
+            return McpTool(
+              name: nativeTool.name,
+              description: nativeTool.description,
+              inputSchema: nativeTool.inputSchema,
+            );
+          })
+          .where((t) => t != null)
+          .cast<McpTool>()
+          .toList();
+      if (systemTools.isNotEmpty) {
+        combined[BuiltInToolsService.systemToolsServiceKey] = systemTools;
+      }
+    }
+
     return combined;
   }
 
@@ -904,10 +930,25 @@ $historyBuffer
           content,
           activeTools: activeTools,
           executeTool: (serviceName, toolName, params, ctx) async {
+            // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
               return runtime.invoke(toolName, params, ctx);
             }
+            // Handle System Tools (native tools from AgentService)
+            // Note: AgentService also handles these internally, but this ensures
+            // consistency if tools are ever delegated to this executor
+            if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+              final nativeTool = agentService.nativeTools
+                  .where((t) => t.name == toolName)
+                  .firstOrNull;
+              if (nativeTool != null) {
+                final result = await nativeTool.execute(params);
+                return result is String ? result : result.toString();
+              }
+              return 'Error: System tool "$toolName" not found';
+            }
+            // Handle MCP Tools
             return McpToolIntegrationService.executeToolCall(
               serviceName: serviceName,
               toolName: toolName,
@@ -1087,11 +1128,26 @@ $historyBuffer
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
+            // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
               return runtime.invoke(toolName, params, context);
             }
 
+            // Handle System Tools (native tools from AgentService)
+            if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+              final agentService = this.context.read<AgentService>();
+              final nativeTool = agentService.nativeTools
+                  .where((t) => t.name == toolName)
+                  .firstOrNull;
+              if (nativeTool != null) {
+                final result = await nativeTool.execute(params);
+                return result is String ? result : result.toString();
+              }
+              return 'Error: System tool "$toolName" not found';
+            }
+
+            // Handle MCP Tools
             return McpToolIntegrationService.executeToolCall(
               serviceName: serviceName,
               toolName: toolName,
@@ -1760,11 +1816,13 @@ $historyBuffer
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
     final activeBuiltInToolsCount = _selectedBuiltInTools.length;
+    final activeSystemToolsCount = _selectedSystemTools.length;
     final totalActiveCount =
         activeMcpCount +
         activeLocalCount +
         activeModelFeaturesCount +
-        activeBuiltInToolsCount;
+        activeBuiltInToolsCount +
+        activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     // Get current model config to check for features
@@ -2061,6 +2119,70 @@ $historyBuffer
                                   _selectedBuiltInTools.add(tool.id);
                                 } else {
                                   _selectedBuiltInTools.remove(tool.id);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              tool.icon,
+                              size: 16,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    // System Tools (native tools from AgentService)
+                    if (BuiltInToolsService.systemTools.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.memory,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'System Tools',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeSystemToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeSystemToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: BuiltInToolsService.systemTools.map((tool) {
+                          final isSelected = _selectedSystemTools.contains(
+                            tool.id,
+                          );
+                          return FilterChip(
+                            label: Text(tool.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedSystemTools.add(tool.id);
+                                } else {
+                                  _selectedSystemTools.remove(tool.id);
                                 }
                               });
                             },
