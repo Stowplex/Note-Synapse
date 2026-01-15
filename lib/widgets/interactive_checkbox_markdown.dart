@@ -1257,6 +1257,13 @@ class _InteractiveCheckboxMarkdownState
         inlineComponents: inlineComponents,
         richTextBuilder: widget.onBlockEditRequested != null
             ? (textWidget, text) {
+                // Skip wrapping image markdown - it's handled by imageBuilder
+                // Also skip linked images
+                final trimmedText = text.trim();
+                if (trimmedText.startsWith('![') ||
+                    trimmedText.startsWith('[![')) {
+                  return textWidget;
+                }
                 // Wrap text paragraphs with DragTargetBlockWrapper for drag-to-edit
                 final occurrence = _occurrenceTracker.nextOccurrence(text);
                 return DragTargetBlockWrapper(

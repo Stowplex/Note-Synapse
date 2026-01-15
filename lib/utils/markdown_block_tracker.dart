@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 enum MarkdownBlockType {
   codeBlock,
   image,
+  linkedImage, // Image wrapped in a link: [![alt](url)](url)
   link,
   heading,
   orderedList,
@@ -62,6 +63,11 @@ class MarkdownBlockTracker {
 
     // Phase 3: Parse all other block types, respecting protected ranges
     _parseHeadings(content, blocks, protectedRanges);
+    _parseLinkedImages(
+      content,
+      blocks,
+      protectedRanges,
+    ); // Must be before _parseImages
     _parseImages(content, blocks, protectedRanges);
     _parseLinks(content, blocks, protectedRanges);
     _parseBlockquotes(content, blocks, protectedRanges);
@@ -160,11 +166,21 @@ class MarkdownBlockTracker {
     // Normalize image markdown: extract just the URL, ignoring alt text
     // This handles the case where imageBuilder only receives URL but source has alt text
     // Converts ![alt text](url) to ![](url) for matching
-    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+)\)$');
+    // Use non-greedy match for URL to handle nested patterns like [![alt](url)](url)
+    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+?)\)$');
     final imageMatch = imagePattern.firstMatch(normalized);
     if (imageMatch != null) {
       final url = imageMatch.group(2);
       normalized = '![]($url)';
+    }
+
+    // Handle nested link+image: [![alt](imageUrl)](linkUrl)
+    // Normalize to just the full pattern for matching
+    final nestedLinkImagePattern = RegExp(
+      r'^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$',
+    );
+    if (nestedLinkImagePattern.hasMatch(normalized)) {
+      // Keep as-is for now, it should match the source
     }
 
     // Normalize code blocks: standardize whitespace around fences
@@ -329,6 +345,42 @@ class MarkdownBlockTracker {
           occurrenceIndex: occurrence,
         ),
       );
+      protectedRanges.add((match.start, match.end));
+    }
+  }
+
+  void _parseLinkedImages(
+    String content,
+    List<MarkdownBlock> blocks,
+    List<(int, int)> protectedRanges,
+  ) {
+    // Linked images: [![alt](imageUrl)](linkUrl)
+    // This is an image wrapped in a link
+    final pattern = RegExp(
+      r'\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)',
+      multiLine: true,
+    );
+    final occurrences = <String, int>{};
+
+    for (final match in pattern.allMatches(content)) {
+      if (_isInProtectedRange(match.start, protectedRanges)) continue;
+
+      final blockContent = match.group(0)!;
+      // Use trimmed key for occurrence counting to match BlockOccurrenceTracker
+      final occurrenceKey = blockContent.trim();
+      final occurrence = occurrences[occurrenceKey] ?? 0;
+      occurrences[occurrenceKey] = occurrence + 1;
+
+      blocks.add(
+        MarkdownBlock(
+          type: MarkdownBlockType.linkedImage,
+          content: blockContent,
+          startOffset: match.start,
+          endOffset: match.end,
+          occurrenceIndex: occurrence,
+        ),
+      );
+      // Add to protected ranges so the inner image isn't also parsed
       protectedRanges.add((match.start, match.end));
     }
   }
@@ -723,11 +775,21 @@ class BlockOccurrenceTracker {
     // Normalize image markdown: extract just the URL, ignoring alt text
     // This handles the case where imageBuilder only receives URL but source has alt text
     // Converts ![alt text](url) to ![](url) for matching
-    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+)\)$');
+    // Use non-greedy match for URL to handle nested patterns like [![alt](url)](url)
+    final imagePattern = RegExp(r'^!\[([^\]]*)\]\((.+?)\)$');
     final imageMatch = imagePattern.firstMatch(normalized);
     if (imageMatch != null) {
       final url = imageMatch.group(2);
       normalized = '![]($url)';
+    }
+
+    // Handle nested link+image: [![alt](imageUrl)](linkUrl)
+    // Keep as-is for matching
+    final nestedLinkImagePattern = RegExp(
+      r'^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$',
+    );
+    if (nestedLinkImagePattern.hasMatch(normalized)) {
+      // Keep as-is for now, it should match the source
     }
 
     // Normalize code blocks: standardize whitespace around fences
