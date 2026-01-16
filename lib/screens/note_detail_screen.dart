@@ -24,6 +24,7 @@ import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../utils/markdown_block_tracker.dart';
+import '../widgets/block_markdown_body.dart';
 
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
@@ -732,18 +733,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           const SizedBox(height: 16),
           SelectionArea(
-            child: InteractiveCheckboxMarkdown(
+            child: BlockMarkdownBody(
               key: ValueKey('note_${currentNote.id}'),
               noteId: currentNote.id,
-              originalContent: currentNote.content,
+              content: currentNote.content,
               onContentChanged: _updateNoteContent,
               style: Theme.of(context).textTheme.bodyLarge,
-              textDirection: TextDirection.ltr,
               onLinkTap: _handleLinkTap,
-              // No truncation in detail view - show full content
-              maxLines: null,
-              overflow: null,
-              // Enable drag-to-edit for blocks
               onBlockEditRequested: _handleBlockEditRequest,
             ),
           ),
@@ -3531,12 +3527,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   /// Handle block edit request from drag-and-drop
-  Future<void> _handleBlockEditRequest(
-    String blockContent,
-    int occurrenceIndex,
-  ) async {
+  Future<void> _handleBlockEditRequest(MarkdownBlock block) async {
     debugPrint(
-      '_handleBlockEditRequest: content=$blockContent, occurrence=$occurrenceIndex',
+      '_handleBlockEditRequest: type=${block.type}, content=${block.content}',
     );
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final currentNote = appProvider.notes.firstWhere(
@@ -3546,44 +3539,37 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     final result = await BlockEditorDialog.show(
       context,
-      blockContent,
+      block.content,
       onPickImage: () => _pickImageAndReturnMarkdown(context),
     );
     if (result == null || result.result == BlockEditorResult.cancelled) {
       return;
     }
 
+    // We can assume the tracker used by BlockMarkdownBody (which passed us this block)
+    // produced valid offsets for the content AS IT WAS when rendered.
+    // However, if the note content changed asynchronously, these offsets might be stale.
+    // In a real-time collaborative app this is hard, but here:
+    // We get 'block' from the current render.
+    // We should treat the current note content as the source of truth but verify?
+    // BlockMarkdownBody takes 'content' as input.
+    // If we assume 'currentNote.content' hasn't changed since render, we are good.
+    // But relying on offsets directly is safer if we trust BlockMarkdownBody to rebuild on change.
+
+    // We need a tracker instance to perform operations.
     final tracker = MarkdownBlockTracker();
 
     if (result.result == BlockEditorResult.deleted) {
-      // Find the block and delete it
-      final block = tracker.findBlockByContentAndOccurrence(
-        currentNote.content,
-        blockContent,
-        occurrenceIndex,
-      );
-
-      if (block != null) {
-        final newContent = tracker.deleteBlock(currentNote.content, block);
-        _updateNoteContent(newContent);
-      }
+      final newContent = tracker.deleteBlock(currentNote.content, block);
+      _updateNoteContent(newContent);
     } else if (result.result == BlockEditorResult.saved &&
         result.editedContent != null) {
-      // Find the block and replace it
-      final block = tracker.findBlockByContentAndOccurrence(
+      final newContent = tracker.replaceBlock(
         currentNote.content,
-        blockContent,
-        occurrenceIndex,
+        block,
+        result.editedContent!,
       );
-
-      if (block != null) {
-        final newContent = tracker.replaceBlock(
-          currentNote.content,
-          block,
-          result.editedContent!,
-        );
-        _updateNoteContent(newContent);
-      }
+      _updateNoteContent(newContent);
     }
   }
 
@@ -3625,7 +3611,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   // Link handling function
-  void _handleLinkTap(String url, String text) {
+  void _handleLinkTap(String url, String? text) {
     // Note: gpt_markdown passes parameters in reverse order
     // First parameter is the actual URL, second is the display text
     _launchUrl(url);

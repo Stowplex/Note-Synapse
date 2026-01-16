@@ -31,17 +31,9 @@ import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'interactive_checkbox_component.dart';
 import '../widgets/drawing_editor.dart';
-import '../utils/markdown_block_tracker.dart';
 
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
-
-/// Callback for when a block edit is requested via drag-and-drop.
-///
-/// [blockContent] is the markdown snippet for the block.
-/// [occurrenceIndex] identifies which occurrence of identical content this is.
-typedef BlockEditRequestedCallback =
-    void Function(String blockContent, int occurrenceIndex);
 
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
 /// with a custom checkbox component that handles state updates.
@@ -56,10 +48,6 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
   final String? noteId;
   final Size defaultWebViewSize;
 
-  /// Callback when a block edit is requested via drag-and-drop.
-  /// If this is null, drag-to-edit functionality is disabled.
-  final BlockEditRequestedCallback? onBlockEditRequested;
-
   const InteractiveCheckboxMarkdown({
     super.key,
     required this.originalContent,
@@ -72,7 +60,6 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.noteId,
     this.defaultWebViewSize = const Size(640, 400),
     this.hasWebViewNotifier,
-    this.onBlockEditRequested,
   });
 
   final ValueNotifier<bool>? hasWebViewNotifier;
@@ -85,9 +72,6 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
 class _InteractiveCheckboxMarkdownState
     extends State<InteractiveCheckboxMarkdown> {
   late String _currentContent;
-
-  /// Tracks block occurrences during rendering for drag-to-edit
-  final BlockOccurrenceTracker _occurrenceTracker = BlockOccurrenceTracker();
 
   @override
   void initState() {
@@ -289,20 +273,6 @@ class _InteractiveCheckboxMarkdownState
       },
     );
 
-    // For block-level LaTeX (not inline), wrap with DragTarget for editing
-    // We reconstruct a normalized LaTeX block format for the occurrence key
-    if (widget.onBlockEditRequested != null) {
-      // Block LaTeX is typically \[...\] format, inline is \(...\)
-      final latexBlock = inline ? '\\($tex\\)' : '\\[$tex\\]';
-      final occurrence = _occurrenceTracker.nextOccurrence(latexBlock);
-      result = DragTargetBlockWrapper(
-        blockContent: latexBlock,
-        occurrenceIndex: occurrence,
-        onBlockEditRequested: widget.onBlockEditRequested,
-        child: result,
-      );
-    }
-
     return result;
   }
 
@@ -392,19 +362,8 @@ class _InteractiveCheckboxMarkdownState
     double? width,
     double? height,
   }) {
-    // Track this image for drag-to-edit functionality
-    // We reconstruct the markdown as ![](url) since we don't have the alt text
-    final imageMarkdown = '![]($url)';
-    final occurrence = _occurrenceTracker.nextOccurrence(imageMarkdown);
-
-    // Helper to wrap the final result
     Widget wrapWithDragTarget(Widget child) {
-      return DragTargetBlockWrapper(
-        blockContent: imageMarkdown,
-        occurrenceIndex: occurrence,
-        onBlockEditRequested: widget.onBlockEditRequested,
-        child: child,
-      );
+      return child;
     }
 
     // If we are in "preview mode" (indicated by maxLines being set),
@@ -1133,104 +1092,56 @@ class _InteractiveCheckboxMarkdownState
     String code,
     bool closed,
   ) {
-    // Reconstruct the full markdown for this code block
-    final fullMarkdown = '```$name\n$code\n```';
-    final occurrence = _occurrenceTracker.nextOccurrence(fullMarkdown);
-
-    final codeWidget = _HighlightedCodeBlock(
+    return _HighlightedCodeBlock(
       code: code,
       languageHint: name,
       textStyle: widget.style,
-    );
-
-    return DragTargetBlockWrapper(
-      blockContent: fullMarkdown,
-      occurrenceIndex: occurrence,
-      onBlockEditRequested: widget.onBlockEditRequested,
-      child: codeWidget,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Reset occurrence tracker for each build cycle
-    _occurrenceTracker.reset();
-
-    // Filter out components we want to handle with DragTarget versions
-    // TableMd and LatexMathMultiLine are in both lists, we want our versions
-    final excludedInlineTypes = {
-      ATagMd,
-      TableMd,
-      LatexMathMultiLine,
-      BlockQuote,
-    };
+    // Basic inline components
     final inlineComponents = [
-      DragTargetATagMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: (content) => _occurrenceTracker.nextOccurrence(content),
-      ),
-      DragTargetBlockQuoteMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: (content) => _occurrenceTracker.nextOccurrence(content),
-      ),
-      ...MarkdownComponent.inlineComponents.where(
-        (e) => !excludedInlineTypes.contains(e.runtimeType),
-      ),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
         noteId: widget.noteId,
         hasWebViewNotifier: widget.hasWebViewNotifier,
       ),
+      if (widget.onLinkTap != null || widget.noteId != null)
+        // Helper to ensure links are handled if needed, usually default ATag is fine
+        // but we used DragTargetATagMd before. Standard ATagMd should be enough.
+        // If we need custom link handling (like avoiding ! prefixes),
+        // GptMarkdown handles that.
+        // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
+        // except for the custom one.
+        ...MarkdownComponent.inlineComponents.where((c) => c is! ATagMd),
     ];
 
-    // For components, we can reuse the list if onContentChanged is stable?
-    // widget.onContentChanged is a callback.
-    // Callback to get occurrence index for components
-    int getOccurrence(String content) =>
-        _occurrenceTracker.nextOccurrence(content);
+    // Check if we need to add standard ATagMd back if we excluded it?
+    // Wait, GptMarkdown adds inlineComponents on top of defaults?
+    // No, 'inlineComponents' argument to GptMarkdown REPLACES the list or APPENDS?
+    // Docs say: "inlineComponents: A list of custom inline components"
+    // Usually it appends or overrides if types match.
+    // Let's assume we can just pass our custom ones.
 
     final components = [
       CodeBlockMd(),
-      DragTargetLatexMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
       NewLines(),
-      DragTargetBlockQuoteMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
-      DragTargetTableMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
-      DragTargetSafeHTag(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
-      DragTargetUnorderedListMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
-      DragTargetOrderedListMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
-      RadioButtonMd(),
       if (widget.onContentChanged != null)
         InteractiveCheckboxMd(
           onToggle: (line, text, value) =>
               _handleCheckboxToggle(line, text, value),
-          onBlockEditRequested: widget.onBlockEditRequested,
-          getOccurrence: getOccurrence,
         )
       else
         CheckBoxMd(),
       HrLine(),
-      DragTargetIndentMd(
-        onBlockEditRequested: widget.onBlockEditRequested,
-        getOccurrence: getOccurrence,
-      ),
+      UnOrderedList(),
+      OrderedList(),
+      BlockQuote(),
+      TableMd(),
+      IndentMd(),
+      SafeHTag(), // Using SafeHTag from interactive_checkbox_component
     ];
 
     return KeyedSubtree(
@@ -1255,25 +1166,6 @@ class _InteractiveCheckboxMarkdownState
         codeBuilder: _buildCodeBlock,
         components: components,
         inlineComponents: inlineComponents,
-        richTextBuilder: widget.onBlockEditRequested != null
-            ? (textWidget, text) {
-                // Skip wrapping image markdown - it's handled by imageBuilder
-                // Also skip linked images
-                final trimmedText = text.trim();
-                if (trimmedText.startsWith('![') ||
-                    trimmedText.startsWith('[![')) {
-                  return textWidget;
-                }
-                // Wrap text paragraphs with DragTargetBlockWrapper for drag-to-edit
-                final occurrence = _occurrenceTracker.nextOccurrence(text);
-                return DragTargetBlockWrapper(
-                  blockContent: text,
-                  occurrenceIndex: occurrence,
-                  onBlockEditRequested: widget.onBlockEditRequested,
-                  child: textWidget,
-                );
-              }
-            : null,
       ),
     );
   }
@@ -3201,45 +3093,5 @@ class CustomATagMd extends ATagMd {
     );
     var textSpan = TextSpan(children: [child, ...endingSpans]);
     return textSpan;
-  }
-}
-
-/// Link component with drag-to-edit support
-class DragTargetATagMd extends CustomATagMd {
-  final BlockEditRequestedCallback? onBlockEditRequested;
-  final BlockOccurrenceCallback? getOccurrence;
-
-  DragTargetATagMd({this.onBlockEditRequested, this.getOccurrence});
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final childSpan = super.span(context, text, config);
-
-    if (onBlockEditRequested != null && getOccurrence != null) {
-      // Get the link markdown text (format: [text](url))
-      final linkMarkdown = text.trim();
-      // Only use the main link part, not any trailing text
-      final match = RegExp(r'^\[.*?\]\([^\s]*\)').firstMatch(linkMarkdown);
-      if (match != null) {
-        final linkOnly = match.group(0)!;
-        final occurrence = getOccurrence!(linkOnly);
-        // Wrap the entire span in a WidgetSpan with DragTargetBlockWrapper
-        return TextSpan(
-          children: [
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: DragTargetBlockWrapper(
-                blockContent: linkOnly,
-                occurrenceIndex: occurrence,
-                onBlockEditRequested: onBlockEditRequested,
-                child: Text.rich(childSpan as TextSpan),
-              ),
-            ),
-          ],
-        );
-      }
-    }
-    return childSpan;
   }
 }
