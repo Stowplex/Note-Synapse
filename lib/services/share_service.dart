@@ -2727,24 +2727,99 @@ class LatexInlineSyntax extends md.InlineSyntax {
   }
 }
 
+// /// Syntax for block LaTeX: \[ ... \]
+// class LatexBlockSyntax extends md.BlockSyntax {
+//   @override
+//   RegExp get pattern =>
+//       RegExp(r'^\\\[(.+?)\\\]', multiLine: true, dotAll: true);
+//
+//   const LatexBlockSyntax();
+//
+//   @override
+//   md.Node parse(md.BlockParser parser) {
+//     final match = pattern.firstMatch(parser.current.content);
+//     if (match != null) {
+//       parser.advance();
+//       return md.Element.text('latex', match[1]!.trim());
+//     }
+//
+//     // Fallback if regex didn't match (shouldn't happen if pattern matched)
+//     parser.advance();
+//     return md.Element.text('latex', '');
+//   }
+// }
+
 /// Syntax for block LaTeX: \[ ... \]
 class LatexBlockSyntax extends md.BlockSyntax {
   @override
-  RegExp get pattern =>
-      RegExp(r'^\\\[(.+?)\\\]', multiLine: true, dotAll: true);
+  RegExp get pattern => RegExp(r'^\s{0,3}\\\[', multiLine: true);
 
   const LatexBlockSyntax();
 
   @override
   md.Node parse(md.BlockParser parser) {
-    final match = pattern.firstMatch(parser.current.content);
-    if (match != null) {
-      parser.advance();
-      return md.Element.text('latex', match[1]!.trim());
+    // The pattern matches against the 'current' line, but for multi-line blocks
+    // we need to consume lines until we find the closing tag.
+    // However, the provided pattern uses dotAll: true, which implies it expects
+    // to match against the whole content?
+    // BlockParser operates line-by-line usually.
+
+    // Let's adapt the ShareService logic but robustly for BlockParser.
+    // Standard BlockParser checks pattern against parser.current.content.
+    // If our pattern expects \[ at start, it works.
+
+    final startLine = parser.current.content;
+
+    // Check if start line initiates a block
+    if (!startLine.trim().startsWith(r'\[')) {
+      return md.Element.text(
+        'latex',
+        '',
+      ); // Should not happen if canParse matched
     }
 
-    // Fallback if regex didn't match (shouldn't happen if pattern matched)
-    parser.advance();
-    return md.Element.text('latex', '');
+    // buffer.writeln(startLine); // Keep delimiters? Or strip them?
+    // ShareService strip them matches[1].
+    // If we want to support standard editing, maybe we should keep them?
+    // For rendering, 'gpt_markdown' might expect them or not?
+    // LateXMathMultiLine usually expects raw tex usually...
+    // But 'share_screen' extracts the content.
+
+    // Let's capture the raw content for the block including delimiters
+    // so the MarkdownBlock represents the whole thing in source.
+
+    // Consume lines until \]
+    // We need to advance the parser.
+
+    // Simple robust consumption:
+    // 1. Consume start line.
+    // 2. Consume subsequent lines until one ends with \]
+
+    final childLines = <String>[];
+
+    // Check if single line block: \[ ... \]
+    if (startLine.trim().endsWith(r'\]') && startLine.trim().length > 2) {
+      childLines.add(startLine.replaceAll(r'\[', '').replaceAll(r'\]', ''));
+      parser.advance();
+    } else {
+      // Multi-line
+      // Skip startline: \[
+      parser.advance();
+      while (!parser.isDone) {
+        final line = parser.current.content;
+        if (line.trim().endsWith(r'\]')) {
+          // Skip endline: \]
+          parser.advance();
+          break;
+        }
+        childLines.add(line);
+        parser.advance();
+      }
+    }
+
+    // Return a dummy element with type 'latex'
+    // The actual content logic is handled by _mapNodeType and source extraction.
+    final el = md.Element('latex', [md.Text(childLines.join('\n'))]);
+    return el;
   }
 }

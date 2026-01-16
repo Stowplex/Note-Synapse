@@ -81,6 +81,7 @@ class MarkdownBlockTracker {
     final document = md.Document(
       // We enable common extensions to ensure we catch lists, tables, etc.
       extensionSet: md.ExtensionSet.gitHubFlavored,
+      blockSyntaxes: [const LatexBlockSyntax()],
       encodeHtml: false,
     );
 
@@ -97,32 +98,36 @@ class MarkdownBlockTracker {
       for (final syntax in parser.blockSyntaxes) {
         if (syntax.canParse(parser)) {
           final node = syntax.parse(parser);
-          if (node != null) {
-            // Node was parsed. The parser has advanced.
-            // We need to find where it advanced TO.
-            // If isDone, it consumed everything up to end.
-            // If not done, parser.current is the first unconsumed line.
-
-            int endLineIndex;
-            if (parser.isDone) {
-              endLineIndex = lines.length; // Exclusive
-            } else {
-              endLineIndex = lines.indexOf(parser.current);
-            }
-
-            // We consumed lines from startLineIndex (inclusive) to endLineIndex (exclusive).
-            _addBlockFromLineRange(
-              blocks,
-              node,
-              lines,
-              sourceLines,
-              lineOffsets,
-              startLineIndex,
-              endLineIndex,
-            );
-
-            matched = true;
+          // Safety check: If syntax claimed to parse but didn't advance parser,
+          // we must force advance to avoid infinite loop.
+          if (!parser.isDone &&
+              lines.indexOf(parser.current) == startLineIndex) {
+            parser.advance();
           }
+
+          int endLineIndex;
+          if (parser.isDone) {
+            endLineIndex = lines.length; // Exclusive
+          } else {
+            endLineIndex = lines.indexOf(parser.current);
+          }
+
+          // We consumed lines from startLineIndex (inclusive) to endLineIndex (exclusive).
+          // Even if node is null (e.g. EmptyBlockSyntax), we must record the block
+          // to preserve source mapping offsets.
+          _addBlockFromLineRange(
+            blocks,
+            node,
+            lines,
+            sourceLines,
+            lineOffsets,
+            startLineIndex,
+            endLineIndex,
+            // If node is null, force paragraph (empty lines usually)
+            forceType: node == null ? MarkdownBlockType.paragraph : null,
+          );
+
+          matched = true;
           break; // Stop after first match as parser state has changed
         }
       }
@@ -326,5 +331,103 @@ class MarkdownBlockTracker {
     // For safe robustness, just replace with empty string first.
     // Or maybe a single newline if it leaves a gap?
     return replaceBlock(content, block, '');
+  }
+}
+
+/// Syntax for block LaTeX: \[ ... \]
+// class LatexBlockSyntax extends md.BlockSyntax {
+//   @override
+//   RegExp get pattern =>
+//       RegExp(r'^\\\[(.+?)\\\]', multiLine: true, dotAll: true);
+//
+//   const LatexBlockSyntax();
+//
+//   @override
+//   md.Node parse(md.BlockParser parser) {
+//     final match = pattern.firstMatch(parser.current.content);
+//     if (match != null) {
+//       parser.advance();
+//       return md.Element.text('latex', match[1]!.trim());
+//     }
+//
+//     // Fallback if regex didn't match (shouldn't happen if pattern matched)
+//     parser.advance();
+//     return md.Element.text('latex', '');
+//   }
+// }
+
+/// Syntax for block LaTeX: \[ ... \]
+class LatexBlockSyntax extends md.BlockSyntax {
+  @override
+  RegExp get pattern => RegExp(r'^\s{0,3}\\\[', multiLine: true);
+
+  const LatexBlockSyntax();
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    // The pattern matches against the 'current' line, but for multi-line blocks
+    // we need to consume lines until we find the closing tag.
+    // However, the provided pattern uses dotAll: true, which implies it expects
+    // to match against the whole content?
+    // BlockParser operates line-by-line usually.
+
+    // Let's adapt the ShareService logic but robustly for BlockParser.
+    // Standard BlockParser checks pattern against parser.current.content.
+    // If our pattern expects \[ at start, it works.
+
+    final startLine = parser.current.content;
+
+    // Check if start line initiates a block
+    if (!startLine.trim().startsWith(r'\[')) {
+      return md.Element.text(
+        'latex',
+        '',
+      ); // Should not happen if canParse matched
+    }
+
+    // buffer.writeln(startLine); // Keep delimiters? Or strip them?
+    // ShareService strip them matches[1].
+    // If we want to support standard editing, maybe we should keep them?
+    // For rendering, 'gpt_markdown' might expect them or not?
+    // LateXMathMultiLine usually expects raw tex usually...
+    // But 'share_screen' extracts the content.
+
+    // Let's capture the raw content for the block including delimiters
+    // so the MarkdownBlock represents the whole thing in source.
+
+    // Consume lines until \]
+    // We need to advance the parser.
+
+    // Simple robust consumption:
+    // 1. Consume start line.
+    // 2. Consume subsequent lines until one ends with \] (or contains it?)
+
+    // NOTE: The regex in ShareService is likely used on the WHOLE string, not by block parser.
+    // Here we must iterate lines.
+
+    final childLines = <String>[];
+
+    // Check if single line block: \[ ... \]
+    if (startLine.trim().endsWith(r'\]') && startLine.trim().length > 2) {
+      childLines.add(startLine);
+      parser.advance();
+    } else {
+      // Multi-line
+      childLines.add(startLine);
+      parser.advance();
+      while (!parser.isDone) {
+        final line = parser.current.content;
+        childLines.add(line);
+        parser.advance();
+        if (line.trim().endsWith(r'\]')) {
+          break;
+        }
+      }
+    }
+
+    // Return a dummy element with type 'latex'
+    // The actual content logic is handled by _mapNodeType and source extraction.
+    final el = md.Element('latex', [md.Text(childLines.join('\n'))]);
+    return el;
   }
 }

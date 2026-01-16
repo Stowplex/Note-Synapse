@@ -1115,7 +1115,7 @@ class _InteractiveCheckboxMarkdownState
         // GptMarkdown handles that.
         // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
         // except for the custom one.
-        ...MarkdownComponent.inlineComponents.where((c) => c is! ATagMd),
+        ...MarkdownComponent.inlineComponents,
     ];
 
     // Check if we need to add standard ATagMd back if we excluded it?
@@ -1142,6 +1142,8 @@ class _InteractiveCheckboxMarkdownState
       TableMd(),
       IndentMd(),
       SafeHTag(), // Using SafeHTag from interactive_checkbox_component
+      LatexMathMultiLine(),
+      LatexBracketBlockMd(),
     ];
 
     return KeyedSubtree(

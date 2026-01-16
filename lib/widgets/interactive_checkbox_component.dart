@@ -437,3 +437,26 @@ class DragTargetIndentMd extends IndentMd {
     return child;
   }
 }
+
+/// Custom block parser for \[ ... \] style LaTeX blocks
+class LatexBracketBlockMd extends BlockMd {
+  @override
+  String get expString => r'^\\\[([\s\S]+?)\\\]';
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    if (match == null) return const SizedBox();
+
+    final mathContent = match.group(1) ?? '';
+
+    // logic based on GptMarkdown's LatexMathMultiLine
+    return config.latexBuilder?.call(
+          context,
+          mathContent,
+          config.style ?? const TextStyle(),
+          false, // Not inline
+        ) ??
+        const SizedBox();
+  }
+}
