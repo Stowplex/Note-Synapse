@@ -706,7 +706,10 @@ DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
 ''';
 
   @override
-  Map<String, dynamic> get inputSchema => {'type': 'object', 'properties': {}};
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': <String, dynamic>{},
+  };
 
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
