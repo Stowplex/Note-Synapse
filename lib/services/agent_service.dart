@@ -1286,11 +1286,17 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
 
   /// Resumes a paused task, optionally increasing its turn limit.
   void resumeTask(String taskId, {bool increaseLimit = false}) async {
+    // Ensure we unpause the agent globally so execution loop proceeds
+    _isPaused = false;
+    _currentCheckpoint = null;
+
     final task = _tasks.firstWhere((t) => t.id == taskId);
     if (increaseLimit) {
       final increment = await AgenticSettingsService.getTurnIncrement();
       task.maxTurns += increment;
     }
+
+    notifyListeners();
     // Restart execution
     executePlan();
   }
