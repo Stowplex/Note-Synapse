@@ -880,6 +880,39 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       if (_selectedBuiltInTools.contains(BuiltInToolsService.agentToolId)) {
         final agentService = context.read<AgentService>();
 
+        // SINGLETON GUARD: Check if we can start a new agent here
+        if (!agentService.canStartNewAgent(_conversation!.id)) {
+          // Show conflict dialog
+          final result = await _showAgentConflictDialog(agentService);
+
+          if (result == 'switch') {
+            final targetId = agentService.boundConversationId;
+            if (targetId != null && mounted) {
+              // Use pushReplacement to switch to the active conversation
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ConversationChatScreen(conversationId: targetId),
+                ),
+              );
+              return; // Stop flow
+            }
+          } else if (result == 'abort') {
+            agentService.abortCurrentTask();
+            // Continue execution below...
+          } else {
+            // Cancel or dismissed
+            setState(() {
+              _isSending = false;
+              _currentRequestId = null;
+            });
+            return; // Stop flow
+          }
+        }
+
+        // Bind to this conversation now that we are clear
+        agentService.bindToConversation(_conversation!.id);
+
         // Fetch available tools for the agent based on *current selection*
         final activeTools = _buildActiveToolsMap();
 
@@ -1490,6 +1523,36 @@ $historyBuffer
     } else if (source == 'draw') {
       await _openDrawingEditor();
     }
+  }
+
+  Future<String?> _showAgentConflictDialog(AgentService agentService) async {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Task in Progress'),
+        content: const Text(
+          'An agent task is currently running in another conversation. Do you want to switch to that task or abort it?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'abort'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Abort & Start New'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'switch'),
+            child: const Text('Switch to Task'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openDrawingEditor() async {

@@ -168,6 +168,16 @@ class AgentService extends ChangeNotifier {
     if (_isRunning && !_isPaused) {
       _isPaused = true;
       _currentThought = 'Pausing at next checkpoint...';
+
+      // Mark current in-progress task as manually paused if possible
+      // This helps UI distinguish between user pause and system pause (max turns)
+      for (final t in _tasks) {
+        if (t.status == AgentTaskStatus.inProgress) {
+          t.isManuallyPaused = true;
+          break; // Only one task runs at a time
+        }
+      }
+
       notifyListeners();
     }
   }
@@ -190,22 +200,45 @@ class AgentService extends ChangeNotifier {
 
   /// Binds this agent to a conversation.
   void bindToConversation(String conversationId) {
+    if (_boundConversationId != null &&
+        _boundConversationId != conversationId) {
+      // Switched conversations - ensure we don't leak state
+      clearState();
+    }
     _boundConversationId = conversationId;
   }
 
   /// Checks if a new agent can be started for the given conversation.
   /// Returns true if no agent is running/paused OR if it's the same conversation.
   bool canStartNewAgent(String? conversationId) {
-    // No agent running or paused - can start
+    // If we have no bound activity, we can start.
+    // If we bind to a new ID while idle, it's fine (bindToConversation handles the clear).
     if (!_isRunning && !_isPaused && _tasks.isEmpty) {
       return true;
     }
-    // Same conversation - can start (will replace current)
-    if (conversationId != null && conversationId == _boundConversationId) {
+
+    // If current bound ID is null (shouldn't happen if running), we can start.
+    if (_boundConversationId == null) {
       return true;
     }
+
+    // If incoming conversation ID is null, we can't verify safety.
+    if (conversationId == null) {
+      return false;
+    }
+
+    // Same conversation - can start/continue
+    if (conversationId == _boundConversationId) {
+      return true;
+    }
+
     // Different conversation while agent running/paused - cannot start
     return false;
+  }
+
+  /// Aborts the currently running task (for switching conversations).
+  void abortCurrentTask() {
+    stopExecution(); // This clears state and resets everything
   }
 
   // ... (nativeTools and dbSchema definitions remain the same) ...
@@ -274,7 +307,15 @@ class AgentService extends ChangeNotifier {
         // Check if all dependencies are completed
         for (final depName in t.dependsOn) {
           final depTask = nameToTask[depName];
-          if (depTask != null && depTask.status != AgentTaskStatus.completed) {
+          if (depTask == null) {
+            // CRITICAL: Dependency missing! Do not run this task.
+            // This prevents "pre-requisite task results missing" errors from LLM.
+            LoggerService.error(
+              'Task "${t.description}" depends on missing task "$depName". Skipping.',
+            );
+            return false;
+          }
+          if (depTask.status != AgentTaskStatus.completed) {
             return false; // Dependency not yet complete
           }
         }

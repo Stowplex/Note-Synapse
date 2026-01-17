@@ -756,6 +756,11 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
     AgentTask task,
     AgentService agentService,
   ) {
+    // DIFFERENTIATE: Manual Pause vs System Pause (Turn Limit)
+    final isTurnLimitRefusal =
+        !task.isManuallyPaused &&
+        task.result != null; // Result usually contains "Max turns reached"
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Container(
@@ -779,7 +784,9 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    task.result ?? 'Max turns reached',
+                    isTurnLimitRefusal
+                        ? (task.result ?? 'Max turns reached')
+                        : 'Task Paused by User', // Manual pause message
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.onTertiaryContainer,
@@ -809,13 +816,16 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                 const SizedBox(width: 6),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () =>
-                        agentService.resumeTask(task.id, increaseLimit: true),
+                    onPressed: () => isTurnLimitRefusal
+                        ? agentService.resumeTask(task.id, increaseLimit: true)
+                        : agentService.resumeTask(
+                            task.id,
+                          ), // Just resume if manual
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                     ),
                     child: Text(
-                      '+$_turnIncrement Turns',
+                      isTurnLimitRefusal ? '+$_turnIncrement Turns' : 'Resume',
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),

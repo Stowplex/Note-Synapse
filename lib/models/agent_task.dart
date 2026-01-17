@@ -67,6 +67,9 @@ class AgentTask {
   /// rather than created during initial planning.
   final bool isSpawnedDynamically;
 
+  /// True if this task was paused manually by the user, false if paused by system (e.g. max turns).
+  bool isManuallyPaused;
+
   AgentTask({
     required this.id,
     required this.description,
@@ -89,6 +92,7 @@ class AgentTask {
     List<String>? allowedTools,
     List<String>? contextNoteIds,
     List<String>? spawnedSubtaskIds,
+    this.isManuallyPaused = false,
   }) : dependsOn = dependsOn ?? [],
        toolNames = toolNames ?? [],
        executionHistory = executionHistory ?? [],
@@ -124,5 +128,6 @@ class AgentTask {
     'allowedTools': allowedTools,
     'contextNoteIds': contextNoteIds,
     'spawnedSubtaskIds': spawnedSubtaskIds,
+    'isManuallyPaused': isManuallyPaused,
   };
 }
