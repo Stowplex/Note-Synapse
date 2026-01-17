@@ -330,12 +330,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
                   )!.errorCreatingAppFromEdit(e.toString()),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Please check your API key and try again.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
               ],
             ),
             actions: [

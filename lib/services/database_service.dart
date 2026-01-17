@@ -2697,7 +2697,17 @@ class DatabaseService {
 
   Future<UserApp?> getUserApp(String id) async {
     final db = await database;
-    final maps = await db.query('user_apps', where: 'id = ?', whereArgs: [id]);
+    // Explicitly select columns excluding appState to avoid CursorWindow size limits
+    final maps = await db.rawQuery(
+      '''
+      SELECT id, uuid, name, description, steps, htmlContent, type, 
+             selectedRevisionId, author, license, createdAt, updatedAt
+      FROM user_apps
+      WHERE id = ?
+    ''',
+      [id],
+    );
+
     if (maps.isNotEmpty) {
       return _userAppFromMap(maps.first);
     }
