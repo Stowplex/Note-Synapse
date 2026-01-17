@@ -1704,5 +1704,19 @@
   "agentConflictSwitch": "Switch to Conversation",
   "editBlock": "Edit Block",
   "deleteBlock": "Delete Block",
-  "deleteBlockConfirmation": "Are you sure you want to delete this block? This action cannot be undone."
+  "deleteBlockConfirmation": "Are you sure you want to delete this block? This action cannot be undone.",
+  "expandSelectionAbove": "Expand Above",
+  "contractSelectionAbove": "Contract Above",
+  "expandSelectionBelow": "Expand Below",
+  "contractSelectionBelow": "Contract Below",
+  "editSelection": "Edit",
+  "deleteSelection": "Delete Blocks",
+  "confirmDeleteBlocks": "Are you sure you want to delete {count} blocks?",
+  "@confirmDeleteBlocks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -4032,4 +4032,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteBlockConfirmation => '您确定要删除此区块吗？此操作无法撤消。';
+
+  @override
+  String get expandSelectionAbove => '向上扩展';
+
+  @override
+  String get contractSelectionAbove => '向上收缩';
+
+  @override
+  String get expandSelectionBelow => '向下扩展';
+
+  @override
+  String get contractSelectionBelow => '向下收缩';
+
+  @override
+  String get editSelection => '编辑';
+
+  @override
+  String get deleteSelection => '删除区块';
+
+  @override
+  String confirmDeleteBlocks(int count) {
+    return '确定要删除 $count 个区块吗？';
+  }
 }

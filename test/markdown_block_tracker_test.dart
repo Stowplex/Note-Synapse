@@ -145,5 +145,80 @@ more text
         expect(result, contains('# Third'));
       });
     });
+    group('range operations', () {
+      test(
+        'deleteBlockRange removes multiple blocks and consumes structural newline',
+        () {
+          const content = 'Block 1\n\nBlock 2\n\nBlock 3';
+          final blocks = tracker.parseBlocks(content);
+          final visibleBlocks = blocks
+              .where((b) => b.content.trim().isNotEmpty)
+              .toList();
+
+          expect(visibleBlocks.length, 3);
+
+          // Delete Block 1 and Block 2
+          final toDelete = visibleBlocks.sublist(0, 2);
+          final result = tracker.deleteBlockRange(content, toDelete);
+
+          // B1 start: 0.
+          // B2 end: 16.
+          // deleteBlock consumes one trailing newline (at 16).
+          // end -> 17.
+          // content[17] is \n. content[18] starts B3.
+          // Result: "\nBlock 3".
+
+          expect(result, '\nBlock 3');
+        },
+      );
+
+      test(
+        'replaceBlockRange replaces multiple blocks with single content',
+        () {
+          const content = 'Block 1\n\nBlock 2\n\nBlock 3';
+          final blocks = tracker.parseBlocks(content);
+          final visibleBlocks = blocks
+              .where((b) => b.content.trim().isNotEmpty)
+              .toList();
+
+          // Replace Block 1 and Block 2 with "New Block"
+          final toReplace = visibleBlocks.sublist(0, 2);
+          final result = tracker.replaceBlockRange(
+            content,
+            toReplace,
+            'New Block',
+          );
+
+          // Range 0 to 16.
+          // substring(16) starts at 16 (\n).
+          // Result: "New Block\n\nBlock 3"
+
+          expect(result, 'New Block\n\nBlock 3');
+        },
+      );
+
+      test(
+        'deleteBlockRange handles non-contiguous blocks by deleting the whole range',
+        () {
+          const content = '# 1\n# 2\n# 3\n# 4';
+          final blocks = tracker.parseBlocks(content);
+          // Headers are contiguous lines here, no empty blocks between them in source
+          // # 1 (0-3). \n at 3.
+          // # 2 (4-7).
+
+          // Delete 1 and 3. Range is start(1) to end(3). Includes 2.
+          final toDelete = [blocks[0], blocks[2]];
+
+          final result = tracker.deleteBlockRange(content, toDelete);
+
+          // Block 3 end at 11. \n at 11.
+          // Consume \n -> 12.
+          // # 4 starts at 12.
+          // content[12..] is "# 4".
+
+          expect(result, '# 4');
+        },
+      );
+    });
   });
 }
