@@ -17,6 +17,12 @@ class BlockMarkdownBody extends StatefulWidget {
   final TextStyle? style;
   final BlockEditCallback? onBlockEditRequested;
 
+  // New props for selection
+  final Set<int> selectedBlockIndices;
+  final Function(List<MarkdownBlock>)? onBlocksParsed;
+  final Function(int index, MarkdownBlock block, Offset position)?
+  onBlockDropped;
+
   const BlockMarkdownBody({
     super.key,
     required this.content,
@@ -25,6 +31,9 @@ class BlockMarkdownBody extends StatefulWidget {
     this.onLinkTap,
     this.style,
     this.onBlockEditRequested,
+    this.selectedBlockIndices = const {},
+    this.onBlocksParsed,
+    this.onBlockDropped,
   });
 
   @override
@@ -51,6 +60,11 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
 
   void _parseBlocks() {
     _blocks = _tracker.parseBlocks(widget.content);
+    // Notify parent of parsed blocks (deferred to avoid build-phase callback issues if needed, but usually safe here if parent handles it well)
+    // Using post-frame callback just in case parent calls setState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onBlocksParsed?.call(_blocks);
+    });
   }
 
   @override
@@ -61,18 +75,27 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: _blocks.map((block) => _buildBlockItem(block)).toList(),
+      children: _blocks.asMap().entries.map((entry) {
+        return _buildBlockItem(entry.key, entry.value);
+      }).toList(),
     );
   }
 
-  Widget _buildBlockItem(MarkdownBlock block) {
+  Widget _buildBlockItem(int index, MarkdownBlock block) {
+    final isSelected = widget.selectedBlockIndices.contains(index);
+
     // We wrap each block in a DragTarget to handle the "Edit" drop
     return DragTarget<String>(
-      onWillAccept: (data) =>
-          data ==
+      onWillAcceptWithDetails: (details) =>
+          details.data ==
           'block_edit_drag', // Match kBlockEditDragData in NoteDetailScreen
-      onAccept: (data) {
-        widget.onBlockEditRequested?.call(block);
+      onAcceptWithDetails: (details) {
+        // Prefer onBlockDropped with index, fallback to legacy onBlockEditRequested
+        if (widget.onBlockDropped != null) {
+          widget.onBlockDropped!(index, block, details.offset);
+        } else {
+          widget.onBlockEditRequested?.call(block);
+        }
       },
       builder: (context, candidateData, rejectedData) {
         final isHovered = candidateData.isNotEmpty;
@@ -84,28 +107,24 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
             ? Colors.blue.shade900.withOpacity(0.3)
             : Colors.blue.shade50.withOpacity(0.5);
 
+        final showHighlight = isHovered || isSelected;
+
         return Container(
           decoration: BoxDecoration(
             border: Border.all(
-              color: isHovered ? highlightColor : Colors.transparent,
+              color: showHighlight ? highlightColor : Colors.transparent,
               width: 2,
             ),
             borderRadius: BorderRadius.circular(8),
-            color: isHovered ? backgroundColor : Colors.transparent,
+            // Only add background color for selection/hover feedback
+            color: showHighlight ? backgroundColor : Colors.transparent,
           ),
-          // We assume InteractiveCheckboxMarkdown can handle being given a snippet.
-          // Since we are parsing blocks, the snippet is valid markdown (e.g. a whole list, or a header).
           child: InteractiveCheckboxMarkdown(
             key: ValueKey(
               '${widget.noteId}_${block.startOffset}_${block.endOffset}',
             ),
             noteId: widget.noteId,
             originalContent: block.content,
-            // Internal content changes (checkboxes) need to be mapped back to the whole document.
-            // But InteractiveCheckboxMarkdown usually calls onContentChanged with the *whole* content?
-            // Wait, InteractiveCheckboxMarkdown was previously managing the *whole* note.
-            // If we give it just a snippet, it will callback with the changed snippet (e.g. checkbox toggled).
-            // We need to patch that back into the full document.
             onContentChanged: (newBlockContent) {
               _handleBlockContentChanged(block, newBlockContent);
             },
@@ -113,8 +132,6 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
             style: widget.style,
             maxLines: null,
             overflow: null,
-            // Drag-to-edit is now handled by this outer wrapper,
-            // so we don't pass onBlockEditRequested to the child.
           ),
         );
       },
@@ -124,8 +141,6 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
   void _handleBlockContentChanged(MarkdownBlock block, String newBlockContent) {
     if (widget.onContentChanged == null) return;
 
-    // We need to replace the block in the original full content.
-    // Using the block's offsets which are valid for 'widget.content'.
     final newFullContent = _tracker.replaceBlock(
       widget.content,
       block,

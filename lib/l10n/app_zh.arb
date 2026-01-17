@@ -1644,5 +1644,19 @@
   "agentConflictSwitch": "切换到会话",
   "editBlock": "编辑区块",
   "deleteBlock": "删除区块",
-  "deleteBlockConfirmation": "您确定要删除此区块吗？此操作无法撤消。"
+  "deleteBlockConfirmation": "您确定要删除此区块吗？此操作无法撤消。",
+  "expandSelectionAbove": "向上扩展",
+  "contractSelectionAbove": "向上收缩",
+  "expandSelectionBelow": "向下扩展",
+  "contractSelectionBelow": "向下收缩",
+  "editSelection": "编辑",
+  "deleteSelection": "删除区块",
+  "confirmDeleteBlocks": "确定要删除 {count} 个区块吗？",
+  "@confirmDeleteBlocks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

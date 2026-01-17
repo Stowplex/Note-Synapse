@@ -7327,6 +7327,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to delete this block? This action cannot be undone.'**
   String get deleteBlockConfirmation;
+
+  /// No description provided for @expandSelectionAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand Above'**
+  String get expandSelectionAbove;
+
+  /// No description provided for @contractSelectionAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Contract Above'**
+  String get contractSelectionAbove;
+
+  /// No description provided for @expandSelectionBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand Below'**
+  String get expandSelectionBelow;
+
+  /// No description provided for @contractSelectionBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Contract Below'**
+  String get contractSelectionBelow;
+
+  /// No description provided for @editSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editSelection;
+
+  /// No description provided for @deleteSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Blocks'**
+  String get deleteSelection;
+
+  /// No description provided for @confirmDeleteBlocks.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {count} blocks?'**
+  String confirmDeleteBlocks(int count);
 }
 
 class _AppLocalizationsDelegate

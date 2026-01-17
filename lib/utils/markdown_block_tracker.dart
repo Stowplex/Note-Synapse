@@ -338,6 +338,55 @@ class MarkdownBlockTracker {
 
     return content.substring(0, block.startOffset) + content.substring(end);
   }
+
+  // Deletes a range of blocks from the content.
+  String deleteBlockRange(String content, List<MarkdownBlock> blocks) {
+    if (blocks.isEmpty) return content;
+
+    // Find the total range
+    int start = blocks.first.startOffset;
+    int end = blocks.first.endOffset;
+
+    for (final block in blocks) {
+      if (block.startOffset < start) start = block.startOffset;
+      if (block.endOffset > end) end = block.endOffset;
+    }
+
+    // Consume the trailing newline of the last block (defined by end) if present
+    if (end < content.length && content[end] == '\n') {
+      end++;
+    }
+
+    if (start < 0 || end > content.length) {
+      return content;
+    }
+
+    return content.substring(0, start) + content.substring(end);
+  }
+
+  // Replaces a range of blocks with new content.
+  String replaceBlockRange(
+    String content,
+    List<MarkdownBlock> blocks,
+    String newContent,
+  ) {
+    if (blocks.isEmpty) return content;
+
+    // Find the total range
+    int start = blocks.first.startOffset;
+    int end = blocks.first.endOffset;
+
+    for (final block in blocks) {
+      if (block.startOffset < start) start = block.startOffset;
+      if (block.endOffset > end) end = block.endOffset;
+    }
+
+    if (start < 0 || end > content.length) {
+      return content;
+    }
+
+    return content.substring(0, start) + newContent + content.substring(end);
+  }
 }
 
 /// Syntax for block LaTeX: \[ ... \]

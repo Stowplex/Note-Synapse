@@ -4223,4 +4223,27 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deleteBlockConfirmation =>
       'Are you sure you want to delete this block? This action cannot be undone.';
+
+  @override
+  String get expandSelectionAbove => 'Expand Above';
+
+  @override
+  String get contractSelectionAbove => 'Contract Above';
+
+  @override
+  String get expandSelectionBelow => 'Expand Below';
+
+  @override
+  String get contractSelectionBelow => 'Contract Below';
+
+  @override
+  String get editSelection => 'Edit';
+
+  @override
+  String get deleteSelection => 'Delete Blocks';
+
+  @override
+  String confirmDeleteBlocks(int count) {
+    return 'Are you sure you want to delete $count blocks?';
+  }
 }
