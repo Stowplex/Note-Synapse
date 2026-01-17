@@ -326,11 +326,17 @@ class MarkdownBlockTracker {
 
   // Deletes a block from the content.
   String deleteBlock(String content, MarkdownBlock block) {
-    // Similar to replace but with empty string,
-    // AND maybe cleanup surrounding newlines?
-    // For safe robustness, just replace with empty string first.
-    // Or maybe a single newline if it leaves a gap?
-    return replaceBlock(content, block, '');
+    var end = block.endOffset;
+    // Consume the trailing newline if present to remove the line structure
+    if (end < content.length && content[end] == '\n') {
+      end++;
+    }
+
+    if (block.startOffset < 0 || end > content.length) {
+      return content;
+    }
+
+    return content.substring(0, block.startOffset) + content.substring(end);
   }
 }
 
