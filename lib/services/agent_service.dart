@@ -10,6 +10,7 @@ import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/model_config.dart';
 import 'tools/note_tools.dart';
+import 'tools/read_task_result_tool.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
 import 'context_manager_service.dart';
@@ -395,22 +396,51 @@ class AgentService extends ChangeNotifier {
           } else if (task.isSpawnedDynamically) {
             scopedContext = _contextManager.buildContextForSubtask(taskContext);
           } else {
-            // Planner-created research task - collect dependency results
-            final dependencyResults = <String>[];
+            // Planner-created research task - collect structured dependency info
+            final structuredDeps = <DependencyInfo>[];
             for (final depName in task.dependsOn) {
               final depTask = _tasks
                   .where((t) => t.name == depName)
                   .firstOrNull;
               if (depTask != null &&
                   depTask.status == AgentTaskStatus.completed) {
-                dependencyResults.add(
-                  '### ${depTask.description}\n${depTask.condensedSummary ?? depTask.result ?? "Completed"}',
+                final content =
+                    depTask.condensedSummary ?? depTask.result ?? 'Completed';
+
+                // Check if corresponding context node has structured result
+                final depContext = depTask.contextNodeId != null
+                    ? _contextManager.getContext(depTask.contextNodeId!)
+                    : null;
+
+                String toc = '';
+                bool isShort = true;
+
+                if (depContext?.structuredResult != null) {
+                  final sr = depContext!.structuredResult!;
+                  toc = sr.toc;
+                  isShort = sr.isShortSync();
+                } else {
+                  // Fallback: estimate based on word count
+                  final wordCount = content.split(RegExp(r'\s+')).length;
+                  isShort = wordCount < 1000;
+                  toc =
+                      'No structured TOC available. Content: $wordCount words. Use read_task_result(task_id="${depTask.id}", mode="full") to read.';
+                }
+
+                structuredDeps.add(
+                  DependencyInfo(
+                    taskId: depTask.id,
+                    name: depName,
+                    content: content,
+                    toc: toc,
+                    isShort: isShort,
+                  ),
                 );
               }
             }
             scopedContext = _contextManager.buildContextForResearchTask(
               taskContext,
-              dependencyResults: dependencyResults,
+              structuredDependencies: structuredDeps,
             );
           }
 
@@ -903,7 +933,15 @@ If no findings worth preserving, return: []
     CreateNotesTool(),
     DeleteNoteTool(),
   ];
-  List<NativeTool> get nativeTools => List.unmodifiable(_nativeTools);
+
+  /// Cached ReadTaskResultTool instance (requires contextManager)
+  ReadTaskResultTool? _readTaskResultTool;
+
+  /// Gets all native tools including the read_task_result tool.
+  List<NativeTool> get nativeTools {
+    _readTaskResultTool ??= ReadTaskResultTool(_contextManager);
+    return List.unmodifiable([..._nativeTools, _readTaskResultTool!]);
+  }
 
   Map<String, String> getToolToServiceMap() {
     final map = <String, String>{};
@@ -1535,18 +1573,39 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     // So if the plan was specific about tools, we should probably restrict `task.allowedTools` to ONLY `task.toolNames`.
     // If `task.toolNames` is NOT empty, we restrict execution to those tools?
 
+    // Tool availability priority:
+    // 1. task.allowedTools (user's explicit per-step restrictions via UI) - RESPECTED
+    // 2. If empty, use all enabled tools
+    // Note: task.toolNames (planner's suggestions) are hints only, not filters
     List<NativeTool> allowedNativeFn() {
-      // Use enabledNativeTools to respect tool config settings
-      if (task.toolNames.isEmpty) return enabledNativeTools;
-      return enabledNativeTools
-          .where((t) => task.toolNames.contains(t.name))
+      // read_task_result is ALWAYS available (internal mechanism for TOC-based context)
+      final readTaskResultTool = enabledNativeTools
+          .where((t) => t.name == 'read_task_result')
           .toList();
+
+      // User's per-step restrictions take priority
+      if (task.allowedTools.isNotEmpty) {
+        final userFiltered = enabledNativeTools
+            .where((t) => task.allowedTools.contains(t.name))
+            .toList();
+        // Ensure read_task_result is always included
+        if (!userFiltered.any((t) => t.name == 'read_task_result')) {
+          return [...userFiltered, ...readTaskResultTool];
+        }
+        return userFiltered;
+      }
+      // No user restriction - all enabled tools available
+      return enabledNativeTools;
     }
 
     List<McpTool> allowedExternalFn() {
       final all = _externalTools.values.expand((x) => x).toList();
-      if (task.toolNames.isEmpty) return all;
-      return all.where((t) => task.toolNames.contains(t.name)).toList();
+      // User's per-step restrictions take priority
+      if (task.allowedTools.isNotEmpty) {
+        return all.where((t) => task.allowedTools.contains(t.name)).toList();
+      }
+      // No user restriction - all external tools available
+      return all;
     }
 
     final currentAllowedNative = allowedNativeFn();
@@ -1629,14 +1688,11 @@ Current task depth: ${task.depth} / $kMaxSubtaskDepth
 You are an intelligent agent working on a task.
 Task Description: "${task.description}"
 
-Global Context (Results from previous tasks):
+Global Context (includes current task execution log in <ExecutionLog> section):
 $globalContext
 
-Available Tools (You are restricted to these if specified in plan):
+Available Tools (read_task_result is always available for fetching context):
 $toolsDesc
-
-Execution History:
-${task.executionHistory.map((h) => h.toString()).join('\n')}
 
 ## ITERATION PROTOCOL
 

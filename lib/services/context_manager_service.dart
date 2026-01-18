@@ -1,4 +1,5 @@
 import '../models/context_node.dart';
+import '../models/task_result_storage.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
 import 'logger_service.dart';
@@ -19,6 +20,23 @@ Future<int> getModelContextBudget() async {
   final compactionThreshold =
       await AgenticSettingsService.getCompactionThreshold();
   return compactionThreshold < modelLimit ? compactionThreshold : modelLimit;
+}
+
+/// Structured info about a dependency task for TOC-based rendering.
+class DependencyInfo {
+  final String taskId;
+  final String name;
+  final String content;
+  final String toc;
+  final bool isShort;
+
+  DependencyInfo({
+    required this.taskId,
+    required this.name,
+    required this.content,
+    required this.toc,
+    required this.isShort,
+  });
 }
 
 /// Service for managing hierarchical context in agent execution.
@@ -130,20 +148,43 @@ class ContextManagerService {
     buffer.writeln('</GlobalObjective>');
     buffer.writeln();
 
-    // Add ancestor context (condensed summaries only)
+    // Add ancestor context (TOC-based for lazy loading)
     final ancestors = _getAncestors(node);
     if (ancestors.isNotEmpty) {
       buffer.writeln('<ParentContext>');
       for (final ancestor in ancestors) {
-        buffer.writeln('<AncestorTask objective="${ancestor.objective}">');
-        if (ancestor.summary != null) {
+        buffer.writeln(
+          '<AncestorTask taskId="${ancestor.id}" goal="${ancestor.objective}">',
+        );
+        final result = ancestor.structuredResult;
+        if (result != null) {
+          // Use structured result with TOC-based lazy loading
+          if (result.isShortSync()) {
+            // Short results: include inline
+            buffer.writeln('<Result type="full">');
+            buffer.writeln(result.fullResult);
+            buffer.writeln('</Result>');
+          } else {
+            // Long results: include TOC only, use read_task_result for details
+            buffer.writeln(
+              '<Result type="toc" hint="Use read_task_result tool to fetch sections">',
+            );
+            buffer.writeln(result.toc);
+            buffer.writeln('</Result>');
+          }
+        } else if (ancestor.summary != null) {
+          // Fallback: use summary if no structured result
+          buffer.writeln('<Result type="summary">');
           buffer.writeln(ancestor.summary);
+          buffer.writeln('</Result>');
         } else {
-          // Include recent log entries if no summary yet
+          // Fallback: include recent log entries if no summary yet
           final recentLog = ancestor.executionLog.length > 5
               ? ancestor.executionLog.sublist(ancestor.executionLog.length - 5)
               : ancestor.executionLog;
+          buffer.writeln('<Result type="log-preview">');
           buffer.writeln(recentLog.join('\n'));
+          buffer.writeln('</Result>');
         }
         buffer.writeln('</AncestorTask>');
       }
@@ -151,13 +192,36 @@ class ContextManagerService {
       buffer.writeln();
     }
 
-    // Add completed sibling summaries
+    // Add completed sibling summaries (TOC-based to save tokens)
     final siblings = _getCompletedSiblings(node);
     if (siblings.isNotEmpty) {
-      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
+      buffer.writeln(
+        '<CompletedSiblings note="Do NOT duplicate their work. Use read_task_result to fetch details.">',
+      );
       for (final sibling in siblings) {
-        buffer.writeln('<Sibling objective="${sibling.objective}">');
-        buffer.writeln(sibling.summary ?? sibling.executionLog.join('\n'));
+        buffer.writeln(
+          '<Sibling id="${sibling.id}" objective="${sibling.objective}">',
+        );
+        final sr = sibling.structuredResult;
+        if (sr != null) {
+          if (sr.isShortSync()) {
+            // Short results: brief summary inline
+            buffer.writeln(
+              '<Result type="summary">${sr.fullResult.length > 200 ? sr.fullResult.substring(0, 200) + "..." : sr.fullResult}</Result>',
+            );
+          } else {
+            // Long results: TOC only
+            buffer.writeln(
+              '<Result type="toc" hint="Use read_task_result(${sibling.id}) for details">${sr.toc}</Result>',
+            );
+          }
+        } else {
+          // Fallback: brief summary
+          final summary = sibling.summary ?? 'Completed';
+          buffer.writeln(
+            '<Result type="summary">${summary.length > 200 ? summary.substring(0, 200) + "..." : summary}</Result>',
+          );
+        }
         buffer.writeln('</Sibling>');
       }
       buffer.writeln('</CompletedSiblings>');
@@ -219,16 +283,62 @@ class ContextManagerService {
   /// - Includes completed sibling summaries for context
   /// - Includes the task's own execution log
   ///
+  /// Dependencies use TOC-based rendering:
+  /// - Short results: included inline
+  /// - Long results: TOC only + DependencyHint to use read_task_result
+  ///
   /// This is used for regular planner-created tasks that are NOT the final
   /// deliverable and NOT dynamically spawned subtasks.
   String buildContextForResearchTask(
     ContextNode node, {
     List<String> dependencyResults = const [],
+    List<DependencyInfo> structuredDependencies = const [],
   }) {
     final buffer = StringBuffer();
 
-    // Add dependency results (what this task needs from prior tasks)
-    if (dependencyResults.isNotEmpty) {
+    // Use structured dependencies if available (TOC-based rendering)
+    if (structuredDependencies.isNotEmpty) {
+      final tocDependencies = <DependencyInfo>[];
+
+      buffer.writeln('<DependencyResults>');
+      for (final dep in structuredDependencies) {
+        buffer.writeln(
+          '<Dependency taskId="${dep.taskId}" name="${dep.name}">',
+        );
+        if (dep.isShort) {
+          // Short results: include inline
+          buffer.writeln('<Result type="full">');
+          buffer.writeln(dep.content);
+          buffer.writeln('</Result>');
+        } else {
+          // Long results: include TOC only
+          buffer.writeln('<Result type="toc">');
+          buffer.writeln(dep.toc);
+          buffer.writeln('</Result>');
+          tocDependencies.add(dep);
+        }
+        buffer.writeln('</Dependency>');
+      }
+      buffer.writeln('</DependencyResults>');
+      buffer.writeln();
+
+      // Add DependencyHint for long results that need fetching
+      if (tocDependencies.isNotEmpty) {
+        buffer.writeln('<DependencyHint>');
+        buffer.writeln(
+          'The following dependencies have TOC-only results. Use read_task_result tool to fetch full content:',
+        );
+        for (final dep in tocDependencies) {
+          buffer.writeln(
+            '- "${dep.name}" (id: ${dep.taskId}): Use read_task_result with task_id="${dep.taskId}" mode="full" or mode="section"',
+          );
+        }
+        buffer.writeln('</DependencyHint>');
+        buffer.writeln();
+      }
+    }
+    // Fallback: Use legacy string-based dependency results
+    else if (dependencyResults.isNotEmpty) {
       buffer.writeln('<DependencyResults>');
       for (final result in dependencyResults) {
         buffer.writeln(result);
@@ -570,5 +680,63 @@ If this is research/analysis, output structured findings.
     for (final child in node.children) {
       _indexContextTree(child);
     }
+  }
+
+  // ==========================================================================
+  // TOC Generation for Lazy Loading
+  // ==========================================================================
+
+  /// Generates a TaskResultStorage with TOC from a task result.
+  ///
+  /// Extracts markdown headers to create navigable sections that can be
+  /// retrieved on-demand via the read_task_result tool.
+  TaskResultStorage generateTocFromResult(
+    String taskId,
+    String goal,
+    String result,
+  ) {
+    final sections = <ResultSection>[];
+    final headerPattern = RegExp(r'^(#{1,6})\s+(.+)$', multiLine: true);
+    final breadcrumbStack = <String>[];
+
+    int? lastEnd;
+    for (final match in headerPattern.allMatches(result)) {
+      // Close previous section
+      if (sections.isNotEmpty && lastEnd == null) {
+        sections.last = ResultSection(
+          breadcrumb: sections.last.breadcrumb,
+          title: sections.last.title,
+          startOffset: sections.last.startOffset,
+          endOffset: match.start,
+        );
+      }
+
+      final level = match.group(1)!.length;
+      final title = match.group(2)!.trim();
+
+      // Build breadcrumb path
+      while (breadcrumbStack.length >= level) {
+        breadcrumbStack.removeLast();
+      }
+      breadcrumbStack.add('${'#' * level} $title');
+      final breadcrumb = breadcrumbStack.join(' > ');
+
+      sections.add(
+        ResultSection(
+          breadcrumb: breadcrumb,
+          title: title,
+          startOffset: match.start,
+          endOffset: result.length, // Will be updated when next section found
+        ),
+      );
+      lastEnd = null;
+    }
+
+    return TaskResultStorage(
+      taskId: taskId,
+      goal: goal,
+      fullResult: result,
+      sections: sections,
+    );
   }
 }

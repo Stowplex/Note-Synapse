@@ -1,3 +1,5 @@
+import 'task_result_storage.dart';
+
 /// Status of a context node in the hierarchical execution tree.
 enum ContextNodeStatus { pending, active, completed, failed, paused }
 
@@ -44,6 +46,10 @@ class ContextNode {
 
   /// Tools available within this context scope.
   final List<String> allowedTools;
+
+  /// Structured result with TOC for lazy loading of task results.
+  /// Set when task completes, enables on-demand section retrieval.
+  TaskResultStorage? structuredResult;
 
   ContextNode({
     required this.id,

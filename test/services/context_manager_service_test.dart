@@ -97,10 +97,11 @@ void main() {
 
       final context = service.buildContextForNode(child);
 
-      expect(context, contains('Global Objective'));
+      expect(context, contains('GlobalObjective'));
       expect(context, contains('Research project'));
       expect(context, contains('Global progress made'));
-      expect(context, contains('Current Task: Research subtopic'));
+      expect(context, contains('CurrentTask'));
+      expect(context, contains('Research subtopic'));
       expect(context, contains('Started research'));
       expect(context, contains('Found useful data'));
     });
@@ -122,7 +123,7 @@ void main() {
 
       final context = service.buildContextForNode(current);
 
-      expect(context, contains('Related Completed Work'));
+      expect(context, contains('CompletedSiblings'));
       expect(context, contains('Sibling 1'));
       expect(context, contains('Sibling 1 results'));
     });

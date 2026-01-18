@@ -13,6 +13,7 @@ class AgenticSettingsService {
   static const String _findingMaxWordsKey = 'agentic_finding_max_words';
   static const String _maxTurnsKey = 'agentic_max_turns';
   static const String _turnIncrementKey = 'agentic_turn_increment';
+  static const String _tocInlineThresholdKey = 'agentic_toc_inline_threshold';
 
   // Defaults
   static const int defaultCompactionThreshold = 100000;
@@ -20,6 +21,7 @@ class AgenticSettingsService {
   static const int defaultFindingMaxWords = 500;
   static const int defaultMaxTurns = 10;
   static const int defaultTurnIncrement = 10;
+  static const int defaultTocInlineThreshold = 1000; // words
 
   // Constraints
   static const int minCompactionThreshold = 10000;
@@ -32,6 +34,8 @@ class AgenticSettingsService {
   static const int maxMaxTurns = 100;
   static const int minTurnIncrement = 5;
   static const int maxTurnIncrement = 30;
+  static const int minTocInlineThreshold = 100;
+  static const int maxTocInlineThreshold = 5000;
 
   // ==========================================================================
   // Compaction Threshold
@@ -225,6 +229,46 @@ class AgenticSettingsService {
     } catch (e, stackTrace) {
       LoggerService.error(
         'Failed to save turn increment: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // ==========================================================================
+  // TOC Inline Threshold
+  // ==========================================================================
+
+  /// Gets the word count threshold for inlining task results vs TOC.
+  /// Results shorter than this threshold are included inline; longer results show TOC only.
+  static Future<int> getTocInlineThreshold() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_tocInlineThresholdKey);
+      if (stored == null) {
+        return defaultTocInlineThreshold;
+      }
+      return stored.clamp(minTocInlineThreshold, maxTocInlineThreshold);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to read TOC inline threshold: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return defaultTocInlineThreshold;
+    }
+  }
+
+  /// Sets the TOC inline threshold (in words).
+  static Future<void> setTocInlineThreshold(int value) async {
+    final sanitized = value.clamp(minTocInlineThreshold, maxTocInlineThreshold);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_tocInlineThresholdKey, sanitized);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to save TOC inline threshold: $e',
         error: e,
         stackTrace: stackTrace,
       );
