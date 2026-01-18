@@ -181,5 +181,126 @@ This confirms the schema.
         expect(task.result, contains('"some_key":"some_value"'));
       },
     );
+
+    test(
+      'Case 6: Regular Task, Valid JSON NO Action -> Error in History',
+      () async {
+        final task = AgentTask(
+          id: '6',
+          description: 'Regular task with data json',
+          isFinalDeliverable: false,
+        );
+
+        // JSON that is valid but has no action keys
+        final jsonData = jsonEncode({
+          "data": "some value",
+          "nested": {"id": 1},
+        });
+        final llmResponse = 'Here is some data:\n```json\n$jsonData\n```';
+
+        await runStep(task, llmResponse);
+
+        // Expectation:
+        // It is NOT a final deliverable, so the "discard JSON" validation does NOT run.
+        // It parses the JSON, checks keys, finds none.
+        // Ends up at: if (toolName == null) ... "Error: Missing 'tool' or 'answer' key."
+        expect(task.status, isNot(AgentTaskStatus.completed));
+        expect(
+          task.executionHistory.any(
+            (h) => h.contains("Error: Missing 'tool' or 'answer' key"),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'Case 7: Regular Task, Malformed JSON WITH Intent -> Verdict/Fallback',
+      () async {
+        final task = AgentTask(
+          id: '7',
+          description: 'Regular task malformed intent',
+          isFinalDeliverable: false,
+          toolNames: ['search_notes'],
+          allowedTools: ['search_notes'],
+        );
+
+        // Malformed JSON (missing closing brace) but has "tool" key
+        final malformedJson =
+            '{"tool": "search_notes", "args": {"query": "restore"}';
+
+        // We expect the system to detect "tool" key and trigger Verdict logic.
+        // The Verdict logic sends a prompt to LLM.
+        // We need to mock the Verdict response too.
+        // 1. Initial response (malformed)
+        // 2. Verdict response (corrected)
+        int callCount = 0;
+        agentService.llmGenerator = (prompt) async {
+          callCount++;
+          if (callCount == 1) {
+            return 'My thought: try search.\n```json\n$malformedJson\n```';
+          } else {
+            // Verdict prompt should look like: "Was this response: 1. A completed ANSWER... 2. A TOOL..."
+            if (prompt.contains('<verdict>answer|tool|think</verdict>')) {
+              return '<verdict>tool</verdict><content>search_notes with query restore</content>';
+            }
+            return 'Unexpected prompt';
+          }
+        };
+
+        await agentService.performTaskForTest(task, "Context");
+
+        // Expectation:
+        // It fell into Verdict logic because of looksLikeAgentAction recovery.
+        // Verdict logic parsed "tool" and added "Tool intent detected but malformed" to history.
+        expect(
+          task.executionHistory.any(
+            (h) => h.contains('Tool intent detected but malformed'),
+          ),
+          isTrue,
+          reason:
+              'Execution history should contain malformed tool detection message',
+        );
+      },
+    );
+
+    test(
+      'Case 8: Regular Task, Malformed JSON NO Intent -> Error in History',
+      () async {
+        final task = AgentTask(
+          id: '8',
+          description: 'Regular task malformed garbage',
+          isFinalDeliverable: false,
+        );
+
+        // Malformed JSON (missing brace) AND NO intent keys
+        final malformedJson = '{"data": "garbage"';
+
+        agentService.llmGenerator = (prompt) async {
+          return 'Here is garbage:\n```json\n$malformedJson\n```';
+        };
+
+        await runStep(
+          task,
+          'placeholder - ignored because we set llmGenerator above',
+        );
+
+        // Expectation:
+        // Parsing fails. looksLikeAgentAction returns false.
+        // Falls through to bottom parsing block.
+        // Parser fails again.
+        // Adds "Error: Invalid JSON" to history.
+        expect(
+          task.executionHistory.any(
+            (h) =>
+                h.contains('Error: Invalid JSON') ||
+                h.contains('Error: No JSON action found'),
+          ),
+          isTrue,
+          reason:
+              'Execution history should contain Invalid JSON error or No JSON action found error',
+        );
+      },
+    );
   });
 }

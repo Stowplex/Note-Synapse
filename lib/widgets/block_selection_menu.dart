@@ -81,6 +81,12 @@ class BlockSelectionMenu extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.edit),
               tooltip: l10n.editSelection,
+              onPressed: onEdit,
+            ),
+            // Delete
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              tooltip: l10n.deleteSelection,
               onPressed: onDelete,
             ),
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),

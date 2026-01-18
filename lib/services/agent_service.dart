@@ -1734,35 +1734,48 @@ $formatInstructions
       String? jsonStr = extractJsonFromResponse(processedResponse);
       String thought = '';
 
+      Map<String, dynamic>? decision;
+
       if (jsonStr != null) {
-        // Try to find where the JSON started to extract the thought
-        final idx = processedResponse.indexOf(jsonStr);
-        if (idx > 0) {
-          thought = processedResponse.substring(0, idx).trim();
-          // Strip trailing JSON fence markers (```json, ```)
-          thought = thought
-              .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
-              .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
-              .trim();
+        // Try parsing first to handle malformed recovery
+        try {
+          decision = jsonDecode(jsonStr) as Map<String, dynamic>;
+        } catch (e) {
+          // Failed to decode. Check if it looks like an agent action to recover intent.
+          if (looksLikeAgentAction(jsonStr)) {
+            // It has intent, but is malformed. Trigger verdict/fallback.
+            jsonStr = null;
+            decision = null;
+          }
         }
 
-        // VALIDATION:
-        // If this is a final deliverable, we must be careful not to mistake
-        // code snippets or data in the report as an agent action.
-        // We check if the JSON actually contains a valid action key.
-        if (task.isFinalDeliverable) {
-          try {
-            final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
-            if (!isAgentAction(parsed)) {
-              // It's JSON, but not an action. It's likely part of the report text.
-              // Treat it as text by ignoring the JSON extraction.
+        if (jsonStr != null) {
+          // Try to find where the JSON started to extract the thought
+          final idx = processedResponse.indexOf(jsonStr);
+          if (idx > 0) {
+            thought = processedResponse.substring(0, idx).trim();
+            // Strip trailing JSON fence markers (```json, ```)
+            thought = thought
+                .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
+                .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+                .trim();
+          }
+
+          // VALIDATION:
+          // If this is a final deliverable, we must be careful not to mistake
+          // code snippets or data in the report as an agent action.
+          if (task.isFinalDeliverable) {
+            if (decision != null) {
+              if (!isAgentAction(decision)) {
+                // It's JSON, but not an action. likely part of the report.
+                jsonStr = null;
+                decision = null;
+                thought = '';
+              }
+            } else {
+              // Malformed JSON and no intent detected. Treat as text.
               jsonStr = null;
-              thought = ''; // Reset thought as it was derived from JSON split
             }
-          } catch (e) {
-            // If we can't parse it here (odd, since extractJson found it),
-            // play it safe and ignore it.
-            jsonStr = null;
           }
         }
       }
@@ -1892,16 +1905,20 @@ Properly extracted content from the JSON string.
         return;
       }
 
-      Map<String, dynamic> decision;
-      try {
-        decision = jsonDecode(jsonStr);
-      } catch (e) {
-        task.executionHistory.add("Error: Invalid JSON: $e");
-        return;
+      Map<String, dynamic> validDecision;
+      if (decision != null) {
+        validDecision = decision!;
+      } else {
+        try {
+          validDecision = jsonDecode(jsonStr) as Map<String, dynamic>;
+        } catch (e) {
+          task.executionHistory.add("Error: Invalid JSON: $e");
+          return;
+        }
       }
 
-      if (decision.containsKey('answer')) {
-        final answerContent = decision['answer'].toString();
+      if (validDecision.containsKey('answer')) {
+        final answerContent = validDecision['answer'].toString();
         task.result = answerContent;
         task.status = AgentTaskStatus.completed;
         // Store full answer content for findings extraction and context propagation
@@ -1914,8 +1931,8 @@ Properly extracted content from the JSON string.
       }
 
       // Handle "think" action - pure reasoning on existing context
-      if (decision.containsKey('think')) {
-        final thinkContent = decision['think'] as String?;
+      if (validDecision.containsKey('think')) {
+        final thinkContent = validDecision['think'] as String?;
         if (thinkContent != null && thinkContent.isNotEmpty) {
           task.executionHistory.add('Analysis: $thinkContent');
           _contextManager
@@ -1930,8 +1947,8 @@ Properly extracted content from the JSON string.
       }
 
       // Handle "spawn_subtasks" action - delegate work to 1-5 child tasks
-      if (decision.containsKey('spawn_subtasks')) {
-        final subtasksList = decision['spawn_subtasks'] as List?;
+      if (validDecision.containsKey('spawn_subtasks')) {
+        final subtasksList = validDecision['spawn_subtasks'] as List?;
         if (subtasksList != null && subtasksList.isNotEmpty) {
           await _handleSpawnSubtasks(
             task,
@@ -1941,8 +1958,8 @@ Properly extracted content from the JSON string.
         }
       }
 
-      final toolName = decision['tool'] as String?;
-      final args = decision['args'] as Map<String, dynamic>? ?? {};
+      final toolName = validDecision['tool'] as String?;
+      final args = validDecision['args'] as Map<String, dynamic>? ?? {};
 
       if (toolName == null) {
         task.executionHistory.add("Error: Missing 'tool' or 'answer' key.");

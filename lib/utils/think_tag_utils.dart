@@ -181,3 +181,14 @@ bool isAgentAction(Map<String, dynamic> json) {
       json.containsKey('think') ||
       json.containsKey('spawn_subtasks');
 }
+
+/// Checks if a string likely contains an agent action key (without parsing).
+/// Use this for fallback heuristics when JSON parsing fails.
+bool looksLikeAgentAction(String content) {
+  final lower = content.toLowerCase();
+  // We check for "key": pattern to be slightly more confident it's a JSON key
+  return lower.contains('"answer"') ||
+      lower.contains('"tool"') ||
+      lower.contains('"think"') ||
+      lower.contains('"spawn_subtasks"');
+}
