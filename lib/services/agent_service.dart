@@ -361,10 +361,33 @@ class AgentService extends ChangeNotifier {
           await _contextManager.checkAndCompact(taskContext);
 
           // Build scoped context for this task
-          // Final deliverable tasks get synthesis context with all accumulated findings
-          final scopedContext = task.isFinalDeliverable
-              ? _contextManager.buildSynthesisContext(taskContext)
-              : _contextManager.buildContextForNode(taskContext);
+          // - Final deliverable tasks get synthesis context with accumulated findings
+          // - Dynamically spawned subtasks get isolated context (briefing already in log)
+          // - Planner-created research tasks get focused context (no redundant objectives)
+          final String scopedContext;
+          if (task.isFinalDeliverable) {
+            scopedContext = _contextManager.buildSynthesisContext(taskContext);
+          } else if (task.isSpawnedDynamically) {
+            scopedContext = _contextManager.buildContextForSubtask(taskContext);
+          } else {
+            // Planner-created research task - collect dependency results
+            final dependencyResults = <String>[];
+            for (final depName in task.dependsOn) {
+              final depTask = _tasks
+                  .where((t) => t.name == depName)
+                  .firstOrNull;
+              if (depTask != null &&
+                  depTask.status == AgentTaskStatus.completed) {
+                dependencyResults.add(
+                  '### ${depTask.description}\n${depTask.condensedSummary ?? depTask.result ?? "Completed"}',
+                );
+              }
+            }
+            scopedContext = _contextManager.buildContextForResearchTask(
+              taskContext,
+              dependencyResults: dependencyResults,
+            );
+          }
 
           // Include attached notes context (global + task-specific)
           final attachedNotesContext = await _buildAttachedNotesContext(task);
@@ -782,16 +805,11 @@ If no findings worth preserving, return: []
   /// Includes details as a list of bullet points.
   List<Map<String, dynamic>> _parseFindings(String response) {
     try {
-      // Strip <think> tags from response before parsing
-      final thinkResult = stripThinkTags(response);
-      String cleanResponse = thinkResult.cleanedContent.trim();
-      if (cleanResponse.startsWith('```json')) {
-        cleanResponse = cleanResponse.replaceFirst('```json', '');
-      }
-      if (cleanResponse.startsWith('```')) {
-        cleanResponse = cleanResponse.replaceFirst('```', '');
-      }
-      cleanResponse = cleanResponse.replaceAll(RegExp(r'```$'), '').trim();
+      final cleanResponse = extractJsonFromResponse(
+        response,
+        expectArray: true,
+      );
+      if (cleanResponse == null) return [];
 
       final List<dynamic> jsonList = jsonDecode(cleanResponse);
       return jsonList.map((item) {
@@ -1327,18 +1345,15 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     required List<String> activeTools,
     int? defaultMaxTurns,
   }) {
-    // Strip <think> tags from response before parsing
-    final thinkResult = stripThinkTags(response);
-    String cleanResponse = thinkResult.cleanedContent.trim();
-    if (cleanResponse.startsWith('```json')) {
-      cleanResponse = cleanResponse.replaceFirst('```json', '');
-    }
-    if (cleanResponse.startsWith('```')) {
-      cleanResponse = cleanResponse.replaceFirst('```', '');
-    }
-    cleanResponse = cleanResponse.replaceAll(RegExp(r'```$'), '').trim();
-
     try {
+      final cleanResponse = extractJsonFromResponse(
+        response,
+        expectArray: true,
+      );
+      if (cleanResponse == null) {
+        throw "No valid JSON task list found";
+      }
+
       final List<dynamic> jsonList = jsonDecode(cleanResponse);
       return jsonList.map((item) {
         if (item is String) {
@@ -1694,46 +1709,20 @@ $formatInstructions
             );
       }
 
-      // Extract thought and JSON action
-      String? jsonStr;
+      // Use robust JSON extraction
+      String? jsonStr = extractJsonFromResponse(processedResponse);
       String thought = '';
 
-      // Method 1: Look for ```json ... ``` block (most reliable)
-      final jsonBlockMatch = RegExp(
-        r'```json\s*(\{.*?\})\s*```',
-        dotAll: true,
-      ).firstMatch(processedResponse);
-
-      if (jsonBlockMatch != null) {
-        jsonStr = jsonBlockMatch.group(1);
-        thought = processedResponse.substring(0, jsonBlockMatch.start).trim();
-      } else {
-        // Method 2: Find JSON object with expected action keys
-        // This avoids matching template placeholders like {cid} or {BVID}
-        final jsonStartMatch = RegExp(
-          r'\{\s*"(?:tool|answer|think|spawn_subtasks)"\s*:',
-        ).firstMatch(processedResponse);
-
-        if (jsonStartMatch != null) {
-          thought = processedResponse.substring(0, jsonStartMatch.start).trim();
-          // Extract full JSON by finding matching closing brace
-          final startIdx = jsonStartMatch.start;
-          int braceCount = 0;
-          int? endIdx;
-          for (int i = startIdx; i < processedResponse.length; i++) {
-            if (processedResponse[i] == '{') {
-              braceCount++;
-            } else if (processedResponse[i] == '}') {
-              braceCount--;
-              if (braceCount == 0) {
-                endIdx = i + 1;
-                break;
-              }
-            }
-          }
-          if (endIdx != null) {
-            jsonStr = processedResponse.substring(startIdx, endIdx);
-          }
+      if (jsonStr != null) {
+        // Try to find where the JSON started to extract the thought
+        final idx = processedResponse.indexOf(jsonStr);
+        if (idx > 0) {
+          thought = processedResponse.substring(0, idx).trim();
+          // Strip trailing JSON fence markers (```json, ```)
+          thought = thought
+              .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
+              .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+              .trim();
         }
       }
 
@@ -1758,10 +1747,19 @@ $formatInstructions
         // SPECIAL HANDLING: If no JSON found but it's a final deliverable,
         // treat the entire response as the answer (backward compatibility)
         if (task.isFinalDeliverable) {
-          // Strip any "My thought:" prefix if present
-          String result = response;
+          // Strip any "My thought:" prefix if present from CLEANED content
+          String result = processedResponse.trim();
           final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
           result = result.replaceFirst(thoughtPrefix, '').trim();
+
+          // Also handle "My thought: ... \nAction: ..." or similar mixed formats if needed
+          final singleLineThoughtPrefix = RegExp(
+            r'^My thought:.*?\n',
+            dotAll: true,
+          );
+          if (result.startsWith('My thought:')) {
+            result = result.replaceFirst(singleLineThoughtPrefix, '').trim();
+          }
 
           task.result = result;
           task.status = AgentTaskStatus.completed;

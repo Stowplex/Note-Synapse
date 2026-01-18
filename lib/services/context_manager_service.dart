@@ -122,19 +122,20 @@ class ContextManagerService {
 
     // Add global roadmap (root objective)
     final root = _getRoot(node);
-    buffer.writeln('## Global Objective');
+    buffer.writeln('<GlobalObjective>');
     buffer.writeln(root.objective);
     if (root.summary != null) {
-      buffer.writeln('Global Progress: ${root.summary}');
+      buffer.writeln('Progress: ${root.summary}');
     }
+    buffer.writeln('</GlobalObjective>');
     buffer.writeln();
 
     // Add ancestor context (condensed summaries only)
     final ancestors = _getAncestors(node);
     if (ancestors.isNotEmpty) {
-      buffer.writeln('## Parent Context');
+      buffer.writeln('<ParentContext>');
       for (final ancestor in ancestors) {
-        buffer.writeln('### ${ancestor.objective}');
+        buffer.writeln('<AncestorTask objective="${ancestor.objective}">');
         if (ancestor.summary != null) {
           buffer.writeln(ancestor.summary);
         } else {
@@ -144,30 +145,123 @@ class ContextManagerService {
               : ancestor.executionLog;
           buffer.writeln(recentLog.join('\n'));
         }
-        buffer.writeln();
+        buffer.writeln('</AncestorTask>');
       }
+      buffer.writeln('</ParentContext>');
+      buffer.writeln();
     }
 
     // Add completed sibling summaries
     final siblings = _getCompletedSiblings(node);
     if (siblings.isNotEmpty) {
-      buffer.writeln('## Related Completed Work');
+      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
       for (final sibling in siblings) {
-        buffer.writeln('### ${sibling.objective}');
+        buffer.writeln('<Sibling objective="${sibling.objective}">');
         buffer.writeln(sibling.summary ?? sibling.executionLog.join('\n'));
-        buffer.writeln();
+        buffer.writeln('</Sibling>');
       }
+      buffer.writeln('</CompletedSiblings>');
+      buffer.writeln();
     }
 
     // Add current node's execution log (detailed)
-    buffer.writeln('## Current Task: ${node.objective}');
-    buffer.writeln('### Execution Log');
+    buffer.writeln('<CurrentTask objective="${node.objective}">');
+    buffer.writeln('<ExecutionLog>');
     buffer.writeln(node.executionLog.join('\n'));
+    buffer.writeln('</ExecutionLog>');
+    buffer.writeln('</CurrentTask>');
+
+    return buffer.toString();
+  }
+
+  /// Builds isolated context for dynamically spawned subtasks.
+  ///
+  /// Unlike [buildContextForNode], this method:
+  /// - Does NOT include full global/parent objectives (already in tailored briefing)
+  /// - Only includes the subtask's own objective and execution log
+  /// - Includes completed sibling summaries to avoid duplication
+  ///
+  /// The subtask's execution log already contains a tailored briefing from
+  /// [_compactContextForSubtask] that provides just the right amount of context.
+  String buildContextForSubtask(ContextNode node) {
+    final buffer = StringBuffer();
+
+    // Add completed sibling work (to avoid duplicating their efforts)
+    final siblings = _getCompletedSiblings(node);
+    if (siblings.isNotEmpty) {
+      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
+      for (final sibling in siblings) {
+        buffer.writeln('<Sibling objective="${sibling.objective}">');
+        buffer.writeln(sibling.summary ?? 'Completed');
+        buffer.writeln('</Sibling>');
+      }
+      buffer.writeln('</CompletedSiblings>');
+      buffer.writeln();
+    }
+
+    // Add current subtask's objective and execution log
+    // The execution log already contains the tailored briefing from parent
+    buffer.writeln('<CurrentTask objective="${node.objective}">');
+    buffer.writeln('<ExecutionLog>');
+    buffer.writeln(node.executionLog.join('\n'));
+    buffer.writeln('</ExecutionLog>');
+    buffer.writeln('</CurrentTask>');
+
+    return buffer.toString();
+  }
+
+  /// Builds focused context for planner-created research tasks.
+  ///
+  /// Unlike [buildContextForNode], this method:
+  /// - Does NOT include the full global objective (task description is sufficient)
+  /// - Does NOT include parent context (avoids redundant repetition)
+  /// - Includes only dependency results (tasks this one depends on)
+  /// - Includes completed sibling summaries for context
+  /// - Includes the task's own execution log
+  ///
+  /// This is used for regular planner-created tasks that are NOT the final
+  /// deliverable and NOT dynamically spawned subtasks.
+  String buildContextForResearchTask(
+    ContextNode node, {
+    List<String> dependencyResults = const [],
+  }) {
+    final buffer = StringBuffer();
+
+    // Add dependency results (what this task needs from prior tasks)
+    if (dependencyResults.isNotEmpty) {
+      buffer.writeln('<DependencyResults>');
+      for (final result in dependencyResults) {
+        buffer.writeln(result);
+      }
+      buffer.writeln('</DependencyResults>');
+      buffer.writeln();
+    }
+
+    // Add completed sibling summaries (parallel tasks already done)
+    final siblings = _getCompletedSiblings(node);
+    if (siblings.isNotEmpty) {
+      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
+      for (final sibling in siblings) {
+        buffer.writeln('<Sibling objective="${sibling.objective}">');
+        buffer.writeln(sibling.summary ?? 'Completed');
+        buffer.writeln('</Sibling>');
+      }
+      buffer.writeln('</CompletedSiblings>');
+      buffer.writeln();
+    }
+
+    // Add current task's objective and execution log (detailed)
+    buffer.writeln('<CurrentTask objective="${node.objective}">');
+    buffer.writeln('<ExecutionLog>');
+    buffer.writeln(node.executionLog.join('\n'));
+    buffer.writeln('</ExecutionLog>');
+    buffer.writeln('</CurrentTask>');
 
     return buffer.toString();
   }
 
   /// Gets the root node for any node in the tree.
+
   ContextNode _getRoot(ContextNode node) {
     if (node.parentId == null) return node;
     final parent = _contextMap[node.parentId];
@@ -390,11 +484,9 @@ If this is research/analysis, output structured findings.
     buffer.writeln(buildContextForNode(node));
 
     if (_accumulatedFindings.isNotEmpty) {
+      buffer.writeln();
       buffer.writeln(
-        '\n## Accumulated Research Findings (${_accumulatedFindings.length} items)\n',
-      );
-      buffer.writeln(
-        'Use these findings to support your synthesis. Each finding should be considered for inclusion.\n',
+        '<AccumulatedFindings count="${_accumulatedFindings.length}" note="Use these findings to support your synthesis">',
       );
 
       for (var i = 0; i < _accumulatedFindings.length; i++) {
@@ -404,12 +496,13 @@ If this is research/analysis, output structured findings.
         final url = (f['url'] ?? '').toString();
         final artifacts = f['artifacts'] as List<dynamic>?;
 
-        buffer.writeln('${i + 1}. **$finding**');
+        buffer.writeln('<Finding index="${i + 1}">');
+        buffer.writeln(finding);
         if (source.isNotEmpty) {
           if (url.isNotEmpty) {
-            buffer.writeln('   — Source: $source ($url)');
+            buffer.writeln('Source: $source ($url)');
           } else {
-            buffer.writeln('   — Source: $source');
+            buffer.writeln('Source: $source');
           }
         }
 
@@ -421,19 +514,20 @@ If this is research/analysis, output structured findings.
               final content = a['content']?.toString() ?? '';
 
               if (type == 'bulletpoint') {
-                buffer.writeln('   • $content');
+                buffer.writeln('• $content');
               } else if (type == 'code') {
-                buffer.writeln('   ```\n   $content\n   ```');
+                buffer.writeln('```\n$content\n```');
               } else if (type == 'image') {
-                buffer.writeln('   🖼️ Resource: $content');
+                buffer.writeln('Resource: $content');
               } else {
-                buffer.writeln('   $content');
+                buffer.writeln(content);
               }
             }
           }
         }
-        buffer.writeln();
+        buffer.writeln('</Finding>');
       }
+      buffer.writeln('</AccumulatedFindings>');
     }
 
     return buffer.toString();
