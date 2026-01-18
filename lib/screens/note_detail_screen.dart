@@ -1282,6 +1282,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onContractBelow: _contractSelectionBelow,
                 onEdit: () => _handleEditSelection(),
                 onDelete: () => _handleDeleteSelection(),
+                onExit: _clearSelection,
                 canExpandAbove:
                     _selectedBlockIndices.isNotEmpty &&
                     _selectedBlockIndices.reduce((a, b) => a < b ? a : b) > 0,
