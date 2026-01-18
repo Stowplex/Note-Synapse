@@ -1724,6 +1724,26 @@ $formatInstructions
               .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
               .trim();
         }
+
+        // VALIDATION:
+        // If this is a final deliverable, we must be careful not to mistake
+        // code snippets or data in the report as an agent action.
+        // We check if the JSON actually contains a valid action key.
+        if (task.isFinalDeliverable) {
+          try {
+            final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+            if (!isAgentAction(parsed)) {
+              // It's JSON, but not an action. It's likely part of the report text.
+              // Treat it as text by ignoring the JSON extraction.
+              jsonStr = null;
+              thought = ''; // Reset thought as it was derived from JSON split
+            }
+          } catch (e) {
+            // If we can't parse it here (odd, since extractJson found it),
+            // play it safe and ignore it.
+            jsonStr = null;
+          }
+        }
       }
 
       if (thought.startsWith('My thought:')) {

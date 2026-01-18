@@ -171,3 +171,13 @@ String? _extractBalancedJson(
 String formatThinkForHistory(String thinkContent) {
   return '<think>$thinkContent</think>';
 }
+
+/// Checks if a JSON map contains a valid agent action key.
+///
+/// Valid keys are: 'answer', 'tool', 'think', 'spawn_subtasks'.
+bool isAgentAction(Map<String, dynamic> json) {
+  return json.containsKey('answer') ||
+      json.containsKey('tool') ||
+      json.containsKey('think') ||
+      json.containsKey('spawn_subtasks');
+}
