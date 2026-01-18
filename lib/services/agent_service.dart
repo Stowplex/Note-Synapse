@@ -1005,12 +1005,6 @@ If no findings worth preserving, return: []
         ? "\nAdditional Context:\n$context\n"
         : "";
 
-    // Conditionally include DB Schema only when run_sql is enabled
-    final hasRunSql = enabledNativeTools.any((t) => t.name == 'run_sql');
-    final dbSchemaSection = hasRunSql
-        ? '\nDatabase Schema (for run_sql):\n${DatabaseService.getSchemaDescription()}\n'
-        : '';
-
     // Conditionally include Note Exploration guidance only when note tools are enabled
     final noteToolNames = {'search_notes', 'read_note', 'ls', 'run_sql'};
     final hasNoteTools = enabledNativeTools.any(
@@ -1046,7 +1040,6 @@ $contextSection
 Available Tools:
 $nativeToolsDesc
 $externalToolsDesc
-$dbSchemaSection
 ## EXECUTION STRATEGY GUIDANCE
 
 Choose an appropriate strategy based on the objective and available tools:
@@ -1211,12 +1204,6 @@ Please fix and regenerate the plan.
           .toList(),
     );
 
-    // Conditionally include DB Schema only when run_sql is enabled
-    final hasRunSql = enabledNativeTools.any((t) => t.name == 'run_sql');
-    final dbSchemaSection = hasRunSql
-        ? '\nDB Schema:\n${DatabaseService.getSchemaDescription()}\n'
-        : '';
-
     final prompt =
         '''
 Current Plan:
@@ -1224,7 +1211,6 @@ $currentPlanJson
 
 General User Feedback:
 $feedback
-$dbSchemaSection
 Update the plan based on the feedback.
 Address specific feedback for items if present.
 Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["..."]}]

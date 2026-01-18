@@ -599,18 +599,13 @@ class RunSqlTool implements NativeTool {
   String get name => 'run_sql';
 
   @override
-  String get description => '''
+  String get description =>
+      '''
 Run a SQL query on the local database. Supports SELECT, INSERT, UPDATE, DELETE.
 Write operations require user approval.
 
-KEY TABLES:
-- notes(id TEXT PK, title, content, type, tags, createdAt, updatedAt, pinned, isArchived)
-- tags(id TEXT PK, name UNIQUE, color, usageCount)
-- note_tags(noteId, tagId) - Links notes to tags
-- filters(id, name, includeTags JSON, excludeTags JSON, noteTypes JSON) - Saved search filters
-- conversations(id, title, createdAt, updatedAt, isArchived)
-- attachments(id, noteId, filePath, fileName, fileType)
-- subnotes(id, noteId, name, content, isCompleted) - Task items within notes
+DATABASE SCHEMA:
+${DatabaseService.getSchemaDescription()}
 
 DISCOVERY TIP: Use for metadata exploration before loading note content.
 Example: SELECT id, title, tags FROM notes WHERE tags LIKE '%topic%' ORDER BY updatedAt DESC LIMIT 10
