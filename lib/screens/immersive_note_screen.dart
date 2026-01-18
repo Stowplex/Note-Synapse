@@ -2048,7 +2048,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
-  Future<void> _confirmDrawing() async {
+  Future<void> _confirmDrawing({bool silent = false}) async {
     if (_drawingActions.isEmpty) return;
 
     // Calculate bounds of all actions
@@ -2093,9 +2093,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _redoStack.clear();
           _isPenMode = false; // Optional: exit pen mode after adding?
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Annotation added to attachments.')),
-        );
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Annotation added to attachments.')),
+          );
+        }
       }
     } catch (e, stackTrace) {
       LoggerService.error(
@@ -4173,8 +4175,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
-    if (trimmed.isEmpty && _pendingAttachments.isEmpty) {
+    if (trimmed.isEmpty &&
+        _pendingAttachments.isEmpty &&
+        _drawingActions.isEmpty) {
       return;
+    }
+
+    if (_isPenMode && _drawingActions.isNotEmpty) {
+      await _confirmDrawing(silent: true);
     }
 
     setState(() {
