@@ -8,6 +8,7 @@ class BlockSelectionMenu extends StatelessWidget {
   final VoidCallback? onContractBelow;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onExit;
 
   final bool canExpandAbove;
   final bool canContractAbove;
@@ -22,6 +23,7 @@ class BlockSelectionMenu extends StatelessWidget {
     required this.onContractBelow,
     required this.onEdit,
     required this.onDelete,
+    required this.onExit,
     this.canExpandAbove = true,
     this.canContractAbove = true,
     this.canExpandBelow = true,
@@ -79,13 +81,14 @@ class BlockSelectionMenu extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.edit),
               tooltip: l10n.editSelection,
-              onPressed: onEdit,
-            ),
-            // Delete
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              tooltip: l10n.deleteSelection,
               onPressed: onDelete,
+            ),
+            const SizedBox(width: 4, height: 24, child: VerticalDivider()),
+            // Exit
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: l10n.close,
+              onPressed: onExit,
             ),
           ],
         ),
