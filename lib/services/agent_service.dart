@@ -244,6 +244,31 @@ class AgentService extends ChangeNotifier {
 
   // ... (nativeTools and dbSchema definitions remain the same) ...
 
+  /// Mockable LLM generator for testing.
+  /// If provided, this is used instead of AIService.generateWithAttachments.
+  Future<String> Function(String prompt)? llmGenerator;
+
+  /// Exposes _performTask for testing purposes.
+  @visibleForTesting
+  Future<void> performTaskForTest(AgentTask task, String globalContext) async {
+    return _performTask(task, globalContext);
+  }
+
+  /// Helper to generate LLM response using either the mock or real service.
+  Future<String> _generateLlmResponse(
+    String prompt, {
+    required GenerationContext context,
+  }) async {
+    if (llmGenerator != null) {
+      return llmGenerator!(prompt);
+    }
+    return AIService.generateWithAttachments(
+      prompt,
+      [],
+      generationContext: context,
+    );
+  }
+
   /// ExecuteLoop with Hierarchical Context Management
   Future<void> _executeLoop() async {
     // Ensure root context exists (should be created in generatePlan)
@@ -1672,11 +1697,7 @@ $formatInstructions
         values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
       );
       if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-      final response = await AIService.generateWithAttachments(
-        prompt,
-        [],
-        generationContext: genContext,
-      );
+      final response = await _generateLlmResponse(prompt, context: genContext);
 
       // Checkpoint: After LLM response
       _currentCheckpoint = AgentCheckpoint.afterLlmResponse;
@@ -1827,10 +1848,9 @@ Properly extracted content from the JSON string.
           if (_modelOverride != null) {
             verdictGenContext.modelOverride = _modelOverride;
           }
-          final verdictResponse = await AIService.generateWithAttachments(
+          final verdictResponse = await _generateLlmResponse(
             verdictPrompt,
-            [],
-            generationContext: verdictGenContext,
+            context: verdictGenContext,
           );
 
           final verdictMatch = RegExp(
