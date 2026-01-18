@@ -302,5 +302,39 @@ This confirms the schema.
         );
       },
     );
+
+    test(
+      'Case 9: Literal Newline in JSON (Recovery) -> Parse as Answer',
+      () async {
+        final task = AgentTask(
+          id: '9',
+          description: 'Literal newline recovery',
+          isFinalDeliverable: true,
+        );
+
+        // JSON with literal newline inside string (invalid JSON)
+        final literalNewlineJson = '''
+{
+  "answer": "Line 1
+Line 2"
+}
+''';
+        final llmResponse =
+            'Here is the answer:\n```json\n$literalNewlineJson\n```';
+
+        await runStep(task, llmResponse);
+
+        // Expectation:
+        // jsonDecode fails.
+        // Regex recovery kicks in.
+        // Extracts "Line 1\nLine 2".
+        // Sets task.result to strict answer content.
+        expect(task.status, equals(AgentTaskStatus.completed));
+        expect(task.result, contains("Line 1"));
+        expect(task.result, contains("Line 2"));
+        // Should NOT contain the JSON wrapper because it was parsed!
+        expect(task.result, isNot(contains("```json")));
+      },
+    );
   });
 }

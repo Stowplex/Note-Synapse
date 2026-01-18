@@ -1741,9 +1741,19 @@ $formatInstructions
         try {
           decision = jsonDecode(jsonStr) as Map<String, dynamic>;
         } catch (e) {
-          // Failed to decode. Check if it looks like an agent action to recover intent.
-          if (looksLikeAgentAction(jsonStr)) {
-            // It has intent, but is malformed. Trigger verdict/fallback.
+          // Robustness: If JSON fails (e.g. literal newlines), try regex extraction for 'answer'
+          final answerMatch = RegExp(
+            r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)"',
+            multiLine: true,
+            dotAll: true,
+          ).firstMatch(jsonStr);
+
+          if (answerMatch != null) {
+            final recoveredContent = answerMatch.group(1)!;
+            decision = {'answer': recoveredContent};
+            // Note: We keep jsonStr non-null so we proceed with "valid" decision.
+          } else if (looksLikeAgentAction(jsonStr)) {
+            // It has intent, but is malformed and unrecoverable. Trigger verdict/fallback.
             jsonStr = null;
             decision = null;
           }
