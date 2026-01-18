@@ -19,6 +19,7 @@ import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
 import 'database_service.dart';
 import 'prompts/ai_prompts.dart';
+import '../utils/think_tag_utils.dart';
 
 /// Callback for executing an external tool (MCP or local AI tool).
 typedef ToolExecutor =
@@ -781,7 +782,9 @@ If no findings worth preserving, return: []
   /// Includes details as a list of bullet points.
   List<Map<String, dynamic>> _parseFindings(String response) {
     try {
-      String cleanResponse = response.trim();
+      // Strip <think> tags from response before parsing
+      final thinkResult = stripThinkTags(response);
+      String cleanResponse = thinkResult.cleanedContent.trim();
       if (cleanResponse.startsWith('```json')) {
         cleanResponse = cleanResponse.replaceFirst('```json', '');
       }
@@ -1324,8 +1327,9 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     required List<String> activeTools,
     int? defaultMaxTurns,
   }) {
-    // Robust parsing for List
-    String cleanResponse = response.trim();
+    // Strip <think> tags from response before parsing
+    final thinkResult = stripThinkTags(response);
+    String cleanResponse = thinkResult.cleanedContent.trim();
     if (cleanResponse.startsWith('```json')) {
       cleanResponse = cleanResponse.replaceFirst('```json', '');
     }
@@ -1673,6 +1677,23 @@ $formatInstructions
       // ... Parsing Logic (Similar to before but inside this function) ...
       // Re-using existing ReAct parsing logic but ensuring it matches new flow
 
+      // Strip <think> tags from response before parsing
+      final thinkResult = stripThinkTags(response);
+      final processedResponse = thinkResult.cleanedContent;
+
+      // Preserve think content in execution history for context
+      if (thinkResult.thinkContent != null &&
+          thinkResult.thinkContent!.isNotEmpty) {
+        task.executionHistory.add(
+          'Model reasoning: ${thinkResult.thinkContent}',
+        );
+        _contextManager
+            .getContext(task.contextNodeId ?? '')
+            ?.log(
+              'Model reasoning captured (${thinkResult.thinkContent!.length} chars)',
+            );
+      }
+
       // Extract thought and JSON action
       String? jsonStr;
       String thought = '';
@@ -1681,28 +1702,28 @@ $formatInstructions
       final jsonBlockMatch = RegExp(
         r'```json\s*(\{.*?\})\s*```',
         dotAll: true,
-      ).firstMatch(response);
+      ).firstMatch(processedResponse);
 
       if (jsonBlockMatch != null) {
         jsonStr = jsonBlockMatch.group(1);
-        thought = response.substring(0, jsonBlockMatch.start).trim();
+        thought = processedResponse.substring(0, jsonBlockMatch.start).trim();
       } else {
         // Method 2: Find JSON object with expected action keys
         // This avoids matching template placeholders like {cid} or {BVID}
         final jsonStartMatch = RegExp(
           r'\{\s*"(?:tool|answer|think|spawn_subtasks)"\s*:',
-        ).firstMatch(response);
+        ).firstMatch(processedResponse);
 
         if (jsonStartMatch != null) {
-          thought = response.substring(0, jsonStartMatch.start).trim();
+          thought = processedResponse.substring(0, jsonStartMatch.start).trim();
           // Extract full JSON by finding matching closing brace
           final startIdx = jsonStartMatch.start;
           int braceCount = 0;
           int? endIdx;
-          for (int i = startIdx; i < response.length; i++) {
-            if (response[i] == '{') {
+          for (int i = startIdx; i < processedResponse.length; i++) {
+            if (processedResponse[i] == '{') {
               braceCount++;
-            } else if (response[i] == '}') {
+            } else if (processedResponse[i] == '}') {
               braceCount--;
               if (braceCount == 0) {
                 endIdx = i + 1;
@@ -1711,7 +1732,7 @@ $formatInstructions
             }
           }
           if (endIdx != null) {
-            jsonStr = response.substring(startIdx, endIdx);
+            jsonStr = processedResponse.substring(startIdx, endIdx);
           }
         }
       }
