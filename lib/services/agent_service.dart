@@ -454,6 +454,9 @@ class AgentService extends ChangeNotifier {
               ? '$attachedNotesContext\n\n$scopedContext'
               : scopedContext;
 
+          // Clear previous error state AFTER it has been rendered into the context
+          taskContext.lastError = null;
+
           await _performTask(task, fullContext);
 
           // Small delay to prevent tight loops
@@ -1660,9 +1663,14 @@ FORMAT:
 '''
         : '''
 FORMAT:
+
 My thought: ...
 
-Then choose ONE action:
+```json
+JSON_encoded_action
+```
+
+JSON_encoded_action should be one of:
 ```json
 { "tool": "tool_name", "args": { ... } }
 ```
@@ -1670,6 +1678,7 @@ OR
 ```json
 { "think": "Detailed analysis or reasoning about data already in context" }
 ```
+OR
 ```json
 { "spawn_subtasks": [ { "description": "Subtask 1", "tools": ["tool1"] }, { "description": "Subtask 2", "tools": ["tool2"] } ] }
 ```
@@ -1780,18 +1789,81 @@ $formatInstructions
             );
       }
 
+      LoggerService.debug(
+        '[Agent Parsing] Processed Response:\n$processedResponse',
+      );
+
       // Use robust JSON extraction
       String? jsonStr = extractJsonFromResponse(processedResponse);
+      LoggerService.debug(
+        '[Agent Parsing] Extracted JSON string candidate:\n$jsonStr',
+      );
+
       String thought = '';
 
       Map<String, dynamic>? decision;
 
+      String? parseError;
+
       if (jsonStr != null) {
+        // Extract thought BEFORE parsing, so we preserve it even if parsing fails/is rejected.
+        final idx = processedResponse.indexOf(jsonStr);
+        if (idx > 0) {
+          thought = processedResponse.substring(0, idx).trim();
+          // Strip trailing JSON fence markers (```json, ```)
+          thought = thought
+              .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
+              .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+              .trim();
+        }
+
         // Try parsing first to handle malformed recovery
         try {
           decision = jsonDecode(jsonStr) as Map<String, dynamic>;
+          LoggerService.debug('[Agent Parsing] Parsed Decision Map: $decision');
+
+          // VALIDATION: Strict Schema Check
+          // Ensure the JSON object contains at least one valid action key.
+          if (!decision.containsKey('tool') &&
+              !decision.containsKey('answer') &&
+              !decision.containsKey('think') &&
+              !decision.containsKey('spawn_subtasks')) {
+            throw '''Invalid Agent Action: The parsed JSON object is missing a required action key. Found keys: ${decision.keys.toList()}.
+You must use ONE of the following formats:
+
+1. Call a Tool:
+```json
+{ "tool": "tool_name", "args": { ... } }
+```
+
+2. Answer (Final Result):
+```json
+{ "answer": "Your final answer here..." }
+```
+
+3. Think (Reasoning):
+```json
+{ "think": "Your analysis here..." }
+```
+
+4. Spawn Subtasks:
+```json
+{ "spawn_subtasks": [ { "description": "...", "tools": [...] } ] }
+```
+
+Please correct your output.''';
+          }
         } catch (e) {
+          LoggerService.debug('[Agent Parsing] JSON Parse Error: $e');
+          parseError = e.toString();
+          if (!parseError.startsWith("Invalid Agent Action")) {
+            parseError =
+                "Invalid JSON Syntax: ${e.toString()}. Please ensure your output is valid JSON.";
+          }
+
           // Robustness: If JSON fails (e.g. literal newlines), try regex extraction for 'answer'
+          // ... (keep regex logic)
+
           final answerMatch = RegExp(
             r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)"',
             multiLine: true,
@@ -1801,40 +1873,24 @@ $formatInstructions
           if (answerMatch != null) {
             final recoveredContent = answerMatch.group(1)!;
             decision = {'answer': recoveredContent};
-            // Note: We keep jsonStr non-null so we proceed with "valid" decision.
-          } else if (looksLikeAgentAction(jsonStr)) {
-            // It has intent, but is malformed and unrecoverable. Trigger verdict/fallback.
+            LoggerService.debug(
+              '[Agent Parsing] Recovered Answer via Regex: $recoveredContent',
+            );
+            parseError = null; // Clear error if recovered
+          } else {
+            // Recovery failed (either malformed or invalid schema).
+            // Explicitly nullify jsonStr and decision to force downstream error reporting.
+            LoggerService.debug(
+              '[Agent Parsing] Parsing failed and not recovered. Nullifying decision.',
+            );
             jsonStr = null;
             decision = null;
-          }
-        }
+            // parseError remains set for reporting
 
-        if (jsonStr != null) {
-          // Try to find where the JSON started to extract the thought
-          final idx = processedResponse.indexOf(jsonStr);
-          if (idx > 0) {
-            thought = processedResponse.substring(0, idx).trim();
-            // Strip trailing JSON fence markers (```json, ```)
-            thought = thought
-                .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
-                .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
-                .trim();
-          }
-
-          // VALIDATION:
-          // If this is a final deliverable, we must be careful not to mistake
-          // code snippets or data in the report as an agent action.
-          if (task.isFinalDeliverable) {
-            if (decision != null) {
-              if (!isAgentAction(decision)) {
-                // It's JSON, but not an action. likely part of the report.
-                jsonStr = null;
-                decision = null;
-                thought = '';
-              }
-            } else {
-              // Malformed JSON and no intent detected. Treat as text.
-              jsonStr = null;
+            // Set lastError on context to ensure it appears in <LastRoundError> next turn
+            if (parseError != null) {
+              _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                  'IMPORTANT: $parseError';
             }
           }
         }
@@ -1887,6 +1943,17 @@ $formatInstructions
           }
 
           _currentThought = "Delivered final result.";
+          notifyListeners();
+          return;
+        }
+
+        // If specific parsing/schema error occurred, report it immediately
+        // instead of trying verdict extraction (which might confuse things further).
+        if (parseError != null) {
+          task.executionHistory.add("Observation: $parseError");
+          _contextManager
+              .getContext(task.contextNodeId ?? '')
+              ?.log('Observation: $parseError');
           notifyListeners();
           return;
         }
@@ -1967,7 +2034,7 @@ Properly extracted content from the JSON string.
 
       Map<String, dynamic> validDecision;
       if (decision != null) {
-        validDecision = decision!;
+        validDecision = decision;
       } else {
         try {
           validDecision = jsonDecode(jsonStr) as Map<String, dynamic>;
@@ -2095,7 +2162,13 @@ Properly extracted content from the JSON string.
           }
         }
       } catch (e) {
-        result = "Error executing $toolName: $e";
+        final errorStr = "Error executing $toolName: $e";
+        LoggerService.error(errorStr);
+        result = errorStr;
+
+        // Also set as last execution error for explicit visibility
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            "Tool Execution Error: $e";
       }
 
       task.executionHistory.add("Observation: $result");
@@ -2116,7 +2189,15 @@ Properly extracted content from the JSON string.
       }
     } catch (e) {
       LoggerService.error("Agent Loop Error: $e");
-      task.executionHistory.add("Error: Internal Agent Loop Error: $e");
+      final errorMsg = "Error: Internal Agent Loop Error: $e";
+      task.executionHistory.add(errorMsg);
+
+      // Ensure this fatal error is visible in context for next retry
+      _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+          errorMsg;
+
+      // Also log to execution log to keep history straight
+      _contextManager.getContext(task.contextNodeId ?? '')?.log(errorMsg);
     }
   }
 

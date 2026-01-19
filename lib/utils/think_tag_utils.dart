@@ -3,6 +3,7 @@
 /// Some models (e.g., Minimax-M2) output reasoning in <think> tags interleaved
 /// with their responses. These utilities strip the tags for parsing while
 /// preserving the content for multi-turn conversation enhancement.
+import 'dart:convert';
 
 /// Result of stripping think tags from a response.
 class ThinkTagResult {
@@ -89,20 +90,79 @@ String? extractJsonFromResponse(String response, {bool expectArray = false}) {
 
   // Step 3: Look for raw JSON structure
   if (expectArray) {
-    // Find the outermost array
+    // Find the outermost array (keep existing logic for arrays for now, or improve if needed)
     final arrayMatch = RegExp(r'\[[\s\S]*\]').firstMatch(content);
     if (arrayMatch != null) {
       return _extractBalancedJson(content, arrayMatch.start, '[', ']');
     }
   } else {
-    // Find the outermost object
-    final objectMatch = RegExp(r'\{[\s\S]*\}').firstMatch(content);
-    if (objectMatch != null) {
-      return _extractBalancedJson(content, objectMatch.start, '{', '}');
+    // Find all potential JSON objects
+    final candidates = <String>[];
+    int start = 0;
+
+    // Scan for all top-level balanced braces
+    while (start < content.length) {
+      final match = RegExp(r'\{').firstMatch(content.substring(start));
+      if (match == null) break;
+
+      final realStart = start + match.start;
+      final json = _extractBalancedJson(content, realStart, '{', '}');
+
+      if (json != null) {
+        candidates.add(json);
+        // Move start past this object to find the next one
+        start = realStart + json.length;
+      } else {
+        // Unbalanced or failed, move forward one char
+        start = realStart + 1;
+      }
     }
+
+    if (candidates.isEmpty) return null;
+
+    // Filter and score candidates to find the "best" agent action
+    String? bestMatch;
+    int bestScore = -1;
+
+    for (final jsonStr in candidates) {
+      try {
+        final decoded = jsonDecode(jsonStr);
+        if (decoded is! Map) continue;
+
+        final map = decoded as Map<String, dynamic>;
+        int score = 0;
+
+        // Scoring rules for Agent Actions
+        if (map.containsKey('answer')) {
+          score = 10; // High priority: explicit answer
+        } else if (map.containsKey('spawn_subtasks')) {
+          score = 10; // High priority: subtask spawning
+        } else if (map.containsKey('tool')) {
+          if (map.containsKey('args')) {
+            score = 10; // High priority: complete tool call
+          } else {
+            score = 5; // Medium priority: partial tool call (missing args)
+          }
+        } else if (map.containsKey('think')) {
+          score = 2; // Low priority: think block (usually handled by tags)
+        } else {
+          score = 1; // Generic JSON object
+        }
+
+        // Prefer higher score. If tied, prefer the LATER one (heuristic: explanation then action)
+        if (score >= bestScore) {
+          bestScore = score;
+          bestMatch = jsonStr;
+        }
+      } catch (e) {
+        // Not valid JSON, ignore
+      }
+    }
+
+    if (bestMatch != null) return bestMatch;
   }
 
-  // Step 4: Try the opposite structure type as fallback
+  // Step 4: Fallback to opposite structure (e.g. array when object expected)
   if (expectArray) {
     final objectMatch = RegExp(r'\{[\s\S]*\}').firstMatch(content);
     if (objectMatch != null) {

@@ -231,9 +231,14 @@ class ContextManagerService {
 
     // Add current node's execution log (detailed)
     buffer.writeln('<CurrentTask objective="${node.objective}">');
-    buffer.writeln('<ExecutionLog>');
     buffer.writeln(node.executionLog.join('\n'));
     buffer.writeln('</ExecutionLog>');
+
+    // Explicitly show last error to prevent loops
+    if (node.lastError != null) {
+      buffer.writeln('<LastRoundError>${node.lastError}</LastRoundError>');
+    }
+
     buffer.writeln('</CurrentTask>');
 
     return buffer.toString();
@@ -291,9 +296,14 @@ class ContextManagerService {
     // Add current subtask's objective and execution log
     // The execution log already contains the tailored briefing from parent
     buffer.writeln('<CurrentTask objective="${node.objective}">');
-    buffer.writeln('<ExecutionLog>');
     buffer.writeln(node.executionLog.join('\n'));
     buffer.writeln('</ExecutionLog>');
+
+    // Explicitly show last error to prevent loops
+    if (node.lastError != null) {
+      buffer.writeln('<LastRoundError>${node.lastError}</LastRoundError>');
+    }
+
     buffer.writeln('</CurrentTask>');
 
     return buffer.toString();
@@ -411,9 +421,14 @@ class ContextManagerService {
 
     // Add current task's objective and execution log (detailed)
     buffer.writeln('<CurrentTask objective="${node.objective}">');
-    buffer.writeln('<ExecutionLog>');
     buffer.writeln(node.executionLog.join('\n'));
     buffer.writeln('</ExecutionLog>');
+
+    // Explicitly show last error to prevent loops
+    if (node.lastError != null) {
+      buffer.writeln('<LastRoundError>${node.lastError}</LastRoundError>');
+    }
+
     buffer.writeln('</CurrentTask>');
 
     return buffer.toString();

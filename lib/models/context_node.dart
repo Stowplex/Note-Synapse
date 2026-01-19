@@ -51,6 +51,10 @@ class ContextNode {
   /// Set when task completes, enables on-demand section retrieval.
   TaskResultStorage? structuredResult;
 
+  /// The most recent error encountered during execution in this context.
+  /// Displayed in <LastRoundError> section to inform the agent of failures.
+  String? lastError;
+
   ContextNode({
     required this.id,
     this.parentId,
@@ -65,6 +69,7 @@ class ContextNode {
     DateTime? createdAt,
     this.updatedAt,
     List<String>? allowedTools,
+    this.lastError,
   }) : executionLog = executionLog ?? [],
        children = children ?? [],
        createdAt = createdAt ?? DateTime.now(),
@@ -138,7 +143,9 @@ class ContextNode {
       estimatedTokens: estimatedTokens ?? this.estimatedTokens,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+
       allowedTools: allowedTools ?? List.from(this.allowedTools),
+      lastError: lastError ?? this.lastError,
     );
   }
 
@@ -157,6 +164,7 @@ class ContextNode {
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt?.toIso8601String(),
     'allowedTools': allowedTools,
+    'lastError': lastError,
   };
 
   /// Deserializes from JSON for snapshot restoration.
@@ -179,6 +187,7 @@ class ContextNode {
           ? DateTime.parse(json['updatedAt'] as String)
           : null,
       allowedTools: List<String>.from(json['allowedTools'] as List),
+      lastError: json['lastError'] as String?,
     );
   }
 
