@@ -1579,7 +1579,8 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
     // Note: task.toolNames (planner's suggestions) are hints only, not filters
     List<NativeTool> allowedNativeFn() {
       // read_task_result is ALWAYS available (internal mechanism for TOC-based context)
-      final readTaskResultTool = enabledNativeTools
+      // Use nativeTools (not enabledNativeTools) to ensure it's always present
+      final readTaskResultTool = nativeTools
           .where((t) => t.name == 'read_task_result')
           .toList();
 
@@ -1594,7 +1595,10 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
         }
         return userFiltered;
       }
-      // No user restriction - all enabled tools available
+      // No user restriction - all enabled tools available + read_task_result
+      if (!enabledNativeTools.any((t) => t.name == 'read_task_result')) {
+        return [...enabledNativeTools, ...readTaskResultTool];
+      }
       return enabledNativeTools;
     }
 
@@ -2042,8 +2046,8 @@ Properly extracted content from the JSON string.
 
       dynamic result;
       try {
-        // Try Native - use enabledNativeTools to respect tool config
-        final nativeTool = enabledNativeTools.firstWhere(
+        // Try Native - use allowedNativeFn to respect tool config AND ensure read_task_result is always available
+        final nativeTool = allowedNativeFn().firstWhere(
           (t) => t.name == toolName,
           orElse: () => _UnknownTool(),
         );

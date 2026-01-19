@@ -711,4 +711,88 @@ My thought: This task is complex, I'll spawn multiple subtasks.
       expect(agentService.currentCheckpoint, isNull);
     });
   });
+
+  group('read_task_result tool exemption', () {
+    test(
+      'read_task_result is always available even when not in enabledNativeTools',
+      () {
+        final agentService = AgentService();
+
+        // nativeTools getter should always include read_task_result
+        final allNativeTools = agentService.nativeTools;
+        final hasReadTaskResult = allNativeTools.any(
+          (t) => t.name == 'read_task_result',
+        );
+
+        expect(
+          hasReadTaskResult,
+          isTrue,
+          reason: 'read_task_result should always be in nativeTools',
+        );
+      },
+    );
+
+    test('read_task_result tool has correct schema', () {
+      final agentService = AgentService();
+
+      final readTaskResultTool = agentService.nativeTools.firstWhere(
+        (t) => t.name == 'read_task_result',
+      );
+
+      // Verify input schema has expected parameters
+      final schema = readTaskResultTool.inputSchema;
+      expect(schema['properties'], isNotNull);
+      expect(schema['properties']['task_id'], isNotNull);
+      expect(schema['properties']['mode'], isNotNull);
+      expect(schema['properties']['section'], isNotNull);
+      expect(schema['required'], contains('task_id'));
+    });
+
+    test('read_task_result description includes usage examples', () {
+      final agentService = AgentService();
+
+      final readTaskResultTool = agentService.nativeTools.firstWhere(
+        (t) => t.name == 'read_task_result',
+      );
+
+      final description = readTaskResultTool.description;
+
+      // Verify description includes key usage info
+      expect(description, contains('full'));
+      expect(description, contains('section'));
+      expect(description, contains('BREADCRUMB'));
+      expect(description, contains('task_id'));
+    });
+
+    test('read_task_result returns error for invalid task_id', () async {
+      final agentService = AgentService();
+
+      final readTaskResultTool = agentService.nativeTools.firstWhere(
+        (t) => t.name == 'read_task_result',
+      );
+
+      // Execute with non-existent task ID
+      final result = await readTaskResultTool.execute({
+        'task_id': 'non-existent-task-id',
+        'mode': 'full',
+      });
+
+      expect(result, contains('Error'));
+      expect(result, contains('No task found'));
+    });
+
+    test('read_task_result returns error when task_id is missing', () async {
+      final agentService = AgentService();
+
+      final readTaskResultTool = agentService.nativeTools.firstWhere(
+        (t) => t.name == 'read_task_result',
+      );
+
+      // Execute without task_id
+      final result = await readTaskResultTool.execute({'mode': 'full'});
+
+      expect(result, contains('Error'));
+      expect(result, contains('task_id is required'));
+    });
+  });
 }

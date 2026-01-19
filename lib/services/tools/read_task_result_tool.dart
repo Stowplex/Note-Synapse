@@ -15,16 +15,28 @@ class ReadTaskResultTool implements NativeTool {
 
   @override
   String get description => '''
-Read result content from a previous task. Use this when ancestor task results 
+Read result content from a previous task. Use this when ancestor/sibling task results 
 show a TOC preview and you need the full content or a specific section.
 
-Modes:
-- 'full': Returns the complete task result
+MODES:
+- 'full': Returns the complete task result (default)
 - 'section': Returns a specific section by breadcrumb path
 
-Example calls:
-- {"task_id": "abc123", "mode": "full"}
-- {"task_id": "abc123", "mode": "section", "section": "# Findings > ## Key Data"}
+BREADCRUMB FORMAT:
+Breadcrumbs match the TOC structure using markdown headers joined by " > ".
+Examples from a typical TOC:
+  # Introduction           → section="# Introduction"
+  ## Key Findings          → section="# Results > ## Key Findings"  
+  ### Data Analysis        → section="# Results > ## Key Findings > ### Data Analysis"
+
+EXAMPLE CALLS:
+1. Get full result:
+   {"tool": "read_task_result", "args": {"task_id": "abc123"}}
+   
+2. Get specific section:
+   {"tool": "read_task_result", "args": {"task_id": "abc123", "mode": "section", "section": "# Findings > ## Key Data"}}
+
+TIP: If you get "Section not found", check the available sections in the error response and adjust your breadcrumb path.
 ''';
 
   @override
