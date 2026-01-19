@@ -218,10 +218,9 @@ class ContextManagerService {
             );
           }
         } else {
-          // Fallback: brief summary
-          final summary = sibling.summary ?? 'Completed';
+          // Fallback: no structured result, hint to use read_task_result
           buffer.writeln(
-            '<Result type="summary">${summary.length > 200 ? summary.substring(0, 200) + "..." : summary}</Result>',
+            '<Result type="toc" hint="Use read_task_result(${sibling.id}, mode=full) to read">No structured TOC available.</Result>',
           );
         }
         buffer.writeln('</Sibling>');
@@ -255,10 +254,34 @@ class ContextManagerService {
     // Add completed sibling work (to avoid duplicating their efforts)
     final siblings = _getCompletedSiblings(node);
     if (siblings.isNotEmpty) {
-      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
+      buffer.writeln(
+        '<CompletedSiblings note="Do NOT duplicate their work. Use read_task_result to fetch details.">',
+      );
       for (final sibling in siblings) {
-        buffer.writeln('<Sibling objective="${sibling.objective}">');
-        buffer.writeln(sibling.summary ?? 'Completed');
+        buffer.writeln(
+          '<Sibling id="${sibling.id}" objective="${sibling.objective}">',
+        );
+        final sr = sibling.structuredResult;
+        if (sr != null) {
+          if (sr.isShortSync()) {
+            // Short results: include full
+            buffer.writeln('<Result type="full">');
+            buffer.writeln(sr.fullResult);
+            buffer.writeln('</Result>');
+          } else {
+            // Long results: TOC only
+            buffer.writeln(
+              '<Result type="toc" hint="Use read_task_result(${sibling.id}) for details">',
+            );
+            buffer.writeln(sr.toc);
+            buffer.writeln('</Result>');
+          }
+        } else {
+          // Fallback: no structured result, hint to use read_task_result
+          buffer.writeln(
+            '<Result type="toc" hint="Use read_task_result(${sibling.id}, mode=full) to read">No structured TOC available.</Result>',
+          );
+        }
         buffer.writeln('</Sibling>');
       }
       buffer.writeln('</CompletedSiblings>');
@@ -352,10 +375,34 @@ class ContextManagerService {
     // Add completed sibling summaries (parallel tasks already done)
     final siblings = _getCompletedSiblings(node);
     if (siblings.isNotEmpty) {
-      buffer.writeln('<CompletedSiblings note="Do NOT duplicate their work">');
+      buffer.writeln(
+        '<CompletedSiblings note="Do NOT duplicate their work. Use read_task_result to fetch details.">',
+      );
       for (final sibling in siblings) {
-        buffer.writeln('<Sibling objective="${sibling.objective}">');
-        buffer.writeln(sibling.summary ?? 'Completed');
+        buffer.writeln(
+          '<Sibling id="${sibling.id}" objective="${sibling.objective}">',
+        );
+        final sr = sibling.structuredResult;
+        if (sr != null) {
+          if (sr.isShortSync()) {
+            // Short results: include full
+            buffer.writeln('<Result type="full">');
+            buffer.writeln(sr.fullResult);
+            buffer.writeln('</Result>');
+          } else {
+            // Long results: TOC only
+            buffer.writeln(
+              '<Result type="toc" hint="Use read_task_result(${sibling.id}) for details">',
+            );
+            buffer.writeln(sr.toc);
+            buffer.writeln('</Result>');
+          }
+        } else {
+          // Fallback: no structured result, hint to use read_task_result
+          buffer.writeln(
+            '<Result type="toc" hint="Use read_task_result(${sibling.id}, mode=full) to read">No structured TOC available.</Result>',
+          );
+        }
         buffer.writeln('</Sibling>');
       }
       buffer.writeln('</CompletedSiblings>');
