@@ -427,13 +427,16 @@ class AgentService extends ChangeNotifier {
                   // Fallback: estimate based on word count
                   final wordCount = content.split(RegExp(r'\s+')).length;
                   isShort = wordCount < tocThreshold;
+                  // Use contextNodeId for read_task_result lookups (fixes ID mismatch)
+                  final lookupId = depTask.contextNodeId ?? depTask.id;
                   toc =
-                      'No structured TOC available. Content: $wordCount words. Use read_task_result(task_id="${depTask.id}", mode="full") to read.';
+                      'No structured TOC available. Content: $wordCount words. Use read_task_result(task_id="$lookupId", mode="full") to read.';
                 }
 
+                // Use contextNodeId for task lookup since _contextMap is keyed by ContextNode.id
                 structuredDeps.add(
                   DependencyInfo(
-                    taskId: depTask.id,
+                    taskId: depTask.contextNodeId ?? depTask.id,
                     name: depName,
                     content: content,
                     toc: toc,
