@@ -154,7 +154,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
 
     _titleController.addListener(_onTextChanged);
-    _titleController.addListener(_onTextChanged);
     _codeController.addListener(_onTextChanged);
 
     // Start in editing mode for new notes

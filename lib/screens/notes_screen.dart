@@ -33,7 +33,8 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> _selectedNotes = [];
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
-  List<String> _availableTags = [];
+  // _availableTags removed - using provider directly
+
   Set<String> _selectedFilterIds = {
     'default',
   }; // 'default', 'pinned', 'archived', 'all', or custom filter IDs
@@ -41,9 +42,7 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadTags();
-    });
+    // _loadTags removed - tags are now derived directly from provider
   }
 
   @override
@@ -52,13 +51,7 @@ class _NotesScreenState extends State<NotesScreen> {
     super.dispose();
   }
 
-  void _loadTags() {
-    final appProvider = context.read<AppProvider>();
-    final allTags = appProvider.getAllAvailableTags();
-    setState(() {
-      _availableTags = ['all', ...allTags];
-    });
-  }
+  // _loadTags method removed
 
   Future<void> _importFromZip() async {
     try {
@@ -95,7 +88,8 @@ class _NotesScreenState extends State<NotesScreen> {
 
         // Refresh
         context.read<AppProvider>().loadData();
-        _loadTags();
+        context.read<AppProvider>().loadData();
+        // _loadTags(); removed
       }
     } catch (e) {
       if (!mounted) return;
@@ -296,7 +290,11 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: 'AI Conversation',
             ),
             MultiSelectTagFilter(
-              availableTags: _availableTags,
+              availableTags: [
+                'all',
+                ...context.watch<AppProvider>().getAllAvailableTags(),
+              ],
+
               selectedTags: _selectedTags,
               onSelectionChanged: (selectedTags) {
                 setState(() {
@@ -310,7 +308,8 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 context.read<AppProvider>().loadData();
-                _loadTags();
+                context.read<AppProvider>().loadData();
+                // _loadTags(); removed
               },
             ),
             PopupMenuButton<String>(
@@ -364,38 +363,22 @@ class _NotesScreenState extends State<NotesScreen> {
                       ),
                       const SizedBox(height: 8),
                       // Filter tab strip
-                      Consumer<AppProvider>(
-                        builder: (context, appProvider, child) {
-                          // Update available tags when provider data changes
-                          final allTags = appProvider.getAllAvailableTags();
-                          final updatedAvailableTags = ['all', ...allTags];
-                          if (updatedAvailableTags.length !=
-                                  _availableTags.length ||
-                              !updatedAvailableTags.every(
-                                (tag) => _availableTags.contains(tag),
-                              )) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              setState(() {
-                                _availableTags = updatedAvailableTags;
-                              });
-                            });
-                          }
-
-                          return FilterTabStrip(
-                            selectedFilterIds: _selectedFilterIds,
-                            additionalSelectedTags: _selectedTags,
-                            customFilters: appProvider.filters,
-                            availableTags: _availableTags,
-                            onFilterSelected: _onFilterSelected,
-                            onFilterCreated: _onFilterCreated,
-                            onFilterUpdated: _onFilterUpdated,
-                            onFilterDeleted: _onFilterDeleted,
-                            onTagsUpdated: (tags) {
-                              setState(() {
-                                _selectedTags = tags;
-                              });
-                            },
-                          );
+                      FilterTabStrip(
+                        selectedFilterIds: _selectedFilterIds,
+                        additionalSelectedTags: _selectedTags,
+                        customFilters: appProvider.filters,
+                        availableTags: [
+                          'all',
+                          ...appProvider.getAllAvailableTags(),
+                        ],
+                        onFilterSelected: _onFilterSelected,
+                        onFilterCreated: _onFilterCreated,
+                        onFilterUpdated: _onFilterUpdated,
+                        onFilterDeleted: _onFilterDeleted,
+                        onTagsUpdated: (tags) {
+                          setState(() {
+                            _selectedTags = tags;
+                          });
                         },
                       ),
                     ],
@@ -406,11 +389,7 @@ class _NotesScreenState extends State<NotesScreen> {
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           // Load tags when data becomes available or when provider notifies of changes
-          if (!appProvider.isLoading && appProvider.notes.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _loadTags();
-            });
-          }
+          // Load tags callback removed
 
           if (appProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
