@@ -1662,15 +1662,18 @@ FORMAT:
    - OR just write your complete Markdown result directly (fallback).
 '''
         : '''
-FORMAT:
+IMPORTANT: format your response with the following template (excluding the ResponseTemplate XML tags).
 
+<ResponseTemplate>
 My thought: ...
 
+Action:
 ```json
 JSON_encoded_action
 ```
+</ResponseTemplate>
 
-JSON_encoded_action should be one of:
+In the template, JSON_encoded_action should be one of the following (without the code fence marker):
 ```json
 { "tool": "tool_name", "args": { ... } }
 ```
@@ -1696,6 +1699,24 @@ ACTION GUIDANCE:
 - **answer**: Provide your COMPLETE task output. For creative/generative tasks (write, create, expand),
   output the FULL content. For research tasks, output structured findings. The system will
   transform this appropriately for consuming tasks.
+
+<ResponseExample>
+My thought: I'll need to examine the file named file_1.txt.
+
+Action:
+```json
+{"tool": "read_file", "args": {"filename": "file_1.txt"}}
+```
+</ResponseExample>
+
+<ResponseExample>
+My thought: I'll need to re-analyze the data I have.
+
+Action:
+```json
+{"think": "I'll need to analyze my file A and file B that are in the execution log"}
+```
+</ResponseExample>
 
 Current task depth: ${task.depth} / $kMaxSubtaskDepth
 ''';
@@ -1738,6 +1759,7 @@ INSTRUCTIONS:
    - "spawn_subtasks": Decompose complex work into 1-5 focused child tasks
    - "answer": Complete the task when objective is satisfied
 $deliverableInstructions
+
 $formatInstructions
 ''';
 
