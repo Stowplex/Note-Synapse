@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:json_repair_flutter/json_repair_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -876,7 +878,15 @@ If no findings worth preserving, return: []
       );
       if (cleanResponse == null) return [];
 
-      final List<dynamic> jsonList = jsonDecode(cleanResponse);
+      // Try standard decode first, fall back to repairJson for malformed responses
+      List<dynamic> jsonList;
+      try {
+        jsonList = jsonDecode(cleanResponse) as List<dynamic>;
+      } catch (_) {
+        final repaired = repairJson(cleanResponse);
+        if (repaired is! List) return [];
+        jsonList = repaired;
+      }
       return jsonList.map((item) {
         final map = item as Map<String, dynamic>;
 
@@ -1413,7 +1423,17 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
         throw "No valid JSON task list found";
       }
 
-      final List<dynamic> jsonList = jsonDecode(cleanResponse);
+      // Try standard decode first, fall back to repairJson for malformed responses
+      List<dynamic> jsonList;
+      try {
+        jsonList = jsonDecode(cleanResponse) as List<dynamic>;
+      } catch (_) {
+        final repaired = repairJson(cleanResponse);
+        if (repaired is! List) {
+          throw "JSON repair failed - not a list";
+        }
+        jsonList = repaired;
+      }
       return jsonList.map((item) {
         if (item is String) {
           return AgentTask(
@@ -1844,7 +1864,17 @@ $formatInstructions
 
         // Try parsing first to handle malformed recovery
         try {
-          decision = jsonDecode(jsonStr) as Map<String, dynamic>;
+          // Try standard decode first, fall back to repairJson for malformed responses
+          try {
+            decision = jsonDecode(jsonStr) as Map<String, dynamic>;
+          } catch (_) {
+            final repaired = repairJson(jsonStr);
+            if (repaired is Map<String, dynamic>) {
+              decision = repaired;
+            } else {
+              rethrow;
+            }
+          }
           LoggerService.debug('[Agent Parsing] Parsed Decision Map: $decision');
 
           // VALIDATION: Strict Schema Check
@@ -2061,11 +2091,24 @@ Properly extracted content from the JSON string.
       if (decision != null) {
         validDecision = decision;
       } else {
+        // Try standard decode first, fall back to repairJson for malformed responses
         try {
           validDecision = jsonDecode(jsonStr) as Map<String, dynamic>;
-        } catch (e) {
-          task.executionHistory.add("Error: Invalid JSON: $e");
-          return;
+        } catch (_) {
+          try {
+            final repaired = repairJson(jsonStr);
+            if (repaired is Map<String, dynamic>) {
+              validDecision = repaired;
+            } else {
+              task.executionHistory.add(
+                "Error: JSON repair failed - not a map",
+              );
+              return;
+            }
+          } catch (e) {
+            task.executionHistory.add("Error: Invalid JSON: $e");
+            return;
+          }
         }
       }
 

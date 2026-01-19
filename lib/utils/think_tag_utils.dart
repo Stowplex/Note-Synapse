@@ -5,6 +5,8 @@
 /// preserving the content for multi-turn conversation enhancement.
 import 'dart:convert';
 
+import 'package:json_repair_flutter/json_repair_flutter.dart';
+
 /// Result of stripping think tags from a response.
 class ThinkTagResult {
   /// The content with all <think>...</think> blocks removed.
@@ -126,7 +128,14 @@ String? extractJsonFromResponse(String response, {bool expectArray = false}) {
 
     for (final jsonStr in candidates) {
       try {
-        final decoded = jsonDecode(jsonStr);
+        // First try standard JSON decode
+        dynamic decoded;
+        try {
+          decoded = jsonDecode(jsonStr);
+        } catch (_) {
+          // Fallback: Use json_repair_flutter to fix malformed JSON
+          decoded = repairJson(jsonStr);
+        }
         if (decoded is! Map) continue;
 
         final map = decoded as Map<String, dynamic>;
@@ -155,7 +164,7 @@ String? extractJsonFromResponse(String response, {bool expectArray = false}) {
           bestMatch = jsonStr;
         }
       } catch (e) {
-        // Not valid JSON, ignore
+        // Neither jsonDecode nor repairJson succeeded, ignore
       }
     }
 
