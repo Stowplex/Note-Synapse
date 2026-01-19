@@ -381,6 +381,10 @@ class AgentService extends ChangeNotifier {
       notifyListeners();
 
       try {
+        // Get configurable TOC inline threshold for this task execution
+        final tocThreshold =
+            await AgenticSettingsService.getTocInlineThreshold();
+
         // Run ReAct loop for this task until it's done or paused
         while (task.status == AgentTaskStatus.inProgress && _isRunning) {
           // Check and compact context if nearing token limit
@@ -418,11 +422,11 @@ class AgentService extends ChangeNotifier {
                 if (depContext?.structuredResult != null) {
                   final sr = depContext!.structuredResult!;
                   toc = sr.toc;
-                  isShort = sr.isShortSync();
+                  isShort = sr.isShortSync(threshold: tocThreshold);
                 } else {
                   // Fallback: estimate based on word count
                   final wordCount = content.split(RegExp(r'\s+')).length;
-                  isShort = wordCount < 1000;
+                  isShort = wordCount < tocThreshold;
                   toc =
                       'No structured TOC available. Content: $wordCount words. Use read_task_result(task_id="${depTask.id}", mode="full") to read.';
                 }

@@ -135,7 +135,9 @@ class ContextManagerService {
   /// - Condensed summaries from ancestors
   /// - Completed sibling summaries (if relevant)
   /// - Current node's detailed execution log
-  String buildContextForNode(ContextNode node) {
+  ///
+  /// [tocThreshold] is the word count threshold for inlining results vs showing TOC.
+  String buildContextForNode(ContextNode node, {int tocThreshold = 1000}) {
     final buffer = StringBuffer();
 
     // Add global roadmap (root objective)
@@ -159,7 +161,7 @@ class ContextManagerService {
         final result = ancestor.structuredResult;
         if (result != null) {
           // Use structured result with TOC-based lazy loading
-          if (result.isShortSync()) {
+          if (result.isShortSync(threshold: tocThreshold)) {
             // Short results: include inline
             buffer.writeln('<Result type="full">');
             buffer.writeln(result.fullResult);
@@ -204,7 +206,7 @@ class ContextManagerService {
         );
         final sr = sibling.structuredResult;
         if (sr != null) {
-          if (sr.isShortSync()) {
+          if (sr.isShortSync(threshold: tocThreshold)) {
             // Short results: brief summary inline
             buffer.writeln(
               '<Result type="summary">${sr.fullResult.length > 200 ? sr.fullResult.substring(0, 200) + "..." : sr.fullResult}</Result>',

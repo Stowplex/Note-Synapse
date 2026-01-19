@@ -18,6 +18,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
   int _findingMaxWords = AgenticSettingsService.defaultFindingMaxWords;
   int _maxTurns = AgenticSettingsService.defaultMaxTurns;
   int _turnIncrement = AgenticSettingsService.defaultTurnIncrement;
+  int _tocInlineThreshold = AgenticSettingsService.defaultTocInlineThreshold;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -33,6 +34,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
     final maxWords = await AgenticSettingsService.getFindingMaxWords();
     final maxTurns = await AgenticSettingsService.getMaxTurns();
     final turnIncrement = await AgenticSettingsService.getTurnIncrement();
+    final tocThreshold = await AgenticSettingsService.getTocInlineThreshold();
     if (!mounted) return;
     setState(() {
       _compactionThreshold = compaction;
@@ -40,6 +42,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
       _findingMaxWords = maxWords;
       _maxTurns = maxTurns;
       _turnIncrement = turnIncrement;
+      _tocInlineThreshold = tocThreshold;
       _isLoading = false;
     });
   }
@@ -98,6 +101,18 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
       await AgenticSettingsService.setTurnIncrement(value);
       if (!mounted) return;
       setState(() => _turnIncrement = value);
+      _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _updateTocInlineThreshold(int value) async {
+    setState(() => _isSaving = true);
+    try {
+      await AgenticSettingsService.setTocInlineThreshold(value);
+      if (!mounted) return;
+      setState(() => _tocInlineThreshold = value);
       _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -237,6 +252,26 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
                   onChanged: (v) =>
                       setState(() => _turnIncrement = (v ~/ 5) * 5),
                   onChangeEnd: (v) => _updateTurnIncrement((v ~/ 5) * 5),
+                ),
+                const SizedBox(height: 12),
+
+                // TOC Inline Threshold
+                _buildSettingCard(
+                  title: 'TOC Inline Threshold',
+                  description:
+                      'Results shorter than this word count are included in full; longer results show a table of contents only.',
+                  value: _tocInlineThreshold,
+                  displayValue: '$_tocInlineThreshold words',
+                  min: AgenticSettingsService.minTocInlineThreshold.toDouble(),
+                  max: AgenticSettingsService.maxTocInlineThreshold.toDouble(),
+                  divisions:
+                      (AgenticSettingsService.maxTocInlineThreshold -
+                          AgenticSettingsService.minTocInlineThreshold) ~/
+                      100,
+                  onChanged: (v) =>
+                      setState(() => _tocInlineThreshold = (v ~/ 100) * 100),
+                  onChangeEnd: (v) =>
+                      _updateTocInlineThreshold((v ~/ 100) * 100),
                 ),
               ],
             ),
