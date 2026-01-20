@@ -259,9 +259,9 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
                 _buildSettingCard(
                   title: 'TOC Inline Threshold',
                   description:
-                      'Results shorter than this word count are included in full; longer results show a table of contents only.',
+                      'Results shorter than this token count are included in full; longer results show a table of contents only.',
                   value: _tocInlineThreshold,
-                  displayValue: '$_tocInlineThreshold words',
+                  displayValue: '$_tocInlineThreshold tokens',
                   min: AgenticSettingsService.minTocInlineThreshold.toDouble(),
                   max: AgenticSettingsService.maxTocInlineThreshold.toDouble(),
                   divisions:

@@ -136,7 +136,7 @@ class ContextManagerService {
   /// - Completed sibling summaries (if relevant)
   /// - Current node's detailed execution log
   ///
-  /// [tocThreshold] is the word count threshold for inlining results vs showing TOC.
+  /// [tocThreshold] is the token count threshold for inlining results vs showing TOC.
   String buildContextForNode(ContextNode node, {int tocThreshold = 1000}) {
     final buffer = StringBuffer();
 

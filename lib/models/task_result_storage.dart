@@ -7,6 +7,7 @@
 /// 3. Providing section-based retrieval via breadcrumb paths
 
 import '../services/agentic_settings_service.dart';
+import '../utils/token_estimator.dart';
 
 /// Represents a section within a task result, identified by its header.
 class ResultSection {
@@ -84,18 +85,19 @@ class TaskResultStorage {
     return sections.map((s) => '${s.breadcrumb}').join('\n');
   }
 
-  /// Word count of the full result
-  int get wordCount => _countWords(fullResult);
+  /// Estimated token count of the full result.
+  /// Uses token estimation for accuracy with CJK text.
+  int get tokenCount => TokenEstimator.estimateTokens(fullResult);
 
-  /// Check if result is short enough to inline (uses configurable threshold)
+  /// Check if result is short enough to inline (uses configurable token threshold)
   Future<bool> isShort() async {
     final threshold = await AgenticSettingsService.getTocInlineThreshold();
-    return wordCount < threshold;
+    return tokenCount < threshold;
   }
 
-  /// Synchronous short check with a default threshold (for contexts where async isn't possible)
+  /// Synchronous short check with a default token threshold (for contexts where async isn't possible)
   bool isShortSync({int threshold = 1000}) {
-    return wordCount < threshold;
+    return tokenCount < threshold;
   }
 
   /// Find a section by its breadcrumb path
@@ -123,9 +125,6 @@ class TaskResultStorage {
             .toList(),
       );
 
-  /// Counts words in a string (simple whitespace split)
-  static int _countWords(String text) {
-    if (text.isEmpty) return 0;
-    return text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-  }
+  // Note: Word counting removed in favor of TokenEstimator.estimateTokens()
+  // which provides more accurate estimation for CJK text.
 }

@@ -369,15 +369,22 @@ void main() {
     test(
       'performTask processes JSON answer and populates structuredResult',
       () async {
-        // Mock the LLM to return a JSON answer
+        // Mock the LLM to return an XML answer
         const mockLlmResponse = r'''
-My thought: Research complete.
+<MyThought>Research complete.</MyThought>
+<Action type="answer">
+<Content>
+# Research Report
 
-```json
-{
-  "answer": "# Research Report\n\n## Findings\n\nKey data point 1.\n\n## Conclusion\n\nSummary here."
-}
-```
+## Findings
+
+Key data point 1.
+
+## Conclusion
+
+Summary here.
+</Content>
+</Action>
 ''';
 
         // Set the mock LLM generator
@@ -419,11 +426,16 @@ My thought: Research complete.
         final manyWords = List.generate(150, (i) => 'word$i').join(' ');
         final mockLlmResponse =
             '''
-```json
-{
-  "answer": "# Section 1\\n$manyWords\\n\\n# Section 2\\n$manyWords"
-}
-```
+<MyThought>Generated long content for TOC test.</MyThought>
+<Action type="answer">
+<Content>
+# Section 1
+$manyWords
+
+# Section 2
+$manyWords
+</Content>
+</Action>
 ''';
 
         agentService.llmGenerator = (prompt) async => mockLlmResponse;
@@ -447,7 +459,7 @@ My thought: Research complete.
         expect(rootNode.structuredResult, isNotNull);
         expect(rootNode.structuredResult!.sections.length, 2);
 
-        // Verify word count exceeds threshold (for TOC mode)
+        // Verify token count exceeds threshold (for TOC mode)
         expect(
           rootNode.structuredResult!.fullResult.split(' ').length,
           greaterThan(100),
@@ -460,11 +472,14 @@ My thought: Research complete.
       () async {
         // First, complete a task to populate structuredResult
         const mockLlmResponse = r'''
-```json
-{
-  "answer": "# Short Report\n\nBrief content."
-}
-```
+<MyThought>Brief analysis complete.</MyThought>
+<Action type="answer">
+<Content>
+# Short Report
+
+Brief content.
+</Content>
+</Action>
 ''';
 
         agentService.llmGenerator = (prompt) async => mockLlmResponse;
@@ -505,13 +520,21 @@ My thought: Research complete.
       () async {
         // This is the full end-to-end test that validates the complete wiring
         const mockLlmResponse = r'''
-My thought: After analyzing, I have findings.
+<MyThought>After analyzing, I have findings.</MyThought>
+<Action type="answer">
+<Content>
+# Key Findings
 
-```json
-{
-  "answer": "# Key Findings\n\n## Finding 1\nData about X from Source A.\n\n## Finding 2\nInsight about Y from Source B.\n\n## Conclusion\nRecommend Z."
-}
-```
+## Finding 1
+Data about X from Source A.
+
+## Finding 2
+Insight about Y from Source B.
+
+## Conclusion
+Recommend Z.
+</Content>
+</Action>
 ''';
 
         agentService.llmGenerator = (prompt) async => mockLlmResponse;

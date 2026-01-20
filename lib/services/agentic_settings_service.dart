@@ -21,7 +21,7 @@ class AgenticSettingsService {
   static const int defaultFindingMaxWords = 500;
   static const int defaultMaxTurns = 10;
   static const int defaultTurnIncrement = 10;
-  static const int defaultTocInlineThreshold = 1000; // words
+  static const int defaultTocInlineThreshold = 1000; // tokens
 
   // Constraints
   static const int minCompactionThreshold = 10000;
@@ -240,7 +240,7 @@ class AgenticSettingsService {
   // TOC Inline Threshold
   // ==========================================================================
 
-  /// Gets the word count threshold for inlining task results vs TOC.
+  /// Gets the token count threshold for inlining task results vs TOC.
   /// Results shorter than this threshold are included inline; longer results show TOC only.
   static Future<int> getTocInlineThreshold() async {
     try {
@@ -260,7 +260,7 @@ class AgenticSettingsService {
     }
   }
 
-  /// Sets the TOC inline threshold (in words).
+  /// Sets the TOC inline threshold (in tokens).
   static Future<void> setTocInlineThreshold(int value) async {
     final sanitized = value.clamp(minTocInlineThreshold, maxTocInlineThreshold);
     try {

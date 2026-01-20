@@ -24,6 +24,7 @@ import 'database_service.dart';
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/xml_response_parser.dart';
+import '../utils/token_estimator.dart';
 
 /// Callback for executing an external tool (MCP or local AI tool).
 typedef ToolExecutor =
@@ -427,13 +428,13 @@ class AgentService extends ChangeNotifier {
                   toc = sr.toc;
                   isShort = sr.isShortSync(threshold: tocThreshold);
                 } else {
-                  // Fallback: estimate based on word count
-                  final wordCount = content.split(RegExp(r'\s+')).length;
-                  isShort = wordCount < tocThreshold;
+                  // Fallback: estimate based on token count (more accurate for CJK)
+                  final tokenCount = TokenEstimator.estimateTokens(content);
+                  isShort = tokenCount < tocThreshold;
                   // Use contextNodeId for read_task_result lookups (fixes ID mismatch)
                   final lookupId = depTask.contextNodeId ?? depTask.id;
                   toc =
-                      'No structured TOC available. Content: $wordCount words. Use read_task_result(task_id="$lookupId", mode="full") to read.';
+                      'No structured TOC available. Content: $tokenCount tokens. Use read_task_result(task_id="$lookupId", mode="full") to read.';
                 }
 
                 // Use contextNodeId for task lookup since _contextMap is keyed by ContextNode.id
@@ -1700,7 +1701,7 @@ Structure your response as:
 </Action>
 
 ACTION TYPES AND CONTENT FORMAT:
-- **tool**: Execute a tool. Content MUST be a JSON object: {"arg1": "value", ...}. Include <ToolName>.
+- **tool**: Execute a tool. Content MUST be a JSON object that is the arguments to the tool: {"arg1": "value", ...}. <ToolName> tag is REQUIRED.
 - **think**: Analyze data in context. Content is free-form text.
 - **spawn_subtasks**: Decompose into 1-5 child tasks. Content MUST be a JSON array: [{"description": "...", "tools": [...]}]
 - **answer**: Complete the task. Content is your markdown result.
@@ -1774,8 +1775,8 @@ Don't settle for incomplete information when tools are available.
 ## RESPONSE FORMAT (preserved for UI display)
 
 Always structure your response as:
-1. "My thought: [your reasoning about what to do next]"
-2. ONE action in JSON format (tool, think, spawn_subtasks, or answer)
+1. <MyThought>your reasoning about what to do next</MyThought>
+2. <Action type="next_action"></Action> tag group for tool, think, spawn_subtasks, or answer
 
 This format is shown to the user to help them understand your reasoning.
 
@@ -1784,7 +1785,7 @@ INSTRUCTIONS:
 2. Formulate a CLEAR THOUGHT about what to do next.
 3. Choose ONE action:
    - "tool": Execute a tool to fetch NEW data
-   - "think": Analyze data ALREADY in context (don't reload)
+   - "think": Analyze data ALREADY in context
    - "spawn_subtasks": Decompose complex work into 1-5 focused child tasks
    - "answer": Complete the task when objective is satisfied
 $deliverableInstructions
