@@ -217,8 +217,11 @@ class ContextManagerService {
               '<Result type="toc" hint="Use read_task_result(${sibling.id}) for details">${sr.toc}</Result>',
             );
           }
+        } else if (sibling.summary != null) {
+          // Fallback: use summary if no structured result
+          buffer.writeln('<Result type="summary">${sibling.summary}</Result>');
         } else {
-          // Fallback: no structured result, hint to use read_task_result
+          // Last resort: no structured result or summary
           buffer.writeln(
             '<Result type="toc" hint="Use read_task_result(${sibling.id}, mode=full) to read">No structured TOC available.</Result>',
           );

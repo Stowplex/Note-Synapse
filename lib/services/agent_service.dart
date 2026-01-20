@@ -1992,9 +1992,16 @@ Please correct your output.''';
           task.executionHistory.add('Final deliverable produced directly.');
 
           if (task.contextNodeId != null) {
-            _contextManager
-                .getContext(task.contextNodeId!)
-                ?.log('Turn $turn - Final deliverable produced directly');
+            final ctx = _contextManager.getContext(task.contextNodeId!);
+            if (ctx != null) {
+              ctx.log('Turn $turn - Final deliverable produced directly');
+              // Generate TOC for structured result access
+              ctx.structuredResult = _contextManager.generateTocFromResult(
+                task.contextNodeId!,
+                task.description,
+                result,
+              );
+            }
           }
 
           _currentThought = "Delivered final result.";
@@ -2064,9 +2071,16 @@ Properly extracted content from the JSON string.
               task.status = AgentTaskStatus.completed;
               // Store full answer content for findings extraction and context propagation
               task.executionHistory.add('Answer: $content');
-              _contextManager
-                  .getContext(task.contextNodeId ?? '')
-                  ?.log('Task Result: $content');
+              final ctx = _contextManager.getContext(task.contextNodeId ?? '');
+              ctx?.log('Task Result: $content');
+              // Generate TOC for structured result access
+              if (ctx != null && task.contextNodeId != null) {
+                ctx.structuredResult = _contextManager.generateTocFromResult(
+                  task.contextNodeId!,
+                  task.description,
+                  content,
+                );
+              }
               notifyListeners();
               return;
             } else if (verdict == 'think') {
@@ -2118,9 +2132,16 @@ Properly extracted content from the JSON string.
         task.status = AgentTaskStatus.completed;
         // Store full answer content for findings extraction and context propagation
         task.executionHistory.add('Answer: $answerContent');
-        _contextManager
-            .getContext(task.contextNodeId ?? '')
-            ?.log('Task Result: $answerContent');
+        final ctx = _contextManager.getContext(task.contextNodeId ?? '');
+        ctx?.log('Task Result: $answerContent');
+        // Generate TOC for structured result access
+        if (ctx != null && task.contextNodeId != null) {
+          ctx.structuredResult = _contextManager.generateTocFromResult(
+            task.contextNodeId!,
+            task.description,
+            answerContent,
+          );
+        }
         notifyListeners();
         return;
       }

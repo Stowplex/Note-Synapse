@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
+import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -225,5 +227,335 @@ void main() {
         expect(child.maxContextTokens, kMinSubtaskBudget);
       });
     });
+
+    group('generateTocFromResult', () {
+      test('extracts headers with correct breadcrumbs', () {
+        final result = service.generateTocFromResult(
+          'task-1',
+          'Research goal',
+          '# Top\nIntro text\n## Sub1\nContent here\n### Sub1a\nDeep content\n## Sub2\nMore content',
+        );
+
+        expect(result.sections.length, 4);
+        expect(result.sections[0].title, 'Top');
+        expect(result.sections[0].breadcrumb, '# Top');
+        expect(result.sections[1].title, 'Sub1');
+        expect(result.sections[1].breadcrumb, '# Top > ## Sub1');
+        expect(result.sections[2].title, 'Sub1a');
+        expect(result.sections[2].breadcrumb, '# Top > ## Sub1 > ### Sub1a');
+        expect(result.sections[3].title, 'Sub2');
+        expect(result.sections[3].breadcrumb, '# Top > ## Sub2');
+      });
+
+      test('handles content without headers', () {
+        final result = service.generateTocFromResult(
+          'task-2',
+          'Goal',
+          'Plain text paragraph.\n\nAnother paragraph without any headers.',
+        );
+
+        expect(result.sections, isEmpty);
+        expect(result.fullResult, contains('Plain text'));
+      });
+
+      test('handles markdown answer content (not JSON wrapper)', () {
+        // Simulates properly extracted answer content
+        final result = service.generateTocFromResult(
+          'task-3',
+          'Analysis task',
+          '## Analysis Report\n\nKey findings here.\n\n### Data Points\n\n- Point 1\n- Point 2',
+        );
+
+        expect(result.sections.length, 2);
+        expect(result.sections[0].title, 'Analysis Report');
+        expect(result.sections[1].title, 'Data Points');
+        expect(result.toc, contains('Analysis Report'));
+      });
+    });
+
+    group('structuredResult and context building', () {
+      test('structuredResult enables proper context type', () async {
+        final root = await service.createRootContext(objective: 'Parent task');
+
+        // Simulate task completion with markdown answer
+        const answerContent =
+            '# Report\n## Findings\nData here.\n## Conclusion\nSummary.';
+        root.structuredResult = service.generateTocFromResult(
+          root.id,
+          'Parent task',
+          answerContent,
+        );
+        root.status = ContextNodeStatus.completed;
+
+        final child = service.createChildContext(
+          parent: root,
+          objective: 'Child task',
+        );
+
+        final context = service.buildContextForNode(child);
+
+        // Should use type="full" or type="toc", not log-preview
+        expect(
+          context.contains('type="full"') || context.contains('type="toc"'),
+          isTrue,
+          reason:
+              'Context should use "full" or "toc" type when structuredResult exists',
+        );
+        expect(context, isNot(contains('type="log-preview"')));
+      });
+
+      test('uses type="toc" with low threshold', () async {
+        final root = await service.createRootContext(objective: 'Main');
+
+        // Long content that exceeds threshold
+        final longContent =
+            '# Section 1\n${List.generate(200, (i) => 'word$i').join(' ')}\n# Section 2\n${List.generate(200, (i) => 'word$i').join(' ')}';
+        root.structuredResult = service.generateTocFromResult(
+          root.id,
+          'Main task',
+          longContent,
+        );
+        root.status = ContextNodeStatus.completed;
+
+        final child = service.createChildContext(
+          parent: root,
+          objective: 'Child',
+        );
+
+        // Very low threshold forces TOC mode
+        final context = service.buildContextForNode(child, tocThreshold: 100);
+
+        expect(context, contains('type="toc"'));
+        expect(context, contains('hint='));
+      });
+
+      test(
+        'falls back to log-preview only when no structuredResult or summary',
+        () async {
+          final root = await service.createRootContext(objective: 'Main');
+          root.log('Some execution log');
+          root.status = ContextNodeStatus.completed;
+          // NOTE: no structuredResult set, no summary set
+
+          final child = service.createChildContext(
+            parent: root,
+            objective: 'Child',
+          );
+          final context = service.buildContextForNode(child);
+
+          expect(context, contains('type="log-preview"'));
+        },
+      );
+    });
+  });
+
+  group('LLM Answer Processing Pipeline - Integration Tests', () {
+    late AgentService agentService;
+    late ContextManagerService contextManager;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      agentService = AgentService();
+      contextManager = agentService.contextManager;
+
+      // Initialize the context manager with a root context
+      await contextManager.createRootContext(objective: 'Test objective');
+    });
+
+    tearDown(() {
+      agentService.clearState();
+    });
+
+    test(
+      'performTask processes JSON answer and populates structuredResult',
+      () async {
+        // Mock the LLM to return a JSON answer
+        const mockLlmResponse = r'''
+My thought: Research complete.
+
+```json
+{
+  "answer": "# Research Report\n\n## Findings\n\nKey data point 1.\n\n## Conclusion\n\nSummary here."
+}
+```
+''';
+
+        // Set the mock LLM generator
+        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+
+        // Create a task with a context node
+        final rootNode = contextManager.rootContext!;
+        final task = AgentTask(
+          id: 'test-task-1',
+          description: 'Research something',
+          contextNodeId: rootNode.id,
+          maxTurns: 1,
+          isFinalDeliverable: true,
+        );
+
+        // Execute the task through the real _performTask pipeline
+        await agentService.performTaskForTest(task, 'global context');
+
+        // Verify: task result contains the answer content, not the JSON wrapper
+        expect(task.result, isNotNull);
+        expect(task.result, contains('# Research Report'));
+        expect(task.result, contains('## Findings'));
+        expect(task.result, isNot(contains('{"answer"')));
+        expect(task.status, AgentTaskStatus.completed);
+
+        // Verify: structuredResult was populated with TOC
+        expect(rootNode.structuredResult, isNotNull);
+        expect(rootNode.structuredResult!.sections.length, 3); // 1 H1 + 2 H2
+        expect(rootNode.structuredResult!.toc, contains('Research Report'));
+        expect(rootNode.structuredResult!.toc, contains('Findings'));
+        expect(rootNode.structuredResult!.toc, contains('Conclusion'));
+      },
+    );
+
+    test(
+      'performTask populates structuredResult with TOC for long answers',
+      () async {
+        // Mock the LLM to return a long answer that should trigger TOC mode
+        final manyWords = List.generate(150, (i) => 'word$i').join(' ');
+        final mockLlmResponse =
+            '''
+```json
+{
+  "answer": "# Section 1\\n$manyWords\\n\\n# Section 2\\n$manyWords"
+}
+```
+''';
+
+        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+
+        final rootNode = contextManager.rootContext!;
+        final task = AgentTask(
+          id: 'test-task-2',
+          description: 'Long research',
+          contextNodeId: rootNode.id,
+          maxTurns: 1,
+          isFinalDeliverable: true,
+        );
+
+        await agentService.performTaskForTest(task, 'context');
+
+        // Verify task completed
+        expect(task.status, AgentTaskStatus.completed);
+        expect(task.result, isNotNull);
+
+        // Verify structuredResult has sections
+        expect(rootNode.structuredResult, isNotNull);
+        expect(rootNode.structuredResult!.sections.length, 2);
+
+        // Verify word count exceeds threshold (for TOC mode)
+        expect(
+          rootNode.structuredResult!.fullResult.split(' ').length,
+          greaterThan(100),
+        );
+      },
+    );
+
+    test(
+      'context building uses correct result type based on structuredResult',
+      () async {
+        // First, complete a task to populate structuredResult
+        const mockLlmResponse = r'''
+```json
+{
+  "answer": "# Short Report\n\nBrief content."
+}
+```
+''';
+
+        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+
+        final rootNode = contextManager.rootContext!;
+        final task = AgentTask(
+          id: 'test-task-3',
+          description: 'Brief research',
+          contextNodeId: rootNode.id,
+          maxTurns: 1,
+          isFinalDeliverable: true,
+        );
+
+        await agentService.performTaskForTest(task, 'context');
+        rootNode.status = ContextNodeStatus.completed;
+
+        // Create a child context to test context building
+        final childNode = contextManager.createChildContext(
+          parent: rootNode,
+          objective: 'Follow-up task',
+        );
+
+        final context = contextManager.buildContextForNode(childNode);
+
+        // Should use type="full" or type="toc", NOT log-preview
+        expect(
+          context.contains('type="full"') || context.contains('type="toc"'),
+          isTrue,
+          reason:
+              'Context should use full/toc type when structuredResult exists',
+        );
+        expect(context, isNot(contains('type="log-preview"')));
+      },
+    );
+
+    test(
+      'full E2E: mocked LLM → performTask → structuredResult → context',
+      () async {
+        // This is the full end-to-end test that validates the complete wiring
+        const mockLlmResponse = r'''
+My thought: After analyzing, I have findings.
+
+```json
+{
+  "answer": "# Key Findings\n\n## Finding 1\nData about X from Source A.\n\n## Finding 2\nInsight about Y from Source B.\n\n## Conclusion\nRecommend Z."
+}
+```
+''';
+
+        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+
+        final rootNode = contextManager.rootContext!;
+        final task = AgentTask(
+          id: 'test-e2e',
+          description: 'Full E2E test',
+          contextNodeId: rootNode.id,
+          maxTurns: 1,
+          isFinalDeliverable: true,
+        );
+
+        // Step 1: Execute through real pipeline
+        await agentService.performTaskForTest(task, 'global context');
+
+        // Step 2: Verify task result is clean markdown (extracted from JSON)
+        expect(task.result, startsWith('# Key Findings'));
+        expect(task.result, contains('Finding 1'));
+        expect(task.result, contains('Source A'));
+        expect(task.result, isNot(contains('{"answer"')));
+
+        // Step 3: Verify structuredResult was created with correct TOC
+        expect(rootNode.structuredResult, isNotNull);
+        expect(rootNode.structuredResult!.sections.length, 4); // 1 H1 + 3 H2
+        expect(rootNode.structuredResult!.toc, contains('Key Findings'));
+        expect(rootNode.structuredResult!.toc, contains('Finding 1'));
+        expect(rootNode.structuredResult!.toc, contains('Finding 2'));
+        expect(rootNode.structuredResult!.toc, contains('Conclusion'));
+
+        // Step 4: Verify context building works with structuredResult
+        rootNode.status = ContextNodeStatus.completed;
+        final childNode = contextManager.createChildContext(
+          parent: rootNode,
+          objective: 'Use findings',
+        );
+
+        final context = contextManager.buildContextForNode(childNode);
+        expect(
+          context,
+          contains('Key Findings'),
+        ); // TOC or full content visible
+        expect(context, isNot(contains('type="log-preview"')));
+      },
+    );
   });
 }
