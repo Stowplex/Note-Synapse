@@ -1581,18 +1581,12 @@ Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["...
       return;
     }
 
-    // If no tools AND not a final deliverable AND not extracting findings,
-    // it's a pure no-op task. Skip LLM invocation.
-    // BUT: tasks with extractFindings=true need LLM to generate content
-    // even without external tools (e.g., creative writing, analysis).
-    if (task.toolNames.isEmpty &&
-        !task.isFinalDeliverable &&
-        !task.extractFindings) {
-      task.result = "Thought step completed.";
-      task.status = AgentTaskStatus.completed;
-      notifyListeners();
-      return;
-    }
+    // NOTE: We no longer skip tasks with empty tools.
+    // Tasks with tools: [] are valid "thinking" tasks where the LLM should:
+    // - Analyze context and reason about the problem
+    // - Produce creative output (stories, outlines, analysis)
+    // - Synthesize information from dependencies
+    // The LLM will use action type="answer" when it completes the task.
 
     final int turn = (task.executionHistory.length / 2).floor() + 1;
 
