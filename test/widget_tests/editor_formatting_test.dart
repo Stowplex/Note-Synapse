@@ -76,6 +76,7 @@ void main() {
     expect(controller.selection.start.index, 0);
     expect(controller.selection.end.index, 2);
 
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
     await tester.pumpWidget(const SizedBox());
   });
 }

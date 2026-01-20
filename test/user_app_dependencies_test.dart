@@ -20,12 +20,29 @@ void main() {
       await databaseService.close();
     });
 
+    Future<void> createTestApp(String appUuid) async {
+      final app = UserApp(
+        id: 'id-$appUuid',
+        uuid: appUuid,
+        name: 'Test App $appUuid',
+        description: 'Test Description',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        steps: [],
+        htmlContent: '',
+        type: UserAppType.normal,
+      );
+      await databaseService.insertUserApp(app);
+    }
+
     test('should create user app library', () async {
       // Test data
       const appUuid = 'test-app-uuid';
       const revisionId = 1;
       const name = 'Test Library';
       const usageInstructions = 'Test usage instructions';
+
+      await createTestApp(appUuid);
 
       // Create library
       final library = await libraryService.addLibrary(
@@ -65,6 +82,8 @@ void main() {
       const revisionId = 1;
       const name = 'Test Library 2';
 
+      await createTestApp(appUuid);
+
       // Create library with dependency
       await libraryService.addLibrary(
         appUuid: appUuid,
@@ -73,7 +92,28 @@ void main() {
         dependencies: [
           LibraryDependency(
             localPath: 'libs/example.js',
-            bytes: [99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 39, 72, 101, 108, 108, 111, 39, 41], // "console.log('Hello')" in bytes
+            bytes: [
+              99,
+              111,
+              110,
+              115,
+              111,
+              108,
+              101,
+              46,
+              108,
+              111,
+              103,
+              40,
+              39,
+              72,
+              101,
+              108,
+              108,
+              111,
+              39,
+              41,
+            ], // "console.log('Hello')" in bytes
           ),
         ],
       );
@@ -105,7 +145,9 @@ void main() {
       // Test data
       const appUuid = 'test-app-uuid-delete';
       const revisionId = 1;
-      const name = 'Test Library Delete';
+      const name = 'Library to Delete';
+
+      await createTestApp(appUuid);
 
       // Create library with dependencies
       final library = await libraryService.addLibrary(
@@ -113,14 +155,8 @@ void main() {
         revisionId: revisionId,
         name: name,
         dependencies: [
-          LibraryDependency(
-            localPath: 'libs/test1.js',
-            bytes: [1, 2, 3],
-          ),
-          LibraryDependency(
-            localPath: 'libs/test2.js',
-            bytes: [4, 5, 6],
-          ),
+          LibraryDependency(localPath: 'libs/test1.js', bytes: [1, 2, 3]),
+          LibraryDependency(localPath: 'libs/test2.js', bytes: [4, 5, 6]),
         ],
       );
 
@@ -132,7 +168,10 @@ void main() {
       await libraryService.deleteLibrary(library.id);
 
       // Verify library and dependencies are deleted
-      final librariesAfterDelete = await libraryService.getLibraries(appUuid, revisionId);
+      final librariesAfterDelete = await libraryService.getLibraries(
+        appUuid,
+        revisionId,
+      );
       expect(librariesAfterDelete.length, equals(0));
 
       // Dependencies should be automatically deleted due to foreign key constraint
@@ -144,7 +183,7 @@ void main() {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final appId = 'test-app-id-single-$timestamp';
       final appUuid = 'test-app-uuid-single-$timestamp';
-      
+
       // Create app
       final app = UserApp(
         id: appId,
@@ -158,9 +197,9 @@ void main() {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      
+
       await databaseService.insertUserApp(app);
-      
+
       // Create one revision
       final revision = AppRevision(
         id: 'revision-single-$timestamp',
@@ -172,17 +211,19 @@ void main() {
         appCode: '<div>Test</div>',
         attachmentPaths: [],
       );
-      
+
       await databaseService.insertAppRevision(revision);
-      
+
       // Try to delete the only revision - should throw exception
       expect(
         () => databaseService.deleteAppRevision(revision.id),
-        throwsA(isA<Exception>().having(
-          (e) => e.toString(),
-          'message',
-          contains('Cannot delete the only remaining revision'),
-        )),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Cannot delete the only remaining revision'),
+          ),
+        ),
       );
     });
 
@@ -191,7 +232,7 @@ void main() {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final appId = 'test-app-id-multi-$timestamp';
       final appUuid = 'test-app-uuid-multi-$timestamp';
-      
+
       // Create app
       final app = UserApp(
         id: appId,
@@ -205,9 +246,9 @@ void main() {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      
+
       await databaseService.insertUserApp(app);
-      
+
       // Create multiple revisions
       final revision1 = AppRevision(
         id: 'revision-1-test2-$timestamp',
@@ -219,7 +260,7 @@ void main() {
         appCode: '<div>Test 1</div>',
         attachmentPaths: [],
       );
-      
+
       final revision2 = AppRevision(
         id: 'revision-2-test2-$timestamp',
         appId: appId,
@@ -230,17 +271,17 @@ void main() {
         appCode: '<div>Test 2</div>',
         attachmentPaths: [],
       );
-      
+
       await databaseService.insertAppRevision(revision1);
       await databaseService.insertAppRevision(revision2);
-      
+
       // Set revision 2 as pinned
       final updatedApp = app.copyWith(selectedRevisionId: revision2.id);
       await databaseService.updateUserApp(updatedApp);
-      
+
       // Delete revision 2 (the pinned one)
       await databaseService.deleteAppRevision(revision2.id);
-      
+
       // Check that the pinned revision moved to revision 1
       final finalApp = await databaseService.getUserApp(appId);
       expect(finalApp?.selectedRevisionId, equals(revision1.id));

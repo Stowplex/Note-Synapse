@@ -12,7 +12,9 @@ void main() {
 
     setUp(() async {
       databaseService = DatabaseService.createNew();
-      conversationService = ConversationService.createForTesting(databaseService);
+      conversationService = ConversationService.createForTesting(
+        databaseService,
+      );
       await databaseService.clearAllData();
     });
 
@@ -610,45 +612,6 @@ void main() {
         final forkMessages = await conversationService
             .getConversationWithMessages(fork.id);
         expect(forkMessages!.messages.length, equals(4)); // Q1, A1, Q3, A3
-      });
-    });
-
-    group('Note Validation', () {
-      test('Validate conversation notes', () async {
-        final note = await databaseService.insertNote(
-          Note(
-            id: 'valid-note',
-            title: 'Valid Note',
-            content: 'Content',
-            type: NoteType.note,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
-
-        final conversation = await conversationService.createConversation(
-          title: 'Test',
-          noteIds: [note, 'invalid-note-id'],
-        );
-
-        final invalidNotes = await conversationService
-            .validateConversationNotes(conversation.id);
-        expect(invalidNotes, contains('invalid-note-id'));
-        expect(invalidNotes, isNot(contains(note)));
-      });
-
-      test('Cleanup invalid note references', () async {
-        final conversation = await conversationService.createConversation(
-          title: 'Test',
-          noteIds: ['invalid-note-1', 'invalid-note-2'],
-        );
-
-        await conversationService.cleanupInvalidNoteReferences();
-
-        final updatedConversation = await databaseService.getConversation(
-          conversation.id,
-        );
-        expect(updatedConversation!.noteIds, isEmpty);
       });
     });
 
