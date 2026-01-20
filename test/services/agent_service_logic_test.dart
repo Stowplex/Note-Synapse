@@ -4,7 +4,7 @@ import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/services/agent_service.dart';
 
 void main() {
-  group('AgentService Logic Tests', () {
+  group('AgentService Logic Tests with XML Format', () {
     late AgentService agentService;
 
     setUp(() {
@@ -21,7 +21,7 @@ void main() {
     }
 
     test(
-      'Case 1: Regular task, Invalid JSON (Just Text) -> Fallback to Verdict',
+      'Case 1: Regular task, Missing Action element -> Error reported',
       () async {
         final task = AgentTask(
           id: '1',
@@ -29,70 +29,58 @@ void main() {
           isFinalDeliverable: false,
         );
 
-        // Mocks:
-        // 1. Initial response: returns generic text (invalid action JSON)
-        // 2. Verdict response: returns "think" verdict to continue analysis
-        int callCount = 0;
         // Make sure task has tools so it doesn't auto-complete as no-op
         task.toolNames = ['search_notes'];
 
+        // Response: Just text, no XML Action element
         agentService.llmGenerator = (prompt) async {
-          callCount++;
-          if (callCount == 1) {
-            return "I am thinking about this problem."; // No JSON
-          } else {
-            // Verdict prompt
-            return "<verdict>think</verdict><content>I am thinking about this problem.</content>";
-          }
+          return "I am thinking about this problem."; // No XML Action
         };
 
         await agentService.performTaskForTest(task, "Context");
 
         // Expectation:
         // - Task should NOT be completed (status != completed)
-        // - History should contain the "Analysis" from verdict
+        // - History should contain error about missing Action element
         expect(task.status, isNot(AgentTaskStatus.completed));
         expect(
+          task.executionHistory.any((h) => h.contains('Missing <Action')),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'Case 2: Regular task, Valid XML tool action -> performing action',
+      () async {
+        final task = AgentTask(
+          id: '2',
+          description: 'Regular task action',
+          isFinalDeliverable: false,
+        );
+
+        // Response with valid XML tool action
+        const llmResponse = '''
+<MyThought>I need to search for relevant notes.</MyThought>
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>{"query": "test"}</Content>
+</Action>
+''';
+
+        await runStep(task, llmResponse);
+
+        expect(
           task.executionHistory.any(
-            (h) => h.contains('Analysis: I am thinking'),
+            (h) => h.contains('Action: Call search_notes'),
           ),
           isTrue,
         );
       },
     );
 
-    test('Case 2: Regular task, Valid JSON Action -> performing action', () async {
-      final task = AgentTask(
-        id: '2',
-        description: 'Regular task action',
-        isFinalDeliverable: false,
-      );
-
-      // Response with valid tool action
-      final jsonAction = jsonEncode({
-        "tool": "search_notes",
-        "args": {"query": "test"},
-      });
-      final llmResponse =
-          'My thought: checking notes.\n```json\n$jsonAction\n```';
-
-      // We need to mock the tool executor or native tool execution will fail/try real tools
-      // For this test, valid JSON parsing is enough to verify it TRIES to call tool.
-      // Since we don't mock tools here easily without more setup, we expect
-      // checking executionHistory for "Action: Call search_notes"
-
-      await runStep(task, llmResponse);
-
-      expect(
-        task.executionHistory.any(
-          (h) => h.contains('Action: Call search_notes'),
-        ),
-        isTrue,
-      );
-    });
-
     test(
-      'Case 3: Final Deliverable, Invalid JSON (Just Text) -> Complete as Answer',
+      'Case 3: Final Deliverable, Missing Action -> Complete as Answer (fallback)',
       () async {
         final task = AgentTask(
           id: '3',
@@ -100,8 +88,7 @@ void main() {
           isFinalDeliverable: true,
         );
 
-        // Response: Just text, no JSON.
-        // Should trigger the "direct markdown result" path for final deliverables.
+        // Response: Just text, no XML. For final deliverable, this is treated as direct answer.
         final llmResponse = "Here is the final report.\n\n# Summary\nIt works.";
 
         await runStep(task, llmResponse);
@@ -112,7 +99,7 @@ void main() {
     );
 
     test(
-      'Case 4: Final Deliverable, Valid JSON Action -> Perform Action',
+      'Case 4: Final Deliverable, Valid XML tool action -> Perform tool',
       () async {
         final task = AgentTask(
           id: '4',
@@ -120,13 +107,14 @@ void main() {
           isFinalDeliverable: true,
         );
 
-        // Response: Valid tool call. Even if final, it takes priority if formatted correctly.
-        final jsonAction = jsonEncode({
-          "tool": "search_notes",
-          "args": {"query": "final check"},
-        });
-        final llmResponse =
-            'My thought: checking one last thing.\n```json\n$jsonAction\n```';
+        // Response: Valid XML tool call. Even if final, it takes priority.
+        const llmResponse = '''
+<MyThought>I need one more piece of information.</MyThought>
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>{"query": "final check"}</Content>
+</Action>
+''';
 
         await runStep(task, llmResponse);
 
@@ -142,199 +130,249 @@ void main() {
     );
 
     test(
-      'Case 5: Final Deliverable, Valid JSON NO Action -> Complete as Answer',
+      'Case 5: Final Deliverable, Valid XML answer -> Complete with content',
       () async {
-        // This is the FIX scenario.
         final task = AgentTask(
           id: '5',
-          description: 'Final task with code block',
+          description: 'Final task with answer',
           isFinalDeliverable: true,
         );
 
-        // Response contains valid JSON but it is DATA (code block), not an action.
-        // E.g. a JSON snippet illustrative of something
-        final jsonSnippet = jsonEncode({
-          "some_key": "some_value",
-          "data": [1, 2, 3],
-        });
+        // Response: Valid XML answer action
+        const llmResponse = '''
+<MyThought>I have all the information I need.</MyThought>
+<Action type="answer">
+<Content>
+# Analysis Report
 
-        final llmResponse =
-            '''
-Here is the API response example you asked for:
+## Summary
+The investigation reveals important findings.
 
-```json
-$jsonSnippet
-```
-
-This confirms the schema.
+## Findings
+1. First finding
+2. Second finding
+</Content>
+</Action>
 ''';
 
         await runStep(task, llmResponse);
 
-        // Expectation with FIX:
-        // The JSON should be ignored (validation fails).
-        // The fallback to direct markdown should happen.
-        // Task should be completed.
-        // Result should contain the full text.
         expect(task.status, equals(AgentTaskStatus.completed));
-        expect(task.result, contains("Here is the API response example"));
-        expect(task.result, contains('"some_key":"some_value"'));
+        expect(task.result, contains("# Analysis Report"));
+        expect(task.result, contains("First finding"));
       },
     );
 
     test(
-      'Case 6: Regular Task, Valid JSON NO Action -> Error in History',
+      'Case 6: Regular Task, Invalid action type -> Error in history',
       () async {
         final task = AgentTask(
           id: '6',
-          description: 'Regular task with data json',
+          description: 'Regular task with invalid type',
           isFinalDeliverable: false,
         );
 
-        // JSON that is valid but has no action keys
-        final jsonData = jsonEncode({
-          "data": "some value",
-          "nested": {"id": 1},
-        });
-        final llmResponse = 'Here is some data:\n```json\n$jsonData\n```';
+        const llmResponse = '''
+<MyThought>Doing something.</MyThought>
+<Action type="invalid_action">
+<Content>something</Content>
+</Action>
+''';
 
         await runStep(task, llmResponse);
 
-        // Expectation:
-        // It is NOT a final deliverable, so the "discard JSON" validation does NOT run.
-        // It parses the JSON, checks keys, finds none.
-        // Ends up at: if (toolName == null) ... "Error: Missing 'tool' or 'answer' key."
         expect(task.status, isNot(AgentTaskStatus.completed));
         expect(
-          task.executionHistory.any(
-            (h) => h.contains("Error: Missing 'tool' or 'answer' key"),
-          ),
+          task.executionHistory.any((h) => h.contains('Invalid action type')),
           isTrue,
         );
       },
     );
 
-    test(
-      'Case 7: Regular Task, Malformed JSON WITH Intent -> Verdict/Fallback',
-      () async {
-        final task = AgentTask(
-          id: '7',
-          description: 'Regular task malformed intent',
-          isFinalDeliverable: false,
-          toolNames: ['search_notes'],
-          allowedTools: ['search_notes'],
-        );
+    test('Case 7: Tool action without ToolName -> Error reported', () async {
+      final task = AgentTask(
+        id: '7',
+        description: 'Tool without name',
+        isFinalDeliverable: false,
+      );
 
-        // Malformed JSON (missing closing brace) but has "tool" key
-        final malformedJson =
-            '{"tool": "search_notes", "args": {"query": "restore"}';
+      const llmResponse = '''
+<MyThought>I'll search.</MyThought>
+<Action type="tool">
+<Content>{"query": "test"}</Content>
+</Action>
+''';
 
-        // We expect the system to detect "tool" key and trigger Verdict logic.
-        // The Verdict logic sends a prompt to LLM.
-        // We need to mock the Verdict response too.
-        // 1. Initial response (malformed)
-        // 2. Verdict response (corrected)
-        int callCount = 0;
-        agentService.llmGenerator = (prompt) async {
-          callCount++;
-          if (callCount == 1) {
-            return 'My thought: try search.\n```json\n$malformedJson\n```';
-          } else {
-            // Verdict prompt should look like: "Was this response: 1. A completed ANSWER... 2. A TOOL..."
-            if (prompt.contains('<verdict>answer|tool|think</verdict>')) {
-              return '<verdict>tool</verdict><content>search_notes with query restore</content>';
-            }
-            return 'Unexpected prompt';
-          }
-        };
+      await runStep(task, llmResponse);
 
-        await agentService.performTaskForTest(task, "Context");
-
-        // Expectation:
-        // It fell into Verdict logic because of looksLikeAgentAction recovery.
-        // Verdict logic parsed "tool" and added "Tool intent detected but malformed" to history.
-        expect(
-          task.executionHistory.any(
-            (h) => h.contains('Tool intent detected but malformed'),
-          ),
-          isTrue,
-          reason:
-              'Execution history should contain malformed tool detection message',
-        );
-      },
-    );
+      expect(task.status, isNot(AgentTaskStatus.completed));
+      expect(
+        task.executionHistory.any((h) => h.contains('<ToolName>')),
+        isTrue,
+      );
+    });
 
     test(
-      'Case 8: Regular Task, Malformed JSON NO Intent -> Error in History',
+      'Case 8: Tool action with invalid JSON args -> Error reported',
       () async {
         final task = AgentTask(
           id: '8',
-          description: 'Regular task malformed garbage',
+          description: 'Tool with bad JSON',
           isFinalDeliverable: false,
         );
 
-        // Malformed JSON (missing brace) AND NO intent keys
-        final malformedJson = '{"data": "garbage"';
-
-        agentService.llmGenerator = (prompt) async {
-          return 'Here is garbage:\n```json\n$malformedJson\n```';
-        };
-
-        await runStep(
-          task,
-          'placeholder - ignored because we set llmGenerator above',
-        );
-
-        // Expectation:
-        // Parsing fails. looksLikeAgentAction returns false.
-        // Falls through to bottom parsing block.
-        // Parser fails again.
-        // Adds "Error: Invalid JSON" to history.
-        expect(
-          task.executionHistory.any(
-            (h) =>
-                h.contains('Error: Invalid JSON') ||
-                h.contains('Error: No JSON action found'),
-          ),
-          isTrue,
-          reason:
-              'Execution history should contain Invalid JSON error or No JSON action found error',
-        );
-      },
-    );
-
-    test(
-      'Case 9: Literal Newline in JSON (Recovery) -> Parse as Answer',
-      () async {
-        final task = AgentTask(
-          id: '9',
-          description: 'Literal newline recovery',
-          isFinalDeliverable: true,
-        );
-
-        // JSON with literal newline inside string (invalid JSON)
-        final literalNewlineJson = '''
-{
-  "answer": "Line 1
-Line 2"
-}
+        const llmResponse = '''
+<MyThought>Searching.</MyThought>
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>this is not valid json</Content>
+</Action>
 ''';
-        final llmResponse =
-            'Here is the answer:\n```json\n$literalNewlineJson\n```';
 
         await runStep(task, llmResponse);
 
-        // Expectation:
-        // jsonDecode fails.
-        // Regex recovery kicks in.
-        // Extracts "Line 1\nLine 2".
-        // Sets task.result to strict answer content.
-        expect(task.status, equals(AgentTaskStatus.completed));
-        expect(task.result, contains("Line 1"));
-        expect(task.result, contains("Line 2"));
-        // Should NOT contain the JSON wrapper because it was parsed!
-        expect(task.result, isNot(contains("```json")));
+        expect(task.status, isNot(AgentTaskStatus.completed));
+        expect(task.executionHistory.any((h) => h.contains('JSON')), isTrue);
       },
     );
+
+    test('Case 9: Think action continues without tool call', () async {
+      final task = AgentTask(
+        id: '9',
+        description: 'Think action',
+        isFinalDeliverable: false,
+      );
+
+      const llmResponse = '''
+<MyThought>I need to analyze the data.</MyThought>
+<Action type="think">
+<Content>Looking at the patterns, I notice that the data shows...</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      // Task should not complete (continuing reasoning)
+      expect(task.status, isNot(AgentTaskStatus.completed));
+      expect(task.executionHistory.any((h) => h.contains('Analysis:')), isTrue);
+    });
+
+    test('Case 10: spawn_subtasks action creates subtasks', () async {
+      final task = AgentTask(
+        id: '10',
+        description: 'Complex task',
+        isFinalDeliverable: false,
+        depth: 0, // Root level
+      );
+
+      const llmResponse = '''
+<MyThought>This is complex, I'll decompose it.</MyThought>
+<Action type="spawn_subtasks">
+<Content>[{"description": "Research topic A", "tools": ["search"]}, {"description": "Research topic B", "tools": ["search"]}]</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      // Should have spawned subtasks
+      expect(task.spawnedSubtaskIds.length, equals(2));
+    });
+
+    test('Case 11: spawn_subtasks with invalid JSON -> Error', () async {
+      final task = AgentTask(
+        id: '11',
+        description: 'Bad spawn',
+        isFinalDeliverable: false,
+      );
+
+      const llmResponse = '''
+<MyThought>Decomposing.</MyThought>
+<Action type="spawn_subtasks">
+<Content>{"not": "an array"}</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      expect(task.status, isNot(AgentTaskStatus.completed));
+      expect(task.executionHistory.any((h) => h.contains('array')), isTrue);
+    });
+
+    test('Case 12: spawn_subtasks missing description -> Error', () async {
+      final task = AgentTask(
+        id: '12',
+        description: 'Bad spawn fields',
+        isFinalDeliverable: false,
+      );
+
+      const llmResponse = '''
+<MyThought>Decomposing.</MyThought>
+<Action type="spawn_subtasks">
+<Content>[{"tools": ["search"]}]</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      expect(task.status, isNot(AgentTaskStatus.completed));
+      expect(
+        task.executionHistory.any((h) => h.contains('description')),
+        isTrue,
+      );
+    });
+
+    test('Case 13: Tool Content with code fences is handled', () async {
+      final task = AgentTask(
+        id: '13',
+        description: 'Tool with fenced JSON',
+        isFinalDeliverable: false,
+      );
+
+      // Some LLMs wrap JSON in code fences even when told not to
+      const llmResponse = '''
+<MyThought>Searching with formatted args.</MyThought>
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>
+```json
+{"query": "test with fences"}
+```
+</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      expect(
+        task.executionHistory.any(
+          (h) => h.contains('Action: Call search_notes'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('Case 14: Thought extraction from MyThought element', () async {
+      final task = AgentTask(
+        id: '14',
+        description: 'Test thought extraction',
+        isFinalDeliverable: false,
+      );
+
+      const llmResponse = '''
+<MyThought>This is my detailed reasoning about the problem at hand.</MyThought>
+<Action type="think">
+<Content>Further analysis here.</Content>
+</Action>
+''';
+
+      await runStep(task, llmResponse);
+
+      expect(
+        task.executionHistory.any(
+          (h) => h.contains('Thought: This is my detailed reasoning'),
+        ),
+        isTrue,
+      );
+    });
   });
 }

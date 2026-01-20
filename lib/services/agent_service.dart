@@ -23,6 +23,7 @@ import 'mcp_service.dart';
 import 'database_service.dart';
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
+import '../utils/xml_response_parser.dart';
 
 /// Callback for executing an external tool (MCP or local AI tool).
 typedef ToolExecutor =
@@ -1677,69 +1678,74 @@ ${AIPrompts.agenticDeliverableGuidelines}
     // Use different format instructions based on whether this is a final deliverable
     final formatInstructions = task.isFinalDeliverable
         ? '''
-FORMAT:
-1. "My thought: [your reasoning about what's missing or how to structure the result]"
-2. ONE action:
-   - Use JSON format if you need a tool: ```json { "tool": "tool_name", "args": { ... } } ```
-   - Use JSON format to finalize: ```json { "answer": "..." } ```
-   - OR just write your complete Markdown result directly (fallback).
+RESPONSE FORMAT (XML-based):
+
+<MyThought>Your reasoning about what to do next</MyThought>
+<Action type="ACTION_TYPE">
+  <ToolName>tool_name</ToolName>
+  <Content>action content</Content>
+</Action>
+
+If you need more information, use type="tool".
+If you have the complete answer, use type="answer" with your markdown result in <Content>.
 '''
         : '''
-IMPORTANT: format your response with the following template (excluding the ResponseTemplate XML tags).
+RESPONSE FORMAT (XML-based for reliable parsing):
 
-<ResponseTemplate>
-My thought: ...
+Structure your response as:
+<MyThought>Your reasoning about what to do next</MyThought>
+<Action type="ACTION_TYPE">
+  <ToolName>tool_name</ToolName>
+  <Content>action content</Content>
+</Action>
 
-Action:
-```json
-JSON_encoded_action
-```
-</ResponseTemplate>
+ACTION TYPES AND CONTENT FORMAT:
+- **tool**: Execute a tool. Content MUST be a JSON object: {"arg1": "value", ...}. Include <ToolName>.
+- **think**: Analyze data in context. Content is free-form text.
+- **spawn_subtasks**: Decompose into 1-5 child tasks. Content MUST be a JSON array: [{"description": "...", "tools": [...]}]
+- **answer**: Complete the task. Content is your markdown result.
 
-In the template, JSON_encoded_action should be one of the following (without the code fence marker):
-```json
-{ "tool": "tool_name", "args": { ... } }
-```
-OR
-```json
-{ "think": "Detailed analysis or reasoning about data already in context" }
-```
-OR
-```json
-{ "spawn_subtasks": [ { "description": "Subtask 1", "tools": ["tool1"] }, { "description": "Subtask 2", "tools": ["tool2"] } ] }
-```
-OR
-```json
-{ "answer": "Your complete task output" }
-```
+> For "tool" and "spawn_subtasks", Content must be valid JSON (no code fences).
 
-ACTION GUIDANCE:
-- **think**: Analyze/reason about data ALREADY in execution history - don't reload files
-- **tool**: Fetch NEW data not yet in context
-- **spawn_subtasks**: Delegate complex work by spawning 1-5 focused subtasks at once (max depth: $kMaxSubtaskDepth)
-  Use when: task needs parallel investigation, can be decomposed into independent parts, or benefits from context isolation
-  Each subtask runs with isolated context but inherits parent findings
-- **answer**: Provide your COMPLETE task output. For creative/generative tasks (write, create, expand),
-  output the FULL content. For research tasks, output structured findings. The system will
-  transform this appropriately for consuming tasks.
+EXAMPLES:
 
-<ResponseExample>
-My thought: I'll need to examine the file named file_1.txt.
+<Example>
+<MyThought>I need to search for relevant notes.</MyThought>
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>{"query": "machine learning"}</Content>
+</Action>
+</Example>
 
-Action:
-```json
-{"tool": "read_file", "args": {"filename": "file_1.txt"}}
-```
-</ResponseExample>
+<Example>
+<MyThought>I have all the information needed.</MyThought>
+<Action type="answer">
+<Content>
+# Analysis Report
 
-<ResponseExample>
-My thought: I'll need to re-analyze the data I have.
+## Summary
+The investigation reveals that...
 
-Action:
-```json
-{"think": "I'll need to analyze my file A and file B that are in the execution log"}
-```
-</ResponseExample>
+## Findings
+1. First finding
+2. Second finding
+</Content>
+</Action>
+</Example>
+
+<Example>
+<MyThought>This task is complex and should be decomposed.</MyThought>
+<Action type="spawn_subtasks">
+<Content>[{"description": "Research topic A", "tools": ["search"]}, {"description": "Research topic B", "tools": ["search"]}]</Content>
+</Action>
+</Example>
+
+<Example>
+<MyThought>I need to analyze the data already in context.</MyThought>
+<Action type="think">
+<Content>Looking at the execution history, I notice patterns in the data...</Content>
+</Action>
+</Example>
 
 Current task depth: ${task.depth} / $kMaxSubtaskDepth
 ''';
@@ -1838,122 +1844,12 @@ $formatInstructions
         '[Agent Parsing] Processed Response:\n$processedResponse',
       );
 
-      // Use robust JSON extraction
-      String? jsonStr = extractJsonFromResponse(processedResponse);
-      LoggerService.debug(
-        '[Agent Parsing] Extracted JSON string candidate:\n$jsonStr',
-      );
+      // Use XML parser for response parsing
+      final xmlResponse = parseXmlAgentResponse(processedResponse);
+      LoggerService.debug('[Agent Parsing] XML Parse Result: $xmlResponse');
 
-      String thought = '';
-
-      Map<String, dynamic>? decision;
-
-      String? parseError;
-
-      if (jsonStr != null) {
-        // Extract thought BEFORE parsing, so we preserve it even if parsing fails/is rejected.
-        final idx = processedResponse.indexOf(jsonStr);
-        if (idx > 0) {
-          thought = processedResponse.substring(0, idx).trim();
-          // Strip trailing JSON fence markers (```json, ```)
-          thought = thought
-              .replaceAll(RegExp(r'```json\s*$', multiLine: true), '')
-              .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
-              .trim();
-        }
-
-        // Try parsing first to handle malformed recovery
-        try {
-          // Try standard decode first, fall back to repairJson for malformed responses
-          try {
-            decision = jsonDecode(jsonStr) as Map<String, dynamic>;
-          } catch (_) {
-            final repaired = repairJson(jsonStr);
-            if (repaired is Map<String, dynamic>) {
-              decision = repaired;
-            } else {
-              rethrow;
-            }
-          }
-          LoggerService.debug('[Agent Parsing] Parsed Decision Map: $decision');
-
-          // VALIDATION: Strict Schema Check
-          // Ensure the JSON object contains at least one valid action key.
-          if (!decision.containsKey('tool') &&
-              !decision.containsKey('answer') &&
-              !decision.containsKey('think') &&
-              !decision.containsKey('spawn_subtasks')) {
-            throw '''Invalid Agent Action: The parsed JSON object is missing a required action key. Found keys: ${decision.keys.toList()}.
-You must use ONE of the following formats:
-
-1. Call a Tool:
-```json
-{ "tool": "tool_name", "args": { ... } }
-```
-
-2. Answer (Final Result):
-```json
-{ "answer": "Your final answer here..." }
-```
-
-3. Think (Reasoning):
-```json
-{ "think": "Your analysis here..." }
-```
-
-4. Spawn Subtasks:
-```json
-{ "spawn_subtasks": [ { "description": "...", "tools": [...] } ] }
-```
-
-Please correct your output.''';
-          }
-        } catch (e) {
-          LoggerService.debug('[Agent Parsing] JSON Parse Error: $e');
-          parseError = e.toString();
-          if (!parseError.startsWith("Invalid Agent Action")) {
-            parseError =
-                "Invalid JSON Syntax: ${e.toString()}. Please ensure your output is valid JSON.";
-          }
-
-          // Robustness: If JSON fails (e.g. literal newlines), try regex extraction for 'answer'
-          // ... (keep regex logic)
-
-          final answerMatch = RegExp(
-            r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)"',
-            multiLine: true,
-            dotAll: true,
-          ).firstMatch(jsonStr);
-
-          if (answerMatch != null) {
-            final recoveredContent = answerMatch.group(1)!;
-            decision = {'answer': recoveredContent};
-            LoggerService.debug(
-              '[Agent Parsing] Recovered Answer via Regex: $recoveredContent',
-            );
-            parseError = null; // Clear error if recovered
-          } else {
-            // Recovery failed (either malformed or invalid schema).
-            // Explicitly nullify jsonStr and decision to force downstream error reporting.
-            LoggerService.debug(
-              '[Agent Parsing] Parsing failed and not recovered. Nullifying decision.',
-            );
-            jsonStr = null;
-            decision = null;
-            // parseError remains set for reporting
-
-            // Set lastError on context to ensure it appears in <LastRoundError> next turn
-            if (parseError != null) {
-              _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
-                  'IMPORTANT: $parseError';
-            }
-          }
-        }
-      }
-
-      if (thought.startsWith('My thought:')) {
-        thought = thought.replaceFirst('My thought:', '').trim();
-      }
+      // Extract thought from XML
+      String thought = xmlResponse.thought ?? '';
       _currentThought = thought.isNotEmpty ? thought : "Executing...";
       onProgressUpdate?.call(_currentThought!);
       notifyListeners();
@@ -1968,8 +1864,9 @@ Please correct your output.''';
             ?.log('Turn $turn - Thought: $_currentThought');
       }
 
-      if (jsonStr == null) {
-        // SPECIAL HANDLING: If no JSON found but it's a final deliverable,
+      // Handle parsing errors
+      if (xmlResponse.hasError) {
+        // SPECIAL HANDLING: If no valid XML found but it's a final deliverable,
         // treat the entire response as the answer (backward compatibility)
         if (task.isFinalDeliverable) {
           // Strip any "My thought:" prefix if present from CLEANED content
@@ -1977,18 +1874,16 @@ Please correct your output.''';
           final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
           result = result.replaceFirst(thoughtPrefix, '').trim();
 
-          // Also handle "My thought: ... \nAction: ..." or similar mixed formats if needed
-          final singleLineThoughtPrefix = RegExp(
-            r'^My thought:.*?\n',
+          // Also handle "<MyThought>..." stripped format
+          final xmlThoughtPrefix = RegExp(
+            r'^<MyThought>.*?</MyThought>\s*',
             dotAll: true,
+            caseSensitive: false,
           );
-          if (result.startsWith('My thought:')) {
-            result = result.replaceFirst(singleLineThoughtPrefix, '').trim();
-          }
+          result = result.replaceFirst(xmlThoughtPrefix, '').trim();
 
           task.result = result;
           task.status = AgentTaskStatus.completed;
-          task.executionHistory.add('Turn $turn:');
           task.executionHistory.add('Final deliverable produced directly.');
 
           if (task.contextNodeId != null) {
@@ -2009,176 +1904,82 @@ Please correct your output.''';
           return;
         }
 
-        // If specific parsing/schema error occurred, report it immediately
-        // instead of trying verdict extraction (which might confuse things further).
-        if (parseError != null) {
-          task.executionHistory.add("Observation: $parseError");
-          _contextManager
-              .getContext(task.contextNodeId ?? '')
-              ?.log('Observation: $parseError');
-          notifyListeners();
-          return;
-        }
-
-        // LLM-based verdict extraction: ask LLM to classify its own response
-        // using tag format to avoid JSON parsing issues
-        final verdictPrompt =
-            '''
-The following response was produced but does not conform to the expected JSON format.
-Analyze the content and determine the intent:
-
----
-$response
----
-
-Was this response:
-1. A completed ANSWER to the task?
-2. A TOOL call request that wasn't properly formatted?
-3. A THINK step (analysis/reasoning) that should continue?
-
-Respond ONLY in this exact format (no JSON):
-<verdict>answer|tool|think</verdict>
-<content>
-Properly extracted content from the JSON string.
-</content>
-''';
-
-        try {
-          final verdictGenContext = GenerationContext(
-            values: {'type': 'agent_verdict', 'taskId': task.id},
-          );
-          if (_modelOverride != null) {
-            verdictGenContext.modelOverride = _modelOverride;
-          }
-          final verdictResponse = await _generateLlmResponse(
-            verdictPrompt,
-            context: verdictGenContext,
-          );
-
-          final verdictMatch = RegExp(
-            r'<verdict>(answer|tool|think)</verdict>',
-          ).firstMatch(verdictResponse);
-          final contentMatch = RegExp(
-            r'<content>\s*([\s\S]*?)\s*</content>',
-          ).firstMatch(verdictResponse);
-
-          if (verdictMatch != null && contentMatch != null) {
-            final verdict = verdictMatch.group(1);
-            final content = contentMatch.group(1)?.trim() ?? '';
-
-            if (verdict == 'answer' && content.isNotEmpty) {
-              task.result = content;
-              task.status = AgentTaskStatus.completed;
-              // Store full answer content for findings extraction and context propagation
-              task.executionHistory.add('Answer: $content');
-              final ctx = _contextManager.getContext(task.contextNodeId ?? '');
-              ctx?.log('Task Result: $content');
-              // Generate TOC for structured result access
-              if (ctx != null && task.contextNodeId != null) {
-                ctx.structuredResult = _contextManager.generateTocFromResult(
-                  task.contextNodeId!,
-                  task.description,
-                  content,
-                );
-              }
-              notifyListeners();
-              return;
-            } else if (verdict == 'think') {
-              task.executionHistory.add('Analysis: $content');
-              // Continue loop
-              return;
-            }
-            // 'tool' case: content should describe what was intended
-            task.executionHistory.add(
-              'Tool intent detected but malformed: $content',
-            );
-          }
-        } catch (e) {
-          LoggerService.error('Verdict extraction failed: $e');
-        }
-
-        task.executionHistory.add('Error: No JSON action found in response.');
-        return;
-      }
-
-      Map<String, dynamic> validDecision;
-      if (decision != null) {
-        validDecision = decision;
-      } else {
-        // Try standard decode first, fall back to repairJson for malformed responses
-        try {
-          validDecision = jsonDecode(jsonStr) as Map<String, dynamic>;
-        } catch (_) {
-          try {
-            final repaired = repairJson(jsonStr);
-            if (repaired is Map<String, dynamic>) {
-              validDecision = repaired;
-            } else {
-              task.executionHistory.add(
-                "Error: JSON repair failed - not a map",
-              );
-              return;
-            }
-          } catch (e) {
-            task.executionHistory.add("Error: Invalid JSON: $e");
-            return;
-          }
-        }
-      }
-
-      if (validDecision.containsKey('answer')) {
-        final answerContent = validDecision['answer'].toString();
-        task.result = answerContent;
-        task.status = AgentTaskStatus.completed;
-        // Store full answer content for findings extraction and context propagation
-        task.executionHistory.add('Answer: $answerContent');
-        final ctx = _contextManager.getContext(task.contextNodeId ?? '');
-        ctx?.log('Task Result: $answerContent');
-        // Generate TOC for structured result access
-        if (ctx != null && task.contextNodeId != null) {
-          ctx.structuredResult = _contextManager.generateTocFromResult(
-            task.contextNodeId!,
-            task.description,
-            answerContent,
-          );
-        }
+        // Report parse error back to LLM via context for next round
+        final errorMsg = xmlResponse.parseError!;
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'IMPORTANT: $errorMsg';
+        task.executionHistory.add("Observation: $errorMsg");
+        _contextManager
+            .getContext(task.contextNodeId ?? '')
+            ?.log('Observation: $errorMsg');
         notifyListeners();
         return;
       }
 
-      // Handle "think" action - pure reasoning on existing context
-      if (validDecision.containsKey('think')) {
-        final thinkContent = validDecision['think'] as String?;
-        if (thinkContent != null && thinkContent.isNotEmpty) {
-          task.executionHistory.add('Analysis: $thinkContent');
-          _contextManager
-              .getContext(task.contextNodeId ?? '')
-              ?.log('Analysis: $thinkContent');
-          _currentThought =
-              'Analyzing: ${thinkContent.length > 100 ? '${thinkContent.substring(0, 100)}...' : thinkContent}';
+      // Handle based on action type
+      switch (xmlResponse.actionType) {
+        case 'answer':
+          final answerContent = xmlResponse.content ?? '';
+          task.result = answerContent;
+          task.status = AgentTaskStatus.completed;
+          // Store full answer content for findings extraction and context propagation
+          task.executionHistory.add('Answer: $answerContent');
+          final ctx = _contextManager.getContext(task.contextNodeId ?? '');
+          ctx?.log('Task Result: $answerContent');
+          // Generate TOC for structured result access
+          if (ctx != null && task.contextNodeId != null) {
+            ctx.structuredResult = _contextManager.generateTocFromResult(
+              task.contextNodeId!,
+              task.description,
+              answerContent,
+            );
+          }
           notifyListeners();
+          return;
+
+        case 'think':
+          final thinkContent = xmlResponse.content ?? '';
+          if (thinkContent.isNotEmpty) {
+            task.executionHistory.add('Analysis: $thinkContent');
+            _contextManager
+                .getContext(task.contextNodeId ?? '')
+                ?.log('Analysis: $thinkContent');
+            _currentThought =
+                'Analyzing: ${thinkContent.length > 100 ? '${thinkContent.substring(0, 100)}...' : thinkContent}';
+            notifyListeners();
+          }
           // Continue loop without calling a tool
           return;
-        }
-      }
 
-      // Handle "spawn_subtasks" action - delegate work to 1-5 child tasks
-      if (validDecision.containsKey('spawn_subtasks')) {
-        final subtasksList = validDecision['spawn_subtasks'] as List?;
-        if (subtasksList != null && subtasksList.isNotEmpty) {
-          await _handleSpawnSubtasks(
-            task,
-            subtasksList.cast<Map<String, dynamic>>(),
+        case 'spawn_subtasks':
+          final subtasksList = xmlResponse.parsedContent as List?;
+          if (subtasksList != null && subtasksList.isNotEmpty) {
+            await _handleSpawnSubtasks(
+              task,
+              subtasksList.cast<Map<String, dynamic>>(),
+            );
+            return; // Subtasks spawned, continue loop to wait for them
+          }
+          task.executionHistory.add('Error: Empty spawn_subtasks list.');
+          return;
+
+        case 'tool':
+          // Tool handling continues below
+          break;
+
+        default:
+          task.executionHistory.add(
+            "Error: Unknown action type '${xmlResponse.actionType}'.",
           );
-          return; // Subtasks spawned, continue loop to wait for them
-        }
+          return;
       }
 
-      final toolName = validDecision['tool'] as String?;
-      final args = validDecision['args'] as Map<String, dynamic>? ?? {};
+      // Handle tool action
+      final toolName = xmlResponse.toolName;
+      final args = xmlResponse.parsedContent as Map<String, dynamic>? ?? {};
 
-      if (toolName == null) {
-        task.executionHistory.add("Error: Missing 'tool' or 'answer' key.");
+      if (toolName == null || toolName.isEmpty) {
+        task.executionHistory.add("Error: Missing tool name.");
         return;
       }
 
