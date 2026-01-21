@@ -395,60 +395,23 @@ class AgentService extends ChangeNotifier {
           await _contextManager.checkAndCompact(taskContext);
 
           // Build scoped context for this task
-          // - Final deliverable tasks get synthesis context with accumulated findings
+          // - Final deliverable tasks get synthesis context with accumulated findings AND dependencies
           // - Dynamically spawned subtasks get isolated context (briefing already in log)
           // - Planner-created research tasks get focused context (no redundant objectives)
           final String scopedContext;
+
+          // Collect structured dependencies for use in context
+          final structuredDeps = _collectDependencyInfo(task, tocThreshold);
+
           if (task.isFinalDeliverable) {
-            scopedContext = _contextManager.buildSynthesisContext(taskContext);
+            scopedContext = _contextManager.buildSynthesisContext(
+              taskContext,
+              structuredDependencies: structuredDeps,
+            );
           } else if (task.isSpawnedDynamically) {
             scopedContext = _contextManager.buildContextForSubtask(taskContext);
           } else {
-            // Planner-created research task - collect structured dependency info
-            final structuredDeps = <DependencyInfo>[];
-            for (final depName in task.dependsOn) {
-              final depTask = _tasks
-                  .where((t) => t.name == depName)
-                  .firstOrNull;
-              if (depTask != null &&
-                  depTask.status == AgentTaskStatus.completed) {
-                final content =
-                    depTask.condensedSummary ?? depTask.result ?? 'Completed';
-
-                // Check if corresponding context node has structured result
-                final depContext = depTask.contextNodeId != null
-                    ? _contextManager.getContext(depTask.contextNodeId!)
-                    : null;
-
-                String toc = '';
-                bool isShort = true;
-
-                if (depContext?.structuredResult != null) {
-                  final sr = depContext!.structuredResult!;
-                  toc = sr.toc;
-                  isShort = sr.isShortSync(threshold: tocThreshold);
-                } else {
-                  // Fallback: estimate based on token count (more accurate for CJK)
-                  final tokenCount = TokenEstimator.estimateTokens(content);
-                  isShort = tokenCount < tocThreshold;
-                  // Use contextNodeId for read_task_result lookups (fixes ID mismatch)
-                  final lookupId = depTask.contextNodeId ?? depTask.id;
-                  toc =
-                      'No structured TOC available. Content: $tokenCount tokens. Use read_task_result(task_id="$lookupId", mode="full") to read.';
-                }
-
-                // Use contextNodeId for task lookup since _contextMap is keyed by ContextNode.id
-                structuredDeps.add(
-                  DependencyInfo(
-                    taskId: depTask.contextNodeId ?? depTask.id,
-                    name: depName,
-                    content: content,
-                    toc: toc,
-                    isShort: isShort,
-                  ),
-                );
-              }
-            }
+            // Planner-created research task - use collected structured dependency info
             scopedContext = _contextManager.buildContextForResearchTask(
               taskContext,
               structuredDependencies: structuredDeps,
@@ -702,6 +665,54 @@ class AgentService extends ChangeNotifier {
     }
 
     return buffer.toString();
+  }
+
+  /// Collects structured dependency info for a task.
+  List<DependencyInfo> _collectDependencyInfo(
+    AgentTask task,
+    int tocThreshold,
+  ) {
+    final structuredDeps = <DependencyInfo>[];
+    for (final depName in task.dependsOn) {
+      final depTask = _tasks.where((t) => t.name == depName).firstOrNull;
+      if (depTask != null && depTask.status == AgentTaskStatus.completed) {
+        final content =
+            depTask.condensedSummary ?? depTask.result ?? 'Completed';
+
+        // Check if corresponding context node has structured result
+        final depContext = depTask.contextNodeId != null
+            ? _contextManager.getContext(depTask.contextNodeId!)
+            : null;
+
+        String toc = '';
+        bool isShort = true;
+
+        if (depContext?.structuredResult != null) {
+          final sr = depContext!.structuredResult!;
+          toc = sr.toc;
+          isShort = sr.isShortSync(threshold: tocThreshold);
+        } else {
+          // Fallback: estimate based on token count
+          final tokenCount = TokenEstimator.estimateTokens(content);
+          isShort = tokenCount < tocThreshold;
+          // Use contextNodeId for read_task_result lookups
+          final lookupId = depTask.contextNodeId ?? depTask.id;
+          toc =
+              'No structured TOC available. Content: $tokenCount tokens. Use read_task_result(task_id="$lookupId", mode="full") to read.';
+        }
+
+        structuredDeps.add(
+          DependencyInfo(
+            taskId: depTask.contextNodeId ?? depTask.id,
+            name: depName,
+            content: content,
+            toc: toc,
+            isShort: isShort,
+          ),
+        );
+      }
+    }
+    return structuredDeps;
   }
 
   Future<void> _generateFinalSummary(String globalContext) async {

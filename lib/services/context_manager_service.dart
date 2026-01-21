@@ -656,9 +656,54 @@ If this is research/analysis, output structured findings.
   }
 
   /// Builds rich context for synthesis tasks (includes all accumulated findings).
-  String buildSynthesisContext(ContextNode node) {
+  String buildSynthesisContext(
+    ContextNode node, {
+    List<DependencyInfo> structuredDependencies = const [],
+  }) {
     final buffer = StringBuffer();
     buffer.writeln(buildContextForNode(node));
+
+    // Add structured dependencies if available (before accumulated findings)
+    if (structuredDependencies.isNotEmpty) {
+      final tocDependencies = <DependencyInfo>[];
+
+      buffer.writeln();
+      buffer.writeln('<DependencyResults>');
+      for (final dep in structuredDependencies) {
+        buffer.writeln(
+          '<Dependency taskId="${dep.taskId}" name="${dep.name}">',
+        );
+        if (dep.isShort) {
+          // Short results: include inline
+          buffer.writeln('<Result type="full">');
+          buffer.writeln(dep.content);
+          buffer.writeln('</Result>');
+        } else {
+          // Long results: include TOC only
+          buffer.writeln('<Result type="toc">');
+          buffer.writeln(dep.toc);
+          buffer.writeln('</Result>');
+          tocDependencies.add(dep);
+        }
+        buffer.writeln('</Dependency>');
+      }
+      buffer.writeln('</DependencyResults>');
+
+      // Add DependencyHint for long results that need fetching
+      if (tocDependencies.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln('<DependencyHint>');
+        buffer.writeln(
+          'The following dependencies have TOC-only results. Use read_task_result tool to fetch full content:',
+        );
+        for (final dep in tocDependencies) {
+          buffer.writeln(
+            '- "${dep.name}" (id: ${dep.taskId}): Use read_task_result with task_id="${dep.taskId}" mode="full" or mode="section"',
+          );
+        }
+        buffer.writeln('</DependencyHint>');
+      }
+    }
 
     if (_accumulatedFindings.isNotEmpty) {
       buffer.writeln();
