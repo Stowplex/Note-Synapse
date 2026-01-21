@@ -1266,10 +1266,14 @@ Please fix and regenerate the plan.
       _tasks
           .map(
             (t) => {
+              'name': t.name,
               'description': t.description,
               'tools': t.toolNames,
+              'dependsOn': t.dependsOn,
+              'isFinalDeliverable': t.isFinalDeliverable,
+              'extractFindings': t.extractFindings,
               if (t.userComment != null && t.userComment!.isNotEmpty)
-                'feedback': t.userComment,
+                'user_feedback': t.userComment,
             },
           )
           .toList(),
@@ -1277,14 +1281,39 @@ Please fix and regenerate the plan.
 
     final prompt =
         '''
-Current Plan:
+## CURRENT PLAN
 $currentPlanJson
 
-General User Feedback:
+## USER FEEDBACK
 $feedback
-Update the plan based on the feedback.
-Address specific feedback for items if present.
-Return ONLY a valid JSON list of objects: [{"description": "...", "tools": ["..."]}]
+
+## INSTRUCTIONS
+Update the plan based on the user feedback.
+- Address specific item feedback (marked as "user_feedback" in the JSON above) if present.
+- Preserve the dependency structure: tasks that synthesize or need results from other tasks MUST have those tasks in "dependsOn".
+- Keep exactly ONE task with "isFinalDeliverable": true (the task producing the user's final answer).
+- Mark research/exploration tasks with "extractFindings": true if their results should be preserved for synthesis.
+
+## OUTPUT FORMAT
+Return ONLY a valid JSON list with ALL required fields:
+[
+  {
+    "name": "unique_task_name",
+    "description": "Task description",
+    "tools": ["tool_name"],
+    "dependsOn": ["prior_task_name"],
+    "isFinalDeliverable": false,
+    "extractFindings": true
+  },
+  {
+    "name": "final_synthesis",
+    "description": "Synthesize and deliver final answer",
+    "tools": [],
+    "dependsOn": ["unique_task_name"],
+    "isFinalDeliverable": true,
+    "extractFindings": false
+  }
+]
 ''';
 
     try {
