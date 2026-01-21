@@ -32,6 +32,14 @@ class XmlAgentResponse {
   /// Error message if parsing failed.
   final String? parseError;
 
+  /// Whether the response contained an Action tag that was malformed.
+  /// - true: An <Action type="..."> tag was found but had structural errors
+  ///   (missing ToolName, empty Content, invalid JSON, etc.). This is a
+  ///   strict error that should be reported back to the LLM.
+  /// - false: No Action tag was found at all, which might be acceptable
+  ///   for certain task types (e.g., final deliverable returning plain text).
+  final bool isMalformedAction;
+
   const XmlAgentResponse({
     this.thought,
     this.actionType,
@@ -39,11 +47,17 @@ class XmlAgentResponse {
     this.content,
     this.parsedContent,
     this.parseError,
+    this.isMalformedAction = false,
   });
 
-  /// Creates an error response.
+  /// Creates an error response for a missing Action tag.
   factory XmlAgentResponse.error(String error) =>
-      XmlAgentResponse(parseError: error);
+      XmlAgentResponse(parseError: error, isMalformedAction: false);
+
+  /// Creates an error response for a malformed Action tag.
+  /// This indicates the LLM attempted the correct format but made errors.
+  factory XmlAgentResponse.malformedAction(String error) =>
+      XmlAgentResponse(parseError: error, isMalformedAction: true);
 
   /// Whether the response is valid (has action type and no errors).
   bool get isValid => actionType != null && parseError == null;
@@ -88,21 +102,35 @@ XmlAgentResponse parseXmlAgentResponse(String response) {
   final thought = thoughtMatch?.group(1)?.trim();
 
   // Step 3: Extract <Action> element with type attribute
+  // Use [^"]* to allow empty type (which will be caught as invalid later)
   final actionMatch = RegExp(
-    r'<Action\s+type\s*=\s*"([^"]+)"[^>]*>(.*?)</Action>',
+    r'<Action\s+type\s*=\s*"([^"]*)"[^>]*>(.*?)</Action>',
     caseSensitive: false,
     dotAll: true,
   ).firstMatch(content);
 
   if (actionMatch == null) {
-    // Try alternate formats (single-line, etc.)
+    // Try alternate formats (single quotes)
     final altActionMatch = RegExp(
-      r"<Action\s+type\s*=\s*'([^']+)'[^>]*>(.*?)</Action>",
+      r"<Action\s+type\s*=\s*'([^']*)'[^>]*>(.*?)</Action>",
       caseSensitive: false,
       dotAll: true,
     ).firstMatch(content);
 
     if (altActionMatch == null) {
+      // Check if there's an Action-like tag that's malformed
+      // (e.g., <Action> without type, or <Action type=something> without quotes)
+      final malformedActionPattern = RegExp(
+        r'<Action[^>]*>',
+        caseSensitive: false,
+      );
+      if (malformedActionPattern.hasMatch(content)) {
+        return XmlAgentResponse.malformedAction(
+          'Found <Action> tag but missing or malformed type attribute. '
+          'Expected format: <Action type="tool|answer|think|spawn_subtasks">',
+        );
+      }
+
       return XmlAgentResponse.error(
         'Missing <Action type="...">...</Action> element. '
         'Your response must include an Action element with a type attribute. '
@@ -125,6 +153,8 @@ XmlAgentResponse parseXmlAgentResponse(String response) {
 }
 
 /// Internal helper to parse the body of an Action element.
+/// NOTE: All errors returned from this function use `malformedAction`
+/// because we already matched an Action tag - errors here mean it's malformed.
 XmlAgentResponse _parseActionContent({
   required String? thought,
   required String actionType,
@@ -132,7 +162,7 @@ XmlAgentResponse _parseActionContent({
 }) {
   // Validate action type
   if (!kValidActionTypes.contains(actionType)) {
-    return XmlAgentResponse.error(
+    return XmlAgentResponse.malformedAction(
       'Invalid action type "$actionType". '
       'Valid types: ${kValidActionTypes.join(", ")}.',
     );
@@ -148,14 +178,14 @@ XmlAgentResponse _parseActionContent({
     ).firstMatch(actionBody);
 
     if (toolNameMatch == null) {
-      return XmlAgentResponse.error(
+      return XmlAgentResponse.malformedAction(
         'Action type="tool" requires a <ToolName> element. '
         'Example: <ToolName>search_notes</ToolName>',
       );
     }
     toolName = toolNameMatch.group(1)?.trim();
     if (toolName == null || toolName.isEmpty) {
-      return XmlAgentResponse.error(
+      return XmlAgentResponse.malformedAction(
         '<ToolName> element is empty. Provide the tool name to call.',
       );
     }
@@ -170,9 +200,9 @@ XmlAgentResponse _parseActionContent({
 
   String? rawContent = contentMatch?.group(1);
 
-  // Content is required for all action types except think (where it's optional)
-  if (rawContent == null && actionType != 'think') {
-    return XmlAgentResponse.error(
+  // Content is required for all action types except think or answer (where it's optional)
+  if (rawContent == null && actionType != 'think' && actionType != 'answer') {
+    return XmlAgentResponse.malformedAction(
       'Missing <Content> element in Action. '
       'Provide your ${_contentDescriptionForType(actionType)} inside <Content>...</Content>.',
     );
@@ -184,7 +214,7 @@ XmlAgentResponse _parseActionContent({
   dynamic parsedContent;
   if (actionType == 'tool' || actionType == 'spawn_subtasks') {
     if (rawContent == null || rawContent.isEmpty) {
-      return XmlAgentResponse.error(
+      return XmlAgentResponse.malformedAction(
         'Empty <Content> for $actionType action. '
         '${_jsonSchemaHintForType(actionType)}',
       );
@@ -192,7 +222,7 @@ XmlAgentResponse _parseActionContent({
 
     final jsonResult = _parseJsonContent(rawContent, actionType);
     if (jsonResult.error != null) {
-      return XmlAgentResponse.error(jsonResult.error!);
+      return XmlAgentResponse.malformedAction(jsonResult.error!);
     }
     parsedContent = jsonResult.parsed;
   }

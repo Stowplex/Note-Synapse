@@ -253,6 +253,8 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Missing <Action'));
+        // isMalformedAction should be false when no Action tag is present
+        expect(result.isMalformedAction, isFalse);
       });
 
       test('returns error for only thought element', () {
@@ -261,6 +263,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Missing <Action'));
+        expect(result.isMalformedAction, isFalse);
       });
     });
 
@@ -276,6 +279,8 @@ This is just some text without an action.
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Invalid action type'));
         expect(result.parseError, contains('invalid_type'));
+        // isMalformedAction should be true when Action tag exists but is invalid
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error for empty type attribute', () {
@@ -287,6 +292,8 @@ This is just some text without an action.
         final result = parseXmlAgentResponse(response);
 
         expect(result.hasError, isTrue);
+        // Empty type is still treated as invalid type (Action was found)
+        expect(result.isMalformedAction, isTrue);
       });
     });
 
@@ -301,6 +308,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('<ToolName>'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error for empty ToolName', () {
@@ -314,6 +322,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('empty'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error when tool Content is not a JSON object', () {
@@ -327,6 +336,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('JSON object'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error for completely invalid JSON in tool', () {
@@ -345,6 +355,7 @@ This is just some text without an action.
               result.parseError!.contains('object'),
           isTrue,
         );
+        expect(result.isMalformedAction, isTrue);
       });
     });
 
@@ -359,6 +370,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('JSON array'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error when subtask is missing description field', () {
@@ -372,6 +384,7 @@ This is just some text without an action.
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('description'));
         expect(result.parseError, contains('index 0'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error when subtask description is empty', () {
@@ -384,6 +397,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('empty'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error when subtask is not an object', () {
@@ -396,6 +410,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('not a JSON object'));
+        expect(result.isMalformedAction, isTrue);
       });
     });
 
@@ -410,6 +425,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Missing <Content>'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error for answer without Content', () {
@@ -421,6 +437,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Missing <Content>'));
+        expect(result.isMalformedAction, isTrue);
       });
 
       test('returns error for empty Content in tool', () {
@@ -434,6 +451,7 @@ This is just some text without an action.
 
         expect(result.hasError, isTrue);
         expect(result.parseError, contains('Empty'));
+        expect(result.isMalformedAction, isTrue);
       });
     });
 
@@ -548,6 +566,39 @@ Symbols: < > & " '
         final result = parseXmlAgentResponse('   \n\t  \n   ');
 
         expect(result.hasError, isTrue);
+      });
+
+      test(
+        'treats Action tag with JSON but missing ToolName/Content as malformed',
+        () {
+          // This is the exact scenario reported by the user:
+          // <Action type="tool"> with JSON directly inside, missing proper structure
+          const response = '''
+<Action type="tool">
+<!-- missing tool name -->
+<!-- missing content tag -->
+{ "some json" }
+</Action>
+''';
+          final result = parseXmlAgentResponse(response);
+
+          expect(result.hasError, isTrue);
+          expect(result.isMalformedAction, isTrue);
+          expect(result.parseError, contains('<ToolName>'));
+        },
+      );
+
+      test('treats Action-like tag without type attribute as malformed', () {
+        const response = '''
+<Action>
+<Content>something</Content>
+</Action>
+''';
+        final result = parseXmlAgentResponse(response);
+
+        expect(result.hasError, isTrue);
+        expect(result.isMalformedAction, isTrue);
+        expect(result.parseError, contains('malformed type attribute'));
       });
     });
   });

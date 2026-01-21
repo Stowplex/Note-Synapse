@@ -1901,8 +1901,27 @@ $formatInstructions
 
       // Handle parsing errors
       if (xmlResponse.hasError) {
-        // SPECIAL HANDLING: If no valid XML found but it's a final deliverable,
-        // treat the entire response as the answer (backward compatibility)
+        // STRICT MODE: If an Action tag was present but malformed, report error
+        // back to LLM for correction. This catches cases like:
+        // - <Action type="tool"> without <ToolName>
+        // - <Action type="tool"> without <Content>
+        // - Invalid JSON in <Content>
+        // These are structural errors that the LLM should fix.
+        if (xmlResponse.isMalformedAction) {
+          final errorMsg = xmlResponse.parseError!;
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              'IMPORTANT: $errorMsg';
+          task.executionHistory.add("Observation: $errorMsg");
+          _contextManager
+              .getContext(task.contextNodeId ?? '')
+              ?.log('Observation: $errorMsg');
+          notifyListeners();
+          return;
+        }
+
+        // FALLBACK: If NO Action tag was found at all and it's a final deliverable,
+        // treat the entire response as the answer (backward compatibility for
+        // models that respond with plain text instead of XML structure).
         if (task.isFinalDeliverable) {
           // Strip any "My thought:" prefix if present from CLEANED content
           String result = processedResponse.trim();
