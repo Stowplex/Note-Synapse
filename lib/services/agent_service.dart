@@ -1888,7 +1888,34 @@ $formatInstructions
           );
           result = result.replaceFirst(xmlThoughtPrefix, '').trim();
 
+          // Strip common XML wrapper tags that LLMs might incorrectly use
+          // These patterns handle the case where the LLM uses non-standard formats
+          // like <answer>...</answer> instead of <Action type="answer"><Content>...
+
+          // Strip <answer>...</answer> wrapper (incorrect format used by some LLMs)
+          final answerWrapper = RegExp(
+            r'^<answer>\s*(.*?)\s*</answer>\s*$',
+            dotAll: true,
+            caseSensitive: false,
+          );
+          final answerMatch = answerWrapper.firstMatch(result);
+          if (answerMatch != null) {
+            result = answerMatch.group(1)?.trim() ?? result;
+          }
+
+          // Strip <Action...>...<Content>...</Content>...</Action> wrapper
+          final actionWrapper = RegExp(
+            r'^<Action[^>]*>\s*(?:<Content>\s*)?(.*?)(?:\s*</Content>)?\s*</Action>\s*$',
+            dotAll: true,
+            caseSensitive: false,
+          );
+          final actionMatch = actionWrapper.firstMatch(result);
+          if (actionMatch != null) {
+            result = actionMatch.group(1)?.trim() ?? result;
+          }
+
           task.result = result;
+
           task.status = AgentTaskStatus.completed;
           task.executionHistory.add('Final deliverable produced directly.');
 

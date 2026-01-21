@@ -3437,6 +3437,9 @@ $historyBuffer
           _messages.add(savedMessage);
         });
         _scrollToBottom();
+
+        // Clear agent state so future tasks can start without conflict dialog
+        agentService.clearState();
       }
     }
   }
