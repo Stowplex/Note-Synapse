@@ -417,6 +417,56 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                             ),
                           ),
                         ),
+                      // Task result button (for tasks with structured results)
+                      if (task.status == AgentTaskStatus.completed &&
+                          contextNode?.structuredResult != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: InkWell(
+                            onTap: () => _showTaskResultDialog(
+                              context,
+                              task,
+                              contextNode!,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.description_outlined,
+                                    size: 14,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'View Result',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimaryContainer,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       // Error message
                       if (task.status == AgentTaskStatus.failed &&
                           task.result != null)
@@ -1002,6 +1052,150 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
     if (!mounted) return;
 
     final content = _formatFindingsAsMarkdown(task);
+    if (content.isEmpty) return;
+
+    // Use the AddNoteDialog to let user choose create new or append
+    await AddNoteDialog.show(context: context, content: content);
+  }
+
+  void _showTaskResultDialog(
+    BuildContext context,
+    AgentTask task,
+    ContextNode contextNode,
+  ) {
+    final result = contextNode.structuredResult;
+    if (result == null) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.description_outlined,
+              color: Theme.of(dialogContext).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Task Result',
+                style: Theme.of(dialogContext).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(dialogContext).size.width * 0.85,
+          height: MediaQuery.of(dialogContext).size.height * 0.65,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Task description header
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    dialogContext,
+                  ).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.task_alt,
+                      size: 16,
+                      color: Theme.of(
+                        dialogContext,
+                      ).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        task.description,
+                        style: Theme.of(dialogContext).textTheme.bodySmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(
+                                dialogContext,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Token count info
+              Row(
+                children: [
+                  Icon(
+                    Icons.data_usage,
+                    size: 14,
+                    color: Theme.of(dialogContext).colorScheme.outline,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${result.tokenCount} tokens',
+                    style: Theme.of(dialogContext).textTheme.labelSmall
+                        ?.copyWith(
+                          color: Theme.of(dialogContext).colorScheme.outline,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              // Full result content
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    result.fullResult,
+                    style: Theme.of(dialogContext).textTheme.bodyMedium,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _saveTaskResult(task, contextNode);
+            },
+            icon: const Icon(Icons.save_outlined, size: 18),
+            label: const Text('Save to Note'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTaskResultAsMarkdown(AgentTask task, ContextNode contextNode) {
+    final result = contextNode.structuredResult;
+    if (result == null) return '';
+
+    final buffer = StringBuffer();
+    buffer.writeln('## Task Result');
+    buffer.writeln();
+    buffer.writeln('**Task:** ${task.description}');
+    buffer.writeln();
+    buffer.writeln('---');
+    buffer.writeln();
+    buffer.writeln(result.fullResult);
+
+    return buffer.toString();
+  }
+
+  Future<void> _saveTaskResult(AgentTask task, ContextNode contextNode) async {
+    if (!mounted) return;
+
+    final content = _formatTaskResultAsMarkdown(task, contextNode);
     if (content.isEmpty) return;
 
     // Use the AddNoteDialog to let user choose create new or append
