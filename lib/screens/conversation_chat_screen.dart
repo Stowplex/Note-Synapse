@@ -3093,7 +3093,15 @@ $historyBuffer
             child: Column(
               children: [
                 // Show tree view during/after execution
-                if (hasStartedExecution) const AgentTaskTreeWidget(),
+                if (hasStartedExecution)
+                  AgentTaskTreeWidget(
+                    onResume: () async {
+                      setState(() {
+                        _waitingForAgentResult = true;
+                      });
+                      await context.read<AgentService>().resumeExecution();
+                    },
+                  ),
                 // Show plan review when not executing and tasks are pending
                 if (!isExecuting && !hasStartedExecution)
                   AgentPlanReviewWidget(
@@ -3416,6 +3424,11 @@ $historyBuffer
     final agentService = _agentService;
     if (agentService == null) return;
 
+    // If we just attached and agent is running, we should be waiting
+    if (agentService.isRunning && !_waitingForAgentResult) {
+      _waitingForAgentResult = true;
+    }
+
     if (_waitingForAgentResult &&
         !agentService.isRunning &&
         agentService.finalAnswer != null) {
@@ -3432,14 +3445,14 @@ $historyBuffer
         modelUsed: metadata['modelUsed'] as String?,
       );
 
-      if (mounted) {
+      if (mounted && content.trim().isNotEmpty) {
         setState(() {
           _messages.add(savedMessage);
         });
         _scrollToBottom();
 
         // Clear agent state so future tasks can start without conflict dialog
-        agentService.clearState();
+        // agentService.clearState();
       }
     }
   }

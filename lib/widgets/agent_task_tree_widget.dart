@@ -16,7 +16,16 @@ class AgentTaskTreeWidget extends StatefulWidget {
   /// Called when user wants to view full execution log.
   final Function(ContextNode context)? onContextTap;
 
-  const AgentTaskTreeWidget({super.key, this.onTaskTap, this.onContextTap});
+  /// Called when user wants to resume execution.
+  /// If provided, this overrides the default behavior of calling agentService.resumeExecution().
+  final Future<void> Function()? onResume;
+
+  const AgentTaskTreeWidget({
+    super.key,
+    this.onTaskTap,
+    this.onContextTap,
+    this.onResume,
+  });
 
   @override
   State<AgentTaskTreeWidget> createState() => _AgentTaskTreeWidgetState();
@@ -163,7 +172,13 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
           IconButton(
             icon: const Icon(Icons.play_circle_outline),
             tooltip: 'Continue',
-            onPressed: () => agentService.resumeExecution(),
+            onPressed: () {
+              if (widget.onResume != null) {
+                widget.onResume!();
+              } else {
+                agentService.resumeExecution();
+              }
+            },
             iconSize: 24,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

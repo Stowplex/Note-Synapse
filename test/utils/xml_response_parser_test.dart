@@ -428,16 +428,21 @@ This is just some text without an action.
         expect(result.isMalformedAction, isTrue);
       });
 
-      test('returns error for answer without Content', () {
+      test('uses body content as fallback for answer without Content tag', () {
         const response = '''
 <Action type="answer">
+This is the answer directly in the body.
 </Action>
 ''';
         final result = parseXmlAgentResponse(response);
 
-        expect(result.hasError, isTrue);
-        expect(result.parseError, contains('Missing <Content>'));
-        expect(result.isMalformedAction, isTrue);
+        expect(result.isValid, isTrue);
+        expect(result.actionType, equals('answer'));
+        expect(
+          result.content,
+          equals('This is the answer directly in the body.'),
+        );
+        expect(result.isMalformedAction, isFalse);
       });
 
       test('returns error for empty Content in tool', () {

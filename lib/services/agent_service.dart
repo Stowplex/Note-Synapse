@@ -18,12 +18,12 @@ import 'agentic_settings_service.dart';
 import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
-import 'mcp_tool_integration_service.dart';
 import 'mcp_service.dart';
+import '../utils/xml_response_parser.dart';
+import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
-import '../utils/xml_response_parser.dart';
 import '../utils/token_estimator.dart';
 
 /// Callback for executing an external tool (MCP or local AI tool).
@@ -196,13 +196,13 @@ class AgentService extends ChangeNotifier {
   }
 
   /// Resumes agent execution after being paused.
-  void resumeExecution() {
+  Future<void> resumeExecution() async {
     if (_isPaused) {
       _isPaused = false;
       _currentCheckpoint = null;
       notifyListeners();
       // Restart the execution loop
-      executePlan();
+      await executePlan();
     }
   }
 
@@ -759,13 +759,25 @@ Respond directly to: "$objective"
 
     final genContext = GenerationContext(values: {'type': 'agent_summary'});
     if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-    final response = await AIService.generateWithAttachments(
-      prompt,
-      [],
-      generationContext: genContext,
-    );
+    final response = await _generateLlmResponse(prompt, context: genContext);
 
-    _finalAnswer = response;
+    // Parse the response to extract content if it's in XML format
+    String finalContent = response;
+    try {
+      final parsed = parseXmlAgentResponse(response);
+      if (parsed.isValid) {
+        if (parsed.actionType == 'answer' && parsed.content != null) {
+          finalContent = parsed.content!;
+        } else if (parsed.content != null) {
+          // Fallback to content if other type
+          finalContent = parsed.content!;
+        }
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to parse final summary XML: $e');
+    }
+
+    _finalAnswer = finalContent;
     // Capture metadata for the UI
     _finalMetadata = {
       'modelUsed': ModelSelector.instance.currentModelConfig?.id,

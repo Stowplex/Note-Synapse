@@ -200,8 +200,13 @@ XmlAgentResponse _parseActionContent({
 
   String? rawContent = contentMatch?.group(1);
 
-  // Content is required for all action types except think or answer (where it's optional)
-  if (rawContent == null && actionType != 'think' && actionType != 'answer') {
+  // For 'answer' type, we allow missing <Content> tag and treat the body as content
+  if (actionType == 'answer' && rawContent == null) {
+    rawContent = actionBody.trim();
+  }
+
+  // Content is required for all action types except think (where it's optional)
+  if (rawContent == null && actionType != 'think') {
     return XmlAgentResponse.malformedAction(
       'Missing <Content> element in Action. '
       'Provide your ${_contentDescriptionForType(actionType)} inside <Content>...</Content>.',
