@@ -141,6 +141,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get maxSubtaskDepth => '子任务最大深度';
+
+  @override
+  String get maxSubtaskDepthDescription => '子任务嵌套的最大深度。设置为 0 禁用子任务生成。';
+
+  @override
+  String get aiLogEntriesLimit => 'AI 日志条目上限';
+
+  @override
+  String get aiLogEntriesLimitDescription => '保留的最大 AI 日志条目数。';
+
+  @override
+  String get aiLogEntriesDisabled => '禁用';
+
+  @override
+  String get aiLogEntriesUnlimited => '无限制';
+
+  @override
   String get darkMode => '深色模式';
 
   @override

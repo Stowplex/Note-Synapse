@@ -36,7 +36,9 @@ typedef ToolExecutor =
     );
 
 /// Maximum allowed subtask depth (0=root, so 3 means 4 levels total)
-const int kMaxSubtaskDepth = 3;
+/// @deprecated Use AgenticSettingsService.getMaxSubtaskDepth() instead.
+/// This constant is kept for backward compatibility in tests.
+const int kMaxSubtaskDepth = 2;
 
 /// Checkpoint types where agent can be paused.
 enum AgentCheckpoint {
@@ -55,6 +57,9 @@ class AgentService extends ChangeNotifier {
   String? _finalAnswer;
   Map<String, dynamic>? _finalMetadata;
   ToolExecutor? _toolExecutor;
+
+  /// Cached max subtask depth from settings (loaded at execution start).
+  int _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
 
   // Pause/Resume/Stop state
   bool _isPaused = false;
@@ -166,6 +171,8 @@ class AgentService extends ChangeNotifier {
     _modelOverride = null;
     // Clear enabled native tools filter
     _enabledNativeToolNames = null;
+    // Reset cached settings
+    _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
     notifyListeners();
   }
 
@@ -1362,6 +1369,9 @@ Return ONLY a valid JSON list with ALL required fields:
     onProgressUpdate?.call(_currentThought!);
     notifyListeners();
 
+    // Load max subtask depth from settings (cached for this execution)
+    _cachedMaxSubtaskDepth = await AgenticSettingsService.getMaxSubtaskDepth();
+
     try {
       await _executeLoop();
     } catch (e) {
@@ -1782,7 +1792,7 @@ The investigation reveals that...
 </Action>
 </Example>
 
-Current task depth: ${task.depth} / $kMaxSubtaskDepth
+Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
 ''';
 
     final prompt =
@@ -2188,9 +2198,9 @@ $formatInstructions
     }
 
     // 2. Validate depth limit
-    if (parentTask.depth >= kMaxSubtaskDepth) {
+    if (parentTask.depth >= _cachedMaxSubtaskDepth) {
       parentTask.executionHistory.add(
-        'Cannot spawn subtasks: maximum depth ($kMaxSubtaskDepth) reached. Use "think" to analyze or use "tool" to carry out tasks in current context instead.',
+        'Cannot spawn subtasks: maximum depth ($_cachedMaxSubtaskDepth) reached. Use "think" to analyze or use "tool" to carry out tasks in current context instead.',
       );
       _currentThought = 'Subtask depth limit reached';
       notifyListeners();

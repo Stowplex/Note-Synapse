@@ -1285,6 +1285,7 @@ class SystemSettingsScreen extends StatefulWidget {
 
 class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
   bool _keepScreenOn = false;
+  int _maxLogEntries = LoggerService.defaultMaxLogEntries;
   bool _isLoading = true;
 
   @override
@@ -1295,9 +1296,11 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
 
   Future<void> _loadPreference() async {
     final enabled = await wake_lock.isWakeLockEnabled();
+    final maxLogEntries = await LoggerService.getMaxLogEntries();
     if (mounted) {
       setState(() {
         _keepScreenOn = enabled;
+        _maxLogEntries = maxLogEntries;
         _isLoading = false;
       });
     }
@@ -1380,6 +1383,43 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
                             _showLanguageDialog(context, appProvider, l10n),
                       );
                     },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // AI Log Entries Limit
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.article_outlined),
+                    title: Text(l10n.aiLogEntriesLimit),
+                    subtitle: Text(l10n.aiLogEntriesLimitDescription),
+                    trailing: DropdownButton<int>(
+                      value: _maxLogEntries,
+                      underline: const SizedBox(),
+                      onChanged: (value) async {
+                        if (value != null) {
+                          setState(() => _maxLogEntries = value);
+                          await LoggerService.setMaxLogEntries(value);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.settingsSaved)),
+                            );
+                          }
+                        }
+                      },
+                      items: [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text(l10n.aiLogEntriesDisabled),
+                        ),
+                        const DropdownMenuItem(value: 100, child: Text('100')),
+                        const DropdownMenuItem(value: 300, child: Text('300')),
+                        const DropdownMenuItem(value: 500, child: Text('500')),
+                        DropdownMenuItem(
+                          value: -1,
+                          child: Text(l10n.aiLogEntriesUnlimited),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

@@ -145,6 +145,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get maxSubtaskDepth => 'Max Subtask Depth';
+
+  @override
+  String get maxSubtaskDepthDescription =>
+      'Maximum nesting depth for spawning subtasks. Set to 0 to disable spawning.';
+
+  @override
+  String get aiLogEntriesLimit => 'AI Log Entries Limit';
+
+  @override
+  String get aiLogEntriesLimitDescription =>
+      'Maximum number of AI log entries to keep.';
+
+  @override
+  String get aiLogEntriesDisabled => 'Disabled';
+
+  @override
+  String get aiLogEntriesUnlimited => 'Unlimited';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override

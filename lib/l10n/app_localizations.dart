@@ -326,6 +326,42 @@ abstract class AppLocalizations {
   /// **'{count} turns'**
   String turnsValue(Object count);
 
+  /// No description provided for @maxSubtaskDepth.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Subtask Depth'**
+  String get maxSubtaskDepth;
+
+  /// No description provided for @maxSubtaskDepthDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum nesting depth for spawning subtasks. Set to 0 to disable spawning.'**
+  String get maxSubtaskDepthDescription;
+
+  /// No description provided for @aiLogEntriesLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Log Entries Limit'**
+  String get aiLogEntriesLimit;
+
+  /// No description provided for @aiLogEntriesLimitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of AI log entries to keep.'**
+  String get aiLogEntriesLimitDescription;
+
+  /// No description provided for @aiLogEntriesDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get aiLogEntriesDisabled;
+
+  /// No description provided for @aiLogEntriesUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get aiLogEntriesUnlimited;
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:

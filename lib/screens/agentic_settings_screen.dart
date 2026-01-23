@@ -19,6 +19,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
   int _maxTurns = AgenticSettingsService.defaultMaxTurns;
   int _turnIncrement = AgenticSettingsService.defaultTurnIncrement;
   int _tocInlineThreshold = AgenticSettingsService.defaultTocInlineThreshold;
+  int _maxSubtaskDepth = AgenticSettingsService.defaultMaxSubtaskDepth;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -35,6 +36,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
     final maxTurns = await AgenticSettingsService.getMaxTurns();
     final turnIncrement = await AgenticSettingsService.getTurnIncrement();
     final tocThreshold = await AgenticSettingsService.getTocInlineThreshold();
+    final maxSubtaskDepth = await AgenticSettingsService.getMaxSubtaskDepth();
     if (!mounted) return;
     setState(() {
       _compactionThreshold = compaction;
@@ -43,6 +45,7 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
       _maxTurns = maxTurns;
       _turnIncrement = turnIncrement;
       _tocInlineThreshold = tocThreshold;
+      _maxSubtaskDepth = maxSubtaskDepth;
       _isLoading = false;
     });
   }
@@ -113,6 +116,18 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
       await AgenticSettingsService.setTocInlineThreshold(value);
       if (!mounted) return;
       setState(() => _tocInlineThreshold = value);
+      _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _updateMaxSubtaskDepth(int value) async {
+    setState(() => _isSaving = true);
+    try {
+      await AgenticSettingsService.setMaxSubtaskDepth(value);
+      if (!mounted) return;
+      setState(() => _maxSubtaskDepth = value);
       _showSnackBar(AppLocalizations.of(context)!.settingsSaved);
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -272,6 +287,25 @@ class _AgenticSettingsScreenState extends State<AgenticSettingsScreen> {
                       setState(() => _tocInlineThreshold = (v ~/ 100) * 100),
                   onChangeEnd: (v) =>
                       _updateTocInlineThreshold((v ~/ 100) * 100),
+                ),
+                const SizedBox(height: 12),
+
+                // Max Subtask Depth
+                _buildSettingCard(
+                  title: l10n.maxSubtaskDepth,
+                  description: l10n.maxSubtaskDepthDescription,
+                  value: _maxSubtaskDepth,
+                  displayValue: _maxSubtaskDepth == 0
+                      ? l10n.aiLogEntriesDisabled
+                      : '$_maxSubtaskDepth',
+                  min: AgenticSettingsService.minMaxSubtaskDepth.toDouble(),
+                  max: AgenticSettingsService.maxMaxSubtaskDepth.toDouble(),
+                  divisions:
+                      AgenticSettingsService.maxMaxSubtaskDepth -
+                      AgenticSettingsService.minMaxSubtaskDepth,
+                  onChanged: (v) =>
+                      setState(() => _maxSubtaskDepth = v.round()),
+                  onChangeEnd: (v) => _updateMaxSubtaskDepth(v.round()),
                 ),
               ],
             ),

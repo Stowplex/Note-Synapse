@@ -14,6 +14,7 @@ class AgenticSettingsService {
   static const String _maxTurnsKey = 'agentic_max_turns';
   static const String _turnIncrementKey = 'agentic_turn_increment';
   static const String _tocInlineThresholdKey = 'agentic_toc_inline_threshold';
+  static const String _maxSubtaskDepthKey = 'agentic_max_subtask_depth';
 
   // Defaults
   static const int defaultCompactionThreshold = 100000;
@@ -22,6 +23,7 @@ class AgenticSettingsService {
   static const int defaultMaxTurns = 10;
   static const int defaultTurnIncrement = 10;
   static const int defaultTocInlineThreshold = 1000; // tokens
+  static const int defaultMaxSubtaskDepth = 2;
 
   // Constraints
   static const int minCompactionThreshold = 10000;
@@ -36,6 +38,8 @@ class AgenticSettingsService {
   static const int maxTurnIncrement = 30;
   static const int minTocInlineThreshold = 100;
   static const int maxTocInlineThreshold = 5000;
+  static const int minMaxSubtaskDepth = 0;
+  static const int maxMaxSubtaskDepth = 5;
 
   // ==========================================================================
   // Compaction Threshold
@@ -269,6 +273,46 @@ class AgenticSettingsService {
     } catch (e, stackTrace) {
       LoggerService.error(
         'Failed to save TOC inline threshold: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // ==========================================================================
+  // Max Subtask Depth
+  // ==========================================================================
+
+  /// Gets the maximum depth for spawning subtasks.
+  /// 0 = disable subtask spawning, 5 = maximum nesting.
+  static Future<int> getMaxSubtaskDepth() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_maxSubtaskDepthKey);
+      if (stored == null) {
+        return defaultMaxSubtaskDepth;
+      }
+      return stored.clamp(minMaxSubtaskDepth, maxMaxSubtaskDepth);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to read max subtask depth: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return defaultMaxSubtaskDepth;
+    }
+  }
+
+  /// Sets the maximum depth for spawning subtasks.
+  static Future<void> setMaxSubtaskDepth(int value) async {
+    final sanitized = value.clamp(minMaxSubtaskDepth, maxMaxSubtaskDepth);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_maxSubtaskDepthKey, sanitized);
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to save max subtask depth: $e',
         error: e,
         stackTrace: stackTrace,
       );

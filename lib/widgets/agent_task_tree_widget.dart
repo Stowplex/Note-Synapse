@@ -370,101 +370,109 @@ class _AgentTaskTreeWidgetState extends State<AgentTaskTreeWidget>
                                 ),
                           ),
                         ),
-                      // Findings button (for tasks with extracted findings)
-                      if (task.status == AgentTaskStatus.completed &&
-                          task.structuredFindings != null &&
-                          task.structuredFindings!.isNotEmpty)
+                      // Findings and Result chips
+                      if ((task.status == AgentTaskStatus.completed &&
+                              task.structuredFindings != null &&
+                              task.structuredFindings!.isNotEmpty) ||
+                          (task.status == AgentTaskStatus.completed &&
+                              contextNode?.structuredResult != null))
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: InkWell(
-                            onTap: () => _showFindingsDialog(context, task),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.tertiaryContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.analytics_outlined,
-                                    size: 14,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onTertiaryContainer,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${task.structuredFindings!.length} findings',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              // Findings button
+                              if (task.structuredFindings != null &&
+                                  task.structuredFindings!.isNotEmpty)
+                                InkWell(
+                                  onTap: () =>
+                                      _showFindingsDialog(context, task),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.tertiaryContainer,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.analytics_outlined,
+                                          size: 14,
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.onTertiaryContainer,
                                         ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${task.structuredFindings!.length} findings',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onTertiaryContainer,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Task result button (for tasks with structured results)
-                      if (task.status == AgentTaskStatus.completed &&
-                          contextNode?.structuredResult != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: InkWell(
-                            onTap: () => _showTaskResultDialog(
-                              context,
-                              task,
-                              contextNode!,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primaryContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.description_outlined,
-                                    size: 14,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onPrimaryContainer,
+                                ),
+                              // Task result button
+                              if (contextNode?.structuredResult != null)
+                                InkWell(
+                                  onTap: () => _showTaskResultDialog(
+                                    context,
+                                    task,
+                                    contextNode!,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'View Result',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primaryContainer,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.description_outlined,
+                                          size: 14,
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.onPrimaryContainer,
                                         ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'View Result',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onPrimaryContainer,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ],
-                              ),
-                            ),
+                                ),
+                            ],
                           ),
                         ),
                       // Error message
