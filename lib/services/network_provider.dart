@@ -118,7 +118,7 @@ class NetworkProvider {
           timeout: Duration(seconds: _timeout),
           connectTimeout: Duration(seconds: _connectTimeout),
           keepAliveTimeout: Duration(seconds: _timeout),
-          keepAlivePing: const Duration(seconds: 30),
+          keepAlivePing: const Duration(seconds: 10),
         ),
       ),
     );
