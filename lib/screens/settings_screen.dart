@@ -1499,6 +1499,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   int _retryCount = NetworkSettingsService.defaultRetryCount;
   int _backoffBase = NetworkSettingsService.defaultBackoffBase;
   int _timeout = NetworkSettingsService.defaultTimeout;
+  int _connectTimeout = NetworkSettingsService.defaultConnectTimeout;
   bool _isLoading = true;
 
   @override
@@ -1512,12 +1513,14 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     final retryCount = await NetworkSettingsService.getRetryCount();
     final backoffBase = await NetworkSettingsService.getBackoffBase();
     final timeout = await NetworkSettingsService.getTimeout();
+    final connectTimeout = await NetworkSettingsService.getConnectTimeout();
     if (mounted) {
       setState(() {
         _protocolPreference = protocol;
         _retryCount = retryCount;
         _backoffBase = backoffBase;
         _timeout = timeout;
+        _connectTimeout = connectTimeout;
         _isLoading = false;
       });
     }
@@ -1554,6 +1557,14 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
       _timeout = seconds;
     });
     await NetworkSettingsService.setTimeout(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateConnectTimeout(int seconds) async {
+    setState(() {
+      _connectTimeout = seconds;
+    });
+    await NetworkSettingsService.setConnectTimeout(seconds);
     await NetworkProvider.instance.reloadSettings();
   }
 
@@ -1833,6 +1844,70 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                             });
                           },
                           onChangeEnd: (value) => _updateTimeout(value.round()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Connect Timeout
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer_outlined),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Connect Timeout',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Maximum duration for establishing connection',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_connectTimeout}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _connectTimeout.toDouble(),
+                          min: NetworkSettingsService.minConnectTimeout
+                              .toDouble(),
+                          max: NetworkSettingsService.maxConnectTimeout
+                              .toDouble(),
+                          divisions:
+                              (NetworkSettingsService.maxConnectTimeout -
+                                  NetworkSettingsService.minConnectTimeout) ~/
+                              5,
+                          label: '${_connectTimeout}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _connectTimeout = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateConnectTimeout(value.round()),
                         ),
                       ],
                     ),

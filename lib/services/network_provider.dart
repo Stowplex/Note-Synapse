@@ -39,6 +39,7 @@ class NetworkProvider {
   int _retryCount = NetworkSettingsService.defaultRetryCount;
   int _backoffBase = NetworkSettingsService.defaultBackoffBase;
   int _timeout = NetworkSettingsService.defaultTimeout;
+  int _connectTimeout = NetworkSettingsService.defaultConnectTimeout;
 
   /// Timer for idle connection cleanup.
   Timer? _idleCleanupTimer;
@@ -81,7 +82,8 @@ class NetworkProvider {
 
     LoggerService.info(
       'NetworkProvider settings reloaded: protocol=$_protocolPreference, '
-      'retryCount=$_retryCount, backoffBase=$_backoffBase, timeout=${_timeout}s',
+      'retryCount=$_retryCount, backoffBase=$_backoffBase, '
+      'timeout=${_timeout}s, connectTimeout=${_connectTimeout}s',
     );
   }
 
@@ -90,6 +92,7 @@ class NetworkProvider {
     _retryCount = await NetworkSettingsService.getRetryCount();
     _backoffBase = await NetworkSettingsService.getBackoffBase();
     _timeout = await NetworkSettingsService.getTimeout();
+    _connectTimeout = await NetworkSettingsService.getConnectTimeout();
   }
 
   Future<void> _createHttp11Client() async {
@@ -99,9 +102,9 @@ class NetworkProvider {
         httpVersionPref: HttpVersionPref.http1_1,
         timeoutSettings: TimeoutSettings(
           timeout: Duration(seconds: _timeout),
-          connectTimeout: const Duration(seconds: 30),
-          keepAliveTimeout: const Duration(seconds: 60),
-          keepAlivePing: const Duration(seconds: 30),
+          connectTimeout: Duration(seconds: _connectTimeout),
+          keepAliveTimeout: Duration(seconds: _timeout),
+          keepAlivePing: const Duration(seconds: 10),
         ),
       ),
     );
@@ -113,9 +116,9 @@ class NetworkProvider {
         httpVersionPref: HttpVersionPref.http3,
         timeoutSettings: TimeoutSettings(
           timeout: Duration(seconds: _timeout),
-          connectTimeout: const Duration(seconds: 30),
-          keepAliveTimeout: Duration.zero,
-          keepAlivePing: Duration.zero,
+          connectTimeout: Duration(seconds: _connectTimeout),
+          keepAliveTimeout: Duration(seconds: _timeout),
+          keepAlivePing: const Duration(seconds: 30),
         ),
       ),
     );

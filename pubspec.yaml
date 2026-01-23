@@ -46,7 +46,8 @@ dependencies:
   
   # HTTP requests
   http: ^1.1.0
-  rhttp: ^0.15.0
+  rhttp:
+    path: third_party/rhttp/rhttp
   crypto: ^3.0.3
   
   # Image handling

@@ -1,0 +1,3 @@
+[submodule "third_party/rhttp"]
+	path = third_party/rhttp
+	url = git@github.com:kkspeed/rhttp.git

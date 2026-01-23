@@ -4,6 +4,7 @@ const String _protocolPreferenceKey = 'network_protocol_preference';
 const String _retryCountKey = 'network_retry_count';
 const String _backoffBaseKey = 'network_backoff_base';
 const String _timeoutKey = 'network_timeout';
+const String _connectTimeoutKey = 'network_connect_timeout';
 
 /// Network protocol preference for HTTP requests.
 enum NetworkProtocolPreference {
@@ -49,6 +50,15 @@ class NetworkSettingsService {
 
   /// Maximum timeout in seconds (30 minutes).
   static const int maxTimeout = 1800;
+
+  /// Default connect timeout in seconds (30 seconds).
+  static const int defaultConnectTimeout = 30;
+
+  /// Minimum connect timeout in seconds (5 seconds).
+  static const int minConnectTimeout = 5;
+
+  /// Maximum connect timeout in seconds (2 minutes).
+  static const int maxConnectTimeout = 120;
 
   /// Get the current protocol preference.
   static Future<NetworkProtocolPreference> getProtocolPreference() async {
@@ -119,5 +129,24 @@ class NetworkSettingsService {
     final prefs = await SharedPreferences.getInstance();
     final clampedSeconds = seconds.clamp(minTimeout, maxTimeout);
     await prefs.setInt(_timeoutKey, clampedSeconds);
+  }
+
+  /// Get the current connect timeout in seconds.
+  static Future<int> getConnectTimeout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_connectTimeoutKey);
+    if (value == null ||
+        value < minConnectTimeout ||
+        value > maxConnectTimeout) {
+      return defaultConnectTimeout;
+    }
+    return value;
+  }
+
+  /// Set the connect timeout in seconds.
+  static Future<void> setConnectTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clampedSeconds = seconds.clamp(minConnectTimeout, maxConnectTimeout);
+    await prefs.setInt(_connectTimeoutKey, clampedSeconds);
   }
 }
