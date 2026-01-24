@@ -10,6 +10,7 @@ import '../services/logger_service.dart';
 import '../providers/app_provider.dart';
 import 'dart:convert';
 import 'note_modification_service.dart';
+import 'service_locator.dart';
 
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
@@ -161,7 +162,7 @@ Content: ${note.content}
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
 
-          final service = NoteModificationService();
+          final service = getIt<NoteModificationService>();
           // applyModifications writes to DB
           final updatedNote = await service.applyModifications(note.id, json);
           // Update AppProvider to reflect changes in UI (redundant DB write but safe)

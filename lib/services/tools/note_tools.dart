@@ -9,6 +9,7 @@ import '../database_service.dart';
 import '../note_modification_service.dart';
 import '../logger_service.dart';
 import '../sql_query_service.dart';
+import '../service_locator.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
@@ -787,7 +788,7 @@ DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
 }
 
 class ModifyNoteTool implements NativeTool {
-  final NoteModificationService _service = NoteModificationService();
+  NoteModificationService get _service => getIt<NoteModificationService>();
 
   @override
   String get name => 'modify_note';
@@ -921,7 +922,7 @@ class ModifyNoteTool implements NativeTool {
 }
 
 class CreateNotesTool implements NativeTool {
-  final NoteModificationService _service = NoteModificationService();
+  NoteModificationService get _service => getIt<NoteModificationService>();
 
   @override
   String get name => 'create_notes';

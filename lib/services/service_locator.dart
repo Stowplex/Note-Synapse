@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'database_service.dart';
+import 'note_modification_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -30,7 +31,14 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   }
 
-  // Future waves will be added here as services are migrated
+  // ============================================================
+  // WAVE 2: Simple services - Depend only on DatabaseService
+  // ============================================================
+  if (!getIt.isRegistered<NoteModificationService>()) {
+    getIt.registerLazySingleton<NoteModificationService>(
+      () => NoteModificationService(getIt<DatabaseService>()),
+    );
+  }
 }
 
 /// Reset all registrations. USE ONLY IN TESTS.
