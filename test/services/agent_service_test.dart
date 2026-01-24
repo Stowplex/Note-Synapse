@@ -242,7 +242,7 @@ My thought: This task is complex, I'll spawn multiple subtasks.
   group('Subtask spawning', () {
     test('kMaxSubtaskDepth constant is defined', () {
       // Verify the constant exists and has expected value
-      expect(kMaxSubtaskDepth, equals(3));
+      expect(kMaxSubtaskDepth, equals(2));
     });
 
     test('AgentTask has spawnedSubtaskIds field', () {
