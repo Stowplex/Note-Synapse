@@ -16,6 +16,7 @@ import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
+import 'services/service_locator.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
@@ -33,6 +34,9 @@ void main() async {
   await SecureStorageService.initialize();
   await PromptConfigurationBootstrapper.initialize();
   await GlobalLibraryService().init();
+
+  // Initialize service locator for dependency injection
+  setupServiceLocator();
 
   // Initialize background agent service for Android foreground service
   await BackgroundAgentService.init();
