@@ -523,6 +523,7 @@ class AgentService extends ChangeNotifier {
                   .generateFinalSummary(
                     taskContext,
                     consumingTaskDescriptions: consumingTaskDescriptions,
+                    modelOverride: _modelOverride,
                   );
               taskContext.log('Task completed with result: ${task.result}');
             } catch (e) {

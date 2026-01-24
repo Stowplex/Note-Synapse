@@ -5,6 +5,7 @@ import 'agentic_settings_service.dart';
 import 'logger_service.dart';
 import '../models/generation_context.dart';
 import 'model_selector.dart';
+import '../models/model_config.dart';
 
 /// Default token budgets for context management.
 /// These are fallbacks; prefer model's configured maxInputTokens.
@@ -551,6 +552,7 @@ Output structured, scannable context. Not prose:
   Future<String> generateFinalSummary(
     ContextNode node, {
     List<String> consumingTaskDescriptions = const [],
+    ModelConfig? modelOverride,
   }) async {
     // Determine the transformation approach based on context
     final consumingTasksContext = consumingTaskDescriptions.isNotEmpty
@@ -605,12 +607,15 @@ If this is creative/generative work, output the FULL content.
 If this is research/analysis, output structured findings.
 ''';
 
+    final genContext = GenerationContext(
+      values: {'type': 'context_transform', 'nodeId': node.id},
+    );
+    if (modelOverride != null) genContext.modelOverride = modelOverride;
+
     final response = await AIService.generateWithAttachments(
       prompt,
       [],
-      generationContext: GenerationContext(
-        values: {'type': 'context_transform', 'nodeId': node.id},
-      ),
+      generationContext: genContext,
     );
 
     node.summary = response.trim();
