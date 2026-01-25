@@ -5,6 +5,7 @@ import 'note_modification_service.dart';
 import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
 import 'user_app_service.dart';
+import 'model_storage_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -61,6 +62,15 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<UserAppService>()) {
     getIt.registerLazySingleton<UserAppService>(
       () => UserAppService(getIt<DatabaseService>()),
+    );
+  }
+
+  // ============================================================
+  // WAVE 4A: Storage services (no database dependency)
+  // ============================================================
+  if (!getIt.isRegistered<ModelStorageService>()) {
+    getIt.registerLazySingleton<ModelStorageService>(
+      () => ModelStorageService(),
     );
   }
 }
