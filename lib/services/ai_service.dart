@@ -15,6 +15,7 @@ import 'prompts/system_prompt_builder.dart';
 import 'prompts/note_prompt_builder.dart';
 import '../models/generation_context.dart';
 import 'attachment_preprocessor.dart';
+import 'service_locator.dart';
 
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
@@ -24,7 +25,7 @@ class AIService {
   }
 
   static NotePromptBuilder _notePromptBuilder() =>
-      NotePromptBuilder(DatabaseService());
+      NotePromptBuilder(getIt<DatabaseService>());
 
   static PromptRequest _singleTurnRequest({
     required String taskContext,

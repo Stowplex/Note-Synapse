@@ -22,6 +22,7 @@ import 'mcp_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
+import 'service_locator.dart';
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/token_estimator.dart';
@@ -646,7 +647,7 @@ class AgentService extends ChangeNotifier {
       return '';
     }
 
-    final db = DatabaseService();
+    final db = getIt<DatabaseService>();
     final buffer = StringBuffer();
     buffer.writeln('## User-Provided Context Notes');
     buffer.writeln();
