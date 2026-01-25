@@ -5,6 +5,7 @@ import 'models/ai_model.dart';
 import 'models/gemini_model.dart';
 import 'models/openai_model.dart';
 import 'model_storage_service.dart';
+import 'service_locator.dart';
 import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
 import '../models/model_type.dart';
@@ -33,7 +34,7 @@ class ModelSelector {
     try {
       // Try to get from provider first, then storage
       final selectedConfig =
-          appProvider.modelConfig ?? await ModelStorageService.getActiveModel();
+          appProvider.modelConfig ?? await getIt<ModelStorageService>().getActiveModel();
 
       if (selectedConfig != null) {
         LoggerService.debug(
@@ -90,7 +91,7 @@ class ModelSelector {
 
       // Save selection
       LoggerService.debug('ModelSelector: Saving model selection...');
-      await ModelStorageService.activateModel(config.id);
+      await getIt<ModelStorageService>().activateModel(config.id);
 
       LoggerService.debug(
         'ModelSelector: Successfully switched to ${config.displayName}',
@@ -523,7 +524,7 @@ class ModelSelector {
     }
 
     // Current model doesn't match, search for an alternative
-    final models = await ModelStorageService.getConfiguredModels();
+    final models = await getIt<ModelStorageService>().getConfiguredModels();
     for (final model in models) {
       if (_modelMatchesHints(model, hints)) {
         LoggerService.debug(
@@ -583,13 +584,13 @@ class ModelSelector {
   /// - Fallback: Active/Default model.
   Future<ModelConfig?> selectModelByPreference(Set<String> requiredCaps) async {
     // 1. Prepare candidates: Active Model + Preference List
-    final activeModel = await ModelStorageService.getActiveModel();
+    final activeModel = await getIt<ModelStorageService>().getActiveModel();
     if (activeModel == null)
       return null; // Should not happen if app initialized
 
     final preferenceListIds = await ModelPreferenceService.instance
         .getPreferenceList();
-    final allModels = await ModelStorageService.getConfiguredModels();
+    final allModels = await getIt<ModelStorageService>().getConfiguredModels();
 
     final candidates = <ModelConfig>[
       activeModel,

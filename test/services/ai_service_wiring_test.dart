@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/models/model_capabilities.dart';
@@ -23,6 +24,10 @@ void main() {
   late ModelConfig geminiAudioModel;
 
   setUp(() async {
+    // 0. Reset service locator and set up fresh services
+    await resetForTesting();
+    setupServiceLocator();
+
     // 1. Setup temporary directory for file I/O
     tempDir = await Directory.systemTemp.createTemp('ai_service_test');
 
@@ -85,12 +90,12 @@ void main() {
 
     // 5. Save models to storage (via SharedPreferences)
     // Active model is Text Only
-    await ModelStorageService.addModel(geminiTextModel);
-    await ModelStorageService.activateModel(geminiTextModel.id);
+    await getIt<ModelStorageService>().addModel(geminiTextModel);
+    await getIt<ModelStorageService>().activateModel(geminiTextModel.id);
 
     // Save capability models
-    await ModelStorageService.addModel(geminiVisionModel);
-    await ModelStorageService.addModel(geminiAudioModel);
+    await getIt<ModelStorageService>().addModel(geminiVisionModel);
+    await getIt<ModelStorageService>().addModel(geminiAudioModel);
 
     // 6. Set Preferences: Prefer Audio and Vision models
     await prefs.setStringList('model_preference_list', [
@@ -108,6 +113,7 @@ void main() {
 
   tearDown(() async {
     await tempDir.delete(recursive: true);
+    await resetForTesting();
   });
 
   group('AIService Wiring Tests', () {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/models/model_capabilities.dart';
@@ -13,6 +14,10 @@ void main() {
     late ModelConfig openaiImageModel;
 
     setUp(() async {
+      // Reset and set up service locator
+      await resetForTesting();
+      setupServiceLocator();
+
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
@@ -64,6 +69,10 @@ void main() {
         ),
         isConfigured: true,
       );
+    });
+
+    tearDown(() async {
+      await resetForTesting();
     });
 
     Future<void> _setupStorage({

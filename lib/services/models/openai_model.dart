@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
+import '../service_locator.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
 import '../network_provider.dart';
@@ -34,7 +35,7 @@ class OpenAIModel implements AIModel {
       if (_config == null) return false;
       final apiKey =
           _config?.apiKey ??
-          await ModelStorageService.getModelApiKey(_config!.id);
+          await getIt<ModelStorageService>().getModelApiKey(_config!.id);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('OpenAIModel: Error checking readiness: $e');
@@ -60,7 +61,7 @@ class OpenAIModel implements AIModel {
       );
     } else {
       // If no config provided, try to get the active model if it matches this type
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       if (activeModel?.type == ModelType.openaiCompatible) {
         _config = activeModel;
         LoggerService.debug(
@@ -81,7 +82,7 @@ class OpenAIModel implements AIModel {
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       // Try to fetch from storage using ID
-      final storedKey = await ModelStorageService.getModelApiKey(_config!.id);
+      final storedKey = await getIt<ModelStorageService>().getModelApiKey(_config!.id);
       if (storedKey != null && storedKey.isNotEmpty) {
         _config = _config!.copyWith(apiKey: storedKey);
       } else {

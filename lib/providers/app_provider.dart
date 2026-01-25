@@ -71,7 +71,7 @@ class AppProvider extends ChangeNotifier {
       _userApps = await _userAppService.getAllUserApps();
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
-      _modelConfig = await ModelStorageService.getActiveModel();
+      _modelConfig = await getIt<ModelStorageService>().getActiveModel();
 
       await _refreshMultiFunctionApps();
       _currentMultiFunctionAppId = await _databaseService

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/model_type.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 import 'model_configuration_screen.dart';
 
 class ModelSelectionScreen extends StatefulWidget {
@@ -23,7 +24,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   Future<void> _loadSelectedModel() async {
     try {
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       setState(() {
         _selectedModel = activeModel?.type ?? ModelType.gemini;
       });
@@ -50,18 +51,18 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
     try {
       // Check if any model of this type is already configured
-      final models = await ModelStorageService.getConfiguredModels();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
       final isConfigured = models.any((m) => m.type == _selectedModel);
 
       if (isConfigured) {
         // Model is already configured, proceed to main app
         // We might want to ensure it's active if it's not
-        final activeModel = await ModelStorageService.getActiveModel();
+        final activeModel = await getIt<ModelStorageService>().getActiveModel();
         if (activeModel?.type != _selectedModel) {
           final modelToActivate = models.firstWhere(
             (m) => m.type == _selectedModel,
           );
-          await ModelStorageService.activateModel(modelToActivate.id);
+          await getIt<ModelStorageService>().activateModel(modelToActivate.id);
         }
 
         if (mounted) {
