@@ -21,6 +21,7 @@ import '../models/generation_context.dart';
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   ConversationService get _conversationService => getIt<ConversationService>();
+  UserAppService get _userAppService => getIt<UserAppService>();
 
   List<Note> _notes = [];
   List<Tag> _tags = [];
@@ -67,7 +68,7 @@ class AppProvider extends ChangeNotifier {
       _filters = await _databaseService.getAllFilters();
       LoggerService.debug('Successfully loaded ${_filters.length} filters');
 
-      _userApps = await UserAppService.getAllUserApps();
+      _userApps = await _userAppService.getAllUserApps();
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
       _modelConfig = await ModelStorageService.getActiveModel();
@@ -1008,7 +1009,7 @@ class AppProvider extends ChangeNotifier {
   // User App management methods
   Future<void> addUserApp(UserApp app) async {
     try {
-      await UserAppService.saveUserApp(app);
+      await _userAppService.saveUserApp(app);
       _userApps.add(app);
       notifyListeners();
       _error = null;
@@ -1021,7 +1022,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> refreshUserApps() async {
     try {
-      _userApps = await UserAppService.getAllUserApps();
+      _userApps = await _userAppService.getAllUserApps();
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -1033,7 +1034,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateUserApp(UserApp app) async {
     try {
-      await UserAppService.updateUserApp(app);
+      await _userAppService.updateUserApp(app);
       final appIndex = _userApps.indexWhere((a) => a.id == app.id);
       if (appIndex != -1) {
         _userApps[appIndex] = app;
@@ -1053,7 +1054,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
   }) async {
     try {
-      final revision = await UserAppService.saveManualCodeEdit(
+      final revision = await _userAppService.saveManualCodeEdit(
         originalApp: originalApp,
         newCode: newCode,
         attachmentPaths: attachmentPaths,
@@ -1083,7 +1084,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteUserApp(String appId) async {
     try {
-      await UserAppService.deleteUserApp(appId);
+      await _userAppService.deleteUserApp(appId);
       _userApps.removeWhere((app) => app.id == appId);
       notifyListeners();
       _error = null;
@@ -1118,7 +1119,7 @@ class AppProvider extends ChangeNotifier {
       }
       final userPrompt = promptBuffer.toString();
 
-      final app = await UserAppService.createUserApp(
+      final app = await _userAppService.createUserApp(
         name: name,
         description: description,
         steps: steps,
@@ -1149,7 +1150,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final revision = await UserAppService.editUserApp(
+      final revision = await _userAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
         attachmentPaths: attachmentPaths,
@@ -1192,7 +1193,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> getAppState(String appId) async {
     try {
-      return await UserAppService.getAppState(appId);
+      return await _userAppService.getAppState(appId);
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1202,7 +1203,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
     try {
-      await UserAppService.saveAppState(appId, state);
+      await _userAppService.saveAppState(appId, state);
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -1220,7 +1221,7 @@ class AppProvider extends ChangeNotifier {
       }
 
       // Load revisions from database
-      final revisions = await UserAppService.getAppRevisions(appId);
+      final revisions = await _userAppService.getAppRevisions(appId);
 
       // Cache the revisions (already sorted by revisionNumber ASC from database)
       _appRevisions[appId] = revisions;
@@ -1235,7 +1236,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<AppRevision?> getAppRevision(String revisionId) async {
     try {
-      return await UserAppService.getAppRevision(revisionId);
+      return await _userAppService.getAppRevision(revisionId);
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1259,7 +1260,7 @@ class AppProvider extends ChangeNotifier {
         throw Exception('Revision not found in any app');
       }
 
-      await UserAppService.deleteAppRevision(revisionId);
+      await _userAppService.deleteAppRevision(revisionId);
 
       // Clear and refresh revisions cache for this app
       clearAppRevisionsCache(appId);
@@ -1284,7 +1285,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> setSelectedRevision(String appId, String revisionId) async {
     try {
-      await UserAppService.setSelectedRevision(appId, revisionId);
+      await _userAppService.setSelectedRevision(appId, revisionId);
 
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);
@@ -1306,7 +1307,7 @@ class AppProvider extends ChangeNotifier {
   // Refresh revisions for a specific app
   Future<void> refreshAppRevisions(String appId) async {
     try {
-      final revisions = await UserAppService.getAppRevisions(appId);
+      final revisions = await _userAppService.getAppRevisions(appId);
       _appRevisions[appId] = revisions;
       notifyListeners();
     } catch (e) {
@@ -1324,7 +1325,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<AppRevision> createInitialRevision(String appId) async {
     try {
-      final revision = await UserAppService.createInitialRevision(appId);
+      final revision = await _userAppService.createInitialRevision(appId);
 
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);

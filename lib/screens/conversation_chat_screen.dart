@@ -437,7 +437,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {

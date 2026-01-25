@@ -380,7 +380,7 @@ class UserAppRuntimeBridge {
           LoggerService.debug(
             '[Synapse.loadAppState] Called for app: ${app.id}',
           );
-          final state = await UserAppService.getAppState(app.id);
+          final state = await getIt<UserAppService>().getAppState(app.id);
           final duration = DateTime.now().difference(startTime);
           if (state != null) {
             LoggerService.debug(

@@ -5,6 +5,7 @@ import '../models/agent_task.dart';
 import '../models/note.dart';
 import '../services/mcp_service.dart';
 import '../services/user_app_service.dart';
+import '../services/service_locator.dart';
 import '../models/user_app.dart';
 import '../screens/note_selection_dialog.dart';
 import '../l10n/app_localizations.dart';
@@ -614,7 +615,7 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
 
       // Local AI Tools
       try {
-        final allApps = await UserAppService.getAllUserApps();
+        final allApps = await getIt<UserAppService>().getAllUserApps();
         final localTools = allApps
             .where((app) => app.type == UserAppType.aiTool)
             .toList();

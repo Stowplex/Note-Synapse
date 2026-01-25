@@ -491,7 +491,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {

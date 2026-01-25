@@ -4,6 +4,7 @@ import 'database_service.dart';
 import 'note_modification_service.dart';
 import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
+import 'user_app_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -51,6 +52,15 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ConversationService>()) {
     getIt.registerLazySingleton<ConversationService>(
       () => ConversationService(getIt<DatabaseService>()),
+    );
+  }
+
+  // ============================================================
+  // WAVE 3: Services with database access (formerly static)
+  // ============================================================
+  if (!getIt.isRegistered<UserAppService>()) {
+    getIt.registerLazySingleton<UserAppService>(
+      () => UserAppService(getIt<DatabaseService>()),
     );
   }
 }
