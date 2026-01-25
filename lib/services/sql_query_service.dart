@@ -2,6 +2,7 @@ import 'package:sqlparser/sqlparser.dart';
 
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// Callback type for requesting write operation approval.
 /// Returns true if the user approves the write operation.
@@ -89,9 +90,13 @@ class SqlQueryService {
   SqlQueryService({
     this.onWriteApprovalRequest,
     DatabaseService? databaseService,
-  }) : _databaseService = databaseService ?? DatabaseService();
+  }) : _injectedDatabaseService = databaseService;
 
-  final DatabaseService _databaseService;
+  final DatabaseService? _injectedDatabaseService;
+
+  /// Lazy-loaded database service from GetIt.
+  DatabaseService get _databaseService =>
+      _injectedDatabaseService ?? getIt<DatabaseService>();
 
   /// Callback to request user approval for write operations.
   WriteApprovalCallback? onWriteApprovalRequest;

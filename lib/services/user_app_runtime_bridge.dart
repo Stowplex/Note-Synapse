@@ -92,7 +92,7 @@ class UserAppRuntimeBridge {
     );
   }
 
-  final DatabaseService _databaseService = DatabaseService();
+  DatabaseService get _databaseService => getIt<DatabaseService>();
   late final SqlQueryService _sqlQueryService = SqlQueryService(
     databaseService: _databaseService,
   );

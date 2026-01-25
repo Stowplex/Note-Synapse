@@ -24,7 +24,7 @@ abstract class NativeTool {
 }
 
 class NoteSearchTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'search_notes';
@@ -79,7 +79,7 @@ Priority order for exploring user's notes:
 }
 
 class NoteReadTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'read_note';
@@ -685,7 +685,7 @@ extension StringExtension on String {
 }
 
 class ListFiltersTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'ls';
@@ -1051,7 +1051,7 @@ class CreateNotesTool implements NativeTool {
 /// Tool for deleting notes.
 /// Requires user approval before deletion.
 class DeleteNoteTool implements NativeTool {
-  final DatabaseService _databaseService = DatabaseService();
+  DatabaseService get _databaseService => getIt<DatabaseService>();
 
   @override
   String get name => 'delete_notes';

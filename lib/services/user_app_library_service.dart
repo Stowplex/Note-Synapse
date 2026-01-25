@@ -5,15 +5,20 @@ import '../models/user_app_library_dependency.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../services/network_provider.dart';
+import '../services/service_locator.dart';
 
 class UserAppLibraryService {
-  static final UserAppLibraryService _instance =
-      UserAppLibraryService._internal(DatabaseService());
-  factory UserAppLibraryService() => _instance;
+  static UserAppLibraryService? _instance;
+  factory UserAppLibraryService() =>
+      _instance ??= UserAppLibraryService._internal(null);
 
-  final DatabaseService _databaseService;
+  final DatabaseService? _injectedDatabaseService;
 
-  UserAppLibraryService._internal(this._databaseService);
+  /// Lazy-loaded database service from GetIt.
+  DatabaseService get _databaseService =>
+      _injectedDatabaseService ?? getIt<DatabaseService>();
+
+  UserAppLibraryService._internal(this._injectedDatabaseService);
 
   /// Factory for tests to inject their own database instance.
   factory UserAppLibraryService.createForTesting(
