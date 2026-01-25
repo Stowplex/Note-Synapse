@@ -39,6 +39,7 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/service_locator.dart';
 import '../models/conversation.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -2017,7 +2018,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       // Trigger AI Ingestion ONLY on first save (new note) AND if summary doesn't exist
       if (isFirstSave && !updatedNote.content.contains('> [!SUMMARY]')) {
-        ContentIngestionService().processNote(
+        getIt<ContentIngestionService>().processNote(
           updatedNote,
           appProvider,
           onMessage: (msg) {
@@ -3328,7 +3329,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           orElse: () => currentNote,
         );
 
-        ContentIngestionService().processNote(
+        getIt<ContentIngestionService>().processNote(
           updatedNote,
           appProvider,
           onMessage: (msg) {

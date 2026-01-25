@@ -15,7 +15,12 @@ import 'service_locator.dart';
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 class ContentIngestionService {
-  final DatabaseService _databaseService = DatabaseService();
+  final DatabaseService _databaseService;
+
+  /// Creates a ContentIngestionService.
+  ///
+  /// [databaseService] - The database service for data operations.
+  ContentIngestionService(this._databaseService);
 
   /// Checks if a note needs AI processing based on its tags and triggers ingestion.
   Future<void> processNote(

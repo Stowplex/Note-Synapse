@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'database_service.dart';
 import 'note_modification_service.dart';
+import 'content_ingestion_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -37,6 +38,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteModificationService>()) {
     getIt.registerLazySingleton<NoteModificationService>(
       () => NoteModificationService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<ContentIngestionService>()) {
+    getIt.registerLazySingleton<ContentIngestionService>(
+      () => ContentIngestionService(getIt<DatabaseService>()),
     );
   }
 }

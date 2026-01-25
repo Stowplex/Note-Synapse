@@ -14,6 +14,7 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/media_attachment_service.dart';
@@ -1589,7 +1590,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!finalNote.content.contains('> [!SUMMARY]')) {
-          ContentIngestionService().processNote(
+          getIt<ContentIngestionService>().processNote(
             finalNote,
             appProvider,
             onMessage: (_) {},
@@ -1642,7 +1643,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!updatedNote.content.contains('> [!SUMMARY]')) {
-          ContentIngestionService().processNote(
+          getIt<ContentIngestionService>().processNote(
             updatedNote,
             appProvider,
             onMessage: (_) {},
