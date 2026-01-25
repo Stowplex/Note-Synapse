@@ -60,15 +60,6 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
       await ModelPreferenceService.instance.setPreferenceList(
         _preferenceListIds,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Model preferences saved'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +83,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
       setState(() {
         _preferenceListIds.add(model.id);
       });
+      _savePreferences();
     }
   }
 
@@ -99,6 +91,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
     setState(() {
       _preferenceListIds.removeAt(index);
     });
+    _savePreferences();
   }
 
   void _onReorder(int oldIndex, int newIndex) {
@@ -109,6 +102,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
       final item = _preferenceListIds.removeAt(oldIndex);
       _preferenceListIds.insert(newIndex, item);
     });
+    _savePreferences();
   }
 
   @override
@@ -122,6 +116,15 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
       appBar: AppBar(
         title: const Text('Model Preferences'),
         actions: [
+          if (_isSaving)
+            const Padding(
+              padding: EdgeInsets.only(right: 16.0),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
@@ -132,21 +135,6 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
             },
             tooltip: 'View Feature Matrix',
           ),
-          if (_isSaving)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _savePreferences,
-              tooltip: 'Save',
-            ),
         ],
       ),
       body: _isLoading

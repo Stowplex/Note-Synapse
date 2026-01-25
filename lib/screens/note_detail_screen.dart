@@ -946,8 +946,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           // Header with completed toggle and three dot menu
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 8.0,
+                              horizontal: 4.0,
                             ),
                             child: Row(
                               children: [
@@ -967,25 +966,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                       ? l10n.markIncomplete
                                       : l10n.markComplete,
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    subNote.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          decoration: subNote.isCompleted
-                                              ? TextDecoration.lineThrough
-                                              : null,
-                                          color: subNote.isCompleted
-                                              ? Colors.grey
-                                              : null,
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                                const Spacer(),
                                 // Three dot menu
                                 PopupMenuButton(
                                   itemBuilder: (context) => [
@@ -1039,6 +1020,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                   },
                                 ),
                               ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              16.0,
+                              0.0,
+                              16.0,
+                              16.0,
+                            ),
+                            child: Text(
+                              subNote.name,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    decoration: subNote.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: subNote.isCompleted
+                                        ? Colors.grey
+                                        : null,
+                                  ),
                             ),
                           ),
                           if (subNote.content.isNotEmpty)
