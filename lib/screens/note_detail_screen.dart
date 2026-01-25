@@ -4226,7 +4226,7 @@ class _NoteConversationsDialog extends StatefulWidget {
 
 class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
   late List<Conversation> _conversations;
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
 
   @override
   void initState() {

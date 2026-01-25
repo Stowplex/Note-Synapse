@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'database_service.dart';
 import 'note_modification_service.dart';
 import 'content_ingestion_service.dart';
+import 'conversation_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -44,6 +45,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ContentIngestionService>()) {
     getIt.registerLazySingleton<ContentIngestionService>(
       () => ContentIngestionService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<ConversationService>()) {
+    getIt.registerLazySingleton<ConversationService>(
+      () => ConversationService(getIt<DatabaseService>()),
     );
   }
 }

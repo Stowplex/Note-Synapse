@@ -4,13 +4,14 @@ import '../models/conversation_context.dart';
 import '../widgets/fork_context_selection_dialog.dart';
 import 'conversation_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 class ForkService {
   static final ForkService _instance = ForkService._internal();
   factory ForkService() => _instance;
   ForkService._internal();
 
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
 
   // Main fork method that handles context selection if needed
   Future<Conversation?> forkFromMessage({

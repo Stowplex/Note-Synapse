@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
@@ -8,25 +9,18 @@ import 'database_service.dart';
 import 'logger_service.dart';
 
 class ConversationService {
-  // - [x] Batch processing in `ConversationService` <!-- id: 26 -->
-  static final ConversationService _instance = ConversationService._internal();
-  factory ConversationService() => _instance;
-  ConversationService._internal({DatabaseService? databaseService})
-    : _databaseService = databaseService ?? DatabaseService();
-
   final DatabaseService _databaseService;
   final Uuid _uuid = const Uuid();
 
-  // For testing - allow injection of mock database service
-  static ConversationService _testInstance = ConversationService._internal();
-  static void setTestInstance(ConversationService instance) {
-    _testInstance = instance;
-  }
+  /// Creates a ConversationService.
+  ///
+  /// [databaseService] - The database service for conversation persistence.
+  ConversationService(this._databaseService);
 
-  static ConversationService getTestInstance() => _testInstance;
-
+  /// Creates a ConversationService for testing with injected dependencies.
+  @visibleForTesting
   static ConversationService createForTesting(DatabaseService databaseService) {
-    return ConversationService._internal(databaseService: databaseService);
+    return ConversationService(databaseService);
   }
 
   // Create a new conversation

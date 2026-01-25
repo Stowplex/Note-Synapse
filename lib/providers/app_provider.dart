@@ -14,12 +14,13 @@ import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
 import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
 
   List<Note> _notes = [];
   List<Tag> _tags = [];

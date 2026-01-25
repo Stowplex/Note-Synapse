@@ -6,6 +6,7 @@ import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/fork_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
@@ -35,7 +36,7 @@ class ConversationTreeScreen extends StatefulWidget {
 }
 
 class _ConversTreeScreenState extends State<ConversationTreeScreen> {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final DatabaseService _databaseService = DatabaseService();
   final ForkService _forkService = ForkService();
   final GraphViewController _graphController = GraphViewController();

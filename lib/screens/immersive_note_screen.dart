@@ -63,6 +63,7 @@ import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/service_locator.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -104,7 +105,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         TickerProviderStateMixin,
         NoteActionMixin<ImmersiveNoteScreen>,
         WidgetsBindingObserver {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
