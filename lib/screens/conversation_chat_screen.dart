@@ -277,11 +277,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }

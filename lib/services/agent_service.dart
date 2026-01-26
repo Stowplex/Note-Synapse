@@ -22,6 +22,7 @@ import 'mcp_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
+import 'service_locator.dart';
 
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
@@ -2150,7 +2151,7 @@ $formatInstructions
               );
             } else {
               // Fallback: MCP-only execution (legacy behavior)
-              final endpoints = await McpService.getEndpoints();
+              final endpoints = await getIt<McpService>().getEndpoints();
               final ids = endpoints.map((e) => e.id).toList();
               result = await McpToolIntegrationService.executeToolCall(
                 serviceName: serviceName,
