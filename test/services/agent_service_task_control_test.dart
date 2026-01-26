@@ -12,12 +12,14 @@ import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/services/built_in_tools_service.dart';
 
 @GenerateMocks([
   ContextManagerService,
   ModelSelector,
   AIService,
   DatabaseService,
+  BuiltInToolsService,
 ])
 import 'agent_service_task_control_test.mocks.dart';
 
@@ -67,6 +69,17 @@ void main() {
         objective: invocation.namedArguments[#objective],
       ),
     );
+
+    // Allow getContext to return null for any ID (prevent MissingStubError)
+    when(mockContextManager.getContext(any)).thenReturn(null);
+
+    // Stub for buildContextForResearchTask
+    when(
+      mockContextManager.buildContextForResearchTask(
+        any,
+        structuredDependencies: anyNamed('structuredDependencies'),
+      ),
+    ).thenReturn('Mock Context');
   });
 
   tearDown(() async {
@@ -120,6 +133,14 @@ void main() {
         description: 'Test task',
         status: AgentTaskStatus.pending,
       );
+
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => '<answer>Done</answer>');
 
       // This should not throw - it exposes _performTask for testing
       // We don't verify the full behavior here, just that it's callable
@@ -233,7 +254,7 @@ void main() {
 
         // Now resume
         final tasks = agentService.tasks;
-        agentService.resumeTask(tasks.first.id);
+        await agentService.resumeTask(tasks.first.id);
 
         // resumeTask sets isPaused=false and restarts execution
         expect(agentService.isPaused, isFalse);
@@ -248,7 +269,7 @@ void main() {
         final task1 = tasks.first;
         final initialMaxTurns = task1.maxTurns;
 
-        agentService.resumeTask(task1.id, increaseLimit: true);
+        await agentService.resumeTask(task1.id, increaseLimit: true);
 
         expect(task1.maxTurns, greaterThan(initialMaxTurns));
       });

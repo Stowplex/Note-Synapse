@@ -51,6 +51,27 @@ void main() {
     );
   }
 
+  AppRevision createTestRevision({
+    String id = 'test-revision-1',
+    String appId = 'test-app-1',
+    int revisionNumber = 1,
+    String userPrompt = 'Test prompt',
+    String aiResponse = 'Test response',
+    String appCode = '<html><body>Test</body></html>',
+    List<String> attachmentPaths = const [],
+  }) {
+    return AppRevision(
+      id: id,
+      appId: appId,
+      revisionNumber: revisionNumber,
+      revisionTimestamp: DateTime.now(),
+      userPrompt: userPrompt,
+      aiResponse: aiResponse,
+      appCode: appCode,
+      attachmentPaths: attachmentPaths,
+    );
+  }
+
   group('UserAppService CRUD operations', () {
     test('getAllUserApps returns empty list when no apps exist', () async {
       when(mockDb.getAllUserApps()).thenAnswer((_) async => []);
@@ -123,27 +144,6 @@ void main() {
       verify(mockDb.deleteUserApp(appId)).called(1);
     });
   });
-
-  AppRevision createTestRevision({
-    String id = 'test-revision-1',
-    String appId = 'test-app-1',
-    int revisionNumber = 1,
-    String userPrompt = 'Test prompt',
-    String aiResponse = 'Test response',
-    String appCode = '<html><body>Test</body></html>',
-    List<String> attachmentPaths = const [],
-  }) {
-    return AppRevision(
-      id: id,
-      appId: appId,
-      revisionNumber: revisionNumber,
-      revisionTimestamp: DateTime.now(),
-      userPrompt: userPrompt,
-      aiResponse: aiResponse,
-      appCode: appCode,
-      attachmentPaths: attachmentPaths,
-    );
-  }
 
   group('UserAppService state management', () {
     test('getAppState returns null for non-existent app', () async {
