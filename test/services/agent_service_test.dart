@@ -5,7 +5,6 @@ import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
-import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
@@ -366,11 +365,6 @@ My thought: The endpoint uses GET https://api.example.com/{cid}/data
 
   group('Agent Schema Validation', () {
     test('Agent detects orphaned arguments and reports schema error', () async {
-      String? jsonStr = '''{
-  "owner": "google-gemini",
-  "repo": "gemini-cli",
-  "path": "packages"
-}''';
       String? parseError;
       Map<String, dynamic>? decision;
 
@@ -529,6 +523,95 @@ This is the content that should remain.
       expect(task.status, equals(AgentTaskStatus.completed));
       expect(task.result, contains('Thought result'));
     });
+
+    test('Creative writing task with no tools invokes LLM', () async {
+      bool llmWasCalled = false;
+      final task = AgentTask(
+        id: 'create_outline',
+        name: 'create_outline',
+        description: 'Create novel outline',
+        toolNames: [],
+        isFinalDeliverable: false,
+      );
+
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
+        llmWasCalled = true;
+        return '''
+<Action type="answer">
+<Content># Novel Outline</Content>
+</Action>
+''';
+      });
+
+      await agentService.performTaskForTest(task, 'Context');
+      expect(llmWasCalled, isTrue);
+      expect(task.result, contains('Novel Outline'));
+    });
+
+    test(
+      'Task with extractFindings=true and empty tools invokes LLM',
+      () async {
+        bool llmWasCalled = false;
+        final task = AgentTask(
+          id: 'extract_task',
+          description: 'Extract findings',
+          toolNames: [],
+          extractFindings: true,
+        );
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async {
+          llmWasCalled = true;
+          return '''
+<Action type="answer">
+<Content>Findings extracted</Content>
+</Action>
+''';
+        });
+
+        await agentService.performTaskForTest(task, 'Context');
+        expect(llmWasCalled, isTrue);
+      },
+    );
+
+    test(
+      'Task with isFinalDeliverable=true and empty tools invokes LLM',
+      () async {
+        bool llmWasCalled = false;
+        final task = AgentTask(
+          id: 'final_task',
+          description: 'Final task',
+          toolNames: [],
+          isFinalDeliverable: true,
+        );
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async {
+          llmWasCalled = true;
+          return 'Final result';
+        });
+
+        await agentService.performTaskForTest(task, 'Context');
+        expect(llmWasCalled, isTrue);
+        expect(task.result, contains('Final result'));
+      },
+    );
   });
 
   group('AgentService - State Reset and Singleton Logic', () {
@@ -559,7 +642,6 @@ This is the content that should remain.
     test('resumeExecution should parse XML final answer', () async {
       reset(mockAIService);
 
-      int callCount = 0;
       when(
         mockAIService.generateWithAttachments(
           any,
@@ -568,7 +650,6 @@ This is the content that should remain.
         ),
       ).thenAnswer((invocation) async {
         final prompt = invocation.positionalArguments[0] as String;
-        callCount++;
         if (prompt.contains('You are an intelligent agent that plans')) {
           return '[{"name": "main_task", "description": "Just do it", "tools": [], "dependsOn": [], "isFinalDeliverable": true, "extractFindings": false}]';
         } else {

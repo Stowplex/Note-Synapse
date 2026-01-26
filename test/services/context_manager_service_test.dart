@@ -2,52 +2,52 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'mock_agent_dependencies.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
-import 'package:mockito/mockito.dart';
-import 'package:note_synapse/models/model_config.dart';
-import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
-import 'package:get_it/get_it.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:note_synapse/models/generation_context.dart';
+import 'package:mockito/mockito.dart';
+import 'package:mockito/annotations.dart';
+import 'context_manager_service_test.mocks.dart';
 
-class FakeAIService extends Fake implements AIService {
-  @override
-  Future<String> generateWithAttachments(
-    String prompt,
-    List<PlatformFile> attachedFiles, {
-    GenerationContext? generationContext,
-  }) async {
-    return 'Summary from FakeAIService';
-  }
-}
-
-class FakeModelSelector extends Fake implements ModelSelector {
-  @override
-  ModelConfig? get currentModelConfig => null;
-}
-
+@GenerateMocks([
+  ContextManagerService,
+  ModelSelector,
+  AIService,
+  DatabaseService,
+])
 void main() {
+  late MockModelSelector mockModelSelector;
+  late MockAIService mockAIService;
+  late MockDatabaseService mockDatabaseService;
+
   group('ContextManagerService', () {
     late ContextManagerService service;
 
     setUp(() async {
-      await getIt.reset(); // Reset GetIt first
+      await getIt.reset();
+      mockModelSelector = MockModelSelector();
+      mockAIService = MockAIService();
+      mockDatabaseService = MockDatabaseService();
 
-      final modelSelector = FakeModelSelector();
-      getIt.registerSingleton<ModelSelector>(modelSelector);
+      getIt.registerSingleton<ModelSelector>(mockModelSelector);
+      getIt.registerSingleton<AIService>(mockAIService);
+      getIt.registerSingleton<DatabaseService>(mockDatabaseService);
 
-      final aiService = FakeAIService();
-      getIt.registerSingleton<AIService>(aiService);
-
-      service = ContextManagerService(modelSelector, aiService);
-      // Register service for generic lookups (though we test 'service' instance directly here)
-      // But AgentService tests later need it in GetIt
+      service = ContextManagerService(mockModelSelector, mockAIService);
       getIt.registerSingleton<ContextManagerService>(service);
+
+      // Default stubs
+      when(mockModelSelector.currentModelConfig).thenReturn(null);
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => 'Summary from MockAIService');
 
       // Initialize SharedPreferences with empty values for testing
       SharedPreferences.setMockInitialValues({});
@@ -219,8 +219,8 @@ void main() {
 
       // Create new service and import
       final newService = ContextManagerService(
-        FakeModelSelector(),
-        FakeAIService(),
+        mockModelSelector,
+        mockAIService,
       );
       newService.importSnapshot(snapshot!);
 
@@ -398,21 +398,19 @@ void main() {
       await getIt.reset();
       SharedPreferences.setMockInitialValues({});
 
-      final modelSelector = FakeModelSelector();
-      getIt.registerSingleton<ModelSelector>(modelSelector);
-
-      final aiService = FakeAIService();
-      getIt.registerSingleton<AIService>(aiService);
+      getIt.registerSingleton<ModelSelector>(mockModelSelector);
+      getIt.registerSingleton<AIService>(mockAIService);
+      getIt.registerSingleton<DatabaseService>(mockDatabaseService);
 
       // Register ContextManagerService so AgentService can find it
-      final cms = ContextManagerService(modelSelector, aiService);
+      final cms = ContextManagerService(mockModelSelector, mockAIService);
       getIt.registerSingleton<ContextManagerService>(cms);
 
       agentService = AgentService(
         cms,
-        modelSelector,
-        aiService,
-        MockDatabaseService(), // We need a database service too
+        mockModelSelector,
+        mockAIService,
+        mockDatabaseService,
       );
       contextManager = agentService.contextManager;
 
@@ -446,7 +444,13 @@ Summary here.
 ''';
 
         // Set the mock LLM generator
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         // Create a task with a context node
         final rootNode = contextManager.rootContext!;
@@ -496,7 +500,13 @@ $manyWords
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
@@ -540,7 +550,13 @@ Brief content.
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
@@ -595,7 +611,13 @@ Recommend Z.
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
