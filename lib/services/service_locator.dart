@@ -63,15 +63,6 @@ void setupServiceLocator() {
   }
 
   // ============================================================
-  // WAVE 3: Services with database access (formerly static)
-  // ============================================================
-  if (!getIt.isRegistered<UserAppService>()) {
-    getIt.registerLazySingleton<UserAppService>(
-      () => UserAppService(getIt<DatabaseService>(), getIt<AIService>()),
-    );
-  }
-
-  // ============================================================
   // WAVE 4A: Storage services (no database dependency)
   // ============================================================
   if (!getIt.isRegistered<ModelStorageService>()) {
@@ -104,6 +95,15 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<AIService>()) {
     getIt.registerLazySingleton<AIService>(
       () => AIService(getIt<DatabaseService>(), getIt<ModelSelector>()),
+    );
+  }
+
+  // ============================================================
+  // WAVE 5: Services depending on AIService
+  // ============================================================
+  if (!getIt.isRegistered<UserAppService>()) {
+    getIt.registerLazySingleton<UserAppService>(
+      () => UserAppService(getIt<DatabaseService>(), getIt<AIService>()),
     );
   }
 
