@@ -183,6 +183,8 @@ dev_dependencies:
 
   mockito: ^5.6.1
 
+  test_cov_console: ^0.2.2
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
