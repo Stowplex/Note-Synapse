@@ -236,6 +236,11 @@ class AgentService extends ChangeNotifier {
   /// Checks if a new agent can be started for the given conversation.
   /// Returns true if no agent is running/paused OR if it's the same conversation.
   bool canStartNewAgent(String? conversationId) {
+    // If incoming conversation ID is null, we can't verify safety.
+    if (conversationId == null) {
+      return false;
+    }
+
     // If we have no bound activity, we can start.
     // If we bind to a new ID while idle, it's fine (bindToConversation handles the clear).
     if (!_isRunning && !_isPaused && _tasks.isEmpty) {
@@ -245,11 +250,6 @@ class AgentService extends ChangeNotifier {
     // If current bound ID is null (shouldn't happen if running), we can start.
     if (_boundConversationId == null) {
       return true;
-    }
-
-    // If incoming conversation ID is null, we can't verify safety.
-    if (conversationId == null) {
-      return false;
     }
 
     // Same conversation - can start/continue
@@ -487,7 +487,7 @@ class AgentService extends ChangeNotifier {
           if (task.spawnedSubtaskIds.isNotEmpty) {
             for (final subtaskId in task.spawnedSubtaskIds) {
               final subtask = _tasks
-                  .where((t) => t.id == subtaskId)
+                  .where((s) => s.id == subtaskId)
                   .firstOrNull;
               if (subtask != null &&
                   subtask.status == AgentTaskStatus.completed) {

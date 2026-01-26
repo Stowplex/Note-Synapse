@@ -186,8 +186,8 @@ void main() {
     test('canStartNewAgent returns false for null conversation when bound', () {
       agentService.bindToConversation('conv-1');
       // Need to simulate running state for this to matter
-      // When idle, it should still return true since no work in progress
-      expect(agentService.canStartNewAgent(null), isTrue);
+      // Even when idle, null ID should be rejected for safety
+      expect(agentService.canStartNewAgent(null), isFalse);
     });
   });
 

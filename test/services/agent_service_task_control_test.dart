@@ -263,6 +263,28 @@ void main() {
         completer.complete('<answer>Done</answer>');
       });
 
+      test('resumeExecution unpauses and restarts execution', () async {
+        // 1. Setup a task
+        final completer = Completer<String>();
+        await _populateTasks(executionCompleter: completer);
+
+        // 2. Start and then pause to set state
+        unawaited(agentService.executePlan());
+        await Future.delayed(const Duration(milliseconds: 50));
+        agentService.pauseExecution();
+        expect(agentService.isPaused, isTrue);
+
+        // 3. Resume Execution (global)
+        final resumeFuture = agentService.resumeExecution();
+
+        // 4. Verify unpaused immediately
+        expect(agentService.isPaused, isFalse);
+
+        // 5. Cleanup
+        completer.complete('<answer>Done</answer>');
+        await resumeFuture;
+      });
+
       test('resumeTask increases maxTurns if requested', () async {
         await _populateTasks();
         final tasks = agentService.tasks;
