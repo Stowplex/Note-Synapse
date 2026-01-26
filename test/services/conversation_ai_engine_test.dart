@@ -424,4 +424,95 @@ void main() {
       expect(result.content, contains('Finally done!'));
     });
   });
+
+  group('ConversationAiEngine error handling', () {
+    test('handles model error gracefully', () async {
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenThrow(Exception('Model API error'));
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {},
+        enableTools: false,
+        executeTool: (_, __, ___, ____) async => '',
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // Should return synthetic error message, not throw
+      expect(result.content, contains('error'));
+      expect(result.metadata?['is_client_synthetic'], isTrue);
+    });
+
+    test('handles tool execution error gracefully', () async {
+      var callCount = 0;
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 's',
+                  'tool_name': 't',
+                  'params': {},
+                },
+              }
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'Completed despite error',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {
+          's': [McpTool(name: 't', description: '', inputSchema: const {})],
+        },
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async {
+          throw Exception('Tool execution failed');
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // Should complete without throwing - tool errors are logged, not fatal
+      expect(result.content, contains('Completed'));
+    });
+
+    test('rethrows ConversationCancelledException', () async {
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenThrow(const ConversationCancelledException('Test cancellation'));
+
+      expect(
+        () => engine.generate(
+          request: createTestRequest(),
+          activeTools: {},
+          enableTools: false,
+          executeTool: (_, __, ___, ____) async => '',
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+        ),
+        throwsA(isA<ConversationCancelledException>()),
+      );
+    });
+  });
 }
