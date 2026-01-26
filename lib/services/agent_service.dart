@@ -266,12 +266,6 @@ class AgentService extends ChangeNotifier {
     stopExecution(); // This clears state and resets everything
   }
 
-  // ... (nativeTools and dbSchema definitions remain the same) ...
-
-  /// Mockable LLM generator for testing.
-  /// If provided, this is used instead of AIService.generateWithAttachments.
-  Future<String> Function(String prompt)? llmGenerator;
-
   /// Exposes _performTask for testing purposes.
   @visibleForTesting
   Future<void> performTaskForTest(AgentTask task, String globalContext) async {
@@ -283,9 +277,6 @@ class AgentService extends ChangeNotifier {
     String prompt, {
     required GenerationContext context,
   }) async {
-    if (llmGenerator != null) {
-      return llmGenerator!(prompt);
-    }
     return await _aiService.generateWithAttachments(
       prompt,
       [],
@@ -570,7 +561,6 @@ class AgentService extends ChangeNotifier {
             .lastOrNull;
 
         if (deliverableTask != null && deliverableTask.result != null) {
-          // Use the deliverable's result directly - this IS the user's answer
           _finalAnswer = deliverableTask.result!;
           _finalMetadata = {
             'modelUsed': _modelSelector.currentModelConfig?.id,
