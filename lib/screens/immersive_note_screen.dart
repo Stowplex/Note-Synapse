@@ -64,7 +64,6 @@ import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
-import '../services/service_locator.dart';
 
 enum DrawingTool { pen, rectangle }
 

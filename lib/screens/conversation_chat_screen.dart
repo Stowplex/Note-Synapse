@@ -55,7 +55,6 @@ import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
 import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
-import '../services/service_locator.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 
