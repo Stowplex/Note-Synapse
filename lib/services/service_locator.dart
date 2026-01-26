@@ -12,6 +12,7 @@ import 'sql_query_service.dart';
 import 'context_manager_service.dart';
 import 'ai_service.dart';
 import 'agent_service.dart';
+import 'mcp_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -39,6 +40,10 @@ void setupServiceLocator() {
   // ============================================================
   if (!getIt.isRegistered<DatabaseService>()) {
     getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
+  }
+
+  if (!getIt.isRegistered<McpService>()) {
+    getIt.registerLazySingleton<McpService>(() => McpService());
   }
 
   // ============================================================
