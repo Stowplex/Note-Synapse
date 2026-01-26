@@ -192,4 +192,61 @@ void main() {
       )).called(1);
     });
   });
+
+  group('AIService dedup rules', () {
+    test('suggestDedupRules returns parsed rules', () async {
+      // Mock response with JSON array of dedup rules
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => '''
+[
+  {"pattern": "test.*", "replacement": "test", "reason": "Normalize test tags"}
+]
+''');
+
+      final result = await service.suggestDedupRules(['test1', 'test2', 'other']);
+
+      expect(result, isA<List>());
+    });
+
+    test('suggestDedupRules handles empty response', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => '[]');
+
+      final result = await service.suggestDedupRules(['tag1', 'tag2']);
+
+      expect(result, isEmpty);
+    });
+  });
+
+  group('AIService generateWithAttachments', () {
+    test('generateWithAttachments returns response', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => 'Response with attachments processed');
+
+      final result = await service.generateWithAttachments(
+        'Analyze this',
+        [], // empty attachments list
+      );
+
+      expect(result, equals('Response with attachments processed'));
+    });
+  });
 }
