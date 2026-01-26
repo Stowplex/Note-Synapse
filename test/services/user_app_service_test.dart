@@ -331,4 +331,138 @@ void main() {
       verify(mockDb.getAppRevisions('test-app-1')).called(1);
     });
   });
+
+  group('UserAppService AI workflows', () {
+    group('parseAIResponse', () {
+      test('extracts HTML code from code blocks', () {
+        const response = '''
+Here is your app:
+
+```html
+<!DOCTYPE html>
+<html><body>Test App</body></html>
+```
+''';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], equals('<!DOCTYPE html>\n<html><body>Test App</body></html>'));
+      });
+
+      test('extracts explanation text outside code blocks', () {
+        const response = '''
+Here is your app with explanation.
+
+This is a simple test application that displays "Test App".
+
+```html
+<!DOCTYPE html>
+<html><body>Test App</body></html>
+```
+
+The app uses basic HTML structure.
+''';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], isNotEmpty);
+        expect(result['explanation'], contains('Here is your app with explanation'));
+        expect(result['explanation'], contains('The app uses basic HTML structure'));
+        expect(result['explanation'], isNot(contains('<!DOCTYPE html>')));
+      });
+
+      test('returns empty code when no code blocks found', () {
+        const response = 'This is just plain text without any code blocks.';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], isEmpty);
+        expect(result['explanation'], equals('This is just plain text without any code blocks.'));
+      });
+    });
+
+    test('createUserApp calls AI and saves result', () async {
+      const mockAiResponse = '''
+Here is your app:
+
+```html
+<!DOCTYPE html>
+<html><body>Test App</body></html>
+```
+''';
+      when(mockAi.generateApp(
+        any,
+        attachedFiles: anyNamed('attachedFiles'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => mockAiResponse);
+      when(mockDb.insertUserApp(any)).thenAnswer((_) async => 'new-app-id');
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.createUserApp(
+        name: 'Test App',
+        description: 'A test application',
+        steps: ['Step 1', 'Step 2'],
+      );
+
+      expect(result.name, equals('Test App'));
+      expect(result.description, equals('A test application'));
+      verify(mockAi.generateApp(
+        any,
+        attachedFiles: anyNamed('attachedFiles'),
+        generationContext: anyNamed('generationContext'),
+      )).called(1);
+      verify(mockDb.insertUserApp(any)).called(1);
+      verify(mockDb.insertAppRevision(any)).called(1);
+    });
+
+    test('createUserApp rethrows AI errors', () async {
+      when(mockAi.generateApp(
+        any,
+        attachedFiles: anyNamed('attachedFiles'),
+        generationContext: anyNamed('generationContext'),
+      )).thenThrow(Exception('AI service unavailable'));
+
+      expect(
+        () => service.createUserApp(
+          name: 'Test App',
+          description: 'A test application',
+          steps: ['Step 1'],
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('editUserApp calls AI and creates new revision', () async {
+      final testApp = createTestApp();
+      const mockAiResponse = '''
+Here is your updated app:
+
+```html
+<!DOCTYPE html>
+<html><body>Updated App</body></html>
+```
+''';
+      when(mockDb.getNextRevisionNumber(any)).thenAnswer((_) async => 2);
+      when(mockAi.generateApp(
+        any,
+        attachedFiles: anyNamed('attachedFiles'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => mockAiResponse);
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.getAppRevision(any)).thenAnswer((_) async => null);
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.editUserApp(
+        originalApp: testApp,
+        editSuggestion: 'Add a button',
+      );
+
+      expect(result.appCode, contains('Updated App'));
+      verify(mockAi.generateApp(
+        any,
+        attachedFiles: anyNamed('attachedFiles'),
+        generationContext: anyNamed('generationContext'),
+      )).called(1);
+      verify(mockDb.insertAppRevision(any)).called(1);
+      verify(mockDb.updateUserApp(any)).called(1);
+    });
+  });
 }
