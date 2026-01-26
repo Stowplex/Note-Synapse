@@ -272,6 +272,13 @@ class AgentService extends ChangeNotifier {
     return _performTask(task, globalContext);
   }
 
+  @visibleForTesting
+  set toolExecutor(ToolExecutor? executor) => _toolExecutor = executor;
+
+  @visibleForTesting
+  set externalToolsForTest(Map<String, List<McpTool>> tools) =>
+      _externalTools = tools;
+
   /// Helper to generate LLM response using either the mock or real service.
   Future<String> _generateLlmResponse(
     String prompt, {
@@ -1442,7 +1449,7 @@ Return ONLY a valid JSON list with ALL required fields:
   // Intervention Methods
 
   /// Resumes a paused task, optionally increasing its turn limit.
-  void resumeTask(String taskId, {bool increaseLimit = false}) async {
+  Future<void> resumeTask(String taskId, {bool increaseLimit = false}) async {
     // Ensure we unpause the agent globally so execution loop proceeds
     _isPaused = false;
     _currentCheckpoint = null;
