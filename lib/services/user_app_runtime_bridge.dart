@@ -93,9 +93,7 @@ class UserAppRuntimeBridge {
   }
 
   DatabaseService get _databaseService => getIt<DatabaseService>();
-  late final SqlQueryService _sqlQueryService = SqlQueryService(
-    databaseService: _databaseService,
-  );
+  SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -568,7 +566,7 @@ class UserAppRuntimeBridge {
             LoggerService.debug(
               '[Synapse.chatAI] Using multi-part response mode',
             );
-            final response = await AIService.chatAIMultiPart(
+            final response = await getIt<AIService>().chatAIMultiPart(
               prompt,
               temperature: validated.temperature,
               topK: validated.topK,
@@ -583,7 +581,7 @@ class UserAppRuntimeBridge {
             );
             return {'success': true, 'response': response};
           } else {
-            final response = await AIService.chatAI(
+            final response = await getIt<AIService>().chatAI(
               prompt,
               temperature: validated.temperature,
               topK: validated.topK,

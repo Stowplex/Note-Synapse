@@ -313,7 +313,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final response = await AIService.transformNote(
+      final response = await getIt<AIService>().transformNote(
         note,
         transformationPrompt,
         attachedFiles: attachedFiles,
@@ -336,7 +336,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final newNotes = await AIService.createNewNotes(
+      final newNotes = await getIt<AIService>().createNewNotes(
         prompt,
         contextNotes,
         attachedFiles: attachedFiles,

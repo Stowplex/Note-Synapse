@@ -52,7 +52,7 @@ class NoteSynapseApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => AppProvider()),
-        ChangeNotifierProvider(create: (context) => AgentService()),
+        ChangeNotifierProvider.value(value: getIt<AgentService>()),
       ], // ...
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
@@ -131,7 +131,7 @@ class _AppWrapperState extends State<AppWrapper> {
     await appProvider.loadLanguagePreference();
     await appProvider.loadData();
 
-    await AIService.initialize(appProvider);
+    await getIt<AIService>().initialize(appProvider);
     await ShareService.init(appProvider);
 
     // Initialize wake lock if it was enabled in settings

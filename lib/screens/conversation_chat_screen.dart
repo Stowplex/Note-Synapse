@@ -17,6 +17,7 @@ import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -149,7 +150,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       final result = await ApprovalService.requestSqlWriteApproval(
         sql: sql,
         queryType: queryType,
-        queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+        queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
           queryType,
         ),
         source: 'Agent',
@@ -801,7 +802,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return await ApprovalService.requestSqlWriteApproval(
       sql: sql,
       queryType: queryType,
-      queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+      queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
         queryType,
       ),
       source: 'AI Tool',
@@ -1226,7 +1227,7 @@ $historyBuffer
 
     final conversationMessages = <PromptMessage>[];
     final currentModelId =
-        _selectedModel?.id ?? ModelSelector.instance.currentModelConfig?.id;
+        _selectedModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
 
     for (final message in _messages) {
       // Filter out synthesized error messages

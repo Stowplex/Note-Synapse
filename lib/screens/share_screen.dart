@@ -1159,7 +1159,9 @@ class _ShareScreenState extends State<ShareScreen> {
           true,
         );
 
-        final aiResult = await AIService.extractContentFromImage(absolutePath);
+        final aiResult = await getIt<AIService>().extractContentFromImage(
+          absolutePath,
+        );
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
           note = Note(
@@ -1233,7 +1235,9 @@ class _ShareScreenState extends State<ShareScreen> {
           relativePath,
           true,
         );
-        final aiResult = await AIService.extractContentFromPdf(absolutePath);
+        final aiResult = await getIt<AIService>().extractContentFromPdf(
+          absolutePath,
+        );
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
           note = Note(
@@ -2386,7 +2390,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
 
       if (useAI) {
-        final aiResult = await AIService.extractContentFromText(
+        final aiResult = await getIt<AIService>().extractContentFromText(
           markdownContent,
           'web_content',
           title,

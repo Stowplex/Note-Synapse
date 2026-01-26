@@ -3,6 +3,7 @@ import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
+import 'mock_agent_dependencies.dart';
 
 // Mock dependencies if needed, but AgentService is mostly self-contained logic-wise
 // for these specific methods.
@@ -11,7 +12,12 @@ void main() {
   late AgentService agentService;
 
   setUp(() {
-    agentService = AgentService();
+    agentService = AgentService(
+      MockContextManagerService(),
+      MockModelSelector(),
+      MockAIService(),
+      MockDatabaseService(),
+    );
   });
 
   group('AgentService Singleton Logic', () {

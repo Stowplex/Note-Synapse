@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 
@@ -10,6 +11,7 @@ void main() {
 
   group('ServiceLocator', () {
     test('setupServiceLocator registers DatabaseService', () {
+      FlutterSecureStorage.setMockInitialValues({});
       setupServiceLocator();
 
       expect(GetIt.I.isRegistered<DatabaseService>(), isTrue);

@@ -202,7 +202,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     try {
       final config = widget.config!;
       // Load API key using ID
-      final apiKey = await getIt<ModelStorageService>().getModelApiKey(config.id);
+      final apiKey = await getIt<ModelStorageService>().getModelApiKey(
+        config.id,
+      );
 
       if (mounted) {
         setState(() {
@@ -325,7 +327,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       if (activeModel?.id == config.id) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         appProvider.updateModelConfig(config);
-        await ModelSelector.instance.switchToModel(config);
+        await getIt<ModelSelector>().switchToModel(config);
       }
 
       if (mounted) {

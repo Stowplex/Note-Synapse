@@ -276,7 +276,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     });
 
     try {
-      await ModelSelector.instance.switchToModel(config);
+      await getIt<ModelSelector>().switchToModel(config);
 
       if (mounted) {
         // Force refresh of model config in provider to update UI

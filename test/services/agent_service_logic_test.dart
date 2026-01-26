@@ -2,13 +2,19 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/services/agent_service.dart';
+import 'mock_agent_dependencies.dart';
 
 void main() {
   group('AgentService Logic Tests with XML Format', () {
     late AgentService agentService;
 
     setUp(() {
-      agentService = AgentService();
+      agentService = AgentService(
+        MockContextManagerService(),
+        MockModelSelector(),
+        MockAIService(),
+        MockDatabaseService(),
+      );
     });
 
     // Helper to run a single task step

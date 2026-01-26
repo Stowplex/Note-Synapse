@@ -23,16 +23,20 @@ import 'service_locator.dart';
 
 class UserAppService {
   final DatabaseService _databaseService;
+  final AIService _aiService;
 
-  UserAppService(this._databaseService);
+  UserAppService(this._databaseService, this._aiService);
 
   /// Factory constructor to get the singleton instance from GetIt.
   factory UserAppService.instance() => getIt<UserAppService>();
 
   /// Create an instance for testing with a mock DatabaseService.
   @visibleForTesting
-  static UserAppService createForTesting(DatabaseService databaseService) {
-    return UserAppService(databaseService);
+  static UserAppService createForTesting(
+    DatabaseService databaseService,
+    AIService aiService,
+  ) {
+    return UserAppService(databaseService, aiService);
   }
 
   // Get all user apps
@@ -86,10 +90,7 @@ class UserAppService {
   }
 
   // Save app state
-  Future<void> saveAppState(
-    String appId,
-    Map<String, dynamic> state,
-  ) async {
+  Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
     try {
       await _databaseService.updateUserAppState(appId, state);
     } catch (e) {
@@ -126,10 +127,7 @@ class UserAppService {
     }
   }
 
-  Future<void> setSelectedRevision(
-    String appId,
-    String revisionId,
-  ) async {
+  Future<void> setSelectedRevision(String appId, String revisionId) async {
     try {
       final app = await _databaseService.getUserApp(appId);
       if (app != null) {
@@ -500,7 +498,7 @@ class UserAppService {
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateApp(
+      final response = await _aiService.generateApp(
         prompt,
         attachedFiles: attachedFiles,
         generationContext: generationContext,
@@ -602,7 +600,7 @@ Here's the updated application with your requested changes:
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateApp(
+      final response = await _aiService.generateApp(
         prompt,
         attachedFiles: attachedFiles,
         generationContext: generationContext,

@@ -435,7 +435,7 @@ Describe the content of these PDF pages (${pageImages.length} page(s) from "$att
 Provide a detailed summary of what you see on each page.
 ''';
 
-      final aiResponse = await AIService.generateWithAttachments(
+      final aiResponse = await getIt<AIService>().generateWithAttachments(
         prompt,
         pageImages,
         generationContext: GenerationContext(
@@ -534,7 +534,7 @@ Extraction Guide:
 $extractionGuide
 ''';
 
-        final aiResponse = await AIService.generateWithAttachments(
+        final aiResponse = await getIt<AIService>().generateWithAttachments(
           prompt,
           attachments,
           generationContext: GenerationContext(
@@ -570,7 +570,7 @@ $extractionGuide
 }
 
 class RunSqlTool implements NativeTool {
-  final SqlQueryService _sqlService = SqlQueryService();
+  SqlQueryService get _sqlService => getIt<SqlQueryService>();
 
   /// Legacy static callback for backwards compatibility.
   /// Prefer using ApprovalService.onApprovalRequest instead.

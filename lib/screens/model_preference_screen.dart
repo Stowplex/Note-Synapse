@@ -30,7 +30,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
 
     try {
       final models = await getIt<ModelStorageService>().getConfiguredModels();
-      final prefs = await ModelPreferenceService.instance.getPreferenceList();
+      final prefs = await getIt<ModelPreferenceService>().getPreferenceList();
 
       setState(() {
         _allModels = models;
@@ -58,7 +58,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
     });
 
     try {
-      await ModelPreferenceService.instance.setPreferenceList(
+      await getIt<ModelPreferenceService>().setPreferenceList(
         _preferenceListIds,
       );
     } catch (e) {

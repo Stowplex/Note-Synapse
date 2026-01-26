@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/models/model_config.dart';
@@ -16,6 +17,8 @@ void main() {
     setUp(() async {
       // Reset and set up service locator
       await resetForTesting();
+
+      FlutterSecureStorage.setMockInitialValues({});
       setupServiceLocator();
 
       SharedPreferences.setMockInitialValues({});
@@ -102,7 +105,7 @@ void main() {
           allModels: [geminiVisionModel],
         );
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
         expect(result?.id, geminiVisionModel.id);
@@ -127,7 +130,7 @@ void main() {
         // Actually, if active model doesn't support it, and no other model is preferred, it might try to find *any* model?
         // Or it just returns the active model as a fallback.
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
 
@@ -156,7 +159,7 @@ void main() {
         // Active model fails capability check (assumed).
         // Preference list checked: matching capability found in geminiVisionModel.
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
         expect(result?.id, geminiVisionModel.id);
@@ -175,7 +178,7 @@ void main() {
       );
 
       // Both Ultra and Vision support 'image'. Ultra is first in preference.
-      final result = await ModelSelector.instance.selectModelByPreference({
+      final result = await getIt<ModelSelector>().selectModelByPreference({
         'images',
       });
       expect(result?.id, geminiUltra.id);
@@ -196,7 +199,7 @@ void main() {
       // Preference list empty.
       // Fallback 2: Feature priority 'image_gen'. DALL-E has it.
 
-      final result = await ModelSelector.instance.selectModelByPreference({
+      final result = await getIt<ModelSelector>().selectModelByPreference({
         'image_gen',
       });
       expect(result?.id, openaiImageModel.id); // Should select DALL-E

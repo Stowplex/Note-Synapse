@@ -6,6 +6,7 @@ import '../models/generation_context.dart';
 import '../services/logger_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 import '../services/prompts/prompt_models.dart';
 import 'conversation_settings_service.dart';
 
@@ -89,7 +90,7 @@ class ConversationAiEngine {
         ...request.conversationMessages,
       ];
 
-      final modelType = ModelSelector.instance.currentModelConfig?.type;
+      final modelType = getIt<ModelSelector>().currentModelConfig?.type;
       final callToolFunction = modelType == ModelType.openaiCompatible
           ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
           : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
@@ -153,7 +154,7 @@ class ConversationAiEngine {
 
         LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
-        final response = await ModelSelector.instance
+        final response = await getIt<ModelSelector>()
             .generateWithToolsAndMessages(currentMessages, [
               if (activeTools.isNotEmpty) callToolFunction,
             ], generationContext: generationContext);
@@ -212,7 +213,7 @@ class ConversationAiEngine {
               );
 
               // Build proper tool error message based on model type
-              if (ModelSelector.instance.currentModelConfig?.type ==
+              if (getIt<ModelSelector>().currentModelConfig?.type ==
                   ModelType.openaiCompatible) {
                 // OpenAI: Use the original tool_call_id from the API response
                 final toolCallId =
@@ -268,7 +269,7 @@ class ConversationAiEngine {
               toolResults.add(toolSummary);
               conversationParts.add('[Tool executed: $serviceName.$toolName]');
 
-              if (ModelSelector.instance.currentModelConfig?.type ==
+              if (getIt<ModelSelector>().currentModelConfig?.type ==
                   ModelType.openaiCompatible) {
                 // Use the original tool_call_id from the API response if available
                 final toolCallId =
@@ -328,7 +329,7 @@ class ConversationAiEngine {
             final assistantMetadata = <String, dynamic>{
               'function_calls': functionCalls, // Keep for legacy
               'parts_history': runningPartsHistory, // Updated history
-              'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+              'modelUsed': getIt<ModelSelector>().currentModelConfig?.id,
             };
 
             if (toolCallsWithResults.isNotEmpty) {
@@ -342,7 +343,7 @@ class ConversationAiEngine {
               metadata: assistantMetadata,
             );
             lastAssistantMetadata = assistantMetadata;
-            if (ModelSelector.instance.currentModelConfig?.type ==
+            if (getIt<ModelSelector>().currentModelConfig?.type ==
                 ModelType.openaiCompatible) {
               final toolMessages = toolCallsWithResults
                   .map(
@@ -427,7 +428,7 @@ class ConversationAiEngine {
             if (lastAssistantMetadata != null) ...lastAssistantMetadata,
             if (functionCalls != null) 'function_calls': functionCalls,
             'parts_history': finalPartsHistory,
-            'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+            'modelUsed': getIt<ModelSelector>().currentModelConfig?.id,
           };
 
           return ConversationAiResponse(

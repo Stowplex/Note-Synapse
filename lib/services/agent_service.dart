@@ -22,7 +22,7 @@ import 'mcp_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
-import 'service_locator.dart';
+
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/token_estimator.dart';
@@ -50,6 +50,18 @@ enum AgentCheckpoint {
 }
 
 class AgentService extends ChangeNotifier {
+  final ContextManagerService _contextManager;
+  final ModelSelector _modelSelector;
+  final AIService _aiService;
+  final DatabaseService _databaseService;
+
+  AgentService(
+    this._contextManager,
+    this._modelSelector,
+    this._aiService,
+    this._databaseService,
+  );
+
   // State
   List<AgentTask> _tasks = [];
   Map<String, List<McpTool>> _externalTools = {};
@@ -81,7 +93,6 @@ class AgentService extends ChangeNotifier {
   void Function(String status)? onProgressUpdate;
 
   // Hierarchical Context Management
-  final ContextManagerService _contextManager = ContextManagerService();
   String? _currentObjective;
 
   /// User-attached notes to provide context for ALL tasks in the plan.
@@ -275,7 +286,7 @@ class AgentService extends ChangeNotifier {
     if (llmGenerator != null) {
       return llmGenerator!(prompt);
     }
-    return AIService.generateWithAttachments(
+    return await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: context,
@@ -562,7 +573,7 @@ class AgentService extends ChangeNotifier {
           // Use the deliverable's result directly - this IS the user's answer
           _finalAnswer = deliverableTask.result!;
           _finalMetadata = {
-            'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+            'modelUsed': _modelSelector.currentModelConfig?.id,
             'is_agent_summary': true,
             'objective': _currentObjective,
             'deliverable_task': deliverableTask.description,
@@ -647,7 +658,7 @@ class AgentService extends ChangeNotifier {
       return '';
     }
 
-    final db = getIt<DatabaseService>();
+    final db = _databaseService;
     final buffer = StringBuffer();
     buffer.writeln('## User-Provided Context Notes');
     buffer.writeln();
@@ -782,7 +793,7 @@ Respond directly to: "$objective"
     _finalAnswer = finalContent;
     // Capture metadata for the UI
     _finalMetadata = {
-      'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+      'modelUsed': _modelSelector.currentModelConfig?.id,
       'is_agent_summary': true,
       'objective': _currentObjective,
     };
@@ -862,7 +873,7 @@ If no findings worth preserving, return: []
       values: {'type': 'extract_findings', 'taskId': task.id},
     );
     if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-    final response = await AIService.generateWithAttachments(
+    final response = await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: genContext,
@@ -1225,7 +1236,7 @@ Please fix and regenerate the plan.
 
         final genContext = GenerationContext(values: {'type': 'agent_plan'});
         if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-        final response = await AIService.generateWithAttachments(
+        final response = await _aiService.generateWithAttachments(
           fullPrompt,
           contextAttachments,
           generationContext: genContext,
@@ -1342,7 +1353,7 @@ Return ONLY a valid JSON list with ALL required fields:
         values: {'type': 'agent_revise_plan'},
       );
       if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-      final response = await AIService.generateWithAttachments(
+      final response = await _aiService.generateWithAttachments(
         prompt,
         [],
         generationContext: genContext,
@@ -2356,7 +2367,7 @@ Write a focused briefing for this subtask:
 
     final genContext = GenerationContext(values: {'type': 'subtask_briefing'});
     if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-    return await AIService.generateWithAttachments(
+    return await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: genContext,

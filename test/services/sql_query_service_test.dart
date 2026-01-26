@@ -1,12 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/sql_query_service.dart';
+import 'package:note_synapse/services/database_service.dart';
 
 void main() {
   group('SqlQueryService', () {
     late SqlQueryService service;
 
     setUp(() {
-      service = SqlQueryService();
+      service = SqlQueryService(DatabaseService());
     });
 
     group('getQueryType - valid SQL parsing', () {

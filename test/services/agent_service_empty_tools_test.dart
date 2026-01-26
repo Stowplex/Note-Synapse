@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/services/agent_service.dart';
+import 'mock_agent_dependencies.dart';
 
 /// Tests for tasks with empty tools arrays.
 ///
@@ -18,7 +19,12 @@ void main() {
     bool llmWasCalled = false;
 
     setUp(() {
-      agentService = AgentService();
+      agentService = AgentService(
+        MockContextManagerService(),
+        MockModelSelector(),
+        MockAIService(),
+        MockDatabaseService(),
+      );
       llmWasCalled = false;
     });
 

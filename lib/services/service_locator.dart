@@ -6,6 +6,12 @@ import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
 import 'user_app_service.dart';
 import 'model_storage_service.dart';
+import 'model_preference_service.dart';
+import 'model_selector.dart';
+import 'sql_query_service.dart';
+import 'context_manager_service.dart';
+import 'ai_service.dart';
+import 'agent_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -61,7 +67,7 @@ void setupServiceLocator() {
   // ============================================================
   if (!getIt.isRegistered<UserAppService>()) {
     getIt.registerLazySingleton<UserAppService>(
-      () => UserAppService(getIt<DatabaseService>()),
+      () => UserAppService(getIt<DatabaseService>(), getIt<AIService>()),
     );
   }
 
@@ -71,6 +77,49 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ModelStorageService>()) {
     getIt.registerLazySingleton<ModelStorageService>(
       () => ModelStorageService(),
+    );
+  }
+
+  if (!getIt.isRegistered<ModelPreferenceService>()) {
+    getIt.registerLazySingleton<ModelPreferenceService>(
+      () => ModelPreferenceService(),
+    );
+  }
+
+  if (!getIt.isRegistered<ModelSelector>()) {
+    getIt.registerLazySingleton<ModelSelector>(
+      () => ModelSelector(
+        getIt<ModelStorageService>(),
+        getIt<ModelPreferenceService>(),
+      ),
+    );
+  }
+
+  if (!getIt.isRegistered<SqlQueryService>()) {
+    getIt.registerLazySingleton<SqlQueryService>(
+      () => SqlQueryService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<AIService>()) {
+    getIt.registerLazySingleton<AIService>(
+      () => AIService(getIt<DatabaseService>(), getIt<ModelSelector>()),
+    );
+  }
+
+  if (!getIt.isRegistered<ContextManagerService>()) {
+    getIt.registerLazySingleton<ContextManagerService>(
+      () => ContextManagerService(getIt<ModelSelector>(), getIt<AIService>()),
+    );
+  }
+  if (!getIt.isRegistered<AgentService>()) {
+    getIt.registerLazySingleton<AgentService>(
+      () => AgentService(
+        getIt<ContextManagerService>(),
+        getIt<ModelSelector>(),
+        getIt<AIService>(),
+        getIt<DatabaseService>(),
+      ),
     );
   }
 }

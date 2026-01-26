@@ -15,17 +15,20 @@ import 'prompts/system_prompt_builder.dart';
 import 'prompts/note_prompt_builder.dart';
 import '../models/generation_context.dart';
 import 'attachment_preprocessor.dart';
-import 'service_locator.dart';
 
 /// Unified AI service with centralized prompts and simplified architecture
 class AIService {
+  final DatabaseService _databaseService;
+  final ModelSelector _modelSelector;
+
+  AIService(this._databaseService, this._modelSelector);
+
   /// Initialize the AI service
-  static Future<void> initialize(AppProvider appProvider) async {
-    await ModelSelector.instance.initialize(appProvider);
+  Future<void> initialize(AppProvider appProvider) async {
+    await _modelSelector.initialize(appProvider);
   }
 
-  static NotePromptBuilder _notePromptBuilder() =>
-      NotePromptBuilder(getIt<DatabaseService>());
+  NotePromptBuilder _notePromptBuilder() => NotePromptBuilder(_databaseService);
 
   static PromptRequest _singleTurnRequest({
     required String taskContext,
@@ -47,10 +50,10 @@ class AIService {
     return PromptRequest.singleTurn(systemMessage: system, userMessage: user);
   }
 
-  static GenerationContext _contextFromRequestId(String requestId) =>
+  GenerationContext _contextFromRequestId(String requestId) =>
       GenerationContext(values: {'requestId': requestId});
 
-  static Future<String> executePrompt(
+  Future<String> executePrompt(
     PromptRequest request, {
     double? temperature,
     int? topK,
@@ -61,7 +64,7 @@ class AIService {
     final context = generationContext ?? GenerationContext();
     final actualRequestId = context.ensureRequestId();
     return await _withErrorHandling('prompt execution', () async {
-      return await ModelSelector.instance.generateFromPrompt(
+      return await _modelSelector.generateFromPrompt(
         request,
         temperature: temperature,
         topK: topK,
@@ -73,7 +76,8 @@ class AIService {
   }
 
   /// Note transformation
-  static Future<String> transformNote(
+  /// Note transformation
+  Future<String> transformNote(
     Note note,
     String transformationPrompt, {
     List<PlatformFile>? attachedFiles,
@@ -102,21 +106,21 @@ class AIService {
       );
 
       LoggerService.debug(
-        'Note transformation prompt built',
+        'Note transformation request created',
         error: {
           'requestId': requestId,
           'contextMessages': request.contextMessages.length,
         },
       );
 
-      return await ModelSelector.instance.generateFromPrompt(
+      return await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
     }, requestId: requestId);
   }
 
-  static Future<String> generateWithAttachments(
+  Future<String> generateWithAttachments(
     String prompt,
     List<PlatformFile> attachedFiles, {
     GenerationContext? generationContext,
@@ -127,9 +131,7 @@ class AIService {
         attachedFiles,
       );
       if (caps.isNotEmpty) {
-        final preferred = await ModelSelector.instance.selectModelByPreference(
-          caps,
-        );
+        final preferred = await _modelSelector.selectModelByPreference(caps);
         if (preferred != null) context.modelOverride = preferred;
       }
     }
@@ -144,7 +146,7 @@ class AIService {
   }
 
   /// New note creation
-  static Future<List<Note>> createNewNotes(
+  Future<List<Note>> createNewNotes(
     String prompt,
     List<Note> contextNotes, {
     List<PlatformFile>? attachedFiles,
@@ -160,9 +162,7 @@ class AIService {
         attachedFiles,
       );
       if (caps.isNotEmpty) {
-        final preferred = await ModelSelector.instance.selectModelByPreference(
-          caps,
-        );
+        final preferred = await _modelSelector.selectModelByPreference(caps);
         if (preferred != null) context.modelOverride = preferred;
       }
     }
@@ -193,7 +193,7 @@ class AIService {
         },
       );
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
@@ -202,7 +202,7 @@ class AIService {
   }
 
   /// Audio transcription
-  static Future<String> transcribeAudio(String audioFilePath) async {
+  Future<String> transcribeAudio(String audioFilePath) async {
     return await _withErrorHandling('audio transcription', () async {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
@@ -232,12 +232,10 @@ class AIService {
       );
 
       GenerationContext context = _contextFromRequestId(requestId);
-      final preferred = await ModelSelector.instance.selectModelByPreference({
-        'audio',
-      });
+      final preferred = await _modelSelector.selectModelByPreference({'audio'});
       if (preferred != null) context.modelOverride = preferred;
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
@@ -252,10 +250,7 @@ class AIService {
   }
 
   /// Audio summarization
-  static Future<String> summarizeAudio(
-    String audioFilePath, {
-    String? context,
-  }) async {
+  Future<String> summarizeAudio(String audioFilePath, {String? context}) async {
     return await _withErrorHandling('audio summarization', () async {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
@@ -291,12 +286,10 @@ class AIService {
       );
 
       GenerationContext genContext = _contextFromRequestId(requestId);
-      final preferred = await ModelSelector.instance.selectModelByPreference({
-        'audio',
-      });
+      final preferred = await _modelSelector.selectModelByPreference({'audio'});
       if (preferred != null) genContext.modelOverride = preferred;
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: genContext,
       );
@@ -311,7 +304,7 @@ class AIService {
   }
 
   /// Content extraction methods
-  static Future<Map<String, dynamic>> extractContentFromText(
+  Future<Map<String, dynamic>> extractContentFromText(
     String text,
     String contentType,
     String title,
@@ -339,7 +332,7 @@ class AIService {
         guidelines: [AIPrompts.promptInjectionProtectionGuidelines],
       );
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: _contextFromRequestId(requestId),
       );
@@ -353,9 +346,7 @@ class AIService {
     }).catchError((e) => {'success': false, 'error': e.toString()});
   }
 
-  static Future<Map<String, dynamic>> extractContentFromImage(
-    String imagePath,
-  ) async {
+  Future<Map<String, dynamic>> extractContentFromImage(String imagePath) async {
     return await _withErrorHandling('image content extraction', () async {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
@@ -385,12 +376,12 @@ class AIService {
       );
 
       GenerationContext context = _contextFromRequestId(requestId);
-      final preferred = await ModelSelector.instance.selectModelByPreference({
+      final preferred = await _modelSelector.selectModelByPreference({
         'images',
       });
       if (preferred != null) context.modelOverride = preferred;
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
@@ -404,9 +395,7 @@ class AIService {
     }).catchError((e) => {'success': false, 'error': e.toString()});
   }
 
-  static Future<Map<String, dynamic>> extractContentFromPdf(
-    String pdfPath,
-  ) async {
+  Future<Map<String, dynamic>> extractContentFromPdf(String pdfPath) async {
     return await _withErrorHandling('PDF content extraction', () async {
       final requestId = DateTime.now().millisecondsSinceEpoch.toString();
       LoggerService.debug(
@@ -436,12 +425,12 @@ class AIService {
       );
 
       GenerationContext context = _contextFromRequestId(requestId);
-      final preferred = await ModelSelector.instance.selectModelByPreference({
+      final preferred = await _modelSelector.selectModelByPreference({
         'documents',
       });
       if (preferred != null) context.modelOverride = preferred;
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
@@ -456,7 +445,7 @@ class AIService {
   }
 
   /// AI suggestion for dedup rules
-  static Future<List<DedupRule>> suggestDedupRules(
+  Future<List<DedupRule>> suggestDedupRules(
     List<String> tagNames, {
     List<String> protectedTags = const [],
   }) async {
@@ -480,7 +469,7 @@ class AIService {
         ),
       );
 
-      final response = await ModelSelector.instance.generateFromPrompt(
+      final response = await _modelSelector.generateFromPrompt(
         request,
         generationContext: _contextFromRequestId(requestId),
       );
@@ -495,7 +484,7 @@ class AIService {
   }
 
   /// Generate user app HTML
-  static Future<String> generateApp(
+  Future<String> generateApp(
     String prompt, {
     List<PlatformFile>? attachedFiles,
     GenerationContext? generationContext,
@@ -523,7 +512,7 @@ class AIService {
         attachments: attachedFiles ?? const [],
       );
 
-      return await ModelSelector.instance.generateFromPrompt(
+      return await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
@@ -531,7 +520,7 @@ class AIService {
   }
 
   /// Chat AI with configurable parameters
-  static Future<String> chatAI(
+  Future<String> chatAI(
     String prompt, {
     double? temperature,
     int? topK,
@@ -575,7 +564,7 @@ class AIService {
         ],
       );
 
-      return await ModelSelector.instance.generateFromPrompt(
+      return await _modelSelector.generateFromPrompt(
         request,
         temperature: temperature,
         topK: topK,
@@ -589,7 +578,7 @@ class AIService {
   ///
   /// When [modelHint] contains 'image_gen', selects a model with image generation capability.
   /// Returns a list of response parts (text and/or images).
-  static Future<List<Map<String, dynamic>>> chatAIMultiPart(
+  Future<List<Map<String, dynamic>>> chatAIMultiPart(
     String prompt, {
     double? temperature,
     int? topK,
@@ -628,7 +617,7 @@ class AIService {
         guidelines: [AIPrompts.promptInjectionProtectionGuidelines],
       );
 
-      return await ModelSelector.instance.generateFromPromptMultiPart(
+      return await _modelSelector.generateFromPromptMultiPart(
         request,
         temperature: temperature,
         topK: topK,
@@ -639,7 +628,7 @@ class AIService {
   }
 
   // Helper methods (copied from original GeminiApiService)
-  static Future<T> _withErrorHandling<T>(
+  Future<T> _withErrorHandling<T>(
     String operation,
     Future<T> Function() operationFunction, {
     String? requestId,

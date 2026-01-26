@@ -143,7 +143,7 @@ Content: ${note.content}
 ''';
 
       // Generate Summary/Modification
-      final response = await AIService.generateWithAttachments(
+      final response = await getIt<AIService>().generateWithAttachments(
         prompt,
         attachedFiles,
       );

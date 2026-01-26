@@ -4,13 +4,19 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/agent_service.dart';
+import 'mock_agent_dependencies.dart';
 
 void main() {
   group('Issue: Task state not resetting after completion', () {
     late AgentService agentService;
 
     setUp(() {
-      agentService = AgentService();
+      agentService = AgentService(
+        MockContextManagerService(),
+        MockModelSelector(),
+        MockAIService(),
+        MockDatabaseService(),
+      );
     });
 
     test('canStartNewAgent returns true when bound to same conversation', () {

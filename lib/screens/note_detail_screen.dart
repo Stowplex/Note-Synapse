@@ -3586,7 +3586,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
 
-      final transcription = await AIService.transcribeAudio(audioPath);
+      final transcription = await getIt<AIService>().transcribeAudio(audioPath);
 
       // Close loading dialog
       Navigator.of(context).pop();

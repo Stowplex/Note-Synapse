@@ -1,16 +1,54 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'mock_agent_dependencies.dart';
+import 'package:note_synapse/services/ai_service.dart';
+import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mockito/mockito.dart';
+import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:get_it/get_it.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:note_synapse/models/generation_context.dart';
+
+class FakeAIService extends Fake implements AIService {
+  @override
+  Future<String> generateWithAttachments(
+    String prompt,
+    List<PlatformFile> attachedFiles, {
+    GenerationContext? generationContext,
+  }) async {
+    return 'Summary from FakeAIService';
+  }
+}
+
+class FakeModelSelector extends Fake implements ModelSelector {
+  @override
+  ModelConfig? get currentModelConfig => null;
+}
 
 void main() {
   group('ContextManagerService', () {
     late ContextManagerService service;
 
-    setUp(() {
-      service = ContextManagerService();
+    setUp(() async {
+      await getIt.reset(); // Reset GetIt first
+
+      final modelSelector = FakeModelSelector();
+      getIt.registerSingleton<ModelSelector>(modelSelector);
+
+      final aiService = FakeAIService();
+      getIt.registerSingleton<AIService>(aiService);
+
+      service = ContextManagerService(modelSelector, aiService);
+      // Register service for generic lookups (though we test 'service' instance directly here)
+      // But AgentService tests later need it in GetIt
+      getIt.registerSingleton<ContextManagerService>(service);
+
       // Initialize SharedPreferences with empty values for testing
       SharedPreferences.setMockInitialValues({});
     });
@@ -180,7 +218,10 @@ void main() {
       expect(snapshot, isNotNull);
 
       // Create new service and import
-      final newService = ContextManagerService();
+      final newService = ContextManagerService(
+        FakeModelSelector(),
+        FakeAIService(),
+      );
       newService.importSnapshot(snapshot!);
 
       expect(newService.rootContext?.objective, 'Root');
@@ -354,8 +395,25 @@ void main() {
     late ContextManagerService contextManager;
 
     setUp(() async {
+      await getIt.reset();
       SharedPreferences.setMockInitialValues({});
-      agentService = AgentService();
+
+      final modelSelector = FakeModelSelector();
+      getIt.registerSingleton<ModelSelector>(modelSelector);
+
+      final aiService = FakeAIService();
+      getIt.registerSingleton<AIService>(aiService);
+
+      // Register ContextManagerService so AgentService can find it
+      final cms = ContextManagerService(modelSelector, aiService);
+      getIt.registerSingleton<ContextManagerService>(cms);
+
+      agentService = AgentService(
+        cms,
+        modelSelector,
+        aiService,
+        MockDatabaseService(), // We need a database service too
+      );
       contextManager = agentService.contextManager;
 
       // Initialize the context manager with a root context

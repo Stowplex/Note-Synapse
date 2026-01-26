@@ -9,13 +9,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/services/agent_service.dart';
+import 'mock_agent_dependencies.dart';
 
 void main() {
   group('AgentService - XML Tag Stripping in Final Deliverable Fallback', () {
     late AgentService agentService;
 
     setUp(() {
-      agentService = AgentService();
+      agentService = AgentService(
+        MockContextManagerService(),
+        MockModelSelector(),
+        MockAIService(),
+        MockDatabaseService(),
+      );
     });
 
     test(
