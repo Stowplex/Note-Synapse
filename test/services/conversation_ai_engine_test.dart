@@ -188,4 +188,240 @@ void main() {
       );
     });
   });
+
+  group('ConversationAiEngine tool iteration', () {
+    test('executes tool when call_tool function received', () async {
+      // First response: function_call with call_tool
+      // Second response: text only (final)
+      var callCount = 0;
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 'test-service',
+                  'tool_name': 'test-tool',
+                  'params': {'key': 'value'},
+                },
+              }
+            ],
+            'parts_history': [],
+          };
+        }
+        return {'text': 'Done!', 'function_calls': null, 'parts_history': []};
+      });
+
+      var toolExecuted = false;
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {
+          'test-service': [
+            McpTool(
+              name: 'test-tool',
+              description: 'Test',
+              inputSchema: const {},
+            ),
+          ],
+        },
+        enableTools: true,
+        executeTool: (service, tool, params, ctx) async {
+          toolExecuted = true;
+          expect(service, equals('test-service'));
+          expect(tool, equals('test-tool'));
+          return 'Tool result';
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      expect(toolExecuted, isTrue);
+      expect(result.content, contains('Done!'));
+    });
+
+    test('handles unknown function calls gracefully', () async {
+      // Model calls unknown function directly instead of call_tool
+      var callCount = 0;
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              {'name': 'unknown_function', 'args': {}},
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'Understood, I will use call_tool',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: <String, List<McpTool>>{},
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async => '',
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // Should complete without crashing
+      expect(result.content, isNotEmpty);
+    });
+
+    test('respects max iterations limit', () async {
+      // Always return function_calls to trigger limit
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 's',
+                  'tool_name': 't',
+                  'params': <String, dynamic>{},
+                },
+              }
+            ],
+            'parts_history': [],
+          });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {
+          's': [
+            McpTool(name: 't', description: '', inputSchema: const {}),
+          ],
+        },
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async => 'result',
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+        maxToolIterations: 2,
+      );
+
+      // Should return error message after hitting limit
+      expect(result.content, contains('unable to complete'));
+    });
+
+    test('calls onIterationsExhausted when limit reached', () async {
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 's',
+                  'tool_name': 't',
+                  'params': <String, dynamic>{},
+                },
+              }
+            ],
+            'parts_history': [],
+          });
+
+      var exhaustedCalled = false;
+      // When onIterationsExhausted returns null, it throws ConversationCancelledException
+      try {
+        await engine.generate(
+          request: createTestRequest(),
+          activeTools: {
+            's': [
+              McpTool(name: 't', description: '', inputSchema: const {}),
+            ],
+          },
+          enableTools: true,
+          executeTool: (_, __, ___, ____) async => 'result',
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+          maxToolIterations: 1,
+          onIterationsExhausted: (limit) async {
+            exhaustedCalled = true;
+            return null; // Cancel - this throws ConversationCancelledException
+          },
+        );
+      } on ConversationCancelledException {
+        // Expected when returning null from onIterationsExhausted
+      }
+
+      expect(exhaustedCalled, isTrue);
+    });
+
+    test('continues when onIterationsExhausted returns higher limit', () async {
+      var modelCallCount = 0;
+      when(mockModelSelector.generateWithToolsAndMessages(
+        any,
+        any,
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async {
+        modelCallCount++;
+        if (modelCallCount <= 3) {
+          return {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 's',
+                  'tool_name': 't',
+                  'params': <String, dynamic>{},
+                },
+              }
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'Finally done!',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      var exhaustedCallCount = 0;
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {
+          's': [
+            McpTool(name: 't', description: '', inputSchema: const {}),
+          ],
+        },
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async => 'result',
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+        maxToolIterations: 2,
+        onIterationsExhausted: (limit) async {
+          exhaustedCallCount++;
+          return limit + 2; // Allow more iterations
+        },
+      );
+
+      expect(exhaustedCallCount, greaterThan(0));
+      expect(result.content, contains('Finally done!'));
+    });
+  });
 }
