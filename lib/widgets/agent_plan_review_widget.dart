@@ -589,12 +589,12 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
 
       // MCP Tools
       try {
-        final endpoints = await McpService.getEndpoints();
+        final endpoints = await getIt<McpService>().getEndpoints();
         for (final endpoint in endpoints) {
           // Assume all endpoints in the list are enabled candidates.
           // Check for cached tools.
           try {
-            final cache = await McpService.getCachedTools(endpoint.id);
+            final cache = await getIt<McpService>().getCachedTools(endpoint.id);
             if (cache != null && cache.tools.isNotEmpty) {
               for (final tool in cache.tools) {
                 fullToolMap[tool.name] =

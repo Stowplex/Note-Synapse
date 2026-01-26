@@ -55,7 +55,6 @@ import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
 import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
-import '../services/service_locator.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 
@@ -277,11 +276,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }

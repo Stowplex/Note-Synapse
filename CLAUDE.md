@@ -80,6 +80,12 @@ void main() {
 }
 ```
 
+### Test Coverage
+
+Run `./coverage.sh` to generate a full test coverage report:
+- Test output: `coverage/test_output`
+- Coverage report: `coverage/test_coverage.csv` (files and uncovered lines)
+
 ## Key Directories
 
 - `lib/services/` - Business logic (51 files). `DatabaseService` is the foundation.
