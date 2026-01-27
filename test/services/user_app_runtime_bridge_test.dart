@@ -17,6 +17,7 @@ import 'package:note_synapse/providers/app_provider.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/logger_service.dart';
+import 'package:note_synapse/services/note_modification_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/sql_query_service.dart';
 import 'package:note_synapse/services/user_app_runtime_bridge.dart';
@@ -33,14 +34,17 @@ import 'user_app_runtime_bridge_test.mocks.dart';
   MockSpec<SqlQueryService>(),
   MockSpec<AIService>(),
   MockSpec<InAppWebViewController>(),
+  MockSpec<NoteModificationService>(),
 ])
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late MockAppProvider mockAppProvider;
   late MockUserAppService mockUserAppService;
   late MockDatabaseService mockDatabaseService;
   late MockSqlQueryService mockSqlQueryService;
   late MockAIService mockAIService;
   late MockInAppWebViewController mockWebViewController;
+  late MockNoteModificationService mockModificationService;
   late UserAppRuntimeBridge bridge;
 
   // Store registered handlers to simulate JS calls
@@ -56,14 +60,17 @@ void main() {
     mockUserAppService = MockUserAppService();
     mockDatabaseService = MockDatabaseService();
     mockSqlQueryService = MockSqlQueryService();
+    mockSqlQueryService = MockSqlQueryService();
     mockAIService = MockAIService();
     mockWebViewController = MockInAppWebViewController();
+    mockModificationService = MockNoteModificationService();
 
     getIt.registerSingleton<AppProvider>(mockAppProvider);
     getIt.registerSingleton<UserAppService>(mockUserAppService);
     getIt.registerSingleton<DatabaseService>(mockDatabaseService);
     getIt.registerSingleton<SqlQueryService>(mockSqlQueryService);
     getIt.registerSingleton<AIService>(mockAIService);
+    getIt.registerSingleton<NoteModificationService>(mockModificationService);
 
     // Mock addJavaScriptHandler to capture callbacks
     when(
@@ -332,10 +339,236 @@ void main() {
       });
     });
 
+    group('Notes Management', () {
+      setUp(() {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+      });
+
+      test('saveNotes calls _saveNotesFromJavaScript', () async {
+        final notesData = [
+          {'title': 'Note 1', 'content': 'Content 1'},
+          {'title': 'Note 2', 'content': 'Content 2'},
+        ];
+
+        when(mockModificationService.buildNote(any)).thenAnswer((
+          invocation,
+        ) async {
+          final data =
+              invocation.positionalArguments.first as Map<String, dynamic>;
+          return Note(
+            id: 'generated-id',
+            title: data['title'] ?? 'Untitled',
+            content: data['content'] ?? '',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+        });
+        when(mockAppProvider.addNote(any)).thenAnswer((_) async {});
+
+        final result = await jsHandlers['saveNotes']!([notesData]);
+
+        expect(result['success'], isTrue);
+        expect(result['savedCount'], 2);
+        verify(mockModificationService.buildNote(any)).called(2);
+        verify(mockAppProvider.addNote(any)).called(2);
+      });
+
+      test('deleteNotes requires session approval', () async {
+        final noteIds = ['id1', 'id2'];
+
+        // Default: deletions not approved, no callback
+        final result = await jsHandlers['deleteNotes']!([noteIds]);
+
+        expect(result['success'], isFalse);
+        expect(
+          result['error'],
+          contains('Note deletion requires user approval'),
+        );
+        verifyNever(mockAppProvider.deleteNote(any));
+      });
+
+      test('deleteNotes executes if session approved', () async {
+        bridge.approveDeletionsForSession();
+        final noteIds = ['id1', 'id2'];
+        when(mockAppProvider.deleteNote(any)).thenAnswer((_) async {});
+
+        final result = await jsHandlers['deleteNotes']!([noteIds]);
+
+        expect(result['success'], isTrue);
+        expect(result['deletedCount'], 2);
+        verify(mockAppProvider.deleteNote('id1')).called(1);
+        verify(mockAppProvider.deleteNote('id2')).called(1);
+      });
+
+      test('updateNotes merges data for existing note', () async {
+        bridge.approveSession(); // Approve modifications
+        final noteId = 'existing-id';
+        final existingNote = Note(
+          id: noteId,
+          title: 'Old Title',
+          content: 'Old Content',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        when(
+          mockDatabaseService.getNote(noteId),
+        ).thenAnswer((_) async => existingNote);
+        when(mockAppProvider.updateNote(any)).thenAnswer((_) async {});
+
+        final updates = [
+          {'id': noteId, 'title': 'New Title'},
+        ];
+
+        final result = await jsHandlers['updateNotes']!([updates]);
+
+        expect(result['success'], isTrue);
+        expect(result['updatedCount'], 1);
+
+        final checkCapture = verify(
+          mockAppProvider.updateNote(captureAny),
+        ).captured;
+        final updatedNote = checkCapture.first as Note;
+        expect(updatedNote.title, 'New Title');
+        expect(updatedNote.content, 'Old Content'); // Should preserve content
+      });
+
+      test(
+        'updateNotes uses granular modification service if structure matches',
+        () async {
+          bridge.approveSession();
+          final noteId = 'granular-id';
+          final existingNote = Note(
+            id: noteId,
+            title: 'T',
+            content: 'C',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+
+          when(
+            mockDatabaseService.getNote(noteId),
+          ).thenAnswer((_) async => existingNote);
+          // Return the updated Note from applyModifications as expected by the real service signature
+          when(
+            mockModificationService.applyModifications(any, any),
+          ).thenAnswer((_) async => existingNote);
+
+          final updates = [
+            {
+              'id': noteId,
+              'modification': {'type': 'text_insertion', 'content': 'append'},
+            },
+          ];
+
+          final result = await jsHandlers['updateNotes']!([updates]);
+
+          expect(result['success'], isTrue);
+          verify(
+            mockModificationService.applyModifications(noteId, any),
+          ).called(1);
+          // Should NOT call updateNote directly
+          verifyNever(mockAppProvider.updateNote(any));
+        },
+      );
+    });
+
     test('log calls LoggerService', () async {
       bridge.registerJavaScriptHandlers(mockWebViewController);
       final result = await jsHandlers['log']!(['Test message', 'info']);
       expect(result, isNull);
+    });
+
+    group('App Actions', () {
+      setUp(() {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+      });
+
+      test('openNote triggers callback if note exists', () async {
+        final noteId = 'note-id';
+        final note = Note(
+          id: noteId,
+          title: 'Title',
+          content: 'Content',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        when(mockDatabaseService.getNote(noteId)).thenAnswer((_) async => note);
+
+        bool callbackCalled = false;
+
+        final localBridge = UserAppRuntimeBridge(
+          app: bridge.app,
+          appProvider: mockAppProvider,
+          revisionNumber: 1,
+          isInteractive: true,
+          onOpenNote: (n, replace) async {
+            callbackCalled = true;
+            expect(n.id, noteId);
+          },
+        );
+        localBridge.registerJavaScriptHandlers(mockWebViewController);
+
+        // Re-fetch handlers as registerJavaScriptHandlers overwrites the map via mock
+        final result = await jsHandlers['openNote']!([noteId]);
+        expect(result['success'], isTrue);
+        expect(callbackCalled, isTrue);
+      });
+
+      test('copy-to-clipboard sets clipboard call', () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              methodCall,
+            ) async {
+              if (methodCall.method == 'Clipboard.setData') {
+                return null; // successful void return
+              }
+              return null;
+            });
+
+        final result = await jsHandlers['copy-to-clipboard']!(['text']);
+        expect(result['success'], isTrue);
+      });
+    });
+
+    group('runQuery Permissions', () {
+      setUp(() {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+      });
+
+      test('approves write query if session allows', () async {
+        const sql = 'INSERT INTO notes ...';
+        bridge.approveSqlWritesForSession();
+
+        when(
+          mockSqlQueryService.getQueryType(sql),
+        ).thenReturn(SqlQueryType.insert);
+        when(mockSqlQueryService.isReadOnlyQuery(sql)).thenReturn(false);
+        when(
+          mockSqlQueryService.executeQuery(
+            any,
+            requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+            allowWriteOperations: anyNamed('allowWriteOperations'),
+          ),
+        ).thenAnswer((_) async => SqlQueryResult(success: true));
+
+        final result = await jsHandlers['runQuery']!([sql]);
+
+        expect(result['success'], isTrue);
+        verify(
+          mockSqlQueryService.executeQuery(
+            sql,
+            // requireApprovalForWrites should be false because session approved
+            requireApprovalForWrites: false,
+            allowWriteOperations: true,
+          ),
+        ).called(1);
+      });
     });
   });
 }

@@ -19,13 +19,14 @@ import 'package:note_synapse/models/dedup_rule.dart' as _i25;
 import 'package:note_synapse/models/filter.dart' as _i11;
 import 'package:note_synapse/models/generation_context.dart' as _i16;
 import 'package:note_synapse/models/model_config.dart' as _i13;
-import 'package:note_synapse/models/note.dart' as _i9;
+import 'package:note_synapse/models/note.dart' as _i8;
 import 'package:note_synapse/models/relationship.dart' as _i14;
 import 'package:note_synapse/models/tag.dart' as _i10;
 import 'package:note_synapse/models/user_app.dart' as _i4;
-import 'package:note_synapse/providers/app_provider.dart' as _i8;
+import 'package:note_synapse/providers/app_provider.dart' as _i9;
 import 'package:note_synapse/services/ai_service.dart' as _i23;
 import 'package:note_synapse/services/database_service.dart' as _i19;
+import 'package:note_synapse/services/note_modification_service.dart' as _i27;
 import 'package:note_synapse/services/prompts/prompt_models.dart' as _i24;
 import 'package:note_synapse/services/sql_query_service.dart' as _i6;
 import 'package:note_synapse/services/user_app_service.dart' as _i18;
@@ -99,10 +100,15 @@ class _FakeWebStorage_8 extends _i1.SmartFake implements _i7.WebStorage {
     : super(parent, parentInvocation);
 }
 
+class _FakeNote_9 extends _i1.SmartFake implements _i8.Note {
+  _FakeNote_9(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [AppProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
+class MockAppProvider extends _i1.Mock implements _i9.AppProvider {
   @override
   bool get newNoteFromShare =>
       (super.noSuchMethod(
@@ -113,13 +119,13 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as bool);
 
   @override
-  List<_i9.Note> get notes =>
+  List<_i8.Note> get notes =>
       (super.noSuchMethod(
             Invocation.getter(#notes),
-            returnValue: <_i9.Note>[],
-            returnValueForMissingStub: <_i9.Note>[],
+            returnValue: <_i8.Note>[],
+            returnValueForMissingStub: <_i8.Note>[],
           )
-          as List<_i9.Note>);
+          as List<_i8.Note>);
 
   @override
   List<_i10.Tag> get tags =>
@@ -245,7 +251,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
   );
 
   @override
-  _i12.Future<void> addNote(_i9.Note? note, {bool? fromShare = false}) =>
+  _i12.Future<void> addNote(_i8.Note? note, {bool? fromShare = false}) =>
       (super.noSuchMethod(
             Invocation.method(#addNote, [note], {#fromShare: fromShare}),
             returnValue: _i12.Future<void>.value(),
@@ -254,7 +260,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<void> updateNote(_i9.Note? note) =>
+  _i12.Future<void> updateNote(_i8.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
             returnValue: _i12.Future<void>.value(),
@@ -272,7 +278,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<void> updateTaskStatus(String? noteId, _i9.TaskStatus? status) =>
+  _i12.Future<void> updateTaskStatus(String? noteId, _i8.TaskStatus? status) =>
       (super.noSuchMethod(
             Invocation.method(#updateTaskStatus, [noteId, status]),
             returnValue: _i12.Future<void>.value(),
@@ -348,19 +354,19 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<List<_i14.Relationship>>);
 
   @override
-  _i12.Future<List<_i9.Note>> getLinkedNotes(String? noteId) =>
+  _i12.Future<List<_i8.Note>> getLinkedNotes(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getLinkedNotes, [noteId]),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<String> transformNote(
-    _i9.Note? note,
+    _i8.Note? note,
     String? transformationPrompt, {
     List<_i15.PlatformFile>? attachedFiles,
     _i16.GenerationContext? generationContext,
@@ -404,9 +410,9 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<String>);
 
   @override
-  _i12.Future<List<_i9.Note>> createNewNotes(
+  _i12.Future<List<_i8.Note>> createNewNotes(
     String? prompt,
-    List<_i9.Note>? contextNotes, {
+    List<_i8.Note>? contextNotes, {
     List<_i15.PlatformFile>? attachedFiles,
     bool? persist = true,
     _i16.GenerationContext? generationContext,
@@ -421,21 +427,21 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
                 #generationContext: generationContext,
               },
             ),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
-  List<_i9.Note> getNotesByTag(String? tagName) =>
+  List<_i8.Note> getNotesByTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByTag, [tagName]),
-            returnValue: <_i9.Note>[],
-            returnValueForMissingStub: <_i9.Note>[],
+            returnValue: <_i8.Note>[],
+            returnValueForMissingStub: <_i8.Note>[],
           )
-          as List<_i9.Note>);
+          as List<_i8.Note>);
 
   @override
   _i12.Future<void> addTagToNote(String? noteId, String? tagName) =>
@@ -501,25 +507,25 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  List<_i9.Note> getTasksForDate(DateTime? date) =>
+  List<_i8.Note> getTasksForDate(DateTime? date) =>
       (super.noSuchMethod(
             Invocation.method(#getTasksForDate, [date]),
-            returnValue: <_i9.Note>[],
-            returnValueForMissingStub: <_i9.Note>[],
+            returnValue: <_i8.Note>[],
+            returnValueForMissingStub: <_i8.Note>[],
           )
-          as List<_i9.Note>);
+          as List<_i8.Note>);
 
   @override
-  List<_i9.Note> getNotesForDate(DateTime? date) =>
+  List<_i8.Note> getNotesForDate(DateTime? date) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesForDate, [date]),
-            returnValue: <_i9.Note>[],
-            returnValueForMissingStub: <_i9.Note>[],
+            returnValue: <_i8.Note>[],
+            returnValueForMissingStub: <_i8.Note>[],
           )
-          as List<_i9.Note>);
+          as List<_i8.Note>);
 
   @override
-  double calculateTaskCompletionPercentage(_i9.Note? task) =>
+  double calculateTaskCompletionPercentage(_i8.Note? task) =>
       (super.noSuchMethod(
             Invocation.method(#calculateTaskCompletionPercentage, [task]),
             returnValue: 0.0,
@@ -579,7 +585,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<void> addSubNoteToNote(String? noteId, _i9.SubNote? subNote) =>
+  _i12.Future<void> addSubNoteToNote(String? noteId, _i8.SubNote? subNote) =>
       (super.noSuchMethod(
             Invocation.method(#addSubNoteToNote, [noteId, subNote]),
             returnValue: _i12.Future<void>.value(),
@@ -590,7 +596,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
   @override
   _i12.Future<void> updateSubNoteInNote(
     String? noteId,
-    _i9.SubNote? updatedSubNote,
+    _i8.SubNote? updatedSubNote,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateSubNoteInNote, [noteId, updatedSubNote]),
@@ -647,7 +653,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<void> upsertSubNoteInNote(String? noteId, _i9.SubNote? subNote) =>
+  _i12.Future<void> upsertSubNoteInNote(String? noteId, _i8.SubNote? subNote) =>
       (super.noSuchMethod(
             Invocation.method(#upsertSubNoteInNote, [noteId, subNote]),
             returnValue: _i12.Future<void>.value(),
@@ -659,7 +665,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
   _i12.Future<void> reparentSubNote(
     String? fromNoteId,
     String? toNoteId,
-    _i9.SubNote? subNote,
+    _i8.SubNote? subNote,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#reparentSubNote, [
@@ -700,13 +706,13 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
           as _i12.Future<void>);
 
   @override
-  List<_i9.Note> getFilteredNotes(_i11.Filter? filter) =>
+  List<_i8.Note> getFilteredNotes(_i11.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#getFilteredNotes, [filter]),
-            returnValue: <_i9.Note>[],
-            returnValueForMissingStub: <_i9.Note>[],
+            returnValue: <_i8.Note>[],
+            returnValueForMissingStub: <_i8.Note>[],
           )
-          as List<_i9.Note>);
+          as List<_i8.Note>);
 
   @override
   _i12.Future<void> addUserApp(_i4.UserApp? app) =>
@@ -786,7 +792,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
     required List<String>? steps,
     _i4.UserAppType? type = _i4.UserAppType.normal,
     List<String>? attachmentPaths,
-    List<_i9.Note>? contextNotes,
+    List<_i8.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
     _i16.GenerationContext? generationContext,
   }) =>
@@ -839,7 +845,7 @@ class MockAppProvider extends _i1.Mock implements _i8.AppProvider {
     required _i4.UserApp? originalApp,
     required String? editSuggestion,
     List<String>? attachmentPaths,
-    List<_i9.Note>? contextNotes,
+    List<_i8.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
     _i16.GenerationContext? generationContext,
   }) =>
@@ -1219,7 +1225,7 @@ class MockUserAppService extends _i1.Mock implements _i18.UserAppService {
     _i4.UserAppType? type = _i4.UserAppType.normal,
     String? userPrompt,
     List<String>? attachmentPaths,
-    List<_i9.Note>? contextNotes,
+    List<_i8.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
     _i16.GenerationContext? generationContext,
   }) =>
@@ -1310,7 +1316,7 @@ class MockUserAppService extends _i1.Mock implements _i18.UserAppService {
     required _i4.UserApp? originalApp,
     required String? editSuggestion,
     List<String>? attachmentPaths,
-    List<_i9.Note>? contextNotes,
+    List<_i8.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
     _i16.GenerationContext? generationContext,
   }) =>
@@ -1416,7 +1422,7 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<List<String>>);
 
   @override
-  _i12.Future<String> insertNote(_i9.Note? note) =>
+  _i12.Future<String> insertNote(_i8.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#insertNote, [note]),
             returnValue: _i12.Future<String>.value(
@@ -1435,15 +1441,15 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<String>);
 
   @override
-  _i12.Future<List<_i9.Note>> getAllNotes() =>
+  _i12.Future<List<_i8.Note>> getAllNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getAllNotes, []),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<void> cleanupInvalidNoteReferences() =>
@@ -1455,62 +1461,62 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<List<_i9.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
+  _i12.Future<List<_i8.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByArchiveStatus, [], {
               #isArchived: isArchived,
             }),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
-  _i12.Future<List<_i9.Note>> getPinnedNotes() =>
+  _i12.Future<List<_i8.Note>> getPinnedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getPinnedNotes, []),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
-  _i12.Future<List<_i9.Note>> getArchivedNotes() =>
+  _i12.Future<List<_i8.Note>> getArchivedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getArchivedNotes, []),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
-  _i12.Future<_i9.Note?> getNote(String? id) =>
+  _i12.Future<_i8.Note?> getNote(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNote, [id]),
-            returnValue: _i12.Future<_i9.Note?>.value(),
-            returnValueForMissingStub: _i12.Future<_i9.Note?>.value(),
+            returnValue: _i12.Future<_i8.Note?>.value(),
+            returnValueForMissingStub: _i12.Future<_i8.Note?>.value(),
           )
-          as _i12.Future<_i9.Note?>);
+          as _i12.Future<_i8.Note?>);
 
   @override
-  _i12.Future<List<_i9.Note>> getNotesByIds(List<String>? noteIds) =>
+  _i12.Future<List<_i8.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
-  _i12.Future<void> updateNote(_i9.Note? note) =>
+  _i12.Future<void> updateNote(_i8.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
             returnValue: _i12.Future<void>.value(),
@@ -1597,7 +1603,7 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<String> insertSubNote(_i9.SubNote? subNote, String? noteId) =>
+  _i12.Future<String> insertSubNote(_i8.SubNote? subNote, String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#insertSubNote, [subNote, noteId]),
             returnValue: _i12.Future<String>.value(
@@ -1616,15 +1622,15 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<String>);
 
   @override
-  _i12.Future<List<_i9.SubNote>> getSubNotes(String? noteId) =>
+  _i12.Future<List<_i8.SubNote>> getSubNotes(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getSubNotes, [noteId]),
-            returnValue: _i12.Future<List<_i9.SubNote>>.value(<_i9.SubNote>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.SubNote>>.value(
-              <_i9.SubNote>[],
+            returnValue: _i12.Future<List<_i8.SubNote>>.value(<_i8.SubNote>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.SubNote>>.value(
+              <_i8.SubNote>[],
             ),
           )
-          as _i12.Future<List<_i9.SubNote>>);
+          as _i12.Future<List<_i8.SubNote>>);
 
   @override
   _i12.Future<String> insertTag(_i10.Tag? tag) =>
@@ -2875,18 +2881,18 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<Map<String, List<String>>>);
 
   @override
-  _i12.Future<List<_i9.Note>> searchNotesFTS(
+  _i12.Future<List<_i8.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<List<Map<String, dynamic>>> runRawQuery(
@@ -2906,15 +2912,15 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i12.Future<List<_i9.Note>> searchNotes(String? query) =>
+  _i12.Future<List<_i8.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<String?> getTagExtractionPrompt(String? tagId) =>
@@ -2935,13 +2941,13 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<void>);
 
   @override
-  _i12.Future<_i9.Note?> getNoteById(String? id) =>
+  _i12.Future<_i8.Note?> getNoteById(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteById, [id]),
-            returnValue: _i12.Future<_i9.Note?>.value(),
-            returnValueForMissingStub: _i12.Future<_i9.Note?>.value(),
+            returnValue: _i12.Future<_i8.Note?>.value(),
+            returnValueForMissingStub: _i12.Future<_i8.Note?>.value(),
           )
-          as _i12.Future<_i9.Note?>);
+          as _i12.Future<_i8.Note?>);
 }
 
 /// A class which mocks [SqlQueryService].
@@ -3063,7 +3069,7 @@ class MockSqlQueryService extends _i1.Mock implements _i6.SqlQueryService {
 /// See the documentation for Mockito's code generation for more information.
 class MockAIService extends _i1.Mock implements _i23.AIService {
   @override
-  _i12.Future<void> initialize(_i8.AppProvider? appProvider) =>
+  _i12.Future<void> initialize(_i9.AppProvider? appProvider) =>
       (super.noSuchMethod(
             Invocation.method(#initialize, [appProvider]),
             returnValue: _i12.Future<void>.value(),
@@ -3129,7 +3135,7 @@ class MockAIService extends _i1.Mock implements _i23.AIService {
 
   @override
   _i12.Future<String> transformNote(
-    _i9.Note? note,
+    _i8.Note? note,
     String? transformationPrompt, {
     List<_i15.PlatformFile>? attachedFiles,
     _i16.GenerationContext? generationContext,
@@ -3208,9 +3214,9 @@ class MockAIService extends _i1.Mock implements _i23.AIService {
           as _i12.Future<String>);
 
   @override
-  _i12.Future<List<_i9.Note>> createNewNotes(
+  _i12.Future<List<_i8.Note>> createNewNotes(
     String? prompt,
-    List<_i9.Note>? contextNotes, {
+    List<_i8.Note>? contextNotes, {
     List<_i15.PlatformFile>? attachedFiles,
     _i16.GenerationContext? generationContext,
   }) =>
@@ -3223,12 +3229,12 @@ class MockAIService extends _i1.Mock implements _i23.AIService {
                 #generationContext: generationContext,
               },
             ),
-            returnValue: _i12.Future<List<_i9.Note>>.value(<_i9.Note>[]),
-            returnValueForMissingStub: _i12.Future<List<_i9.Note>>.value(
-              <_i9.Note>[],
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
             ),
           )
-          as _i12.Future<List<_i9.Note>>);
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<String> transcribeAudio(String? audioFilePath) =>
@@ -4733,4 +4739,77 @@ class MockInAppWebViewController extends _i1.Mock
     Invocation.method(#dispose, [], {#isKeepAlive: isKeepAlive}),
     returnValueForMissingStub: null,
   );
+}
+
+/// A class which mocks [NoteModificationService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockNoteModificationService extends _i1.Mock
+    implements _i27.NoteModificationService {
+  @override
+  _i12.Future<_i8.Note> applyModifications(
+    String? noteId,
+    Map<String, dynamic>? modifications,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#applyModifications, [noteId, modifications]),
+            returnValue: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(
+                this,
+                Invocation.method(#applyModifications, [noteId, modifications]),
+              ),
+            ),
+            returnValueForMissingStub: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(
+                this,
+                Invocation.method(#applyModifications, [noteId, modifications]),
+              ),
+            ),
+          )
+          as _i12.Future<_i8.Note>);
+
+  @override
+  _i12.Future<_i8.Note> buildNote(Map<String, dynamic>? data) =>
+      (super.noSuchMethod(
+            Invocation.method(#buildNote, [data]),
+            returnValue: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(this, Invocation.method(#buildNote, [data])),
+            ),
+            returnValueForMissingStub: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(this, Invocation.method(#buildNote, [data])),
+            ),
+          )
+          as _i12.Future<_i8.Note>);
+
+  @override
+  _i12.Future<_i8.Note> createNote(Map<String, dynamic>? data) =>
+      (super.noSuchMethod(
+            Invocation.method(#createNote, [data]),
+            returnValue: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(this, Invocation.method(#createNote, [data])),
+            ),
+            returnValueForMissingStub: _i12.Future<_i8.Note>.value(
+              _FakeNote_9(this, Invocation.method(#createNote, [data])),
+            ),
+          )
+          as _i12.Future<_i8.Note>);
+
+  @override
+  _i12.Future<String> processAttachment(dynamic attachment) =>
+      (super.noSuchMethod(
+            Invocation.method(#processAttachment, [attachment]),
+            returnValue: _i12.Future<String>.value(
+              _i17.dummyValue<String>(
+                this,
+                Invocation.method(#processAttachment, [attachment]),
+              ),
+            ),
+            returnValueForMissingStub: _i12.Future<String>.value(
+              _i17.dummyValue<String>(
+                this,
+                Invocation.method(#processAttachment, [attachment]),
+              ),
+            ),
+          )
+          as _i12.Future<String>);
 }
