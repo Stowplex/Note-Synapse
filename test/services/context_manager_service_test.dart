@@ -660,5 +660,53 @@ Recommend Z.
         expect(context, isNot(contains('type="log-preview"')));
       },
     );
+    group('Compaction and Findings', () {
+      test('compactNodeContext summarizes execution log', () async {
+        final root = await contextManager.createRootContext(objective: 'Task');
+        // Add minimal log entries
+        for (var i = 0; i < 15; i++) {
+          root.log('Log entry $i');
+        }
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => 'Summary of work');
+
+        await contextManager.compactNodeContext(root);
+
+        // Should replace log with summary + recent entries
+        expect(
+          root.executionLog.first,
+          startsWith('[Previous work summarized]'),
+        );
+        expect(root.executionLog.length, lessThan(15));
+      });
+
+      test(
+        'addFindings accumulates findings and includes them in synthesis context',
+        () async {
+          final root = await contextManager.createRootContext(
+            objective: 'Synthesis',
+          );
+
+          contextManager.addFindings([
+            {'finding': 'F1', 'source': 'Src1'},
+            {'finding': 'F2'},
+          ]);
+
+          expect(contextManager.findingsCount, 2);
+
+          final context = contextManager.buildSynthesisContext(root);
+          expect(context, contains('AccumulatedFindings'));
+          expect(context, contains('F1'));
+          expect(context, contains('Src1'));
+          expect(context, contains('F2'));
+        },
+      );
+    });
   });
 }
