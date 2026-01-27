@@ -19,13 +19,30 @@ import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
 import 'global_library_service.dart';
 import '../models/generation_context.dart';
+import 'service_locator.dart';
 
 class UserAppService {
+  final DatabaseService _databaseService;
+  final AIService _aiService;
+
+  UserAppService(this._databaseService, this._aiService);
+
+  /// Factory constructor to get the singleton instance from GetIt.
+  factory UserAppService.instance() => getIt<UserAppService>();
+
+  /// Create an instance for testing with a mock DatabaseService.
+  @visibleForTesting
+  static UserAppService createForTesting(
+    DatabaseService databaseService,
+    AIService aiService,
+  ) {
+    return UserAppService(databaseService, aiService);
+  }
+
   // Get all user apps
-  static Future<List<UserApp>> getAllUserApps() async {
+  Future<List<UserApp>> getAllUserApps() async {
     try {
-      final databaseService = DatabaseService();
-      return await databaseService.getAllUserApps();
+      return await _databaseService.getAllUserApps();
     } catch (e) {
       LoggerService.error('Error loading user apps: $e', error: e);
       return [];
@@ -33,10 +50,9 @@ class UserAppService {
   }
 
   // Save a user app
-  static Future<void> saveUserApp(UserApp app) async {
+  Future<void> saveUserApp(UserApp app) async {
     try {
-      final databaseService = DatabaseService();
-      await databaseService.insertUserApp(app);
+      await _databaseService.insertUserApp(app);
     } catch (e) {
       LoggerService.error('Error saving user app: $e', error: e);
       rethrow;
@@ -44,10 +60,9 @@ class UserAppService {
   }
 
   // Update a user app
-  static Future<void> updateUserApp(UserApp app) async {
+  Future<void> updateUserApp(UserApp app) async {
     try {
-      final databaseService = DatabaseService();
-      await databaseService.updateUserApp(app);
+      await _databaseService.updateUserApp(app);
     } catch (e) {
       LoggerService.error('Error updating user app: $e', error: e);
       rethrow;
@@ -55,10 +70,9 @@ class UserAppService {
   }
 
   // Delete a user app
-  static Future<void> deleteUserApp(String appId) async {
+  Future<void> deleteUserApp(String appId) async {
     try {
-      final databaseService = DatabaseService();
-      await databaseService.deleteUserApp(appId);
+      await _databaseService.deleteUserApp(appId);
     } catch (e) {
       LoggerService.error('Error deleting user app: $e', error: e);
       rethrow;
@@ -66,10 +80,9 @@ class UserAppService {
   }
 
   // Get app state
-  static Future<Map<String, dynamic>?> getAppState(String appId) async {
+  Future<Map<String, dynamic>?> getAppState(String appId) async {
     try {
-      final databaseService = DatabaseService();
-      return await databaseService.getUserAppState(appId);
+      return await _databaseService.getUserAppState(appId);
     } catch (e) {
       LoggerService.error('Error loading app state: $e', error: e);
       return null;
@@ -77,13 +90,9 @@ class UserAppService {
   }
 
   // Save app state
-  static Future<void> saveAppState(
-    String appId,
-    Map<String, dynamic> state,
-  ) async {
+  Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
     try {
-      final databaseService = DatabaseService();
-      await databaseService.updateUserAppState(appId, state);
+      await _databaseService.updateUserAppState(appId, state);
     } catch (e) {
       LoggerService.error('Error saving app state: $e', error: e);
       rethrow;
@@ -91,46 +100,39 @@ class UserAppService {
   }
 
   // App Revisions management
-  static Future<List<AppRevision>> getAppRevisions(String appId) async {
+  Future<List<AppRevision>> getAppRevisions(String appId) async {
     try {
-      final databaseService = DatabaseService();
-      return await databaseService.getAppRevisions(appId);
+      return await _databaseService.getAppRevisions(appId);
     } catch (e) {
       LoggerService.error('Error loading app revisions: $e', error: e);
       return [];
     }
   }
 
-  static Future<AppRevision?> getAppRevision(String revisionId) async {
+  Future<AppRevision?> getAppRevision(String revisionId) async {
     try {
-      final databaseService = DatabaseService();
-      return await databaseService.getAppRevision(revisionId);
+      return await _databaseService.getAppRevision(revisionId);
     } catch (e) {
       LoggerService.error('Error loading app revision: $e', error: e);
       return null;
     }
   }
 
-  static Future<void> deleteAppRevision(String revisionId) async {
+  Future<void> deleteAppRevision(String revisionId) async {
     try {
-      final databaseService = DatabaseService();
-      await databaseService.deleteAppRevision(revisionId);
+      await _databaseService.deleteAppRevision(revisionId);
     } catch (e) {
       LoggerService.error('Error deleting app revision: $e', error: e);
       rethrow;
     }
   }
 
-  static Future<void> setSelectedRevision(
-    String appId,
-    String revisionId,
-  ) async {
+  Future<void> setSelectedRevision(String appId, String revisionId) async {
     try {
-      final databaseService = DatabaseService();
-      final app = await databaseService.getUserApp(appId);
+      final app = await _databaseService.getUserApp(appId);
       if (app != null) {
         final updatedApp = app.copyWith(selectedRevisionId: revisionId);
-        await databaseService.updateUserApp(updatedApp);
+        await _databaseService.updateUserApp(updatedApp);
       }
     } catch (e) {
       LoggerService.error('Error setting selected revision: $e', error: e);
@@ -139,16 +141,15 @@ class UserAppService {
   }
 
   // Create initial revision for apps that don't have any revisions yet
-  static Future<AppRevision> createInitialRevision(String appId) async {
+  Future<AppRevision> createInitialRevision(String appId) async {
     try {
-      final databaseService = DatabaseService();
-      final app = await databaseService.getUserApp(appId);
+      final app = await _databaseService.getUserApp(appId);
       if (app == null) {
         throw Exception('App not found: $appId');
       }
 
       // Check if app already has revisions
-      final existingRevisions = await databaseService.getAppRevisions(appId);
+      final existingRevisions = await _databaseService.getAppRevisions(appId);
       if (existingRevisions.isNotEmpty) {
         throw Exception('App already has revisions');
       }
@@ -165,11 +166,11 @@ class UserAppService {
       );
 
       // Save the revision
-      await databaseService.insertAppRevision(revision);
+      await _databaseService.insertAppRevision(revision);
 
       // Update the app to set the selected revision
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
-      await databaseService.updateUserApp(updatedApp);
+      await _databaseService.updateUserApp(updatedApp);
 
       return revision;
     } catch (e) {
@@ -179,7 +180,7 @@ class UserAppService {
   }
 
   // Create a new user app using AI
-  static Future<UserApp> createUserApp({
+  Future<UserApp> createUserApp({
     required String name,
     required String description,
     required List<String> steps,
@@ -241,7 +242,6 @@ class UserAppService {
       await saveUserApp(app);
 
       // Always create initial revision for new apps
-      final databaseService = DatabaseService();
       final revision = AppRevision(
         id: '${DateTime.now().millisecondsSinceEpoch}_rev',
         appId: app.id,
@@ -265,11 +265,11 @@ class UserAppService {
         'Revision appCode preview: ${revision.appCode.substring(0, revision.appCode.length > 200 ? 200 : revision.appCode.length)}...',
       );
 
-      await databaseService.insertAppRevision(revision);
+      await _databaseService.insertAppRevision(revision);
 
       // Update app with selected revision
       final updatedApp = app.copyWith(selectedRevisionId: revision.id);
-      await databaseService.updateUserApp(updatedApp);
+      await _databaseService.updateUserApp(updatedApp);
       LoggerService.debug(
         'Updated app with selectedRevisionId: ${updatedApp.selectedRevisionId}',
       );
@@ -287,15 +287,14 @@ class UserAppService {
   }
 
   // Save manual code edit by creating a new revision
-  static Future<AppRevision> saveManualCodeEdit({
+  Future<AppRevision> saveManualCodeEdit({
     required UserApp originalApp,
     required String newCode,
     List<String>? attachmentPaths,
   }) async {
     try {
       // Get the next revision number
-      final databaseService = DatabaseService();
-      final revisionNumber = await databaseService.getNextRevisionNumber(
+      final revisionNumber = await _databaseService.getNextRevisionNumber(
         originalApp.id,
       );
 
@@ -312,7 +311,7 @@ class UserAppService {
       );
 
       // Save the revision
-      await databaseService.insertAppRevision(revision);
+      await _databaseService.insertAppRevision(revision);
 
       // Copy dependencies from the current revision to the new revision
       if (originalApp.selectedRevisionId != null) {
@@ -320,7 +319,7 @@ class UserAppService {
           LoggerService.debug(
             'Manual edit: Copying dependencies from revision ${originalApp.selectedRevisionId}',
           );
-          final currentRevision = await databaseService.getAppRevision(
+          final currentRevision = await _databaseService.getAppRevision(
             originalApp.selectedRevisionId!,
           );
           if (currentRevision != null) {
@@ -358,7 +357,7 @@ class UserAppService {
         selectedRevisionId: revision.id,
         updatedAt: DateTime.now(),
       );
-      await databaseService.updateUserApp(updatedApp);
+      await _databaseService.updateUserApp(updatedApp);
 
       return revision;
     } catch (e) {
@@ -368,7 +367,7 @@ class UserAppService {
   }
 
   // Edit an existing app by creating a new revision
-  static Future<AppRevision> editUserApp({
+  Future<AppRevision> editUserApp({
     required UserApp originalApp,
     required String editSuggestion,
     List<String>? attachmentPaths,
@@ -397,8 +396,7 @@ class UserAppService {
       final explanation = parsedResponse['explanation'] ?? '';
 
       // Get the next revision number
-      final databaseService = DatabaseService();
-      final revisionNumber = await databaseService.getNextRevisionNumber(
+      final revisionNumber = await _databaseService.getNextRevisionNumber(
         originalApp.id,
       );
 
@@ -415,7 +413,7 @@ class UserAppService {
       );
 
       // Save the revision
-      await databaseService.insertAppRevision(revision);
+      await _databaseService.insertAppRevision(revision);
 
       // Download and store libraries if provided
       if (libraries != null && libraries.isNotEmpty) {
@@ -428,7 +426,7 @@ class UserAppService {
           LoggerService.debug(
             'AI edit: Copying dependencies from revision ${originalApp.selectedRevisionId}',
           );
-          final currentRevision = await databaseService.getAppRevision(
+          final currentRevision = await _databaseService.getAppRevision(
             originalApp.selectedRevisionId!,
           );
           if (currentRevision != null) {
@@ -464,7 +462,7 @@ class UserAppService {
         selectedRevisionId: revision.id,
         updatedAt: DateTime.now(),
       );
-      await databaseService.updateUserApp(updatedApp);
+      await _databaseService.updateUserApp(updatedApp);
 
       return revision;
     } catch (e) {
@@ -474,7 +472,7 @@ class UserAppService {
   }
 
   // Generate app HTML using AI
-  static Future<String> _generateAppWithAI(
+  Future<String> _generateAppWithAI(
     String name,
     String description,
     List<String> steps,
@@ -500,7 +498,7 @@ class UserAppService {
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateApp(
+      final response = await _aiService.generateApp(
         prompt,
         attachedFiles: attachedFiles,
         generationContext: generationContext,
@@ -513,7 +511,7 @@ class UserAppService {
   }
 
   // Generate app edit using AI
-  static Future<String> _generateAppEditWithAI(
+  Future<String> _generateAppEditWithAI(
     String name,
     String description,
     List<String> steps,
@@ -602,7 +600,7 @@ Here's the updated application with your requested changes:
         noteAttachments: noteContextPayload?.attachments,
       );
 
-      final response = await AIService.generateApp(
+      final response = await _aiService.generateApp(
         prompt,
         attachedFiles: attachedFiles,
         generationContext: generationContext,
@@ -704,7 +702,7 @@ Here's the complete HTML application:
     return buffer.toString();
   }
 
-  static Future<_NoteContextPayload?> _buildNoteContextPayload(
+  Future<_NoteContextPayload?> _buildNoteContextPayload(
     List<Note>? contextNotes,
   ) async {
     if (contextNotes == null || contextNotes.isEmpty) {
@@ -712,7 +710,7 @@ Here's the complete HTML application:
     }
 
     try {
-      final builder = NotePromptBuilder(DatabaseService());
+      final builder = NotePromptBuilder(_databaseService);
       final context = await builder.buildNoteContext(contextNotes);
       final attachments = await builder.loadNoteAttachments(contextNotes);
       final formattedContext = context.trim().isEmpty
@@ -1889,7 +1887,7 @@ ${libraries.map((lib) => '''
   }
 
   // Clone a user app
-  static Future<UserApp> cloneUserApp(UserApp originalApp) async {
+  Future<UserApp> cloneUserApp(UserApp originalApp) async {
     try {
       LoggerService.info('Cloning user app: ${originalApp.name}');
 
@@ -1942,12 +1940,11 @@ ${libraries.map((lib) => '''
       );
 
       // Save the new revision
-      final databaseService = DatabaseService();
-      await databaseService.insertAppRevision(newRevision);
+      await _databaseService.insertAppRevision(newRevision);
 
       // Update the app with the selected revision
       final updatedApp = newApp.copyWith(selectedRevisionId: newRevision.id);
-      await databaseService.updateUserApp(updatedApp);
+      await _databaseService.updateUserApp(updatedApp);
 
       // Copy libraries if they exist
       LoggerService.debug(

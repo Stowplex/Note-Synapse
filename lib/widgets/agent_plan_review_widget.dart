@@ -5,6 +5,7 @@ import '../models/agent_task.dart';
 import '../models/note.dart';
 import '../services/mcp_service.dart';
 import '../services/user_app_service.dart';
+import '../services/service_locator.dart';
 import '../models/user_app.dart';
 import '../screens/note_selection_dialog.dart';
 import '../l10n/app_localizations.dart';
@@ -588,12 +589,12 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
 
       // MCP Tools
       try {
-        final endpoints = await McpService.getEndpoints();
+        final endpoints = await getIt<McpService>().getEndpoints();
         for (final endpoint in endpoints) {
           // Assume all endpoints in the list are enabled candidates.
           // Check for cached tools.
           try {
-            final cache = await McpService.getCachedTools(endpoint.id);
+            final cache = await getIt<McpService>().getCachedTools(endpoint.id);
             if (cache != null && cache.tools.isNotEmpty) {
               for (final tool in cache.tools) {
                 fullToolMap[tool.name] =
@@ -614,7 +615,7 @@ class _AgentPlanReviewWidgetState extends State<AgentPlanReviewWidget> {
 
       // Local AI Tools
       try {
-        final allApps = await UserAppService.getAllUserApps();
+        final allApps = await getIt<UserAppService>().getAllUserApps();
         final localTools = allApps
             .where((app) => app.type == UserAppType.aiTool)
             .toList();

@@ -14,6 +14,7 @@ import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/media_attachment_service.dart';
@@ -1158,7 +1159,9 @@ class _ShareScreenState extends State<ShareScreen> {
           true,
         );
 
-        final aiResult = await AIService.extractContentFromImage(absolutePath);
+        final aiResult = await getIt<AIService>().extractContentFromImage(
+          absolutePath,
+        );
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
           note = Note(
@@ -1232,7 +1235,9 @@ class _ShareScreenState extends State<ShareScreen> {
           relativePath,
           true,
         );
-        final aiResult = await AIService.extractContentFromPdf(absolutePath);
+        final aiResult = await getIt<AIService>().extractContentFromPdf(
+          absolutePath,
+        );
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
           note = Note(
@@ -1589,7 +1594,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!finalNote.content.contains('> [!SUMMARY]')) {
-          ContentIngestionService().processNote(
+          getIt<ContentIngestionService>().processNote(
             finalNote,
             appProvider,
             onMessage: (_) {},
@@ -1642,7 +1647,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!updatedNote.content.contains('> [!SUMMARY]')) {
-          ContentIngestionService().processNote(
+          getIt<ContentIngestionService>().processNote(
             updatedNote,
             appProvider,
             onMessage: (_) {},
@@ -2385,7 +2390,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
 
       if (useAI) {
-        final aiResult = await AIService.extractContentFromText(
+        final aiResult = await getIt<AIService>().extractContentFromText(
           markdownContent,
           'web_content',
           title,

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:note_synapse/l10n/app_localizations.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
+import '../../services/service_locator.dart';
 
 import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -205,7 +206,7 @@ Do NOT execute queries yourself, just suggest them.
 The response shall be in markdown format.
 ''';
 
-      final response = await AIService.chatAI(
+      final response = await getIt<AIService>().chatAI(
         '$systemPrompt\n\nUser Question: $message',
       );
 

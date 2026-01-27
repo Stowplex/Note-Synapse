@@ -86,10 +86,7 @@ class SqlQueryResult {
 /// - Session-level approval for write operations
 /// - Unified query execution with proper error handling
 class SqlQueryService {
-  SqlQueryService({
-    this.onWriteApprovalRequest,
-    DatabaseService? databaseService,
-  }) : _databaseService = databaseService ?? DatabaseService();
+  SqlQueryService(this._databaseService, {this.onWriteApprovalRequest});
 
   final DatabaseService _databaseService;
 

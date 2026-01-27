@@ -4,6 +4,7 @@ import 'package:note_synapse/l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../providers/app_provider.dart';
 import '../widgets/tag_selection_dialog.dart';
@@ -29,7 +30,7 @@ class LinearHistoryDialog extends StatefulWidget {
 }
 
 class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   List<Conversation> _conversations = [];
   late Duration _selectedTimeRange;
   bool _isLoading = true;

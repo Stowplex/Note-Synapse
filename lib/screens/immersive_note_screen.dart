@@ -34,6 +34,7 @@ import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/conversation_settings_service.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
@@ -104,7 +105,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         TickerProviderStateMixin,
         NoteActionMixin<ImmersiveNoteScreen>,
         WidgetsBindingObserver {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
@@ -430,11 +431,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }
@@ -490,7 +491,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {
@@ -849,7 +850,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return await ApprovalService.requestSqlWriteApproval(
       sql: sql,
       queryType: queryType,
-      queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+      queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
         queryType,
       ),
       source: 'AI Tool',
@@ -4200,7 +4201,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         attachments,
       );
       if (caps.isNotEmpty) {
-        final preferredModel = await ModelSelector.instance
+        final preferredModel = await getIt<ModelSelector>()
             .selectModelByPreference(caps);
         if (preferredModel != null) {
           generationContext.modelOverride = preferredModel;
@@ -4409,9 +4410,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
     }
 
-    final currentModelId =
-        generationContext.modelOverride?.id ??
-        ModelSelector.instance.currentModelConfig?.id;
+    final preferredModel = await getIt<ModelSelector>().getModelByHint(
+      ['image_gen'],
+      currentOverride: getIt<ModelSelector>()
+          .currentModelConfig, // Pass current to avoid override if it supports it
+    );
+
+    final modelToUseId =
+        preferredModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
 
     for (final message in _messages) {
       // Filter out synthesized error messages
@@ -4428,8 +4434,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       // to avoid potential format/capability mismatches (e.g. thoughtSignature)
       if (role == PromptRole.assistant) {
         final modelUsed = message.metadata?['modelUsed'] as String?;
-        if (currentModelId != null &&
-            (modelUsed == null || modelUsed != currentModelId)) {
+        final activeModelId = getIt<ModelSelector>().currentModelConfig?.id;
+
+        if (activeModelId != null &&
+            (modelUsed == null || modelUsed != activeModelId)) {
           role = PromptRole.user;
           final modelLabel = modelUsed ?? 'an earlier model';
           content = '[Response from $modelLabel]:\n$content';

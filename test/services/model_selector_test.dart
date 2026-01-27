@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/models/model_capabilities.dart';
@@ -13,6 +15,12 @@ void main() {
     late ModelConfig openaiImageModel;
 
     setUp(() async {
+      // Reset and set up service locator
+      await resetForTesting();
+
+      FlutterSecureStorage.setMockInitialValues({});
+      setupServiceLocator();
+
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
@@ -66,6 +74,10 @@ void main() {
       );
     });
 
+    tearDown(() async {
+      await resetForTesting();
+    });
+
     Future<void> _setupStorage({
       required ModelConfig activeModel,
       List<ModelConfig> allModels = const [],
@@ -93,7 +105,7 @@ void main() {
           allModels: [geminiVisionModel],
         );
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
         expect(result?.id, geminiVisionModel.id);
@@ -118,7 +130,7 @@ void main() {
         // Actually, if active model doesn't support it, and no other model is preferred, it might try to find *any* model?
         // Or it just returns the active model as a fallback.
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
 
@@ -147,7 +159,7 @@ void main() {
         // Active model fails capability check (assumed).
         // Preference list checked: matching capability found in geminiVisionModel.
 
-        final result = await ModelSelector.instance.selectModelByPreference({
+        final result = await getIt<ModelSelector>().selectModelByPreference({
           'images',
         });
         expect(result?.id, geminiVisionModel.id);
@@ -166,7 +178,7 @@ void main() {
       );
 
       // Both Ultra and Vision support 'image'. Ultra is first in preference.
-      final result = await ModelSelector.instance.selectModelByPreference({
+      final result = await getIt<ModelSelector>().selectModelByPreference({
         'images',
       });
       expect(result?.id, geminiUltra.id);
@@ -187,10 +199,159 @@ void main() {
       // Preference list empty.
       // Fallback 2: Feature priority 'image_gen'. DALL-E has it.
 
-      final result = await ModelSelector.instance.selectModelByPreference({
+      final result = await getIt<ModelSelector>().selectModelByPreference({
         'image_gen',
       });
       expect(result?.id, openaiImageModel.id); // Should select DALL-E
     });
+
+    test('selectModelByPreference - Code generation priority', () async {
+      final codeModel = ModelConfig(
+        id: 'code_model',
+        type: ModelType.gemini,
+        displayName: 'Code Model',
+        customCapabilitiesObject: const ModelCapabilities(
+          maxInputTokens: 32000,
+          maxOutputTokens: 4096,
+          supportsImages: false,
+          supportsDocuments: false,
+          supportsAudio: false,
+          supportsVideo: false,
+          supportsCodeGeneration: true,
+        ),
+        isConfigured: true,
+      );
+
+      await _setupStorage(
+        activeModel: geminiTextModel,
+        allModels: [geminiTextModel, codeModel],
+        preferences: [
+          codeModel.id,
+        ], // Code model must be in preferences to be a candidate
+      );
+
+      final result = await getIt<ModelSelector>().selectModelByPreference({
+        'generateCode',
+      });
+      expect(result?.id, codeModel.id);
+    });
+
+    test(
+      'selectModelByPreference - Media capabilities priority over code',
+      () async {
+        final videoModel = ModelConfig(
+          id: 'video_model',
+          type: ModelType.gemini,
+          displayName: 'Video Model',
+          customCapabilitiesObject: const ModelCapabilities(
+            maxInputTokens: 128000,
+            maxOutputTokens: 4096,
+            supportsImages: false,
+            supportsDocuments: false,
+            supportsAudio: false,
+            supportsVideo: true,
+          ),
+          isConfigured: true,
+        );
+
+        await _setupStorage(
+          activeModel: geminiTextModel,
+          allModels: [geminiTextModel, videoModel],
+          preferences: [videoModel.id],
+        );
+
+        final result = await getIt<ModelSelector>().selectModelByPreference({
+          'video',
+        });
+        expect(result?.id, videoModel.id);
+      },
+    );
+
+    test('selectModelByPreference - Audio capability', () async {
+      final audioModel = ModelConfig(
+        id: 'audio_model',
+        type: ModelType.gemini,
+        displayName: 'Audio Model',
+        customCapabilitiesObject: const ModelCapabilities(
+          maxInputTokens: 32000,
+          maxOutputTokens: 4096,
+          supportsImages: false,
+          supportsDocuments: false,
+          supportsAudio: true,
+          supportsVideo: false,
+        ),
+        isConfigured: true,
+      );
+
+      await _setupStorage(
+        activeModel: geminiTextModel,
+        allModels: [geminiTextModel, audioModel],
+        preferences: [
+          audioModel.id,
+        ], // Audio model must be in preferences to be a candidate
+      );
+
+      final result = await getIt<ModelSelector>().selectModelByPreference({
+        'audio',
+      });
+      expect(result?.id, audioModel.id);
+    });
+
+    test('selectModelByPreference - Documents capability', () async {
+      await _setupStorage(
+        activeModel: geminiTextModel, // Already supports documents
+        allModels: [geminiTextModel],
+        preferences: [],
+      );
+
+      final result = await getIt<ModelSelector>().selectModelByPreference({
+        'documents',
+      });
+      expect(result?.id, geminiTextModel.id);
+    });
+
+    test('selectModelByPreference - Multiple capabilities required', () async {
+      final multiCapModel = ModelConfig(
+        id: 'multi_cap_model',
+        type: ModelType.gemini,
+        displayName: 'Multi-Capability Model',
+        customCapabilitiesObject: const ModelCapabilities(
+          maxInputTokens: 128000,
+          maxOutputTokens: 4096,
+          supportsImages: true,
+          supportsDocuments: true,
+          supportsAudio: false,
+          supportsVideo: true,
+        ),
+        isConfigured: true,
+      );
+
+      await _setupStorage(
+        activeModel: geminiTextModel,
+        allModels: [geminiTextModel, geminiVisionModel, multiCapModel],
+        preferences: [multiCapModel.id],
+      );
+
+      // Request both images and video
+      final result = await getIt<ModelSelector>().selectModelByPreference({
+        'images',
+        'video',
+      });
+      expect(result?.id, multiCapModel.id);
+    });
+
+    test(
+      'selectModelByPreference - Empty required caps returns active model',
+      () async {
+        await _setupStorage(
+          activeModel: geminiTextModel,
+          allModels: [geminiTextModel],
+          preferences: [],
+        );
+
+        final result = await getIt<ModelSelector>().selectModelByPreference({});
+        expect(result?.id, geminiTextModel.id);
+      },
+    );
   });
 }

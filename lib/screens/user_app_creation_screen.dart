@@ -15,6 +15,7 @@ import '../widgets/model_selector_button.dart';
 import '../widgets/drawing_editor.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
   const UserAppCreationScreen({super.key});
@@ -374,7 +375,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
           attachmentsToScan,
         );
         if (caps.isNotEmpty) {
-          final preferredModel = await ModelSelector.instance
+          final preferredModel = await getIt<ModelSelector>()
               .selectModelByPreference(caps);
           if (preferredModel != null) {
             generationContext.modelOverride = preferredModel;

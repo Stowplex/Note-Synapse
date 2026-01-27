@@ -10,11 +10,17 @@ import '../services/logger_service.dart';
 import '../providers/app_provider.dart';
 import 'dart:convert';
 import 'note_modification_service.dart';
+import 'service_locator.dart';
 
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 class ContentIngestionService {
-  final DatabaseService _databaseService = DatabaseService();
+  final DatabaseService _databaseService;
+
+  /// Creates a ContentIngestionService.
+  ///
+  /// [databaseService] - The database service for data operations.
+  ContentIngestionService(this._databaseService);
 
   /// Checks if a note needs AI processing based on its tags and triggers ingestion.
   Future<void> processNote(
@@ -137,7 +143,7 @@ Content: ${note.content}
 ''';
 
       // Generate Summary/Modification
-      final response = await AIService.generateWithAttachments(
+      final response = await getIt<AIService>().generateWithAttachments(
         prompt,
         attachedFiles,
       );
@@ -161,7 +167,7 @@ Content: ${note.content}
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
 
-          final service = NoteModificationService();
+          final service = getIt<NoteModificationService>();
           // applyModifications writes to DB
           final updatedNote = await service.applyModifications(note.id, json);
           // Update AppProvider to reflect changes in UI (redundant DB write but safe)

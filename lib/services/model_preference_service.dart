@@ -3,10 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ModelPreferenceService {
   static const _preferenceListKey = 'model_preference_list';
 
-  // Private constructor
-  ModelPreferenceService._();
-
-  static final instance = ModelPreferenceService._();
+  // Removed internal singleton pattern in favor of GetIt injection
 
   /// Get ordered list of model IDs (preference order)
   /// Empty list means use default model only

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/model_config.dart';
 import '../services/model_preference_service.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 
 class ModelPreferenceScreen extends StatefulWidget {
   const ModelPreferenceScreen({super.key});
@@ -28,8 +29,8 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
     });
 
     try {
-      final models = await ModelStorageService.getConfiguredModels();
-      final prefs = await ModelPreferenceService.instance.getPreferenceList();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
+      final prefs = await getIt<ModelPreferenceService>().getPreferenceList();
 
       setState(() {
         _allModels = models;
@@ -57,7 +58,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
     });
 
     try {
-      await ModelPreferenceService.instance.setPreferenceList(
+      await getIt<ModelPreferenceService>().setPreferenceList(
         _preferenceListIds,
       );
     } catch (e) {

@@ -18,6 +18,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'note_modification_service.dart';
 import 'sql_query_service.dart';
+import 'service_locator.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
@@ -91,10 +92,8 @@ class UserAppRuntimeBridge {
     );
   }
 
-  final DatabaseService _databaseService = DatabaseService();
-  late final SqlQueryService _sqlQueryService = SqlQueryService(
-    databaseService: _databaseService,
-  );
+  DatabaseService get _databaseService => getIt<DatabaseService>();
+  SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -379,7 +378,7 @@ class UserAppRuntimeBridge {
           LoggerService.debug(
             '[Synapse.loadAppState] Called for app: ${app.id}',
           );
-          final state = await UserAppService.getAppState(app.id);
+          final state = await getIt<UserAppService>().getAppState(app.id);
           final duration = DateTime.now().difference(startTime);
           if (state != null) {
             LoggerService.debug(
@@ -567,7 +566,7 @@ class UserAppRuntimeBridge {
             LoggerService.debug(
               '[Synapse.chatAI] Using multi-part response mode',
             );
-            final response = await AIService.chatAIMultiPart(
+            final response = await getIt<AIService>().chatAIMultiPart(
               prompt,
               temperature: validated.temperature,
               topK: validated.topK,
@@ -582,7 +581,7 @@ class UserAppRuntimeBridge {
             );
             return {'success': true, 'response': response};
           } else {
-            final response = await AIService.chatAI(
+            final response = await getIt<AIService>().chatAI(
               prompt,
               temperature: validated.temperature,
               topK: validated.topK,
@@ -1415,7 +1414,7 @@ class UserAppRuntimeBridge {
   }
 
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
-    final modificationService = NoteModificationService();
+    final modificationService = getIt<NoteModificationService>();
     var savedCount = 0;
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
@@ -1554,7 +1553,7 @@ class UserAppRuntimeBridge {
 
   Future<int> _updateNotesFromJavaScript(List<dynamic> notesData) async {
     var updatedCount = 0;
-    final modificationService = NoteModificationService();
+    final modificationService = getIt<NoteModificationService>();
 
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
@@ -1673,7 +1672,7 @@ class UserAppRuntimeBridge {
     }
 
     // Attachments: replace entire list if present
-    final modificationService = NoteModificationService();
+    final modificationService = getIt<NoteModificationService>();
     List<String> attachmentPaths = existing.attachmentPaths;
     if (changes.containsKey('attachments') && changes['attachments'] is List) {
       attachmentPaths = [];

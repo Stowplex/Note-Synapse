@@ -6,6 +6,7 @@ import '../models/model_type.dart';
 import '../models/model_config.dart';
 import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_selector.dart';
 import '../services/model_preset_service.dart';
 import '../providers/app_provider.dart';
@@ -201,7 +202,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     try {
       final config = widget.config!;
       // Load API key using ID
-      final apiKey = await ModelStorageService.getModelApiKey(config.id);
+      final apiKey = await getIt<ModelStorageService>().getModelApiKey(
+        config.id,
+      );
 
       if (mounted) {
         setState(() {
@@ -307,24 +310,24 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
       // Save configuration
       if (_isEditing) {
-        await ModelStorageService.updateModel(config);
+        await getIt<ModelStorageService>().updateModel(config);
       } else {
-        await ModelStorageService.addModel(config);
+        await getIt<ModelStorageService>().addModel(config);
       }
 
       // Save API Key securely
       if (apiKey.isNotEmpty) {
-        await ModelStorageService.saveModelApiKey(config.id, apiKey);
+        await getIt<ModelStorageService>().saveModelApiKey(config.id, apiKey);
       }
 
       // If this is the first model or user wants to use it, we could activate it.
       // For now, let's just save it. The user can activate it from the list.
       // But if we are editing the active model, we should probably reload it.
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       if (activeModel?.id == config.id) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         appProvider.updateModelConfig(config);
-        await ModelSelector.instance.switchToModel(config);
+        await getIt<ModelSelector>().switchToModel(config);
       }
 
       if (mounted) {

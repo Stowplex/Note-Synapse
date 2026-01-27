@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'logger_service.dart';
 import 'sql_query_service.dart';
 import 'database_service.dart';
+import 'service_locator.dart';
 
 /// Type of approval being requested.
 enum ApprovalType { sqlWrite, noteModification, noteDeletion }
@@ -244,7 +245,7 @@ class ApprovalService {
     String? title;
     String? snippet;
     try {
-      final db = DatabaseService();
+      final db = getIt<DatabaseService>();
       final note = await db.getNote(noteId);
       if (note != null) {
         title = note.title;
@@ -313,7 +314,7 @@ class ApprovalService {
     // Fetch note details
     final noteDetails = <Map<String, String>>[];
     try {
-      final db = DatabaseService();
+      final db = getIt<DatabaseService>();
       final notes = await db.getNotesByIds(noteIds);
       for (final note in notes) {
         final content = note.content;

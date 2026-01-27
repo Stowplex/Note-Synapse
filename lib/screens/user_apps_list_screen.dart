@@ -7,6 +7,7 @@ import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_service.dart';
+import '../services/service_locator.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
@@ -624,7 +625,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       );
 
       // Clone the app
-      await UserAppService.cloneUserApp(app);
+      await getIt<UserAppService>().cloneUserApp(app);
 
       // Close loading dialog
       if (mounted) {

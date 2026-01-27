@@ -9,6 +9,7 @@ import '../database_service.dart';
 import '../note_modification_service.dart';
 import '../logger_service.dart';
 import '../sql_query_service.dart';
+import '../service_locator.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
@@ -23,7 +24,7 @@ abstract class NativeTool {
 }
 
 class NoteSearchTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'search_notes';
@@ -78,7 +79,7 @@ Priority order for exploring user's notes:
 }
 
 class NoteReadTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'read_note';
@@ -434,7 +435,7 @@ Describe the content of these PDF pages (${pageImages.length} page(s) from "$att
 Provide a detailed summary of what you see on each page.
 ''';
 
-      final aiResponse = await AIService.generateWithAttachments(
+      final aiResponse = await getIt<AIService>().generateWithAttachments(
         prompt,
         pageImages,
         generationContext: GenerationContext(
@@ -533,7 +534,7 @@ Extraction Guide:
 $extractionGuide
 ''';
 
-        final aiResponse = await AIService.generateWithAttachments(
+        final aiResponse = await getIt<AIService>().generateWithAttachments(
           prompt,
           attachments,
           generationContext: GenerationContext(
@@ -569,7 +570,7 @@ $extractionGuide
 }
 
 class RunSqlTool implements NativeTool {
-  final SqlQueryService _sqlService = SqlQueryService();
+  SqlQueryService get _sqlService => getIt<SqlQueryService>();
 
   /// Legacy static callback for backwards compatibility.
   /// Prefer using ApprovalService.onApprovalRequest instead.
@@ -684,7 +685,7 @@ extension StringExtension on String {
 }
 
 class ListFiltersTool implements NativeTool {
-  final DatabaseService _db = DatabaseService();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   @override
   String get name => 'ls';
@@ -787,7 +788,7 @@ DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
 }
 
 class ModifyNoteTool implements NativeTool {
-  final NoteModificationService _service = NoteModificationService();
+  NoteModificationService get _service => getIt<NoteModificationService>();
 
   @override
   String get name => 'modify_note';
@@ -921,7 +922,7 @@ class ModifyNoteTool implements NativeTool {
 }
 
 class CreateNotesTool implements NativeTool {
-  final NoteModificationService _service = NoteModificationService();
+  NoteModificationService get _service => getIt<NoteModificationService>();
 
   @override
   String get name => 'create_notes';
@@ -1050,7 +1051,7 @@ class CreateNotesTool implements NativeTool {
 /// Tool for deleting notes.
 /// Requires user approval before deletion.
 class DeleteNoteTool implements NativeTool {
-  final DatabaseService _databaseService = DatabaseService();
+  DatabaseService get _databaseService => getIt<DatabaseService>();
 
   @override
   String get name => 'delete_notes';

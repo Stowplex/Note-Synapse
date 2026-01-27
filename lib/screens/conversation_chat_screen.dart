@@ -17,6 +17,7 @@ import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -75,7 +76,7 @@ class ConversationChatScreen extends StatefulWidget {
 
 class _ConversationChatScreenState extends State<ConversationChatScreen>
     with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -148,7 +149,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       final result = await ApprovalService.requestSqlWriteApproval(
         sql: sql,
         queryType: queryType,
-        queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+        queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
           queryType,
         ),
         source: 'Agent',
@@ -275,11 +276,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }
@@ -436,7 +437,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {
@@ -800,7 +801,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return await ApprovalService.requestSqlWriteApproval(
       sql: sql,
       queryType: queryType,
-      queryTypeDescription: SqlQueryService().getQueryTypeDescription(
+      queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
         queryType,
       ),
       source: 'AI Tool',
@@ -1225,7 +1226,7 @@ $historyBuffer
 
     final conversationMessages = <PromptMessage>[];
     final currentModelId =
-        _selectedModel?.id ?? ModelSelector.instance.currentModelConfig?.id;
+        _selectedModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
 
     for (final message in _messages) {
       // Filter out synthesized error messages

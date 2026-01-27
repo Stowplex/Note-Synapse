@@ -3,6 +3,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import 'mcp_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// Service for integrating MCP tools with AI models
 class McpToolIntegrationService {
@@ -13,9 +14,9 @@ class McpToolIntegrationService {
     final toolsByEndpoint = <String, List<McpTool>>{};
 
     for (final endpointId in endpointIds) {
-      final cache = await McpService.getCachedTools(endpointId);
+      final cache = await getIt<McpService>().getCachedTools(endpointId);
       if (cache != null && cache.tools.isNotEmpty) {
-        final endpoints = await McpService.getEndpoints();
+        final endpoints = await getIt<McpService>().getEndpoints();
         final endpoint = endpoints.firstWhere((e) => e.id == endpointId);
         toolsByEndpoint[endpoint.name] = cache.tools;
       }
@@ -483,7 +484,7 @@ tool_fn({a: "hello"})
   }) async {
     try {
       // Find the endpoint by service name
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       final endpoint = endpoints.firstWhere(
         (e) => e.name == serviceName && enabledEndpointIds.contains(e.id),
         orElse: () =>
@@ -498,7 +499,7 @@ tool_fn({a: "hello"})
       LoggerService.debug('Tool parameters: ${jsonEncode(parameters)}');
 
       // Call the tool
-      final result = await McpService.callTool(
+      final result = await getIt<McpService>().callTool(
         endpointId: endpoint.id,
         toolName: toolName,
         arguments: parameters,

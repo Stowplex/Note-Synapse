@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/mcp_endpoint.dart';
 import '../services/mcp_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../l10n/app_localizations.dart';
 import 'oauth_discovery_screen.dart';
 import '../services/oauth_service.dart';
@@ -33,7 +34,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     });
 
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       setState(() {
         _endpoints = endpoints;
         _isLoading = false;
@@ -84,7 +85,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     // Load existing values if editing
     if (isEditing) {
       if (endpoint.authType == McpAuthType.token) {
-        final token = await McpService.getBearerToken(endpoint.id);
+        final token = await getIt<McpService>().getBearerToken(endpoint.id);
         if (token != null) {
           bearerTokenController.text = token;
         }
@@ -584,7 +585,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           authorizationServerMetadataUrl:
                               discoveryResult?.authorizationServerMetadataUrl,
                         );
-                        await McpService.updateEndpoint(
+                        await getIt<McpService>().updateEndpoint(
                           id: endpoint.id,
                           name: name,
                           baseUrl: baseUrl,
@@ -601,7 +602,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           await manager.saveTokens(oauthTokenResponse!);
                         }
                       } else {
-                        await McpService.updateEndpoint(
+                        await getIt<McpService>().updateEndpoint(
                           id: endpoint.id,
                           name: name,
                           baseUrl: baseUrl,
@@ -648,7 +649,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           authorizationServerMetadataUrl:
                               discoveryResult?.authorizationServerMetadataUrl,
                         );
-                        created = await McpService.addEndpoint(
+                        created = await getIt<McpService>().addEndpoint(
                           name: name,
                           baseUrl: baseUrl,
                           transportType: selectedTransport,
@@ -664,7 +665,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
                           await manager.saveTokens(oauthTokenResponse!);
                         }
                       } else {
-                        created = await McpService.addEndpoint(
+                        created = await getIt<McpService>().addEndpoint(
                           name: name,
                           baseUrl: baseUrl,
                           transportType: selectedTransport,
@@ -745,7 +746,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
     if (confirmed == true) {
       try {
-        await McpService.deleteEndpoint(endpoint.id);
+        await getIt<McpService>().deleteEndpoint(endpoint.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -775,7 +776,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
     });
 
     try {
-      await McpService.refreshTools(endpoint.id);
+      await getIt<McpService>().refreshTools(endpoint.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -804,7 +805,7 @@ class _McpSettingsScreenState extends State<McpSettingsScreen> {
 
   Future<void> _showToolsDialog(McpEndpoint endpoint) async {
     final l10n = AppLocalizations.of(context)!;
-    final cache = await McpService.getCachedTools(endpoint.id);
+    final cache = await getIt<McpService>().getCachedTools(endpoint.id);
 
     if (!mounted) return;
 

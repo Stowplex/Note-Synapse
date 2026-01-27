@@ -22,6 +22,7 @@ import '../widgets/model_selector_button.dart';
 import '../widgets/drawing_editor.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -280,7 +281,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
           attachmentsToScan,
         );
         if (caps.isNotEmpty) {
-          final preferredModel = await ModelSelector.instance
+          final preferredModel = await getIt<ModelSelector>()
               .selectModelByPreference(caps);
           if (preferredModel != null) {
             generationContext.modelOverride = preferredModel;

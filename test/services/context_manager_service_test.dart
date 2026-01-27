@@ -1,16 +1,54 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:note_synapse/services/ai_service.dart';
+import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:mockito/mockito.dart';
+import 'package:mockito/annotations.dart';
+import 'context_manager_service_test.mocks.dart';
 
+@GenerateMocks([
+  ContextManagerService,
+  ModelSelector,
+  AIService,
+  DatabaseService,
+])
 void main() {
+  late MockModelSelector mockModelSelector;
+  late MockAIService mockAIService;
+  late MockDatabaseService mockDatabaseService;
+
   group('ContextManagerService', () {
     late ContextManagerService service;
 
-    setUp(() {
-      service = ContextManagerService();
+    setUp(() async {
+      await getIt.reset();
+      mockModelSelector = MockModelSelector();
+      mockAIService = MockAIService();
+      mockDatabaseService = MockDatabaseService();
+
+      getIt.registerSingleton<ModelSelector>(mockModelSelector);
+      getIt.registerSingleton<AIService>(mockAIService);
+      getIt.registerSingleton<DatabaseService>(mockDatabaseService);
+
+      service = ContextManagerService(mockModelSelector, mockAIService);
+      getIt.registerSingleton<ContextManagerService>(service);
+
+      // Default stubs
+      when(mockModelSelector.currentModelConfig).thenReturn(null);
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => 'Summary from MockAIService');
+
       // Initialize SharedPreferences with empty values for testing
       SharedPreferences.setMockInitialValues({});
     });
@@ -180,7 +218,10 @@ void main() {
       expect(snapshot, isNotNull);
 
       // Create new service and import
-      final newService = ContextManagerService();
+      final newService = ContextManagerService(
+        mockModelSelector,
+        mockAIService,
+      );
       newService.importSnapshot(snapshot!);
 
       expect(newService.rootContext?.objective, 'Root');
@@ -354,8 +395,23 @@ void main() {
     late ContextManagerService contextManager;
 
     setUp(() async {
+      await getIt.reset();
       SharedPreferences.setMockInitialValues({});
-      agentService = AgentService();
+
+      getIt.registerSingleton<ModelSelector>(mockModelSelector);
+      getIt.registerSingleton<AIService>(mockAIService);
+      getIt.registerSingleton<DatabaseService>(mockDatabaseService);
+
+      // Register ContextManagerService so AgentService can find it
+      final cms = ContextManagerService(mockModelSelector, mockAIService);
+      getIt.registerSingleton<ContextManagerService>(cms);
+
+      agentService = AgentService(
+        cms,
+        mockModelSelector,
+        mockAIService,
+        mockDatabaseService,
+      );
       contextManager = agentService.contextManager;
 
       // Initialize the context manager with a root context
@@ -388,7 +444,13 @@ Summary here.
 ''';
 
         // Set the mock LLM generator
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         // Create a task with a context node
         final rootNode = contextManager.rootContext!;
@@ -438,7 +500,13 @@ $manyWords
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
@@ -482,7 +550,13 @@ Brief content.
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
@@ -537,7 +611,13 @@ Recommend Z.
 </Action>
 ''';
 
-        agentService.llmGenerator = (prompt) async => mockLlmResponse;
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => mockLlmResponse);
 
         final rootNode = contextManager.rootContext!;
         final task = AgentTask(
@@ -580,5 +660,53 @@ Recommend Z.
         expect(context, isNot(contains('type="log-preview"')));
       },
     );
+    group('Compaction and Findings', () {
+      test('compactNodeContext summarizes execution log', () async {
+        final root = await contextManager.createRootContext(objective: 'Task');
+        // Add minimal log entries
+        for (var i = 0; i < 15; i++) {
+          root.log('Log entry $i');
+        }
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((_) async => 'Summary of work');
+
+        await contextManager.compactNodeContext(root);
+
+        // Should replace log with summary + recent entries
+        expect(
+          root.executionLog.first,
+          startsWith('[Previous work summarized]'),
+        );
+        expect(root.executionLog.length, lessThan(15));
+      });
+
+      test(
+        'addFindings accumulates findings and includes them in synthesis context',
+        () async {
+          final root = await contextManager.createRootContext(
+            objective: 'Synthesis',
+          );
+
+          contextManager.addFindings([
+            {'finding': 'F1', 'source': 'Src1'},
+            {'finding': 'F2'},
+          ]);
+
+          expect(contextManager.findingsCount, 2);
+
+          final context = contextManager.buildSynthesisContext(root);
+          expect(context, contains('AccumulatedFindings'));
+          expect(context, contains('F1'));
+          expect(context, contains('Src1'));
+          expect(context, contains('F2'));
+        },
+      );
+    });
   });
 }

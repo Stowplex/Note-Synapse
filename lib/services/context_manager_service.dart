@@ -13,16 +13,6 @@ const int kDefaultContextBudget = 100000;
 const int kSubtaskBudgetRatio = 60;
 const int kMinSubtaskBudget = 5000;
 
-/// Gets the effective context budget for agent execution.
-/// Returns: min(configuredCompactionThreshold, model.maxInputTokens)
-Future<int> getModelContextBudget() async {
-  final config = ModelSelector.instance.currentModelConfig;
-  final modelLimit = config?.maxInputTokens ?? kDefaultContextBudget;
-  final compactionThreshold =
-      await AgenticSettingsService.getCompactionThreshold();
-  return compactionThreshold < modelLimit ? compactionThreshold : modelLimit;
-}
-
 /// Structured info about a dependency task for TOC-based rendering.
 class DependencyInfo {
   final String taskId;
@@ -45,6 +35,21 @@ class DependencyInfo {
 /// Handles context tree lifecycle, scoped context building, token budget
 /// management, and automatic summarization when limits are approached.
 class ContextManagerService {
+  final ModelSelector _modelSelector;
+  final AIService _aiService;
+
+  ContextManagerService(this._modelSelector, this._aiService);
+
+  /// Gets the effective context budget for agent execution.
+  /// Returns: min(configuredCompactionThreshold, model.maxInputTokens)
+  Future<int> getModelContextBudget() async {
+    final config = _modelSelector.currentModelConfig;
+    final modelLimit = config?.maxInputTokens ?? kDefaultContextBudget;
+    final compactionThreshold =
+        await AgenticSettingsService.getCompactionThreshold();
+    return compactionThreshold < modelLimit ? compactionThreshold : modelLimit;
+  }
+
   /// The root context node for the current execution session.
   ContextNode? _rootContext;
 
@@ -530,7 +535,7 @@ Remove:
 Output structured, scannable context. Not prose:
 ''';
 
-    final response = await AIService.generateWithAttachments(
+    final response = await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: GenerationContext(
@@ -612,7 +617,7 @@ If this is research/analysis, output structured findings.
     );
     if (modelOverride != null) genContext.modelOverride = modelOverride;
 
-    final response = await AIService.generateWithAttachments(
+    final response = await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: genContext,

@@ -1,11 +1,34 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:mockito/annotations.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/note_modification_service.dart';
 import 'package:note_synapse/services/tools/note_tools.dart';
+
+@GenerateMocks([DatabaseService, NoteModificationService])
+import 'note_tools_test.mocks.dart';
 
 /// Tests for NoteReadTool progressive discovery modes.
 ///
 /// Note: These tests verify the logic of each mode using a mock-friendly approach.
 /// For full integration testing, the tool would need to be tested with a real database.
 void main() {
+  late MockDatabaseService mockDb;
+  late MockNoteModificationService mockNoteModificationService;
+
+  setUp(() async {
+    await resetForTesting();
+    mockDb = MockDatabaseService();
+    mockNoteModificationService = MockNoteModificationService();
+    getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<NoteModificationService>(mockNoteModificationService);
+  });
+
+  tearDown(() async {
+    await resetForTesting();
+  });
+
   group('NoteReadTool', () {
     late NoteReadTool tool;
 
@@ -38,6 +61,7 @@ void main() {
     });
 
     test('returns error for non-existent note', () async {
+      when(mockDb.getNoteById('non-existent-id')).thenAnswer((_) async => null);
       final result = await tool.execute({'note_id': 'non-existent-id'});
       expect(result['error'], 'Note not found');
     });

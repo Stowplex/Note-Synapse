@@ -11,19 +11,24 @@ class ModelStorageService {
   static const String _activeModelIdKey = 'active_model_id';
   static const String _configuredModelsKey = 'configured_models';
 
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-      sharedPreferencesName: 'note_synapse_secure',
-      preferencesKeyPrefix: 'note_synapse_',
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-    ),
-  );
+  final FlutterSecureStorage _storage;
+
+  /// Creates a ModelStorageService with optional [storage] for testing.
+  ModelStorageService({FlutterSecureStorage? storage})
+      : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(
+                encryptedSharedPreferences: true,
+                sharedPreferencesName: 'note_synapse_secure',
+                preferencesKeyPrefix: 'note_synapse_',
+              ),
+              iOptions: IOSOptions(
+                accessibility: KeychainAccessibility.first_unlock_this_device,
+              ),
+            );
 
   /// Get the currently active model configuration
-  static Future<ModelConfig?> getActiveModel() async {
+  Future<ModelConfig?> getActiveModel() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final activeModelId = prefs.getString(_activeModelIdKey);
@@ -53,7 +58,7 @@ class ModelStorageService {
   }
 
   /// Set the active model by ID
-  static Future<void> activateModel(String modelId) async {
+  Future<void> activateModel(String modelId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_activeModelIdKey, modelId);
@@ -68,7 +73,7 @@ class ModelStorageService {
   }
 
   /// Get all configured models
-  static Future<List<ModelConfig>> getConfiguredModels() async {
+  Future<List<ModelConfig>> getConfiguredModels() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final configsJson = prefs.getString(_configuredModelsKey);
@@ -93,7 +98,7 @@ class ModelStorageService {
   }
 
   /// Add a new model configuration
-  static Future<void> addModel(ModelConfig config) async {
+  Future<void> addModel(ModelConfig config) async {
     try {
       final models = await getConfiguredModels();
       models.add(config);
@@ -107,7 +112,7 @@ class ModelStorageService {
   }
 
   /// Update an existing model configuration
-  static Future<void> updateModel(ModelConfig config) async {
+  Future<void> updateModel(ModelConfig config) async {
     try {
       final models = await getConfiguredModels();
       final index = models.indexWhere((m) => m.id == config.id);
@@ -129,7 +134,7 @@ class ModelStorageService {
   }
 
   /// Delete a model configuration
-  static Future<void> deleteModel(String modelId) async {
+  Future<void> deleteModel(String modelId) async {
     try {
       final models = await getConfiguredModels();
       final modelToRemove = models.cast<ModelConfig?>().firstWhere(
@@ -161,14 +166,14 @@ class ModelStorageService {
   }
 
   /// Save the list of models to SharedPreferences
-  static Future<void> _saveModels(List<ModelConfig> models) async {
+  Future<void> _saveModels(List<ModelConfig> models) async {
     final prefs = await SharedPreferences.getInstance();
     final configsJson = jsonEncode(models.map((m) => m.toJson()).toList());
     await prefs.setString(_configuredModelsKey, configsJson);
   }
 
   /// Save API key securely for a model ID
-  static Future<void> saveModelApiKey(String modelId, String apiKey) async {
+  Future<void> saveModelApiKey(String modelId, String apiKey) async {
     try {
       final key = '${modelId}_api_key';
       LoggerService.debug(
@@ -181,7 +186,7 @@ class ModelStorageService {
   }
 
   /// Get API key for a model ID
-  static Future<String?> getModelApiKey(String modelId) async {
+  Future<String?> getModelApiKey(String modelId) async {
     try {
       final key = '${modelId}_api_key';
       final apiKey = await _storage.read(key: key);
@@ -193,7 +198,7 @@ class ModelStorageService {
   }
 
   /// Delete API key for a model ID
-  static Future<void> deleteModelApiKey(String modelId) async {
+  Future<void> deleteModelApiKey(String modelId) async {
     try {
       final key = '${modelId}_api_key';
       await _storage.delete(key: key);
@@ -203,7 +208,7 @@ class ModelStorageService {
   }
 
   /// Clear all model configurations
-  static Future<void> clearAllConfigurations() async {
+  Future<void> clearAllConfigurations() async {
     try {
       final models = await getConfiguredModels();
       for (final model in models) {
@@ -228,7 +233,7 @@ class ModelStorageService {
   // Removing them as we are doing a breaking change.
 
   /// Get the currently selected model type (Deprecated, maps to active model type)
-  static Future<ModelType?> getSelectedModelType() async {
+  Future<ModelType?> getSelectedModelType() async {
     final activeModel = await getActiveModel();
     return activeModel?.type;
   }

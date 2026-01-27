@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../models/conversation.dart';
 import '../models/tag.dart';
 import '../services/conversation_service.dart';
+import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/note_detail_screen.dart';
 
@@ -20,7 +21,7 @@ class TagDetailDialog extends StatefulWidget {
 }
 
 class _TagDetailDialogState extends State<TagDetailDialog> {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   List<Note> _notes = [];
   List<Conversation> _conversations = [];
   bool _isLoading = true;

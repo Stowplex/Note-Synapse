@@ -11,6 +11,7 @@ import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/note_prompt_builder.dart';
+import '../services/service_locator.dart';
 
 /// Dialog for creating a conversation using AI with customizable prompt
 /// Similar to AINoteCreatorDialog, but creates a conversation instead
@@ -18,14 +19,14 @@ class AIConversationCreatorDialog extends StatefulWidget {
   final List<String> selectedNodeIds;
   final String conversationContent;
   final List<Note> contextNotes;
-  
+
   const AIConversationCreatorDialog({
     super.key,
     required this.selectedNodeIds,
     required this.conversationContent,
     this.contextNotes = const [],
   });
-  
+
   /// Show the dialog and return the created conversation if any
   static Future<Conversation?> show({
     required BuildContext context,
@@ -43,34 +44,38 @@ class AIConversationCreatorDialog extends StatefulWidget {
       ),
     );
   }
-  
+
   @override
-  State<AIConversationCreatorDialog> createState() => _AIConversationCreatorDialogState();
+  State<AIConversationCreatorDialog> createState() =>
+      _AIConversationCreatorDialogState();
 }
 
-class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialog> {
-  final TextEditingController _promptController = TextEditingController(text: 'Summarize');
+class _AIConversationCreatorDialogState
+    extends State<AIConversationCreatorDialog> {
+  final TextEditingController _promptController = TextEditingController(
+    text: 'Summarize',
+  );
   final List<PlatformFile> _attachedFiles = [];
   List<Note> _selectedNotes = [];
   bool _isProcessing = false;
-  
+
   @override
   void initState() {
     super.initState();
     // Start with context notes already selected
     _selectedNotes = List.from(widget.contextNotes);
   }
-  
+
   @override
   void dispose() {
     _promptController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Dialog(
       child: Container(
         constraints: BoxConstraints(
@@ -114,7 +119,7 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                 ],
               ),
             ),
-            
+
             // Content
             Flexible(
               child: SingleChildScrollView(
@@ -126,11 +131,13 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                     Text(
                       l10n.aiConversationCreatorInstructions,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Prompt input
                     Text(
                       l10n.prompt,
@@ -169,17 +176,19 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                     Text(
                       l10n.promptTip,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
                         fontStyle: FontStyle.italic,
                       ),
                     ),
-                    
+
                     // Attached files section
                     if (_attachedFiles.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildAttachedFilesSection(),
                     ],
-                    
+
                     // Additional notes section
                     const SizedBox(height: 16),
                     Row(
@@ -187,12 +196,13 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                       children: [
                         Text(
                           l10n.additionalContextNotes(_selectedNotes.length),
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         TextButton.icon(
-                          onPressed: _isProcessing ? null : _selectAdditionalNotes,
+                          onPressed: _isProcessing
+                              ? null
+                              : _selectAdditionalNotes,
                           icon: const Icon(Icons.add),
                           label: Text(l10n.addNotes),
                         ),
@@ -203,7 +213,9 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Wrap(
@@ -227,7 +239,7 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
                 ),
               ),
             ),
-            
+
             // Footer with action buttons
             Container(
               padding: const EdgeInsets.all(16),
@@ -265,18 +277,18 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
       ),
     );
   }
-  
+
   Widget _buildAttachedFilesSection() {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           l10n.attachedFiles(_attachedFiles.length),
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -303,7 +315,7 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
       ],
     );
   }
-  
+
   IconData _getFileIcon(String? extension) {
     switch (extension?.toLowerCase()) {
       case '.jpg':
@@ -326,37 +338,35 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
         return Icons.attach_file;
     }
   }
-  
+
   Future<void> _attachFiles() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: FileType.any,
     );
-    
+
     if (result != null && result.files.isNotEmpty) {
       setState(() {
         _attachedFiles.addAll(result.files);
       });
     }
   }
-  
+
   Future<void> _captureImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.camera);
-    
+
     if (image != null) {
       final file = File(image.path);
       final size = await file.length();
       setState(() {
-        _attachedFiles.add(PlatformFile(
-          path: image.path,
-          name: image.name,
-          size: size,
-        ));
+        _attachedFiles.add(
+          PlatformFile(path: image.path, name: image.name, size: size),
+        );
       });
     }
   }
-  
+
   Future<void> _selectAdditionalNotes() async {
     final selectedNotes = await showDialog<List<Note>>(
       context: context,
@@ -364,7 +374,7 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
         onNotesSelected: (notes) => Navigator.of(context).pop(notes),
       ),
     );
-    
+
     if (selectedNotes != null && selectedNotes.isNotEmpty) {
       // Filter out notes already selected to avoid duplicates
       final newNotes = selectedNotes
@@ -375,32 +385,33 @@ class _AIConversationCreatorDialogState extends State<AIConversationCreatorDialo
       });
     }
   }
-  
+
   Future<void> _proceed() async {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (_promptController.text.trim().isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.pleaseEnterPrompt)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.pleaseEnterPrompt)));
       }
       return;
     }
-    
+
     setState(() {
       _isProcessing = true;
     });
-    
+
     try {
       // Build the complete prompt with conversation content
-      final fullPrompt = '''
+      final fullPrompt =
+          '''
 ${_promptController.text.trim()}
 
 Conversation content to process:
 ${widget.conversationContent}
 ''';
-      
+
       // Prepare note-aware prompt and execute it
       final databaseService = DatabaseService();
       final promptBuilder = NotePromptBuilder(databaseService);
@@ -410,19 +421,19 @@ ${widget.conversationContent}
         useOwnKnowledge: true,
         additionalAttachments: _attachedFiles,
       );
-      final processedContent = await AIService.executePrompt(request);
-      
+      final processedContent = await getIt<AIService>().executePrompt(request);
+
       // Get conversation IDs and note IDs from selected nodes
-      final conversationService = ConversationService();
+      final conversationService = getIt<ConversationService>();
       final tree = await conversationService.getConversationTree();
-      
+
       if (tree == null) {
         throw Exception('No conversation tree found');
       }
-      
+
       final conversationIds = <String>{};
       final allNoteIds = <String>{};
-      
+
       for (final nodeId in widget.selectedNodeIds) {
         final node = tree.nodes[nodeId];
         if (node != null && node.conversationId.isNotEmpty) {
@@ -433,23 +444,23 @@ ${widget.conversationContent}
           allNoteIds.addAll(noteIds);
         }
       }
-      
+
       // Check mounted after async operations
       if (!mounted) return;
-      
+
       // Use processed content as title (or extract a summary title)
       final title = processedContent.length > 100
           ? '${processedContent.substring(0, 97)}...'
           : processedContent;
-      
+
       // Create conversation with all notes
       final newConversation = await conversationService.createConversation(
         title: title,
         noteIds: allNoteIds.toList(),
       );
-      
+
       if (!mounted) return;
-      
+
       // Add only the AI's processed response as the starting context
       // This serves as the initial context for the conversation without showing
       // the user prompt or intermediate context messages
@@ -459,20 +470,20 @@ ${widget.conversationContent}
           content: processedContent,
         );
       }
-      
+
       if (!mounted) return;
-      
+
       // Return the created conversation - let the caller show success messages
       Navigator.of(context).pop(newConversation);
     } catch (e) {
       if (!mounted) return;
-      
+
       setState(() {
         _isProcessing = false;
       });
-      
+
       LoggerService.error('Error creating conversation: $e', error: e);
-      
+
       // Show error message before popping
       try {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -484,7 +495,7 @@ ${widget.conversationContent}
       } catch (_) {
         // Context may be deactivated, skip snackbar
       }
-      
+
       // Pop with null to indicate error
       if (mounted) {
         Navigator.of(context).pop(null);

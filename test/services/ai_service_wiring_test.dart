@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/models/model_capabilities.dart';
@@ -23,6 +25,14 @@ void main() {
   late ModelConfig geminiAudioModel;
 
   setUp(() async {
+    // 0. Reset service locator and set up fresh services
+    await resetForTesting();
+
+    // Mock FlutterSecureStorage BEFORE setupServiceLocator might use it (though ModelStorageService might start with it)
+    FlutterSecureStorage.setMockInitialValues({});
+
+    setupServiceLocator();
+
     // 1. Setup temporary directory for file I/O
     tempDir = await Directory.systemTemp.createTemp('ai_service_test');
 
@@ -85,12 +95,25 @@ void main() {
 
     // 5. Save models to storage (via SharedPreferences)
     // Active model is Text Only
-    await ModelStorageService.addModel(geminiTextModel);
-    await ModelStorageService.activateModel(geminiTextModel.id);
+    await getIt<ModelStorageService>().addModel(geminiTextModel);
+    await getIt<ModelStorageService>().saveModelApiKey(
+      geminiTextModel.id,
+      'dummy_key',
+    );
+    await getIt<ModelStorageService>().activateModel(geminiTextModel.id);
 
     // Save capability models
-    await ModelStorageService.addModel(geminiVisionModel);
-    await ModelStorageService.addModel(geminiAudioModel);
+    await getIt<ModelStorageService>().addModel(geminiVisionModel);
+    await getIt<ModelStorageService>().saveModelApiKey(
+      geminiVisionModel.id,
+      'dummy_key',
+    );
+
+    await getIt<ModelStorageService>().addModel(geminiAudioModel);
+    await getIt<ModelStorageService>().saveModelApiKey(
+      geminiAudioModel.id,
+      'dummy_key',
+    );
 
     // 6. Set Preferences: Prefer Audio and Vision models
     await prefs.setStringList('model_preference_list', [
@@ -100,7 +123,7 @@ void main() {
 
     // 7. Initialize AIService
     // Note: ModelSelector singleton persists, so re-init updates it.
-    await AIService.initialize(MockAppProvider());
+    await getIt<AIService>().initialize(MockAppProvider());
 
     // Wait slightly for async init if any
     await Future.delayed(Duration(milliseconds: 50));
@@ -108,6 +131,7 @@ void main() {
 
   tearDown(() async {
     await tempDir.delete(recursive: true);
+    await resetForTesting();
   });
 
   group('AIService Wiring Tests', () {
@@ -117,7 +141,7 @@ void main() {
       await imageFile.writeAsBytes([1, 2, 3]); // Dummy bytes
 
       try {
-        await AIService.extractContentFromImage(imageFile.path);
+        await getIt<AIService>().extractContentFromImage(imageFile.path);
       } catch (e) {
         // Expected to fail at network step, but we check logs
       }
@@ -141,7 +165,7 @@ void main() {
       await audioFile.writeAsBytes([1, 2, 3]);
 
       try {
-        await AIService.transcribeAudio(audioFile.path);
+        await getIt<AIService>().transcribeAudio(audioFile.path);
       } catch (e) {
         // Network will fail
       }

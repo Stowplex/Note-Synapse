@@ -16,6 +16,7 @@ import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
+import 'services/service_locator.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
@@ -34,6 +35,9 @@ void main() async {
   await PromptConfigurationBootstrapper.initialize();
   await GlobalLibraryService().init();
 
+  // Initialize service locator for dependency injection
+  setupServiceLocator();
+
   // Initialize background agent service for Android foreground service
   await BackgroundAgentService.init();
 
@@ -48,7 +52,7 @@ class NoteSynapseApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => AppProvider()),
-        ChangeNotifierProvider(create: (context) => AgentService()),
+        ChangeNotifierProvider.value(value: getIt<AgentService>()),
       ], // ...
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
@@ -127,7 +131,7 @@ class _AppWrapperState extends State<AppWrapper> {
     await appProvider.loadLanguagePreference();
     await appProvider.loadData();
 
-    await AIService.initialize(appProvider);
+    await getIt<AIService>().initialize(appProvider);
     await ShareService.init(appProvider);
 
     // Initialize wake lock if it was enabled in settings

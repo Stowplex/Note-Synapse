@@ -6,6 +6,7 @@ import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
 import 'setup_screen.dart';
@@ -249,8 +250,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       _isLoading = true;
     });
     try {
-      final models = await ModelStorageService.getConfiguredModels();
-      final activeModel = await ModelStorageService.getActiveModel();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
 
       if (mounted) {
         setState(() {
@@ -275,7 +276,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     });
 
     try {
-      await ModelSelector.instance.switchToModel(config);
+      await getIt<ModelSelector>().switchToModel(config);
 
       if (mounted) {
         // Force refresh of model config in provider to update UI
@@ -343,7 +344,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     if (confirmed == true) {
       try {
-        await ModelStorageService.deleteModel(config.id);
+        await getIt<ModelStorageService>().deleteModel(config.id);
         await _loadData();
 
         if (mounted) {

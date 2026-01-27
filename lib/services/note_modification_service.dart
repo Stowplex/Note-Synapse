@@ -8,8 +8,13 @@ import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
 
 class NoteModificationService {
-  final DatabaseService _db = DatabaseService();
+  final DatabaseService _db;
   final Uuid _uuid = const Uuid();
+
+  /// Creates a NoteModificationService.
+  ///
+  /// [db] - The database service for persistence operations.
+  NoteModificationService(this._db);
 
   /// Applies modifications defined in the JSON schema to a note.
   /// Returns the updated Note object.

@@ -22,6 +22,8 @@ import 'mcp_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
+import 'service_locator.dart';
+
 import 'prompts/ai_prompts.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/token_estimator.dart';
@@ -49,6 +51,18 @@ enum AgentCheckpoint {
 }
 
 class AgentService extends ChangeNotifier {
+  final ContextManagerService _contextManager;
+  final ModelSelector _modelSelector;
+  final AIService _aiService;
+  final DatabaseService _databaseService;
+
+  AgentService(
+    this._contextManager,
+    this._modelSelector,
+    this._aiService,
+    this._databaseService,
+  );
+
   // State
   List<AgentTask> _tasks = [];
   Map<String, List<McpTool>> _externalTools = {};
@@ -80,7 +94,6 @@ class AgentService extends ChangeNotifier {
   void Function(String status)? onProgressUpdate;
 
   // Hierarchical Context Management
-  final ContextManagerService _contextManager = ContextManagerService();
   String? _currentObjective;
 
   /// User-attached notes to provide context for ALL tasks in the plan.
@@ -224,6 +237,11 @@ class AgentService extends ChangeNotifier {
   /// Checks if a new agent can be started for the given conversation.
   /// Returns true if no agent is running/paused OR if it's the same conversation.
   bool canStartNewAgent(String? conversationId) {
+    // If incoming conversation ID is null, we can't verify safety.
+    if (conversationId == null) {
+      return false;
+    }
+
     // If we have no bound activity, we can start.
     // If we bind to a new ID while idle, it's fine (bindToConversation handles the clear).
     if (!_isRunning && !_isPaused && _tasks.isEmpty) {
@@ -233,11 +251,6 @@ class AgentService extends ChangeNotifier {
     // If current bound ID is null (shouldn't happen if running), we can start.
     if (_boundConversationId == null) {
       return true;
-    }
-
-    // If incoming conversation ID is null, we can't verify safety.
-    if (conversationId == null) {
-      return false;
     }
 
     // Same conversation - can start/continue
@@ -254,27 +267,25 @@ class AgentService extends ChangeNotifier {
     stopExecution(); // This clears state and resets everything
   }
 
-  // ... (nativeTools and dbSchema definitions remain the same) ...
-
-  /// Mockable LLM generator for testing.
-  /// If provided, this is used instead of AIService.generateWithAttachments.
-  Future<String> Function(String prompt)? llmGenerator;
-
   /// Exposes _performTask for testing purposes.
   @visibleForTesting
   Future<void> performTaskForTest(AgentTask task, String globalContext) async {
     return _performTask(task, globalContext);
   }
 
+  @visibleForTesting
+  set toolExecutor(ToolExecutor? executor) => _toolExecutor = executor;
+
+  @visibleForTesting
+  set externalToolsForTest(Map<String, List<McpTool>> tools) =>
+      _externalTools = tools;
+
   /// Helper to generate LLM response using either the mock or real service.
   Future<String> _generateLlmResponse(
     String prompt, {
     required GenerationContext context,
   }) async {
-    if (llmGenerator != null) {
-      return llmGenerator!(prompt);
-    }
-    return AIService.generateWithAttachments(
+    return await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: context,
@@ -477,7 +488,7 @@ class AgentService extends ChangeNotifier {
           if (task.spawnedSubtaskIds.isNotEmpty) {
             for (final subtaskId in task.spawnedSubtaskIds) {
               final subtask = _tasks
-                  .where((t) => t.id == subtaskId)
+                  .where((s) => s.id == subtaskId)
                   .firstOrNull;
               if (subtask != null &&
                   subtask.status == AgentTaskStatus.completed) {
@@ -558,10 +569,9 @@ class AgentService extends ChangeNotifier {
             .lastOrNull;
 
         if (deliverableTask != null && deliverableTask.result != null) {
-          // Use the deliverable's result directly - this IS the user's answer
           _finalAnswer = deliverableTask.result!;
           _finalMetadata = {
-            'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+            'modelUsed': _modelSelector.currentModelConfig?.id,
             'is_agent_summary': true,
             'objective': _currentObjective,
             'deliverable_task': deliverableTask.description,
@@ -646,7 +656,7 @@ class AgentService extends ChangeNotifier {
       return '';
     }
 
-    final db = DatabaseService();
+    final db = _databaseService;
     final buffer = StringBuffer();
     buffer.writeln('## User-Provided Context Notes');
     buffer.writeln();
@@ -781,7 +791,7 @@ Respond directly to: "$objective"
     _finalAnswer = finalContent;
     // Capture metadata for the UI
     _finalMetadata = {
-      'modelUsed': ModelSelector.instance.currentModelConfig?.id,
+      'modelUsed': _modelSelector.currentModelConfig?.id,
       'is_agent_summary': true,
       'objective': _currentObjective,
     };
@@ -861,7 +871,7 @@ If no findings worth preserving, return: []
       values: {'type': 'extract_findings', 'taskId': task.id},
     );
     if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-    final response = await AIService.generateWithAttachments(
+    final response = await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: genContext,
@@ -1224,7 +1234,7 @@ Please fix and regenerate the plan.
 
         final genContext = GenerationContext(values: {'type': 'agent_plan'});
         if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-        final response = await AIService.generateWithAttachments(
+        final response = await _aiService.generateWithAttachments(
           fullPrompt,
           contextAttachments,
           generationContext: genContext,
@@ -1341,7 +1351,7 @@ Return ONLY a valid JSON list with ALL required fields:
         values: {'type': 'agent_revise_plan'},
       );
       if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-      final response = await AIService.generateWithAttachments(
+      final response = await _aiService.generateWithAttachments(
         prompt,
         [],
         generationContext: genContext,
@@ -1440,7 +1450,7 @@ Return ONLY a valid JSON list with ALL required fields:
   // Intervention Methods
 
   /// Resumes a paused task, optionally increasing its turn limit.
-  void resumeTask(String taskId, {bool increaseLimit = false}) async {
+  Future<void> resumeTask(String taskId, {bool increaseLimit = false}) async {
     // Ensure we unpause the agent globally so execution loop proceeds
     _isPaused = false;
     _currentCheckpoint = null;
@@ -2141,7 +2151,7 @@ $formatInstructions
               );
             } else {
               // Fallback: MCP-only execution (legacy behavior)
-              final endpoints = await McpService.getEndpoints();
+              final endpoints = await getIt<McpService>().getEndpoints();
               final ids = endpoints.map((e) => e.id).toList();
               result = await McpToolIntegrationService.executeToolCall(
                 serviceName: serviceName,
@@ -2355,7 +2365,7 @@ Write a focused briefing for this subtask:
 
     final genContext = GenerationContext(values: {'type': 'subtask_briefing'});
     if (_modelOverride != null) genContext.modelOverride = _modelOverride;
-    return await AIService.generateWithAttachments(
+    return await _aiService.generateWithAttachments(
       prompt,
       [],
       generationContext: genContext,

@@ -8,6 +8,7 @@ import '../models/dedup_rule.dart';
 import '../services/ai_service.dart';
 import '../widgets/tag_detail_dialog.dart';
 import '../utils/dedup_suggestion_utils.dart';
+import '../services/service_locator.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -652,7 +653,7 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       }
       final filterTags = filterTagSet.toList();
 
-      final suggestions = await AIService.suggestDedupRules(
+      final suggestions = await getIt<AIService>().suggestDedupRules(
         tagNames,
         protectedTags: filterTags,
       );
