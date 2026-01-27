@@ -37,7 +37,27 @@ class ShareService {
   );
   static bool _initialized = false;
   static bool _waitingForNavigatorFrame = false;
+  static bool _processingQueue = false;
   static bool _isPresentingShareScreen = false;
+
+  /// For testing purposes only
+  @visibleForTesting
+  static Future<String?> Function({
+    String? dialogTitle,
+    String? fileName,
+    List<String>? allowedExtensions,
+  })?
+  filePickerSaveOverride;
+
+  /// For testing purposes only
+  @visibleForTesting
+  static Future<bool> Function({
+    required Uint8List bytes,
+    String? filename,
+    Rect? bounds,
+  })?
+  printingSharePdfOverride;
+
   static final List<Map<String, dynamic>> _pendingSharedQueue =
       <Map<String, dynamic>>[];
   // navigatorKey is now imported from global_keys.dart
@@ -318,15 +338,26 @@ class ShareService {
         ], subject: 'Notes Export');
       } else {
         // Desktop
-        final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save Zip Archive',
-          fileName: zipFileName,
-          type: FileType.custom,
-          allowedExtensions: ['zip'],
-        );
+        if (filePickerSaveOverride != null) {
+          final savePath = await filePickerSaveOverride!(
+            dialogTitle: 'Save Zip Archive',
+            fileName: zipFileName,
+            allowedExtensions: ['zip'],
+          );
+          if (savePath != null) {
+            await File(zipFilePath).copy(savePath);
+          }
+        } else {
+          final savePath = await FilePicker.platform.saveFile(
+            dialogTitle: 'Save Zip Archive',
+            fileName: zipFileName,
+            type: FileType.custom,
+            allowedExtensions: ['zip'],
+          );
 
-        if (savePath != null) {
-          await File(zipFilePath).copy(savePath);
+          if (savePath != null) {
+            await File(zipFilePath).copy(savePath);
+          }
         }
       }
 
@@ -514,12 +545,21 @@ class ShareService {
           ], subject: l10n.shareDialogTitle);
         }
       } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-        final result = await FilePicker.platform.saveFile(
-          dialogTitle: l10n.selectFileLocation,
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: const ['pdf'],
-        );
+        String? result;
+        if (filePickerSaveOverride != null) {
+          result = await filePickerSaveOverride!(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            allowedExtensions: ['pdf'],
+          );
+        } else {
+          result = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: const ['pdf'],
+          );
+        }
 
         if (result != null) {
           final destination = File(result);
