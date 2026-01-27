@@ -72,6 +72,14 @@ void main() {
     );
   }
 
+  group('UserAppService factory', () {
+    test('instance() returns registered service from GetIt', () {
+      getIt.registerSingleton<UserAppService>(service);
+      final instance = UserAppService.instance();
+      expect(instance, equals(service));
+    });
+  });
+
   group('UserAppService CRUD operations', () {
     test('getAllUserApps returns empty list when no apps exist', () async {
       when(mockDb.getAllUserApps()).thenAnswer((_) async => []);
@@ -135,6 +143,16 @@ void main() {
       verify(mockDb.updateUserApp(testApp)).called(1);
     });
 
+    test('updateUserApp rethrows database errors', () async {
+      final testApp = createTestApp();
+      when(mockDb.updateUserApp(any)).thenThrow(Exception('Update failed'));
+
+      expect(
+        () => service.updateUserApp(testApp),
+        throwsA(isA<Exception>()),
+      );
+    });
+
     test('deleteUserApp calls database delete', () async {
       const appId = 'test-app-1';
       when(mockDb.deleteUserApp(any)).thenAnswer((_) async {});
@@ -142,6 +160,15 @@ void main() {
       await service.deleteUserApp(appId);
 
       verify(mockDb.deleteUserApp(appId)).called(1);
+    });
+
+    test('deleteUserApp rethrows database errors', () async {
+      when(mockDb.deleteUserApp(any)).thenThrow(Exception('Delete failed'));
+
+      expect(
+        () => service.deleteUserApp('test-app-1'),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 
@@ -276,6 +303,24 @@ void main() {
       ))).called(1);
     });
 
+    test('setSelectedRevision does nothing when app not found', () async {
+      when(mockDb.getUserApp(any)).thenAnswer((_) async => null);
+
+      await service.setSelectedRevision('non-existent', 'rev-1');
+
+      verify(mockDb.getUserApp('non-existent')).called(1);
+      verifyNever(mockDb.updateUserApp(any));
+    });
+
+    test('setSelectedRevision rethrows database errors', () async {
+      when(mockDb.getUserApp(any)).thenThrow(Exception('Database error'));
+
+      expect(
+        () => service.setSelectedRevision('test-app-1', 'rev-1'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
     test('createInitialRevision creates revision with code', () async {
       final testApp = createTestApp();
       when(mockDb.getUserApp(any)).thenAnswer((_) async => testApp);
@@ -375,6 +420,40 @@ The app uses basic HTML structure.
 
         expect(result['code'], isEmpty);
         expect(result['explanation'], equals('This is just plain text without any code blocks.'));
+      });
+
+      test('extracts code from generic code blocks without html tag', () {
+        const response = '''
+Here is your code:
+
+```
+<!DOCTYPE html>
+<html><body>Generic Code Block</body></html>
+```
+
+This uses a generic code block.
+''';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], contains('Generic Code Block'));
+        expect(result['explanation'], contains('Here is your code'));
+        expect(result['explanation'], contains('generic code block'));
+      });
+
+      test('handles empty response', () {
+        const response = '';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], isEmpty);
+        expect(result['explanation'], isEmpty);
+      });
+
+      test('handles whitespace-only response', () {
+        const response = '   \n\n   ';
+        final result = UserAppService.parseAIResponse(response);
+
+        expect(result['code'], isEmpty);
+        expect(result['explanation'], isEmpty);
       });
     });
 

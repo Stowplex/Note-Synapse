@@ -289,6 +289,46 @@ void main() {
       final cache = await service.getCachedTools(endpoint.id);
       expect(cache, isNull);
     });
+
+    test('getCachedTools returns cached tools when cache exists', () async {
+      // Set up SharedPreferences with cached tools data
+      final cacheJson = '''
+{
+  "endpointId": "cached-endpoint-id",
+  "tools": [
+    {"name": "tool1", "description": "First tool"},
+    {"name": "tool2", "description": "Second tool", "inputSchema": {"type": "object"}}
+  ],
+  "fetchedAt": "2024-01-15T10:00:00.000Z"
+}
+''';
+      SharedPreferences.setMockInitialValues({
+        'mcp_tools_cache_cached-endpoint-id': cacheJson,
+      });
+
+      // Create a fresh service instance to pick up the new SharedPreferences values
+      final freshService = McpService.createForTesting(mockStorage);
+
+      final cache = await freshService.getCachedTools('cached-endpoint-id');
+
+      expect(cache, isNotNull);
+      expect(cache!.endpointId, equals('cached-endpoint-id'));
+      expect(cache.tools.length, equals(2));
+      expect(cache.tools[0].name, equals('tool1'));
+      expect(cache.tools[1].name, equals('tool2'));
+      expect(cache.tools[1].inputSchema, isNotNull);
+    });
+
+    test('getCachedTools returns null on invalid JSON', () async {
+      SharedPreferences.setMockInitialValues({
+        'mcp_tools_cache_invalid-endpoint': 'not valid json {{{',
+      });
+
+      final freshService = McpService.createForTesting(mockStorage);
+
+      final cache = await freshService.getCachedTools('invalid-endpoint');
+      expect(cache, isNull);
+    });
   });
 
   group('McpService transport types', () {
