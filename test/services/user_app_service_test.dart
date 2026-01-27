@@ -465,4 +465,173 @@ Here is your updated app:
       verify(mockDb.updateUserApp(any)).called(1);
     });
   });
+
+  group('UserAppService saveManualCodeEdit', () {
+    test('saveManualCodeEdit creates revision with manual edit prompt', () async {
+      final testApp = createTestApp();
+      when(mockDb.getNextRevisionNumber(any)).thenAnswer((_) async => 2);
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.getAppRevision(any)).thenAnswer((_) async => null);
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.saveManualCodeEdit(
+        originalApp: testApp,
+        newCode: '<html><body>Manually edited</body></html>',
+      );
+
+      expect(result.appId, equals(testApp.id));
+      expect(result.revisionNumber, equals(2));
+      expect(result.userPrompt, equals('Manual code edit'));
+      expect(result.appCode, contains('Manually edited'));
+      verify(mockDb.getNextRevisionNumber(testApp.id)).called(1);
+      verify(mockDb.insertAppRevision(any)).called(1);
+      verify(mockDb.updateUserApp(any)).called(1);
+    });
+
+    test('saveManualCodeEdit copies dependencies from current revision', () async {
+      final testApp = createTestApp().copyWith(selectedRevisionId: 'current-rev');
+      final currentRevision = createTestRevision(
+        id: 'current-rev',
+        revisionNumber: 1,
+      );
+      when(mockDb.getNextRevisionNumber(any)).thenAnswer((_) async => 2);
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.getAppRevision('current-rev'))
+          .thenAnswer((_) async => currentRevision);
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.saveManualCodeEdit(
+        originalApp: testApp,
+        newCode: '<html><body>Updated</body></html>',
+      );
+
+      expect(result.revisionNumber, equals(2));
+      verify(mockDb.getAppRevision('current-rev')).called(1);
+    });
+
+    test('saveManualCodeEdit includes attachment paths', () async {
+      final testApp = createTestApp();
+      when(mockDb.getNextRevisionNumber(any)).thenAnswer((_) async => 1);
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.getAppRevision(any)).thenAnswer((_) async => null);
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.saveManualCodeEdit(
+        originalApp: testApp,
+        newCode: '<html></html>',
+        attachmentPaths: ['/path/to/file.png'],
+      );
+
+      expect(result.attachmentPaths, contains('/path/to/file.png'));
+    });
+
+    test('saveManualCodeEdit rethrows database errors', () async {
+      final testApp = createTestApp();
+      when(mockDb.getNextRevisionNumber(any))
+          .thenThrow(Exception('Database error'));
+
+      expect(
+        () => service.saveManualCodeEdit(
+          originalApp: testApp,
+          newCode: '<html></html>',
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  group('UserAppService cloneUserApp', () {
+    test('cloneUserApp creates new app with Copy suffix', () async {
+      final selectedRevision = createTestRevision(
+        id: 'selected-rev-1',
+        appId: 'test-app-1',
+        revisionNumber: 1,
+        appCode: '<html><body>Original Code</body></html>',
+      );
+      final testApp = createTestApp(
+        name: 'My App',
+      ).copyWith(selectedRevisionId: 'selected-rev-1');
+
+      when(mockDb.getAppRevision('selected-rev-1'))
+          .thenAnswer((_) async => selectedRevision);
+      when(mockDb.insertUserApp(any)).thenAnswer((_) async => 'new-app-id');
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.cloneUserApp(testApp);
+
+      expect(result.name, equals('My App (Copy)'));
+      expect(result.selectedRevisionId, isNotNull);
+      verify(mockDb.insertUserApp(any)).called(1);
+      verify(mockDb.insertAppRevision(any)).called(1);
+      verify(mockDb.updateUserApp(any)).called(1);
+    });
+
+    test('cloneUserApp preserves app properties', () async {
+      final selectedRevision = createTestRevision(
+        id: 'selected-rev-1',
+        appCode: '<html></html>',
+      );
+      final testApp = createTestApp(
+        name: 'Test App',
+        description: 'A description',
+      ).copyWith(
+        selectedRevisionId: 'selected-rev-1',
+        steps: ['Step 1', 'Step 2'],
+      );
+
+      when(mockDb.getAppRevision('selected-rev-1'))
+          .thenAnswer((_) async => selectedRevision);
+      when(mockDb.insertUserApp(any)).thenAnswer((_) async => 'new-app-id');
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      final result = await service.cloneUserApp(testApp);
+
+      expect(result.description, equals('A description'));
+      verify(mockDb.insertUserApp(argThat(
+        predicate<UserApp>((app) =>
+            app.description == 'A description' &&
+            app.name == 'Test App (Copy)'),
+      ))).called(1);
+    });
+
+    test('cloneUserApp throws if no selected revision', () async {
+      final testApp = createTestApp().copyWith(selectedRevisionId: 'missing-rev');
+      when(mockDb.getAppRevision('missing-rev')).thenAnswer((_) async => null);
+
+      expect(
+        () => service.cloneUserApp(testApp),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('No selected revision found'),
+        )),
+      );
+    });
+
+    test('cloneUserApp creates new revision from selected revision code', () async {
+      final selectedRevision = createTestRevision(
+        id: 'selected-rev-1',
+        appCode: '<html><body>Cloned Code</body></html>',
+        attachmentPaths: ['/path/to/attachment.jpg'],
+      );
+      final testApp = createTestApp().copyWith(selectedRevisionId: 'selected-rev-1');
+
+      when(mockDb.getAppRevision('selected-rev-1'))
+          .thenAnswer((_) async => selectedRevision);
+      when(mockDb.insertUserApp(any)).thenAnswer((_) async => 'new-app-id');
+      when(mockDb.insertAppRevision(any)).thenAnswer((_) async => 'new-rev-id');
+      when(mockDb.updateUserApp(any)).thenAnswer((_) async {});
+
+      await service.cloneUserApp(testApp);
+
+      verify(mockDb.insertAppRevision(argThat(
+        predicate<AppRevision>((rev) =>
+            rev.appCode == '<html><body>Cloned Code</body></html>' &&
+            rev.revisionNumber == 1 &&
+            rev.userPrompt.contains('Cloned from')),
+      ))).called(1);
+    });
+  });
 }
