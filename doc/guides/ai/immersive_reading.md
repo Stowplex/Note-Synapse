@@ -37,6 +37,22 @@ You are reading a critical formula `H(t) |ψ(t)>` and need an explanation.
 4.  **Result**: The AI analyzes the *pixels* inside your circle to understand symbols that normal text extraction misses.
 
 
+## The Scratchpad
+### Problem
+You are reading and have a flash of insight, or need to jot down key terms, but you don't want to leave the reading view or start a full chat session.
+
+### Solution
+The Scratchpad is a temporary buffer that sits "between" your reading and your permanent note.
+
+1.  **Toggle**: Tap the **Note Icon** inside the AI Panel (near the input bar) to switch from "Chat Mode" to "Scratchpad Mode".
+    *   *Indicator*: The input bar hint changes to "Send to scratchpad".
+2.  **Capture**: Type notes, copy-paste snippets from the PDF, or even scribble with the pen.
+3.  **Use It**:
+    *   **Context for AI**: Check the box **"Include scratchpad in chat context"**. Now, when you switch back to Chat, the AI knows everything you just jotted down.
+    *   **Save to Note**: Tap **"Add to Note"** to append your scratchpad items permanently to the underlying note.
+
+> **Screenshot Placeholder:** [Image of the AI Panel in 'Scratchpad Mode', showing a list of bullet points and the 'Include in Chat' checkbox.]
+
 ## Hands-On: Limiting Context Scope
 ### Problem
 You are asking the AI to summarize Chapter 5, but it keeps hallucinating facts from Chapter 1.
