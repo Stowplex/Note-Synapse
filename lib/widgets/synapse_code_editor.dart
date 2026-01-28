@@ -259,6 +259,35 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                       onPressed: _paste,
                       tooltip: 'Paste',
                     ),
+                    ListenableBuilder(
+                      listenable: widget.controller,
+                      builder: (context, child) {
+                        final hasSelection =
+                            !widget.controller.selection.isCollapsed;
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (hasSelection) ...[
+                              IconButton(
+                                icon: const Icon(Icons.content_cut, size: 20),
+                                onPressed: _cutSelectedText,
+                                tooltip: 'Cut',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.copy, size: 20),
+                                onPressed: _copySelectedText,
+                                tooltip: 'Copy',
+                              ),
+                            ],
+                            IconButton(
+                              icon: const Icon(Icons.select_all, size: 20),
+                              onPressed: _selectAll,
+                              tooltip: 'Select All',
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                     IconButton(
                       icon: Icon(
                         _isSearchVisible ? Icons.search_off : Icons.search,
@@ -269,9 +298,7 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                     ),
                     IconButton(
                       icon: Icon(
-                        _isArrowsVisible
-                            ? Icons.unfold_less
-                            : Icons.open_with,
+                        _isArrowsVisible ? Icons.unfold_less : Icons.open_with,
                         size: 20,
                         color: _isArrowsVisible
                             ? theme.colorScheme.primary
@@ -282,9 +309,7 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                           _isArrowsVisible = !_isArrowsVisible;
                         });
                       },
-                      tooltip: _isArrowsVisible
-                          ? 'Hide Arrows'
-                          : 'Show Arrows',
+                      tooltip: _isArrowsVisible ? 'Hide Arrows' : 'Show Arrows',
                     ),
                     if (widget.actions != null &&
                         widget.actions!.isNotEmpty) ...[
@@ -327,7 +352,7 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                       allLanguages.containsKey(widget.language)) {
                     codeTheme = CodeHighlightTheme(
                       languages: {
-                        widget.language!: allLanguages[widget.language]!
+                        widget.language!: allLanguages[widget.language]!,
                       },
                       theme: style,
                     );
