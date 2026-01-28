@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
@@ -44,6 +45,8 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
   bool _isArrowsVisible = false;
   bool _isSelectionMode = false;
 
+  late final ValueNotifier<bool> _hasSelectionNotifier;
+
   @override
   void initState() {
     super.initState();
@@ -52,17 +55,42 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
       builder: _buildMobileToolbar,
     );
     _isSearchVisible = false;
+    _hasSelectionNotifier = ValueNotifier(
+      !widget.controller.selection.isCollapsed,
+    );
+    widget.controller.addListener(_onCodeControllerChanged);
   }
 
   @override
   void didUpdateWidget(SynapseCodeEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller.removeListener(_onCodeControllerChanged);
+      widget.controller.addListener(_onCodeControllerChanged);
+      _onCodeControllerChanged();
+    }
   }
 
   @override
   void dispose() {
     _findController.dispose();
+    widget.controller.removeListener(_onCodeControllerChanged);
+    _hasSelectionNotifier.dispose();
     super.dispose();
+  }
+
+  void _onCodeControllerChanged() {
+    final hasSelection = !widget.controller.selection.isCollapsed;
+    if (hasSelection != _hasSelectionNotifier.value) {
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _hasSelectionNotifier.value = hasSelection;
+        });
+      } else {
+        if (mounted) _hasSelectionNotifier.value = hasSelection;
+      }
+    }
   }
 
   void _toggleSearch() {
@@ -259,11 +287,9 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                       onPressed: _paste,
                       tooltip: 'Paste',
                     ),
-                    ListenableBuilder(
-                      listenable: widget.controller,
-                      builder: (context, child) {
-                        final hasSelection =
-                            !widget.controller.selection.isCollapsed;
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _hasSelectionNotifier,
+                      builder: (context, hasSelection, child) {
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
