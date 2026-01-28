@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #333; }
+        .card { background: #f5f5f7; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        input { padding: 10px; border-radius: 8px; border: 1px solid #ccc; width: 200px; }
+        button { padding: 10px 20px; border-radius: 8px; border: none; background: #007aff; color: white; cursor: pointer; }
+        button:hover { background: #0062cc; }
+        #result { margin-top: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Weather Check</h1>
+        <p>Demonstrates <code>window.Synapse.proxyFetch</code> to bypass CORS.</p>
+        <input type="text" id="city" placeholder="Enter city name (e.g. London)">
+        <button onclick="getWeather()">Check</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function getWeather() {
+            const city = document.getElementById('city').value;
+            if (!city) return;
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = "Loading...";
+
+            try {
+                // calls Open-Meteo API (no key required for demo)
+                const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+                
+                // Using proxyFetch to ensure we can hit any external API
+                const geoResponse = await window.Synapse.proxyFetch(url);
+                const geoData = JSON.parse(geoResponse);
+
+                if (!geoData.results || geoData.results.length === 0) {
+                    resultDiv.textContent = "City not found.";
+                    return;
+                }
+
+                const { latitude, longitude, name, country } = geoData.results[0];
+
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+                const weatherResponse = await window.Synapse.proxyFetch(weatherUrl);
+                const weatherData = JSON.parse(weatherResponse);
+
+                const temp = weatherData.current_weather.temperature;
+                resultDiv.innerHTML = `<strong>${name}, ${country}</strong>: ${temp}°C`;
+
+            } catch (e) {
+                resultDiv.textContent = "Error: " + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
