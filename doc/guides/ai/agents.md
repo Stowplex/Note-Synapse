@@ -1,26 +1,77 @@
-# Hands-On: Agentic Research
+# Agentic Mode: Your Autonomous Partner
 
-Turn Note Synapse into a background worker.
+Agentic Mode turns Note Synapse from a chatbot into an active problem solver. Instead of just answering with text, it can plan, use tools, create files, and execute multi-step workflows to achieve your goals.
 
-## The "Research Agent" Workflow
-### Problem
-You want to know "How does Note Synapse handle dependency injection?" but you don't want to search through 50 files yourself.
+## How to Enter Agentic Mode
+Unlike standard chat tools, Agentic Mode requires **explicit activation** to engage the Planner.
 
-### Walkthrough
-1.  **Start Agent Mode**: Toggle the toggle switch from "Chat" to "Agent".
-2.  **Define Objective**: Type: *"Analyze the codebase and explain the Service Locator pattern usage."*
-3.  **Attach Context**:
-    -   Tap the **Paperclip**.
-    -   Add `lib/services/service_locator.dart`.
-    -   *Tip*: Giving the agent a starting point helps it run faster.
-4.  **Run**: Tap Send.
-5.  **Multi-Tasking**:
-    -   **Android Users**: You can minimize the app. A "Foreground Service" notification will appear ("Synapse Agent is Thinking...").
-    -   Go check your email. The agent will continue reading files and reasoning in the background.
+1.  Open a Conversation.
+2.  Expand the **Tools Panel** (Puzzle piece icon `extension`).
+3.  **Check the "Agent" box** (Icon: `psychology`, Purple).
+4.  Send your request (e.g., "Research the best noise-canceling headphones and create a comparison table note").
 
-## Reviewing the Plan
-1.  Before executing, the Agent will propose a **Plan** (e.g., "1. List files, 2. Read File A, 3. Read File B").
-2.  **Edit the Plan**: You can delete steps that seem irrelevant (e.g., "Don't read `main.dart`, I know that's not it").
-3.  **Approve**: Tap "Execute" to start the background work.
+### The Planner Workflow
+Once the Agent tool is active, the next message you send will trigger the **Planner Step**:
 
-> **Screenshot Placeholder:** [Image of the Agent Plan Review screen, showing a list of proposed tasks with generic checkboxes.]
+1.  **Request**: You send a complex goal.
+2.  **Planning**: The AI analyzes your request and tools, then generates a **Plan** (a series of proposed steps).
+3.  **Review (Planner Widget)**: You see the proposed plan in the chat. You can:
+    *   **Edit**: Modify steps if the agent misunderstood.
+    *   **Approve**: Click "Start" to begin execution.
+    *   **Reject**: Cancel or ask for a revision.
+4.  **Execution**: The agent executes tasks one by one, updating you on progress.
+
+## Types of Tools
+The planner can use three types of tools to accomplish tasks:
+
+1.  **Built-in Tools**: Native capabilities of Note Synapse.
+    *   *Examples*: Search Notes, Read Note, Create/Modify Note, SQL Query.
+    *   *Agent Tool*: The planner itself is technically a built-in tool!
+2.  **MCP Tools**: External tools provided by **Model Context Protocol** servers.
+    *   *Examples*: Google Drive, Slack, GitHub, Filesystem access.
+    *   *Setup*: specific in `Settings -> AI Settings -> MCP Servers`.
+3.  **Local Tools (AI Apps)**: Custom tools created by **You** within Note Synapse.
+    *   *Examples*: A specific "Customer Data Lookup" script or a "Daily Log Generator".
+    *   *Creation*: Create a User App with type `AI Tool`.
+
+
+> [!TIP]
+> **Pro Tip: Turn your Agent into a Power Intern**
+> Empower the LLM with a web-search centric MCP like **Exa.ai**, **Jina**, or **SerpApi**.
+> These tools allow the agent to perform broad internet research, read results, and synthesize answers far better than standard "browsing" tools, effectively turning it into a dedicated researcher.
+
+## Attaching Skills & Instructions
+You can "teach" the agent how to behave or give it specific domain knowledge by attaching **Notes**.
+
+1.  **Global Context (Available All Time)**:
+    *   Attach notes via the **Note Icon** (`library_books`) in the top bar.
+    *   These notes are visible to the planner throughout the entire conversation, used for high-level instructions (e.g., "Standard Operating Procedure: Bug Reports").
+2.  **Local Step Context (Task Specific)**:
+    *   Attach notes directly to a specific **Plan Step** in the Planner Widget.
+    *   These notes are visible *only* to the agent executing that specific step. This gives you precise control, preventing context pollution for other steps.
+
+## Background Execution
+Agentic tasks can take time. You don't need to keep the app open.
+
+*   **Android**: The agent runs in a **Foreground Service**. You will see a notification in your status bar showing the current subtask. You can switch apps or lock your phone.
+*   **iOS**: Due to OS limitations, the agent must stay in the foreground. Note Synapse prevents screen sleep while the agent is working.
+
+## Configuring the Planner (Settings)
+Go to **Settings -> AI Settings -> Agentic Settings** to tune the planner's brain.
+
+### 1. Performance vs. Depth
+*   **Max Subtask Depth** (Default: 2): Controls how "deep" the recursion goes.
+    *   `0`: Linear tasks only.
+    *   `2`: Standard. Can break tasks into subtasks.
+    *   `5`: Maximum complexity.
+*   **Max Turns** (Default: 10): Maximum steps per task loop.
+
+### 2. Token Optimization (Critical)
+Manage the trade-off between "Context Window" (Memory) and "TPM" (Rate Limits).
+
+> [!IMPORTANT]
+> **Context Window vs. Rate Limits (TPM)**
+> Models have **Tokens Per Minute (TPM)** limits. Sending full history every step can hit these limits instantly, even if the model supports a 1M token context window.
+
+*   **Compaction Threshold**: The "Safety Valve" for TPM. When history exceeds this, old steps are zipped into a summary. Lower this if hitting rate limits.
+*   **TOC Inline Threshold**: Controls **Context Pruning**. Large tool outputs are collapsed into a Table of Contents to save tokens. The agent reads specific sections only if needed.
