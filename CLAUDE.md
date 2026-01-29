@@ -140,3 +140,6 @@ Both steps are required - the implementation enables the functionality, and the 
 ## Code Style
 
 Before implementing features, search the codebase for similar functionality to avoid duplication. Refactor shared code when appropriate.
+
+## Planning
+Your plan files should be stored in project's .claude/plans folder.
