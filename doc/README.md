@@ -1,9 +1,10 @@
 # Note Synapse Documentation
 
-The **Hands-On** Manual for Power Users.
+Hands-On Manual for Power Users.
 
 ## ✍️ Editor & Writing
 -   **[Block-Based Editing](guides/editor/block_editing.md)**: The "hidden" drag gesture, reordering, and block types.
+-   **[Note Editing](guides/editor/note_editing.md)**: Using the note editor.
 
 ## 🗂 Organization
 -   **[Tag Algebra](guides/organize/tag_algebra.md)**: Creating virtual folder hierarchies (`Tag A` + `Tag B`).
