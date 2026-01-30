@@ -1,28 +1,30 @@
-# Hands-On: Block-Based Editing
+# Block-Based Editing
 
-Note Synapse treats every paragraph, header, and list item as a separate "block". This gives you power features usually found in tools like Notion.
+Note Synapse treats your markdown as a series of logical "Blocks" (paragraphs, headers, code blocks, lists). This allows for powerful batch operations without needing precise text cursor placement.
 
-## The "Hidden" Drag Gesture
-### Problem
-You want to reorder a paragraph or convert it to a different type, but you don't see any handles.
+## The Interaction Model
+Unlike standard text editors where you drag to select characters, Synapse's block mode allows you to grab entire chunks of content.
 
-### Solution
-The "Edit" icon (Pen) in the top-right is actually a **Draggable Tool**.
+### 1. Initiating Block Mode (The "Pen Drop")
+To start block editing, you **drag the edit button** itself.
+*   **Gesture**: Long-press the **Edit Button** (pencil icon) in the top-right toolbar.
+*   **Action**: Drag the floating icon and drop it onto any paragraph or element in your note.
+*   **Visual**: The target block will highlight, and the floating **Action Menu** will appear.
 
-### Walkthrough
-1.  Open any note in **Viewing Mode** (not editing text).
-2.  **Long Press** the ✏️ (Pen) icon in the top toolbar.
-3.  **Drag** it onto any block of text in your note.
-4.  **Drop** it.
-5.  A menu will appear allowing you to:
-    -   **Edit** just that block.
-    -   **Delete** the block.
-    -   **Reorder** (if multiple blocks selected).
-    -   **Convert** (e.g., Text -> Checkbox).
+> ![Screenshot: User dragging the pencil icon from the toolbar onto a paragraph text block](placeholder_images/block_drag_initiation.png)
 
-> **Screenshot Placeholder:** [Image showing the Pen icon being dragged from the app bar, with a ghost icon floating over a paragraph, highlighting the drop target.]
+### 2. Expanding Selection
+Note Synapse uses a precision menu for expanding selections.
+*   **Action**: Tap the **Up (`^`)** or **Down (`v`)** chevron arrows on the Block Menu.
+*   **Result**: The selection highlight grows to include adjacent blocks.
 
-## Reordering Blocks
-1.  Once you select a block (via the Pen Drop method), you enter **Block Selection Mode**.
-2.  Tap other blocks to add them to the selection.
-3.  Use the **Up/Down arrows** in the floating menu to move the entire selection.
+> ![Screenshot: The Block Action Menu showing the chevron, edit, and delete buttons](placeholder_images/block_menu_actions.png)
+
+## The Block Menu
+Once blocks are selected, you can perform batch operations on them:
+
+### Actions
+*   **Edit Groups**: Tapping the **Edit** (pencil) icon opens a focused editor containing *only* the selected blocks. This is perfect for rewriting a specific section without distractions.
+*   **Batch Delete**: Tapping **Delete** (trash can) removes all selected blocks at once.
+
+> ![Screenshot: The focused editor view showing only the selected blocks](placeholder_images/block_focused_editor.png)
