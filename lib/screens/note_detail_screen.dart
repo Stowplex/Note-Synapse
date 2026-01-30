@@ -1329,12 +1329,37 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               controller: _codeController,
               focusNode: _codeFocusNode,
               onPickImage: () => _showImagePicker(context),
+              onPickNoteLink: () => _showNoteLinkPicker(context),
               language: 'markdown',
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _showNoteLinkPicker(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => _NoteLinkPickerDialog(
+        existingLinkedNotes: _linkedNotes,
+        onLinkNote: (newNote) async {
+          await _addRelationship(newNote.id);
+        },
+      ),
+    );
+
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _addRelationship(String otherNoteId) async {
+    final appProvider = context.read<AppProvider>();
+    await appProvider.createNoteRelationships(widget.note.id, [
+      otherNoteId,
+    ], 'references');
+    await _loadRelationships();
   }
 
   void _handleToolbarImageAdded(String imagePath) async {
@@ -4809,6 +4834,169 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
                   });
                 },
           child: const Text('OK'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoteLinkPickerDialog extends StatefulWidget {
+  final List<Note> existingLinkedNotes;
+  final Future<void> Function(Note newNote) onLinkNote;
+
+  const _NoteLinkPickerDialog({
+    required this.existingLinkedNotes,
+    required this.onLinkNote,
+  });
+
+  @override
+  State<_NoteLinkPickerDialog> createState() => _NoteLinkPickerDialogState();
+}
+
+class _NoteLinkPickerDialogState extends State<_NoteLinkPickerDialog> {
+  Note? _selectedNote;
+  final TextEditingController _linkTextController = TextEditingController();
+
+  @override
+  void dispose() {
+    _linkTextController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickNewNote() async {
+    await showDialog(
+      context: context,
+      builder: (context) => NoteSelectionDialog(
+        title: 'Select Note to Link',
+        singleSelection: true,
+        onNotesSelected: (notes) async {
+          if (notes.isNotEmpty) {
+            Navigator.of(context).pop();
+            final note = notes.first;
+            // Link the note if not already linked
+            if (!widget.existingLinkedNotes.any((n) => n.id == note.id)) {
+              await widget.onLinkNote(note);
+            }
+            setState(() {
+              _selectedNote = note;
+              _linkTextController.text = note.title.length > 50
+                  ? '${note.title.substring(0, 50)}...'
+                  : note.title;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
+    // Combine existing linked notes and the newly selected one if it's new
+    final notesToShow = [...widget.existingLinkedNotes];
+    if (_selectedNote != null &&
+        !notesToShow.any((n) => n.id == _selectedNote!.id)) {
+      notesToShow.insert(0, _selectedNote!);
+    }
+
+    return AlertDialog(
+      title: const Text('Insert Note Link'),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.8,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (notesToShow.isNotEmpty) ...[
+              Text('Linked Notes', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: notesToShow.length,
+                  itemBuilder: (context, index) {
+                    final note = notesToShow[index];
+                    final isSelected = _selectedNote?.id == note.id;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedNote = note;
+                          _linkTextController.text = note.title.length > 50
+                              ? '${note.title.substring(0, 50)}...'
+                              : note.title;
+                        });
+                      },
+                      child: Container(
+                        width: 100,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceVariant,
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              note.title,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            TextField(
+              controller: _linkTextController,
+              decoration: const InputDecoration(
+                labelText: 'Link Text',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _pickNewNote,
+                icon: const Icon(Icons.search),
+                label: const Text('Pick Note'),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: _selectedNote == null
+              ? null
+              : () {
+                  final text = _linkTextController.text.isEmpty
+                      ? _selectedNote!.title
+                      : _linkTextController.text;
+                  final markdown =
+                      '[$text](synapseresource://note/${_selectedNote!.id})';
+                  Navigator.of(context).pop(markdown);
+                },
+          child: const Text('Insert'),
         ),
       ],
     );

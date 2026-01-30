@@ -8,6 +8,7 @@ class SynapseNoteEditor extends StatefulWidget {
   final CodeLineEditingController controller;
   final FocusNode? focusNode;
   final VoidCallback? onPickImage;
+  final VoidCallback? onPickNoteLink;
   final String? language;
 
   const SynapseNoteEditor({
@@ -15,6 +16,7 @@ class SynapseNoteEditor extends StatefulWidget {
     required this.controller,
     this.focusNode,
     this.onPickImage,
+    this.onPickNoteLink,
     this.language,
   });
 
@@ -51,7 +53,7 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
         IconButton(
           icon: const Icon(Icons.code, size: 20),
           onPressed: _toggleInlineCode,
-          tooltip: l10n.addLink,
+          tooltip: 'Inline Code',
         ),
         IconButton(
           icon: const Icon(Icons.data_object, size: 20),
@@ -97,6 +99,12 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
             icon: const Icon(Icons.image, size: 20),
             onPressed: widget.onPickImage,
             tooltip: 'Image',
+          ),
+        if (widget.onPickNoteLink != null)
+          IconButton(
+            icon: const Icon(Icons.note_add, size: 20),
+            onPressed: widget.onPickNoteLink,
+            tooltip: l10n.addLink,
           ),
       ],
     );
