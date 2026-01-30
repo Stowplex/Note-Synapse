@@ -1,22 +1,52 @@
-# Hands-On: Calendar & Time Blocking
+# Calendar & Task Management
 
-Stop managing tasks in a list. Manage them in *time*.
+The Calendar Screen in Note Synapse is more than just a date picker; it's a fully interactive task planner designed for rapid scheduling and adjustment.
 
-## Drag & Drop Rescheduling
-### Problem
-You have 5 tasks due today and you know you can't do them all. Changing the due date on each one via a dropdown menu is slow.
+## Core Interactions
 
-### Walkthrough
-1.  Open the **Calendar View** (Calendar icon).
-2.  You will see your tasks as blocks on the timeline.
-3.  **Long Press** on a task block.
-4.  **Drag** it to tomorrow, or next week.
-5.  **Drop**. The due date is instantly updated.
+### 1. Drag & Drop Rescheduling
+You can quickly move tasks between days without opening any menus.
+*   **Action**: Long-press any task in the bottom list.
+*   **Move**: Drag it onto any date in the calendar grid.
+*   **Result**: The task is instantly rescheduled to that date.
+    *   *Visual Cue*: The target date highlights in **Blue**.
+    *   *Source Cue*: The original date highlights in **Purple**.
 
-> **Screenshot Placeholder:** [Image of the Calendar view, showing a task being dragged from 'Today' to 'Tomorrow'.]
+### 2. Multi-Day Task Sizing (Two-Finger Gesture)
+Adjust the duration of a task while you are dragging it.
+*   **Action**: While dragging a task with one finger...
+*   **Resize**: Use a **second finger** to pinch (shrink) or spread (expand) anywhere on the screen.
+*   **Result**: The "ghost" of the task will grow to cover multiple days (e.g., 3 days). Dropping it will set the task to start on the target date and last for the new duration.
 
-## The Timeline View (GTD)
-1.  Switch to **Timeline View** (List icon).
-2.  This shows a linear stream of *all* tasks across *all* notes.
-3.  **Filter**: Tap the Funnel icon to show only "High Priority" tasks.
-4.  **Check off**: Tap the circle to complete. It updates the original note instantly.
+## Task Management
+The screen is split into two views:
+1.  **Calendar Grid/Timeline**: Top half for navigation.
+2.  **Daily Content**: Bottom half tabs for **Tasks** and **Notes** associated with the selected day.
+
+### Creating Tasks
+*   **New Task**: Tap the **+ New Task** button (or `+` icon) next to the date header.
+*   **Defaults**: Tasks created this way are automatically scheduled for the currently selected date.
+
+### Task States
+Tap the status icon or the dropdown menu on any task card to change its state:
+*   `[ ]` **To Do**: Active pending tasks.
+*   `[>]` **In Progress**: Tasks you are currently working on.
+*   `[x]` **Completed**: Done.
+*   `[!]` **Cancelled/Abandoned**: No longer needed.
+
+## Organization & Filters
+
+### Tag Filtering
+Use the filter bar at the top to focus on specific domains (e.g., "Work", "Personal", "Project X").
+*   **Single Select**: Tap a tag to filter the calendar heatmap and the task list.
+*   **Multi-Select**: Use the filter icon to select multiple combination of tags.
+
+### Heatmap Logic
+The colored dots under each date show the density of tasks:
+*   **Red**: Pending / To Do
+*   **Amber**: In Progress
+*   **Green**: Completed
+*   **Grey**: Cancelled
+
+> [!TIP]
+> **Timeline View**: Switch to "Timeline" view using the view icon (top right) to see a vertical scrollable list of all upcoming tasks, great for long-term planning without month-switching.
