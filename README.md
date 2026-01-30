@@ -53,7 +53,7 @@ LLMs hallucinate. Don't let a bad turn ruin a good chat.
 
 ### Build from Source
 ```bash
-git clone https://github.com/active-stack/Note-Synapse.git
+git clone https://github.com/kkspeed/Note-Synapse.git
 cd Note-Synapse
 flutter pub get
 flutter run

@@ -8,6 +8,7 @@ Hands-On Manual for Power Users.
 
 ## 🗂 Organization
 -   **[Tag Algebra](guides/organize/tag_algebra.md)**: Creating virtual folder hierarchies (`Tag A` + `Tag B`).
+-   **[Tag Manager & Dedup](guides/organize/tag_manager.md)**: Bulk delete and Merge tags (Manual & AI).
 
 ## 🧠 AI & Thinking
 -   **[Tree Conversations](guides/ai/tree_conversations.md)**: "Git for Chat", forking timelines, and pruning context.

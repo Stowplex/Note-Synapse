@@ -1,41 +1,31 @@
-# Hands-On: Web Clipper & API Vibe Coding
+# Web Clipper
 
-Stop copy-pasting. Start clipping.
+The Web Clipper allows you to save content from your browser or other apps directly into Note Synapse. It supports intelligent extraction, readability enhancement, and file handling.
 
-## The "Readability" Toggle
-### Problem
-You want to read a long article in Note Synapse, but the "Raw" view is full of ads, popups, and broken layout scripts.
+## How to Clip
+1.  **Share**: In your browser (e.g., Chrome, Safari), tap the **Share** button.
+2.  **Select Synapse**: Choose **Note Synapse** from the list of apps.
+3.  **Choose Mode**: The clipper will analyze the content and offer the best saving method.
 
-### Walkthrough
-1.  **Open Browser**: Go to any article (e.g., a Hacker News link).
-2.  **Share**: Tap the system **Share** button -> **Note Synapse**.
-3.  **The Switch**:
-    -   **ON**: Synapse strips all junk. *Why?* Better for reading and standardizing the text for the AI.
-    -   **OFF**: Synapse keeps the raw HTML. *Why?* Better for "Vibe Coding" where you need the exact table structure or API code blocks.
-4.  **Save**.
+## 1. Web Pages (Readability)
+When sharing a standard URL, Synapse behaves like a "Read-it-Later" app.
 
-## Dealing with Images
-Images are tricky. Here are the two ways Note Synapse handles them.
+### Readability Toggle
+*   **The Problem**: Many websites are cluttered with ads, popups, and broken layouts.
+*   **The Fix**: Toggle **Readability Mode** (Book icon) in the clipper preview.
+    *   **On**: Applies a clean, distraction-free layout, strips navigation/ads, and converts *only the article content* to Markdown.
+    *   **Off**: Captures the raw HTML structure (useful for "Vibe Coding" where you want the exact DOM).
 
-### Method 1: The "Rich" Clip
-If you use the Web Clipper with **Readability ON**, Synapse tries to download the main article images as **Attachments**.
--   They appear at the bottom of the note.
--   They act as local files (great for offline).
+> ![Screenshot: The Web Clipper popup showing the Readability toggle button](placeholder_images/clipper_readability.png)
 
-### Method 2: Fetching Later
-Sometimes the clipper misses images, or you clipped in "Raw" mode (where images are just URL links).
-1.  Open the Note.
-2.  Tap the **Examples/Menu** (`more_vert`) icon.
-3.  Select **"Fetch Remote Images"**.
-4.  **Result**: The app scans the note for `![](http://...)` links, downloads them, and converts them to local attachments `![](file://...)`.
+### Image Scraper
+You don't have to save every banner ad.
+*   **Detection**: Synapse validates all images on the page.
+*   **Select**: You can check/uncheck purely decorative images before saving.
+*   **Save**: Selected images are downloaded and attached locally to your note, ensuring they don't break if the original website goes down.
 
-
-## Hands-On: Clipping API Docs for Vibe Coding
-### Usage
-You want to build an app that uses the **Stripe API**, but the AI doesn't know the latest endpoints.
-
-1.  Navigate to the Stripe API reference for "Create Charge".
-2.  **Share** to Note Synapse.
-3.  **Turn Readability OFF**.
-    -   *Why?* You want the raw table structures and code blocks so the AI can understand the exact JSON schema.
-4.  **Use it**: Now use this note as context to say "Write me a Stripe dashboard".
+## 2. Auto-Download (PDFs & Files)
+If you share a link to a file (e.g., an academic paper PDF, a ZIP file, or a Doc), Synapse automatically detects the **MIME Type**.
+*   **Action**: Instead of saving the *link*, it downloads the actual **File**.
+*   **Storage**: The file is saved to your local attachment storage.
+*   **Note**: A new note is created with the file attached, tagged as `#download`.
