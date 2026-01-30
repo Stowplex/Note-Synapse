@@ -1,7 +1,5 @@
 # Note Synapse Documentation
 
-Hands-On Manual for Power Users.
-
 ## ✍️ Editor & Writing
 -   **[Block-Based Editing](guides/editor/block_editing.md)**: The "hidden" drag gesture, reordering, and block types.
 -   **[Note Editing](guides/editor/note_editing.md)**: Using the note editor.
@@ -21,11 +19,20 @@ Hands-On Manual for Power Users.
 -   **[Web Clipper](guides/productivity/web_clipper.md)**: Readability vs Raw HTML (for Vibe Coding).
 -   **[Calendar & Tasks](guides/productivity/calendar.md)**: Drag-and-drop scheduling.
 
-## 👩‍💻 Developer
--   **[User Apps & Vibe Coding](developer/user_apps.md)**: Build tools using `window.Synapse`.
+---
+
+## 🚀 Power User / Vibe Coding
+Build your own apps and tools *inside* Synapse without touching the app source code.
+
+-   **[Overview](power_user/overview.md)**: Global Apps vs Note Actions vs AI Tools.
+-   **[AI Tools](power_user/ai_tools.md)**: Create headless tools for the LLM (e.g., Geocoding).
+-   **[User Apps](power_user/user_apps.md)**: Create UI-based apps for dashboards or note processing.
+-   **[External Dev](power_user/external_development.md)**: Build apps in VS Code using YAML & Python.
+
+---
+
+## 👩‍💻 Contributor
+For developers modifying the Core Dart/Flutter codebase.
+
 -   **[Architecture](developer/architecture.md)**: Local-first design and HTTP/3.
-
-
-## 🧪 Examples
--   **[Weather Dashboard](examples/weather_dashboard.html)**
--   **[SQL Stats](examples/sql_dashboard.html)**
+-   **[Contributing](developer/index.md)**: Setup and guidelines.
