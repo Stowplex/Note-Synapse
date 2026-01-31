@@ -18,6 +18,7 @@
 ## ⚡ Productivity
 -   **[Web Clipper](guides/productivity/web_clipper.md)**: Readability vs Raw HTML (for Vibe Coding).
 -   **[Calendar & Tasks](guides/productivity/calendar.md)**: Drag-and-drop scheduling.
+-   **[Multi-Function Tab](guides/productivity/multi_function_tab.md)**: Custom dashboards and switching views.
 
 ---
 
