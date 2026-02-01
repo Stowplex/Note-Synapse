@@ -1,9 +1,8 @@
 # Block-Based Editing
 
-Note Synapse treats your markdown as a series of logical "Blocks" (paragraphs, headers, code blocks, lists). This allows for powerful batch operations without needing precise text cursor placement.
+Note Synapse treats your markdown as a series of logical "Blocks" (paragraphs, headers, code blocks, lists). This allows for quick operations without needing to go into the editing view.
 
 ## The Interaction Model
-Unlike standard text editors where you drag to select characters, Synapse's block mode allows you to grab entire chunks of content.
 
 ### 1. Initiating Block Mode (The "Pen Drop")
 To start block editing, you **drag the edit button** itself.
