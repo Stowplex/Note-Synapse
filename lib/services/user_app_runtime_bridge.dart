@@ -440,6 +440,8 @@ class UserAppRuntimeBridge {
           if (jsonBody != null) {
             try {
               requestBody = jsonEncode(jsonBody);
+              LoggerService.debug('proxyFetch requestBody: $requestBody');
+
               final contentTypeKey = headers.keys.firstWhere(
                 (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
                 orElse: () => '',
