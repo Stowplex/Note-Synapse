@@ -2265,7 +2265,7 @@ $formatInstructions
         depth: parentTask.depth + 1,
         isSpawnedDynamically: true,
         toolNames: tools,
-        allowedTools: tools.isEmpty ? parentTask.allowedTools : tools,
+        allowedTools: parentTask.allowedTools,
         maxTurns: parentTask.maxTurns,
       );
 
