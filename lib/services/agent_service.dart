@@ -1645,6 +1645,17 @@ Return ONLY a valid JSON list with ALL required fields:
     return null; // Valid
   }
 
+  /// Updates the tool executor used by the agent.
+  ///
+  /// This is critical for handling lifecycle mismatches where the UI layer (Screen)
+  /// is disposed and recreated (e.g. during model switch or navigation) while
+  /// the AgentService remains running. The new UI must provide a fresh executor
+  /// that references valid HeadlessInAppWebView instances.
+  void updateToolExecutor(ToolExecutor executor) {
+    _toolExecutor = executor;
+    LoggerService.info('AgentService: ToolExecutor updated by UI');
+  }
+
   Future<void> _performTask(AgentTask task, String globalContext) async {
     // Check for max turns
     if (task.executionHistory.length / 2 >= task.maxTurns) {

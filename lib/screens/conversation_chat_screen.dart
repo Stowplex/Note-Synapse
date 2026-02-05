@@ -263,6 +263,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         // Initialize model features from config
         _loadModelFeatures();
         setState(() => _isLoading = false);
+        // Sync with agent state (update executor) now that we are initialized
+        _onAgentStateChange();
       }
     }
   }
@@ -963,34 +965,7 @@ $historyBuffer
         agentService.generatePlan(
           content,
           activeTools: activeTools,
-          executeTool: (serviceName, toolName, params, ctx) async {
-            // Handle AI Tools
-            if (_aiToolBundles.containsKey(serviceName)) {
-              final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params, ctx);
-            }
-            // Handle System Tools (native tools from AgentService)
-            // Note: AgentService also handles these internally, but this ensures
-            // consistency if tools are ever delegated to this executor
-            if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
-              final nativeTool = agentService.nativeTools
-                  .where((t) => t.name == toolName)
-                  .firstOrNull;
-              if (nativeTool != null) {
-                final result = await nativeTool.execute(params);
-                return result is String ? result : result.toString();
-              }
-              return 'Error: System tool "$toolName" not found';
-            }
-            // Handle MCP Tools
-            return McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: _selectedMcpEndpointIds.toList(),
-              generationContext: ctx,
-            );
-          },
+          executeTool: _createToolExecutor(),
           context: combinedContext,
           contextAttachments: allAttachments,
         );
@@ -3424,6 +3399,16 @@ $historyBuffer
     if (!mounted) return;
     final agentService = _agentService;
     if (agentService == null) return;
+    if (_isLoading)
+      return; // Wait for initialization to complete before updating executor
+
+    // CRITICAL FIX: Ensure AgentService uses the current, valid tool executor.
+    // When switching models or navigating, this screen is disposed and recreated,
+    // but AgentService persists. We must update the executor to use the NEW
+    // HeadlessWebView runtimes attached to this new screen instance.
+    if (agentService.isRunning || agentService.isPaused) {
+      agentService.updateToolExecutor(_createToolExecutor());
+    }
 
     // If we just attached and agent is running, we should be waiting
     if (agentService.isRunning && !_waitingForAgentResult) {
@@ -3456,6 +3441,37 @@ $historyBuffer
         // agentService.clearState();
       }
     }
+  }
+
+  /// Creates a tool executor that captures the current context and runtimes.
+  ToolExecutor _createToolExecutor() {
+    return (serviceName, toolName, params, ctx) async {
+      // Handle AI Tools
+      if (_aiToolBundles.containsKey(serviceName)) {
+        final runtime = await _getAiToolRuntime(serviceName);
+        return runtime.invoke(toolName, params, ctx);
+      }
+      // Handle System Tools (native tools from AgentService)
+      if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+        final agentService = _agentService!;
+        final nativeTool = agentService.nativeTools
+            .where((t) => t.name == toolName)
+            .firstOrNull;
+        if (nativeTool != null) {
+          final result = await nativeTool.execute(params);
+          return result is String ? result : result.toString();
+        }
+        return 'Error: System tool "$toolName" not found';
+      }
+      // Handle MCP Tools
+      return McpToolIntegrationService.executeToolCall(
+        serviceName: serviceName,
+        toolName: toolName,
+        parameters: params,
+        enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+        generationContext: ctx,
+      );
+    };
   }
 
   @override
