@@ -49,6 +49,7 @@ dependencies:
   rhttp:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
+  cryptography: ^2.7.0
   
   # Image handling
   image: ^4.2.0
