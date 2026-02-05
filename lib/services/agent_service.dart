@@ -1967,6 +1967,30 @@ $formatInstructions
         // treat the entire response as the answer (backward compatibility for
         // models that respond with plain text instead of XML structure).
         if (task.isFinalDeliverable) {
+          // HEURISTIC CHECK FOR MALFORMED TOOL CALLS:
+          // If the response looks like it tried to call a tool but failed parsing,
+          // DO NOT treat it as a final answer. Reject it so the agent can fix it.
+          final lowerResponse = processedResponse.toLowerCase();
+          final hasToolTag =
+              lowerResponse.contains('<tool>') ||
+              lowerResponse.contains('<toolname>');
+          final hasActionTag = lowerResponse.contains('<action');
+          final hasTypeAttr =
+              lowerResponse.contains('type="tool"') ||
+              lowerResponse.contains("type='tool'");
+
+          if (hasToolTag || (hasActionTag && hasTypeAttr)) {
+            final baseError = xmlResponse.parseError ?? 'Unknown parse error.';
+            final errorMsg =
+                'Potential malformed tool call detected in final deliverable. The response contained tool-like tags but failed strict XML parsing. Error: $baseError';
+
+            _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                'IMPORTANT: $errorMsg. Please correct your XML syntax.';
+            task.executionHistory.add("Observation: $errorMsg");
+            notifyListeners();
+            return;
+          }
+
           // Strip any "My thought:" prefix if present from CLEANED content
           String result = processedResponse.trim();
           final thoughtPrefix = RegExp(r'^My thought:.*?\n\n', dotAll: true);
