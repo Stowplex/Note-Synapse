@@ -4658,4 +4658,175 @@ class DatabaseService {
   }
 
   // --- End Agent / AI Features ---
+
+  // --- Sync Changelog Methods ---
+
+  /// Primary key column name(s) for each synced table.
+  /// Most tables use 'id', but composite keys are concatenated with '-'.
+  static const Map<String, List<String>> _syncedTablePrimaryKeys = {
+    'notes': ['id'],
+    'subnotes': ['id'],
+    'tags': ['id'],
+    'note_tags': ['noteId', 'tagId'],
+    'relationships': ['id'],
+    'conversations': ['id'],
+    'conversation_messages': ['id'],
+    'conversation_message_mapping': ['conversationId', 'messageId'],
+    'message_parents': ['id'],
+    'conversation_note_mapping': ['conversationId', 'noteId'],
+    'conversation_tags': ['conversationId', 'tagId'],
+    'attachments': ['id'],
+    'conversation_attachments': ['id'],
+  };
+
+  /// Enable sync change tracking by creating the sync_changelog table and
+  /// triggers for all synced tables.
+  Future<void> enableSyncTriggers() async {
+    final db = await database;
+
+    // Import syncedTables from field_version_registry
+    // (done at runtime to avoid import here, using the static map instead)
+
+    // Create the sync_changelog table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_changelog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        changed_fields TEXT,
+        old_values TEXT,
+        timestamp TEXT NOT NULL,
+        pushed INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Create index for efficient queries
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sync_changelog_pushed
+      ON sync_changelog(pushed)
+    ''');
+
+    // Create triggers for each synced table
+    for (final table in _syncedTablePrimaryKeys.keys) {
+      await _createSyncTriggersForTable(db, table);
+    }
+  }
+
+  /// Create INSERT, UPDATE, and DELETE triggers for a specific table.
+  Future<void> _createSyncTriggersForTable(Database db, String table) async {
+    final pkColumns = _syncedTablePrimaryKeys[table]!;
+    final rowIdExpr = _buildRowIdExpression(pkColumns, 'NEW');
+    final oldRowIdExpr = _buildRowIdExpression(pkColumns, 'OLD');
+
+    // Get column list for this table
+    final columns = await _getTableColumns(db, table);
+
+    // Build changed_fields and old_values expressions for UPDATE trigger
+    final changedFieldsCases = <String>[];
+    final oldValuesPairs = <String>[];
+
+    for (final col in columns) {
+      // For changed_fields: CASE WHEN OLD.col != NEW.col OR (OLD.col IS NULL) != (NEW.col IS NULL) THEN 'col' END
+      changedFieldsCases.add(
+        "CASE WHEN OLD.$col != NEW.$col OR (OLD.$col IS NULL) != (NEW.$col IS NULL) THEN '$col' END",
+      );
+      // For old_values: 'col', OLD.col
+      oldValuesPairs.add("'$col', OLD.$col");
+    }
+
+    // INSERT trigger
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS sync_insert_$table
+      AFTER INSERT ON $table
+      BEGIN
+        INSERT INTO sync_changelog (table_name, row_id, action, timestamp)
+        VALUES ('$table', $rowIdExpr, 'insert', datetime('now'));
+      END
+    ''');
+
+    // UPDATE trigger with changed_fields and old_values
+    final changedFieldsExpr =
+        'json_array(${changedFieldsCases.join(', ')})';
+    final oldValuesExpr = 'json_object(${oldValuesPairs.join(', ')})';
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS sync_update_$table
+      AFTER UPDATE ON $table
+      BEGIN
+        INSERT INTO sync_changelog (table_name, row_id, action, changed_fields, old_values, timestamp)
+        VALUES ('$table', $rowIdExpr, 'update', $changedFieldsExpr, $oldValuesExpr, datetime('now'));
+      END
+    ''');
+
+    // DELETE trigger
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS sync_delete_$table
+      AFTER DELETE ON $table
+      BEGIN
+        INSERT INTO sync_changelog (table_name, row_id, action, timestamp)
+        VALUES ('$table', $oldRowIdExpr, 'delete', datetime('now'));
+      END
+    ''');
+  }
+
+  /// Build a SQL expression for the row_id based on primary key column(s).
+  String _buildRowIdExpression(List<String> pkColumns, String prefix) {
+    if (pkColumns.length == 1) {
+      return '$prefix.${pkColumns.first}';
+    }
+    // Composite key: concatenate with '-'
+    return pkColumns.map((col) => '$prefix.$col').join(" || '-' || ");
+  }
+
+  /// Get the list of column names for a table.
+  Future<List<String>> _getTableColumns(Database db, String table) async {
+    final result = await db.rawQuery('PRAGMA table_info($table)');
+    return result.map((row) => row['name'] as String).toList();
+  }
+
+  /// Disable sync change tracking by dropping all sync triggers and the
+  /// sync_changelog table.
+  Future<void> disableSyncTriggers() async {
+    final db = await database;
+
+    // Drop triggers for each synced table
+    for (final table in _syncedTablePrimaryKeys.keys) {
+      await db.execute('DROP TRIGGER IF EXISTS sync_insert_$table');
+      await db.execute('DROP TRIGGER IF EXISTS sync_update_$table');
+      await db.execute('DROP TRIGGER IF EXISTS sync_delete_$table');
+    }
+
+    // Drop the sync_changelog table
+    await db.execute('DROP TABLE IF EXISTS sync_changelog');
+  }
+
+  /// Get all pending (unpushed) sync changes, ordered by id.
+  Future<List<Map<String, dynamic>>> getPendingSyncChanges() async {
+    final db = await database;
+    return await db.query(
+      'sync_changelog',
+      where: 'pushed = 0',
+      orderBy: 'id',
+    );
+  }
+
+  /// Mark the specified sync changelog entries as pushed.
+  Future<void> markSyncChangesPushed(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final placeholders = ids.map((_) => '?').join(', ');
+    await db.rawUpdate(
+      'UPDATE sync_changelog SET pushed = 1 WHERE id IN ($placeholders)',
+      ids,
+    );
+  }
+
+  /// Remove all pushed sync changelog entries.
+  Future<void> prunePushedSyncChanges() async {
+    final db = await database;
+    await db.delete('sync_changelog', where: 'pushed = 1');
+  }
+
+  // --- End Sync Changelog Methods ---
 }
