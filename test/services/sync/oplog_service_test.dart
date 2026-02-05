@@ -533,4 +533,424 @@ void main() {
       expect(op.fields['metadata']!.minVersion, 32); // added in v32
     });
   });
+
+  group('OplogReader', () {
+    late Directory tempDir;
+    late FolderSyncProvider provider;
+    late SyncEncryptionService encryption;
+
+    setUpAll(() async {
+      encryption = await SyncEncryptionService.create(
+        passphrase: 'test-passphrase',
+        cipherId: 'aes-256-gcm',
+        salt: 'dGVzdC1zYWx0LWZvci10ZXN0aW5n',
+      );
+    });
+
+    setUp(() async {
+      tempDir = Directory.systemTemp.createTempSync('oplog_reader_test_');
+      provider = FolderSyncProvider(rootPath: tempDir.path);
+    });
+
+    tearDown(() async {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    /// Helper to create an oplog file with the given operations.
+    Future<void> writeRawOplogFile(
+      String filename,
+      List<Map<String, dynamic>> operations, {
+      SyncEncryptionService? encryptWith,
+    }) async {
+      final jsonBytes = utf8.encode(jsonEncode(operations));
+      final Uint8List dataToWrite;
+      if (encryptWith != null) {
+        dataToWrite = await encryptWith.encrypt(Uint8List.fromList(jsonBytes));
+      } else {
+        dataToWrite = Uint8List.fromList(jsonBytes);
+      }
+      await provider.writeFile('oplog/$filename', dataToWrite);
+    }
+
+    /// Helper to create a SyncOperation JSON map.
+    Map<String, dynamic> makeOpJson({
+      required String deviceId,
+      required int sequence,
+      required int schemaVersion,
+      String table = 'notes',
+      String rowId = 'row-1',
+      SyncAction action = SyncAction.insert,
+    }) {
+      return {
+        'id': 'op-$deviceId-$sequence',
+        'deviceId': deviceId,
+        'sequence': sequence,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'table': table,
+        'rowId': rowId,
+        'action': action.name,
+        'fields': {
+          'id': {'value': rowId, 'minVersion': 1},
+          'title': {'value': 'Test', 'minVersion': 1},
+        },
+        'schemaVersion': schemaVersion,
+      };
+    }
+
+    group('listOplogFiles', () {
+      test('parses filenames correctly extracting deviceId/seqStart/seqEnd',
+          () async {
+        // Create some oplog files with known names
+        await writeRawOplogFile('device-a-1-5.json', [makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32)]);
+        await writeRawOplogFile('device-b-10-20.json', [makeOpJson(deviceId: 'device-b', sequence: 10, schemaVersion: 32)]);
+        await writeRawOplogFile('uuid-123-456-789-100-150.json', [makeOpJson(deviceId: 'uuid-123-456-789', sequence: 100, schemaVersion: 32)]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final files = await reader.listOplogFiles();
+
+        expect(files.length, 3);
+
+        // Find by path to verify parsing
+        final fileA = files.firstWhere((f) => f.path.contains('device-a'));
+        expect(fileA.deviceId, 'device-a');
+        expect(fileA.seqStart, 1);
+        expect(fileA.seqEnd, 5);
+
+        final fileB = files.firstWhere((f) => f.path.contains('device-b'));
+        expect(fileB.deviceId, 'device-b');
+        expect(fileB.seqStart, 10);
+        expect(fileB.seqEnd, 20);
+
+        // Device ID with dashes: uuid-123-456-789
+        final fileUuid = files.firstWhere((f) => f.path.contains('uuid-123-456-789'));
+        expect(fileUuid.deviceId, 'uuid-123-456-789');
+        expect(fileUuid.seqStart, 100);
+        expect(fileUuid.seqEnd, 150);
+      });
+
+      test('returns empty list when no oplog files exist', () async {
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final files = await reader.listOplogFiles();
+        expect(files, isEmpty);
+      });
+    });
+
+    group('readOplogFile', () {
+      test('reads and parses unencrypted oplog file', () async {
+        await writeRawOplogFile('device-x-1-2.json', [
+          makeOpJson(deviceId: 'device-x', sequence: 1, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-x', sequence: 2, schemaVersion: 32),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final ops = await reader.readOplogFile('oplog/device-x-1-2.json');
+
+        expect(ops.length, 2);
+        expect(ops[0].deviceId, 'device-x');
+        expect(ops[0].sequence, 1);
+        expect(ops[1].sequence, 2);
+      });
+
+      test('decrypts and parses encrypted oplog file', () async {
+        await writeRawOplogFile(
+          'encrypted-device-1-1.json',
+          [makeOpJson(deviceId: 'encrypted-device', sequence: 1, schemaVersion: 32)],
+          encryptWith: encryption,
+        );
+
+        final reader = OplogReader(
+          provider: provider,
+          encryption: encryption,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final ops = await reader.readOplogFile('oplog/encrypted-device-1-1.json');
+
+        expect(ops.length, 1);
+        expect(ops[0].deviceId, 'encrypted-device');
+        expect(ops[0].sequence, 1);
+      });
+    });
+
+    group('readNewOperations', () {
+      test('filters out own device oplog files', () async {
+        // Create ops from own device and other device
+        await writeRawOplogFile('own-device-1-5.json', [
+          makeOpJson(deviceId: 'own-device', sequence: 1, schemaVersion: 32),
+        ]);
+        await writeRawOplogFile('other-device-1-5.json', [
+          makeOpJson(deviceId: 'other-device', sequence: 1, schemaVersion: 32),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'own-device',
+          currentSchemaVersion: 32,
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Should only include other-device ops
+        expect(result.applicableOps.length, 1);
+        expect(result.applicableOps.first.deviceId, 'other-device');
+      });
+
+      test('filters by sequence number - only ops newer than lastSeen', () async {
+        await writeRawOplogFile('device-a-1-10.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32, rowId: 'row-1'),
+          makeOpJson(deviceId: 'device-a', sequence: 2, schemaVersion: 32, rowId: 'row-2'),
+          makeOpJson(deviceId: 'device-a', sequence: 5, schemaVersion: 32, rowId: 'row-5'),
+          makeOpJson(deviceId: 'device-a', sequence: 10, schemaVersion: 32, rowId: 'row-10'),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        // We've already seen up to sequence 5
+        final result = await reader.readNewOperations({'device-a': 5});
+
+        // Should only include ops with sequence > 5
+        expect(result.applicableOps.length, 1);
+        expect(result.applicableOps.first.sequence, 10);
+      });
+
+      test('handles partial overlap - file with seqStart before lastSeen but seqEnd after',
+          () async {
+        // File covers seq 5-15, but we've seen up to 10
+        await writeRawOplogFile('device-a-5-15.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 5, schemaVersion: 32, rowId: 'row-5'),
+          makeOpJson(deviceId: 'device-a', sequence: 8, schemaVersion: 32, rowId: 'row-8'),
+          makeOpJson(deviceId: 'device-a', sequence: 10, schemaVersion: 32, rowId: 'row-10'),
+          makeOpJson(deviceId: 'device-a', sequence: 12, schemaVersion: 32, rowId: 'row-12'),
+          makeOpJson(deviceId: 'device-a', sequence: 15, schemaVersion: 32, rowId: 'row-15'),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        // We've seen up to sequence 10
+        final result = await reader.readNewOperations({'device-a': 10});
+
+        // Should only include ops with sequence > 10 (i.e., 12 and 15)
+        expect(result.applicableOps.length, 2);
+        expect(result.applicableOps.map((op) => op.sequence).toList(), [12, 15]);
+      });
+
+      test('defers high schema version ops to deferredOps', () async {
+        await writeRawOplogFile('device-a-1-3.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 30, rowId: 'row-1'),
+          makeOpJson(deviceId: 'device-a', sequence: 2, schemaVersion: 32, rowId: 'row-2'),
+          makeOpJson(deviceId: 'device-a', sequence: 3, schemaVersion: 35, rowId: 'row-3'), // future version
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32, // current schema version
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Ops with schemaVersion <= 32 are applicable
+        expect(result.applicableOps.length, 2);
+        expect(result.applicableOps.map((op) => op.sequence).toList(), [1, 2]);
+
+        // Ops with schemaVersion > 32 are deferred
+        expect(result.deferredOps.length, 1);
+        expect(result.deferredOps.first.sequence, 3);
+        expect(result.deferredOps.first.schemaVersion, 35);
+      });
+
+      test('sorts applicable ops by (deviceId, sequence)', () async {
+        // Create ops from multiple devices in non-sorted order
+        await writeRawOplogFile('device-b-5-10.json', [
+          makeOpJson(deviceId: 'device-b', sequence: 10, schemaVersion: 32, rowId: 'b-10'),
+          makeOpJson(deviceId: 'device-b', sequence: 5, schemaVersion: 32, rowId: 'b-5'),
+        ]);
+        await writeRawOplogFile('device-a-1-3.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 3, schemaVersion: 32, rowId: 'a-3'),
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32, rowId: 'a-1'),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Should be sorted by (deviceId, sequence)
+        expect(result.applicableOps.length, 4);
+
+        // device-a comes before device-b
+        expect(result.applicableOps[0].deviceId, 'device-a');
+        expect(result.applicableOps[0].sequence, 1);
+        expect(result.applicableOps[1].deviceId, 'device-a');
+        expect(result.applicableOps[1].sequence, 3);
+        expect(result.applicableOps[2].deviceId, 'device-b');
+        expect(result.applicableOps[2].sequence, 5);
+        expect(result.applicableOps[3].deviceId, 'device-b');
+        expect(result.applicableOps[3].sequence, 10);
+      });
+
+      test('handles corrupted file gracefully - returns warning', () async {
+        // Write valid file
+        await writeRawOplogFile('device-good-1-1.json', [
+          makeOpJson(deviceId: 'device-good', sequence: 1, schemaVersion: 32),
+        ]);
+
+        // Write corrupted file (invalid JSON)
+        await provider.writeFile(
+          'oplog/device-bad-1-1.json',
+          Uint8List.fromList(utf8.encode('{ invalid json')),
+        );
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Should still return the good ops
+        expect(result.applicableOps.length, 1);
+        expect(result.applicableOps.first.deviceId, 'device-good');
+
+        // Should have a warning about the corrupted file
+        expect(result.warnings.length, 1);
+        expect(result.warnings.first, contains('device-bad'));
+      });
+
+      test('handles malformed SyncOperation gracefully - skips and warns', () async {
+        // Write a file with one valid and one invalid operation
+        final validOp = makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32);
+        final invalidOp = {
+          'id': 'invalid-op',
+          // Missing required fields like deviceId, sequence, etc.
+        };
+
+        final jsonBytes = utf8.encode(jsonEncode([validOp, invalidOp]));
+        await provider.writeFile(
+          'oplog/device-a-1-2.json',
+          Uint8List.fromList(jsonBytes),
+        );
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Should have the valid op
+        expect(result.applicableOps.length, 1);
+        expect(result.applicableOps.first.sequence, 1);
+
+        // Should have a warning about the malformed op
+        expect(result.warnings.length, 1);
+        expect(result.warnings.first, contains('device-a-1-2.json'));
+      });
+
+      test('updates lastSeenSequences in result', () async {
+        await writeRawOplogFile('device-a-1-5.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-a', sequence: 5, schemaVersion: 32),
+        ]);
+        await writeRawOplogFile('device-b-10-15.json', [
+          makeOpJson(deviceId: 'device-b', sequence: 10, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-b', sequence: 15, schemaVersion: 32),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        final result = await reader.readNewOperations({});
+
+        // Should have updated lastSeenSequences for both devices
+        expect(result.newLastSeenSequences['device-a'], 5);
+        expect(result.newLastSeenSequences['device-b'], 15);
+      });
+
+      test('preserves existing lastSeenSequences for devices with no new ops',
+          () async {
+        await writeRawOplogFile('device-a-1-5.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-a', sequence: 5, schemaVersion: 32),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        // We've already seen all of device-a's ops and device-c had ops before
+        final result = await reader.readNewOperations({
+          'device-a': 10, // higher than any in file
+          'device-c': 100, // device-c doesn't even have files
+        });
+
+        // No new ops from device-a (all <= 10)
+        expect(result.applicableOps, isEmpty);
+
+        // Should preserve the lastSeenSequences
+        expect(result.newLastSeenSequences['device-a'], 10);
+        expect(result.newLastSeenSequences['device-c'], 100);
+      });
+
+      test('skips files entirely when seqEnd <= lastSeen', () async {
+        await writeRawOplogFile('device-a-1-5.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 1, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-a', sequence: 5, schemaVersion: 32),
+        ]);
+        await writeRawOplogFile('device-a-10-15.json', [
+          makeOpJson(deviceId: 'device-a', sequence: 10, schemaVersion: 32),
+          makeOpJson(deviceId: 'device-a', sequence: 15, schemaVersion: 32),
+        ]);
+
+        final reader = OplogReader(
+          provider: provider,
+          ownDeviceId: 'my-device',
+          currentSchemaVersion: 32,
+        );
+
+        // We've seen up to sequence 8, so first file (1-5) should be skipped entirely
+        final result = await reader.readNewOperations({'device-a': 8});
+
+        // Should only include ops from the second file (10-15)
+        expect(result.applicableOps.length, 2);
+        expect(result.applicableOps.map((op) => op.sequence).toList(), [10, 15]);
+      });
+    });
+  });
 }

@@ -236,3 +236,247 @@ class _WhereClause {
 
   _WhereClause({required this.where, required this.args});
 }
+
+/// Information about an oplog file extracted from its filename.
+class OplogFileInfo {
+  final String path;
+  final String deviceId;
+  final int seqStart;
+  final int seqEnd;
+
+  OplogFileInfo({
+    required this.path,
+    required this.deviceId,
+    required this.seqStart,
+    required this.seqEnd,
+  });
+}
+
+/// Result of reading new operations from remote oplog files.
+class OplogReadResult {
+  /// Operations that can be applied (schemaVersion <= current).
+  final List<SyncOperation> applicableOps;
+
+  /// Operations deferred for later (schemaVersion > current).
+  final List<SyncOperation> deferredOps;
+
+  /// Updated sequence map after processing all files.
+  final Map<String, int> newLastSeenSequences;
+
+  /// Warnings for parsing errors, corrupted files, etc.
+  final List<String> warnings;
+
+  OplogReadResult({
+    required this.applicableOps,
+    required this.deferredOps,
+    required this.newLastSeenSequences,
+    required this.warnings,
+  });
+}
+
+/// Reads oplog files from cloud storage for the "pull" phase of sync.
+///
+/// The OplogReader discovers what operations other devices have written,
+/// downloads and validates them, and prepares them for the merge engine.
+/// It also handles schema version filtering to allow devices at different
+/// versions to coexist.
+class OplogReader {
+  final SyncStorageProvider _provider;
+  final SyncEncryptionService? _encryption;
+  final String _ownDeviceId;
+  final int _currentSchemaVersion;
+
+  OplogReader({
+    required SyncStorageProvider provider,
+    SyncEncryptionService? encryption,
+    required String ownDeviceId,
+    required int currentSchemaVersion,
+  })  : _provider = provider,
+        _encryption = encryption,
+        _ownDeviceId = ownDeviceId,
+        _currentSchemaVersion = currentSchemaVersion;
+
+  /// Lists all oplog files and parses their filenames.
+  ///
+  /// Filename format: `{deviceId}-{seqStart}-{seqEnd}.json`
+  /// Note: deviceId may contain dashes, so we parse from the end.
+  Future<List<OplogFileInfo>> listOplogFiles() async {
+    final files = await _provider.listFiles('oplog');
+    final result = <OplogFileInfo>[];
+
+    for (final file in files) {
+      final info = _parseOplogFilename(file.path);
+      if (info != null) {
+        result.add(info);
+      }
+    }
+
+    return result;
+  }
+
+  /// Parses an oplog filename to extract deviceId, seqStart, seqEnd.
+  ///
+  /// Format: `oplog/{deviceId}-{seqStart}-{seqEnd}.json`
+  /// Since deviceId may contain dashes, we parse seqStart and seqEnd from the end.
+  OplogFileInfo? _parseOplogFilename(String path) {
+    // Extract just the filename
+    final filename = path.split('/').last;
+
+    // Remove .json extension
+    if (!filename.endsWith('.json')) {
+      return null;
+    }
+    final withoutExt = filename.substring(0, filename.length - 5);
+
+    // Parse from end: last two dash-separated parts are seqStart and seqEnd
+    final parts = withoutExt.split('-');
+    if (parts.length < 3) {
+      return null;
+    }
+
+    try {
+      final seqEnd = int.parse(parts.last);
+      final seqStart = int.parse(parts[parts.length - 2]);
+      final deviceId = parts.sublist(0, parts.length - 2).join('-');
+
+      return OplogFileInfo(
+        path: path,
+        deviceId: deviceId,
+        seqStart: seqStart,
+        seqEnd: seqEnd,
+      );
+    } catch (e) {
+      // Invalid sequence numbers
+      return null;
+    }
+  }
+
+  /// Reads and parses a single oplog file.
+  ///
+  /// Decrypts if encryption service is provided.
+  Future<List<SyncOperation>> readOplogFile(String path) async {
+    final bytes = await _provider.readFile(path);
+
+    final Uint8List jsonBytes;
+    if (_encryption != null) {
+      jsonBytes = await _encryption.decrypt(bytes);
+    } else {
+      jsonBytes = bytes;
+    }
+
+    final jsonList = jsonDecode(utf8.decode(jsonBytes)) as List<dynamic>;
+    return jsonList
+        .map((item) => SyncOperation.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Reads new operations from remote oplog files.
+  ///
+  /// This is the main method for the pull phase:
+  /// 1. Lists all oplog files
+  /// 2. Filters to files from other devices with new operations
+  /// 3. Downloads, decrypts, and parses qualifying files
+  /// 4. Separates ops by schema version (applicable vs deferred)
+  /// 5. Sorts applicable ops for replay order
+  ///
+  /// [lastSeenSequences] maps deviceId -> highest sequence already processed.
+  Future<OplogReadResult> readNewOperations(
+    Map<String, int> lastSeenSequences,
+  ) async {
+    final warnings = <String>[];
+    final applicableOps = <SyncOperation>[];
+    final deferredOps = <SyncOperation>[];
+    final newLastSeenSequences = Map<String, int>.from(lastSeenSequences);
+
+    // List all oplog files
+    final files = await listOplogFiles();
+
+    // Filter to qualifying files
+    final qualifyingFiles = files.where((file) {
+      // Skip our own device's files
+      if (file.deviceId == _ownDeviceId) {
+        return false;
+      }
+      // Skip files entirely older than lastSeen
+      final lastSeen = lastSeenSequences[file.deviceId] ?? 0;
+      return file.seqEnd > lastSeen;
+    }).toList();
+
+    // Process each qualifying file
+    for (final file in qualifyingFiles) {
+      final lastSeen = lastSeenSequences[file.deviceId] ?? 0;
+
+      List<SyncOperation> ops;
+      try {
+        ops = await _readOplogFileWithWarnings(file.path, warnings);
+      } catch (e) {
+        // Skip file entirely on read/decrypt errors
+        warnings.add('Failed to read oplog file ${file.path}: $e');
+        continue;
+      }
+
+      // Filter out already-seen operations (partial overlap case)
+      ops = ops.where((op) => op.sequence > lastSeen).toList();
+
+      // Track the highest sequence we've seen for this device
+      for (final op in ops) {
+        final currentMax = newLastSeenSequences[op.deviceId] ?? 0;
+        if (op.sequence > currentMax) {
+          newLastSeenSequences[op.deviceId] = op.sequence;
+        }
+      }
+
+      // Separate by schema version
+      for (final op in ops) {
+        if (op.schemaVersion <= _currentSchemaVersion) {
+          applicableOps.add(op);
+        } else {
+          deferredOps.add(op);
+        }
+      }
+    }
+
+    // Sort applicable ops by (deviceId, sequence) for consistent replay order
+    applicableOps.sort((a, b) {
+      final deviceCompare = a.deviceId.compareTo(b.deviceId);
+      if (deviceCompare != 0) return deviceCompare;
+      return a.sequence.compareTo(b.sequence);
+    });
+
+    return OplogReadResult(
+      applicableOps: applicableOps,
+      deferredOps: deferredOps,
+      newLastSeenSequences: newLastSeenSequences,
+      warnings: warnings,
+    );
+  }
+
+  /// Reads and parses an oplog file, handling individual operation parsing errors.
+  Future<List<SyncOperation>> _readOplogFileWithWarnings(
+    String path,
+    List<String> warnings,
+  ) async {
+    final bytes = await _provider.readFile(path);
+
+    final Uint8List jsonBytes;
+    if (_encryption != null) {
+      jsonBytes = await _encryption.decrypt(bytes);
+    } else {
+      jsonBytes = bytes;
+    }
+
+    final jsonList = jsonDecode(utf8.decode(jsonBytes)) as List<dynamic>;
+    final ops = <SyncOperation>[];
+
+    for (final item in jsonList) {
+      try {
+        ops.add(SyncOperation.fromJson(item as Map<String, dynamic>));
+      } catch (e) {
+        warnings.add('Failed to parse operation in $path: $e');
+        // Continue to next operation
+      }
+    }
+
+    return ops;
+  }
+}
