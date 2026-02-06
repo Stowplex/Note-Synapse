@@ -1,21 +1,18 @@
 Copyright (c) 2025, Bruce Li
 
-DUAL LICENSING NOTICE
+NOTE SYNAPSE PROPRIETARY LICENSE AGREEMENT
 
-1. Open Source License (AGPL v3)
-   Subject to the exceptions in Section 2, this software is released under the GNU Affero General Public License, version 3 (AGPL v3).
-   You are free to use, modify, and distribute this software in compliance with the AGPL v3 terms.
-   Specifically, if you modify the software and make it available over a network, you must provide the source code of your modified version to users.
+1. Grant of License
+   Stowplex LLC and Bruce Li hereby grant the user the ability to use this software (the "Software"), subject to the terms herein.
 
-2. Proprietary License for App Store Distribution
-   A restricted, proprietary license is granted exclusively to Stowplex LLC and Bruce Li for the purpose of compiling, signing, and releasing the software as a proprietary application on digital distribution platforms, including but not limited to the Apple App Store and Google Play Store.
-   This proprietary license permits the release of the software without the copyleft obligations of the AGPL v3, solely for the specified entities and purposes.
+2. Intellectual Property & Trademark
+   Stowplex LLC and Bruce Li retain all ownership, title, and intellectual property rights in and to the Software, including explicitly the "Note Synapse" trademark.
 
-3. Restrictions on Other Derivative Works
-   Any other application, derivative work, or commercial product built using this software, other than those released by Stowplex LLC or Bruce Li under the proprietary license described in Section 2, shall be subject to the terms of the GNU Affero General Public License, version 3 (AGPL v3). No other proprietary or closed-source use is permitted without a separate written commercial license agreement.
+3. Derivative Works & Dual Licensing
+   Any derived work, modification, or redistribution of the Software shall be licensed under the GNU Affero General Public License, version 3 (AGPL v3), unless otherwise permitted by Stowplex LLC and/or Bruce Li in specific situations (e.g. App Store releases by the owners).
 
-4. Warranty & Liability
-   The warranty and liability provisions for all versions of the software, including those released under the proprietary license, remain consistent with the AGPL v3 terms provided below (specifically Sections 15, 16, and 17).
+4. Disclaimer of Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
