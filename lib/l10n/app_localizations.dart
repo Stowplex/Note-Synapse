@@ -7813,6 +7813,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to expand'**
   String get syncConflictTapToExpand;
+
+  /// No description provided for @syncBundleImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Sync Bundle'**
+  String get syncBundleImportTitle;
+
+  /// No description provided for @syncBundleImportDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a sync bundle zip file for one-time data transfer (e.g., iOS to Android migration) without setting up continuous sync.'**
+  String get syncBundleImportDescription;
+
+  /// No description provided for @syncBundleExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting bundle...'**
+  String get syncBundleExtracting;
+
+  /// No description provided for @syncBundleReadingConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading sync config...'**
+  String get syncBundleReadingConfig;
+
+  /// No description provided for @syncBundleVerifyingPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying passphrase...'**
+  String get syncBundleVerifyingPassphrase;
+
+  /// No description provided for @syncBundleReadingSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading snapshot...'**
+  String get syncBundleReadingSnapshot;
+
+  /// No description provided for @syncBundleApplyingSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying snapshot...'**
+  String get syncBundleApplyingSnapshot;
+
+  /// No description provided for @syncBundleValidating.
+  ///
+  /// In en, this message translates to:
+  /// **'Validating database...'**
+  String get syncBundleValidating;
+
+  /// No description provided for @syncBundleCopyingAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying attachments...'**
+  String get syncBundleCopyingAttachments;
+
+  /// No description provided for @syncBundleNotValid.
+  ///
+  /// In en, this message translates to:
+  /// **'Not a valid sync bundle — missing sync-config.json'**
+  String get syncBundleNotValid;
+
+  /// No description provided for @syncBundleInvalidPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid passphrase or corrupted config'**
+  String get syncBundleInvalidPassphrase;
+
+  /// No description provided for @syncBundleNoSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'No snapshot found in sync bundle'**
+  String get syncBundleNoSnapshot;
+
+  /// No description provided for @syncBundleValidationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Database validation failed after applying snapshot'**
+  String get syncBundleValidationFailed;
+
+  /// No description provided for @syncBundleImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync bundle import failed'**
+  String get syncBundleImportFailed;
+
+  /// No description provided for @syncBundleImportComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Complete'**
+  String get syncBundleImportComplete;
+
+  /// No description provided for @syncBundleSetupContinuousSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Your data has been imported successfully. Would you like to set up continuous sync?'**
+  String get syncBundleSetupContinuousSync;
+
+  /// No description provided for @syncBundleEnterPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Passphrase'**
+  String get syncBundleEnterPassphrase;
 }
 
 class _AppLocalizationsDelegate

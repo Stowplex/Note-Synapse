@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -10,11 +11,17 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
+import '../models/sync_config.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/sync/folder_sync_provider.dart';
+import '../services/sync/snapshot_service.dart';
+import '../services/sync/sync_encryption_service.dart';
+import '../services/sync/sync_staging.dart';
 import '../utils/file_utils.dart';
 import '../providers/app_provider.dart';
 import 'raw_data_manager/raw_data_manager_screen.dart';
+import 'sync_setup_screen.dart';
 
 class RecoveryScreen extends StatefulWidget {
   final String? error;
@@ -37,6 +44,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   double _importProgress = 0.0;
   final List<String> _importLogs = [];
   String? _originalDbBackupPath;
+
+  // Sync bundle import
+  bool _isImportingSyncBundle = false;
+  String _importBundleProgress = '';
 
   @override
   void initState() {
@@ -1641,6 +1652,305 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
+  Future<void> _importSyncBundle() async {
+    final l10n = AppLocalizations.of(context)!;
+    Directory? extractDir;
+
+    try {
+      // 1. Pick a .zip file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty || result.files.first.path == null) return;
+
+      final zipPath = result.files.first.path!;
+
+      // 2. Show progress
+      setState(() {
+        _isImportingSyncBundle = true;
+        _importBundleProgress = l10n.syncBundleExtracting;
+      });
+
+      // 3. Extract zip to temp directory
+      final tempDir = await getTemporaryDirectory();
+      extractDir = Directory(
+        '${tempDir.path}/sync_bundle_import_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await extractDir.create(recursive: true);
+
+      final inputStream = InputFileStream(zipPath);
+      final archive = ZipDecoder().decodeStream(inputStream);
+
+      for (final file in archive.files) {
+        final filePath = '${extractDir.path}/${file.name}';
+        final fileDir = Directory(path.dirname(filePath));
+        await fileDir.create(recursive: true);
+
+        if (file.isFile) {
+          final outputStream = OutputFileStream(filePath);
+          file.writeContent(outputStream);
+          outputStream.close();
+          await Future.delayed(Duration.zero);
+        }
+      }
+      inputStream.close();
+
+      // 4. Check for sync-config.json
+      final configFile = File('${extractDir.path}/sync-config.json');
+      if (!configFile.existsSync()) {
+        setState(() => _isImportingSyncBundle = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.syncBundleNotValid),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _importBundleProgress = l10n.syncBundleReadingConfig;
+      });
+
+      // 5. Parse sync config
+      final configJson =
+          jsonDecode(configFile.readAsStringSync()) as Map<String, dynamic>;
+      final syncConfig = SyncConfig.fromJson(configJson);
+
+      // 6. If encrypted, prompt for passphrase
+      SyncEncryptionService? encryption;
+      if (syncConfig.isEncrypted) {
+        final passphrase = await _showPassphraseDialog();
+        if (passphrase == null) {
+          setState(() => _isImportingSyncBundle = false);
+          return;
+        }
+
+        setState(() {
+          _importBundleProgress = l10n.syncBundleVerifyingPassphrase;
+        });
+
+        encryption = await SyncEncryptionService.create(
+          passphrase: passphrase,
+          cipherId: syncConfig.encryption,
+          salt: syncConfig.salt,
+          kdfMemory: syncConfig.kdfParams.memory,
+          kdfIterations: syncConfig.kdfParams.iterations,
+          kdfParallelism: syncConfig.kdfParams.parallelism,
+        );
+
+        // Verify HMAC
+        if (syncConfig.hmac != null) {
+          final hmacValid = await encryption.verifyHmac(
+            syncConfig.jsonForHmac(),
+            syncConfig.hmac!,
+          );
+          if (!hmacValid) {
+            setState(() => _isImportingSyncBundle = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(l10n.syncBundleInvalidPassphrase),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
+
+      setState(() {
+        _importBundleProgress = l10n.syncBundleReadingSnapshot;
+      });
+
+      // 7. Create a FolderSyncProvider pointing at extracted directory
+      final provider = FolderSyncProvider(rootPath: extractDir.path);
+
+      // 8. Use SnapshotService to read snapshot
+      final databaseService = DatabaseService();
+      final snapshotService = SnapshotService(
+        db: databaseService,
+        provider: provider,
+        encryption: encryption,
+      );
+      final snapshot = await snapshotService.readSnapshot();
+      if (snapshot == null) {
+        setState(() => _isImportingSyncBundle = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.syncBundleNoSnapshot),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _importBundleProgress = l10n.syncBundleApplyingSnapshot;
+      });
+
+      // 9. Use SyncStaging for crash-safe apply
+      final staging = SyncStaging(db: databaseService);
+      final stagingPath = await staging.createStagingCopy();
+      final stagingDb = await staging.openStagingDb(stagingPath);
+
+      // 10. Apply snapshot to staging DB
+      await snapshotService.applySnapshotToDb(snapshot, stagingDb);
+      await stagingDb.close();
+
+      setState(() {
+        _importBundleProgress = l10n.syncBundleValidating;
+      });
+
+      // 11. Validate and swap
+      final validationDb =
+          await openDatabase(stagingPath, singleInstance: false);
+      final isValid = await staging.validateStagingDb(validationDb);
+      await validationDb.close();
+
+      if (isValid) {
+        await staging.atomicSwap(stagingPath);
+      } else {
+        setState(() => _isImportingSyncBundle = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.syncBundleValidationFailed),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _importBundleProgress = l10n.syncBundleCopyingAttachments;
+      });
+
+      // 12. Copy attachments to local storage
+      final attachmentsDir = Directory('${extractDir.path}/attachments');
+      if (await attachmentsDir.exists()) {
+        final appAttachmentsDir = await FileUtils.getPrivateStorageDirectory();
+        await _copyDirectory(attachmentsDir, appAttachmentsDir);
+      }
+
+      setState(() {
+        _importBundleProgress = l10n.reloadingData;
+      });
+
+      // Reload app data
+      if (mounted) {
+        final appProvider = Provider.of<AppProvider>(context, listen: false);
+        await appProvider.loadData();
+      }
+
+      // 13. Cleanup temp directory
+      setState(() => _isImportingSyncBundle = false);
+
+      // 14. Show success dialog
+      if (mounted) {
+        _showImportSyncBundleSuccessDialog();
+      }
+    } catch (e) {
+      LoggerService.error('Error importing sync bundle: $e', error: e);
+      setState(() => _isImportingSyncBundle = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${l10n.syncBundleImportFailed}: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      // Always try to clean up the temp directory
+      if (extractDir != null && await extractDir.exists()) {
+        try {
+          await extractDir.delete(recursive: true);
+        } catch (_) {
+          // Ignore cleanup errors
+        }
+      }
+    }
+  }
+
+  Future<String?> _showPassphraseDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    bool obscure = true;
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(l10n.syncBundleEnterPassphrase),
+          content: TextField(
+            controller: controller,
+            obscureText: obscure,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: l10n.syncPassphrase,
+              suffixIcon: IconButton(
+                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
+                onPressed: () => setDialogState(() => obscure = !obscure),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: Text(l10n.cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.isNotEmpty) {
+                  Navigator.of(context).pop(controller.text);
+                }
+              },
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showImportSyncBundleSuccessDialog() {
+    final l10n = AppLocalizations.of(context)!;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.syncBundleImportComplete),
+        content: Text(l10n.syncBundleSetupContinuousSync),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.close),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SyncSetupScreen(),
+                ),
+              );
+            },
+            child: Text(l10n.syncSetupTitle),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -1831,6 +2141,55 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Import Sync Bundle section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.syncBundleImportTitle,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.syncBundleImportDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: (_isImportingSyncBundle || _isImporting)
+                              ? null
+                              : _importSyncBundle,
+                          icon: _isImportingSyncBundle
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.sync),
+                          label: Text(
+                            _isImportingSyncBundle
+                                ? _importBundleProgress
+                                : l10n.syncBundleImportTitle,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

@@ -1795,5 +1795,23 @@
   "syncConflictResolvedLocal": "冲突已解决 — 保留了本地值。",
   "syncConflictResolvedRemote": "冲突已解决 — 已应用远程值。",
   "syncConflictValueEmpty": "（空）",
-  "syncConflictTapToExpand": "点击展开"
+  "syncConflictTapToExpand": "点击展开",
+
+  "syncBundleImportTitle": "导入同步包",
+  "syncBundleImportDescription": "导入同步包 zip 文件以进行一次性数据迁移（如 iOS 到 Android），无需设置持续同步。",
+  "syncBundleExtracting": "正在解压...",
+  "syncBundleReadingConfig": "正在读取同步配置...",
+  "syncBundleVerifyingPassphrase": "正在验证密码短语...",
+  "syncBundleReadingSnapshot": "正在读取快照...",
+  "syncBundleApplyingSnapshot": "正在应用快照...",
+  "syncBundleValidating": "正在验证数据库...",
+  "syncBundleCopyingAttachments": "正在复制附件...",
+  "syncBundleNotValid": "不是有效的同步包 — 缺少 sync-config.json",
+  "syncBundleInvalidPassphrase": "密码短语无效或配置文件已损坏",
+  "syncBundleNoSnapshot": "同步包中未找到快照",
+  "syncBundleValidationFailed": "应用快照后数据库验证失败",
+  "syncBundleImportFailed": "同步包导入失败",
+  "syncBundleImportComplete": "导入完成",
+  "syncBundleSetupContinuousSync": "数据已成功导入。是否要设置持续同步？",
+  "syncBundleEnterPassphrase": "输入密码短语"
 }

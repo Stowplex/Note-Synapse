@@ -4296,4 +4296,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncConflictTapToExpand => '点击展开';
+
+  @override
+  String get syncBundleImportTitle => '导入同步包';
+
+  @override
+  String get syncBundleImportDescription =>
+      '导入同步包 zip 文件以进行一次性数据迁移（如 iOS 到 Android），无需设置持续同步。';
+
+  @override
+  String get syncBundleExtracting => '正在解压...';
+
+  @override
+  String get syncBundleReadingConfig => '正在读取同步配置...';
+
+  @override
+  String get syncBundleVerifyingPassphrase => '正在验证密码短语...';
+
+  @override
+  String get syncBundleReadingSnapshot => '正在读取快照...';
+
+  @override
+  String get syncBundleApplyingSnapshot => '正在应用快照...';
+
+  @override
+  String get syncBundleValidating => '正在验证数据库...';
+
+  @override
+  String get syncBundleCopyingAttachments => '正在复制附件...';
+
+  @override
+  String get syncBundleNotValid => '不是有效的同步包 — 缺少 sync-config.json';
+
+  @override
+  String get syncBundleInvalidPassphrase => '密码短语无效或配置文件已损坏';
+
+  @override
+  String get syncBundleNoSnapshot => '同步包中未找到快照';
+
+  @override
+  String get syncBundleValidationFailed => '应用快照后数据库验证失败';
+
+  @override
+  String get syncBundleImportFailed => '同步包导入失败';
+
+  @override
+  String get syncBundleImportComplete => '导入完成';
+
+  @override
+  String get syncBundleSetupContinuousSync => '数据已成功导入。是否要设置持续同步？';
+
+  @override
+  String get syncBundleEnterPassphrase => '输入密码短语';
 }

@@ -4499,4 +4499,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncConflictTapToExpand => 'Tap to expand';
+
+  @override
+  String get syncBundleImportTitle => 'Import Sync Bundle';
+
+  @override
+  String get syncBundleImportDescription =>
+      'Import a sync bundle zip file for one-time data transfer (e.g., iOS to Android migration) without setting up continuous sync.';
+
+  @override
+  String get syncBundleExtracting => 'Extracting bundle...';
+
+  @override
+  String get syncBundleReadingConfig => 'Reading sync config...';
+
+  @override
+  String get syncBundleVerifyingPassphrase => 'Verifying passphrase...';
+
+  @override
+  String get syncBundleReadingSnapshot => 'Reading snapshot...';
+
+  @override
+  String get syncBundleApplyingSnapshot => 'Applying snapshot...';
+
+  @override
+  String get syncBundleValidating => 'Validating database...';
+
+  @override
+  String get syncBundleCopyingAttachments => 'Copying attachments...';
+
+  @override
+  String get syncBundleNotValid =>
+      'Not a valid sync bundle — missing sync-config.json';
+
+  @override
+  String get syncBundleInvalidPassphrase =>
+      'Invalid passphrase or corrupted config';
+
+  @override
+  String get syncBundleNoSnapshot => 'No snapshot found in sync bundle';
+
+  @override
+  String get syncBundleValidationFailed =>
+      'Database validation failed after applying snapshot';
+
+  @override
+  String get syncBundleImportFailed => 'Sync bundle import failed';
+
+  @override
+  String get syncBundleImportComplete => 'Import Complete';
+
+  @override
+  String get syncBundleSetupContinuousSync =>
+      'Your data has been imported successfully. Would you like to set up continuous sync?';
+
+  @override
+  String get syncBundleEnterPassphrase => 'Enter Passphrase';
 }

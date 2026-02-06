@@ -1855,5 +1855,23 @@
   "syncConflictResolvedLocal": "Conflict resolved — kept local value.",
   "syncConflictResolvedRemote": "Conflict resolved — applied remote value.",
   "syncConflictValueEmpty": "(empty)",
-  "syncConflictTapToExpand": "Tap to expand"
+  "syncConflictTapToExpand": "Tap to expand",
+
+  "syncBundleImportTitle": "Import Sync Bundle",
+  "syncBundleImportDescription": "Import a sync bundle zip file for one-time data transfer (e.g., iOS to Android migration) without setting up continuous sync.",
+  "syncBundleExtracting": "Extracting bundle...",
+  "syncBundleReadingConfig": "Reading sync config...",
+  "syncBundleVerifyingPassphrase": "Verifying passphrase...",
+  "syncBundleReadingSnapshot": "Reading snapshot...",
+  "syncBundleApplyingSnapshot": "Applying snapshot...",
+  "syncBundleValidating": "Validating database...",
+  "syncBundleCopyingAttachments": "Copying attachments...",
+  "syncBundleNotValid": "Not a valid sync bundle — missing sync-config.json",
+  "syncBundleInvalidPassphrase": "Invalid passphrase or corrupted config",
+  "syncBundleNoSnapshot": "No snapshot found in sync bundle",
+  "syncBundleValidationFailed": "Database validation failed after applying snapshot",
+  "syncBundleImportFailed": "Sync bundle import failed",
+  "syncBundleImportComplete": "Import Complete",
+  "syncBundleSetupContinuousSync": "Your data has been imported successfully. Would you like to set up continuous sync?",
+  "syncBundleEnterPassphrase": "Enter Passphrase"
 }
