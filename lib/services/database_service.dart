@@ -4829,4 +4829,40 @@ class DatabaseService {
   }
 
   // --- End Sync Changelog Methods ---
+
+  // --- Sync Conflicts Methods ---
+
+  /// Creates the sync_conflicts table if it does not already exist.
+  ///
+  /// This table stores field-level conflicts detected during merge operations,
+  /// allowing the user to review and resolve them later.
+  Future<void> ensureSyncConflictsTable() async {
+    final db = await database;
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        local_value TEXT,
+        remote_value TEXT,
+        remote_device_id TEXT NOT NULL,
+        remote_timestamp TEXT NOT NULL,
+        resolved INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// Returns all unresolved sync conflicts, ordered by most recent first.
+  Future<List<Map<String, dynamic>>> getSyncConflicts() async {
+    final db = await database;
+    return db.query(
+      'sync_conflicts',
+      where: 'resolved = 0',
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  // --- End Sync Conflicts Methods ---
 }
