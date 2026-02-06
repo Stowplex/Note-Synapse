@@ -1724,5 +1724,41 @@
         "type": "int"
       }
     }
+  },
+  "syncSetupTitle": "Set Up Cloud Sync",
+  "syncSetupDescription": "Configure cloud sync to keep your notes synchronized across devices.",
+  "syncProviderSelection": "Sync Provider",
+  "syncProviderConfiguration": "Configuration",
+  "syncProviderFolder": "Local Folder",
+  "syncProviderFolderDescription": "Sync via a shared folder (iCloud Drive, Dropbox, FolderSync, etc.)",
+  "syncProviderWebDav": "WebDAV Server",
+  "syncProviderWebDavDescription": "Sync via a WebDAV-compatible server",
+  "syncFolderSelectDescription": "Select a folder that is shared across your devices (e.g., iCloud Drive, Dropbox folder).",
+  "syncFolderNotSelected": "No folder selected",
+  "syncSelectFolder": "Select Folder",
+  "syncFolderRequired": "Please select a sync folder",
+  "syncWebDavUrl": "Server URL",
+  "syncWebDavUrlRequired": "Please enter a WebDAV server URL",
+  "syncWebDavUsername": "Username",
+  "syncWebDavPassword": "Password",
+  "syncEncryption": "Encryption",
+  "syncEncryptionDescription": "Set a passphrase to encrypt your sync data. This ensures your notes remain private even if the storage is compromised.",
+  "syncPassphrase": "Passphrase",
+  "syncConfirmPassphrase": "Confirm Passphrase",
+  "syncPassphraseRequired": "Please enter a passphrase",
+  "syncPassphraseTooShort": "Passphrase must be at least 8 characters",
+  "syncPassphraseMismatch": "Passphrases do not match",
+  "syncSkipEncryption": "Skip encryption",
+  "syncSkipEncryptionWarning": "Only safe if all devices use isolated storage (e.g., iOS-only with iCloud container). Your notes will be stored unencrypted in the sync folder.",
+  "syncInitialize": "Initialize Sync",
+  "syncInitializing": "Initializing...",
+  "syncInitSuccess": "Sync initialized successfully!",
+  "syncInitFailed": "Sync initialization failed: {error}",
+  "@syncInitFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

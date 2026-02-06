@@ -7405,6 +7405,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to delete {count} blocks?'**
   String confirmDeleteBlocks(int count);
+
+  /// No description provided for @syncSetupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Up Cloud Sync'**
+  String get syncSetupTitle;
+
+  /// No description provided for @syncSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure cloud sync to keep your notes synchronized across devices.'**
+  String get syncSetupDescription;
+
+  /// No description provided for @syncProviderSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Provider'**
+  String get syncProviderSelection;
+
+  /// No description provided for @syncProviderConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration'**
+  String get syncProviderConfiguration;
+
+  /// No description provided for @syncProviderFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Folder'**
+  String get syncProviderFolder;
+
+  /// No description provided for @syncProviderFolderDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync via a shared folder (iCloud Drive, Dropbox, FolderSync, etc.)'**
+  String get syncProviderFolderDescription;
+
+  /// No description provided for @syncProviderWebDav.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV Server'**
+  String get syncProviderWebDav;
+
+  /// No description provided for @syncProviderWebDavDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync via a WebDAV-compatible server'**
+  String get syncProviderWebDavDescription;
+
+  /// No description provided for @syncFolderSelectDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a folder that is shared across your devices (e.g., iCloud Drive, Dropbox folder).'**
+  String get syncFolderSelectDescription;
+
+  /// No description provided for @syncFolderNotSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No folder selected'**
+  String get syncFolderNotSelected;
+
+  /// No description provided for @syncSelectFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Folder'**
+  String get syncSelectFolder;
+
+  /// No description provided for @syncFolderRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a sync folder'**
+  String get syncFolderRequired;
+
+  /// No description provided for @syncWebDavUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get syncWebDavUrl;
+
+  /// No description provided for @syncWebDavUrlRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a WebDAV server URL'**
+  String get syncWebDavUrlRequired;
+
+  /// No description provided for @syncWebDavUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get syncWebDavUsername;
+
+  /// No description provided for @syncWebDavPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get syncWebDavPassword;
+
+  /// No description provided for @syncEncryption.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption'**
+  String get syncEncryption;
+
+  /// No description provided for @syncEncryptionDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a passphrase to encrypt your sync data. This ensures your notes remain private even if the storage is compromised.'**
+  String get syncEncryptionDescription;
+
+  /// No description provided for @syncPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase'**
+  String get syncPassphrase;
+
+  /// No description provided for @syncConfirmPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Passphrase'**
+  String get syncConfirmPassphrase;
+
+  /// No description provided for @syncPassphraseRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a passphrase'**
+  String get syncPassphraseRequired;
+
+  /// No description provided for @syncPassphraseTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase must be at least 8 characters'**
+  String get syncPassphraseTooShort;
+
+  /// No description provided for @syncPassphraseMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrases do not match'**
+  String get syncPassphraseMismatch;
+
+  /// No description provided for @syncSkipEncryption.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip encryption'**
+  String get syncSkipEncryption;
+
+  /// No description provided for @syncSkipEncryptionWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Only safe if all devices use isolated storage (e.g., iOS-only with iCloud container). Your notes will be stored unencrypted in the sync folder.'**
+  String get syncSkipEncryptionWarning;
+
+  /// No description provided for @syncInitialize.
+  ///
+  /// In en, this message translates to:
+  /// **'Initialize Sync'**
+  String get syncInitialize;
+
+  /// No description provided for @syncInitializing.
+  ///
+  /// In en, this message translates to:
+  /// **'Initializing...'**
+  String get syncInitializing;
+
+  /// No description provided for @syncInitSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync initialized successfully!'**
+  String get syncInitSuccess;
+
+  /// No description provided for @syncInitFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync initialization failed: {error}'**
+  String syncInitFailed(String error);
 }
 
 class _AppLocalizationsDelegate

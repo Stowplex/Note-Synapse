@@ -4266,4 +4266,100 @@ class AppLocalizationsEn extends AppLocalizations {
   String confirmDeleteBlocks(int count) {
     return 'Are you sure you want to delete $count blocks?';
   }
+
+  @override
+  String get syncSetupTitle => 'Set Up Cloud Sync';
+
+  @override
+  String get syncSetupDescription =>
+      'Configure cloud sync to keep your notes synchronized across devices.';
+
+  @override
+  String get syncProviderSelection => 'Sync Provider';
+
+  @override
+  String get syncProviderConfiguration => 'Configuration';
+
+  @override
+  String get syncProviderFolder => 'Local Folder';
+
+  @override
+  String get syncProviderFolderDescription =>
+      'Sync via a shared folder (iCloud Drive, Dropbox, FolderSync, etc.)';
+
+  @override
+  String get syncProviderWebDav => 'WebDAV Server';
+
+  @override
+  String get syncProviderWebDavDescription =>
+      'Sync via a WebDAV-compatible server';
+
+  @override
+  String get syncFolderSelectDescription =>
+      'Select a folder that is shared across your devices (e.g., iCloud Drive, Dropbox folder).';
+
+  @override
+  String get syncFolderNotSelected => 'No folder selected';
+
+  @override
+  String get syncSelectFolder => 'Select Folder';
+
+  @override
+  String get syncFolderRequired => 'Please select a sync folder';
+
+  @override
+  String get syncWebDavUrl => 'Server URL';
+
+  @override
+  String get syncWebDavUrlRequired => 'Please enter a WebDAV server URL';
+
+  @override
+  String get syncWebDavUsername => 'Username';
+
+  @override
+  String get syncWebDavPassword => 'Password';
+
+  @override
+  String get syncEncryption => 'Encryption';
+
+  @override
+  String get syncEncryptionDescription =>
+      'Set a passphrase to encrypt your sync data. This ensures your notes remain private even if the storage is compromised.';
+
+  @override
+  String get syncPassphrase => 'Passphrase';
+
+  @override
+  String get syncConfirmPassphrase => 'Confirm Passphrase';
+
+  @override
+  String get syncPassphraseRequired => 'Please enter a passphrase';
+
+  @override
+  String get syncPassphraseTooShort =>
+      'Passphrase must be at least 8 characters';
+
+  @override
+  String get syncPassphraseMismatch => 'Passphrases do not match';
+
+  @override
+  String get syncSkipEncryption => 'Skip encryption';
+
+  @override
+  String get syncSkipEncryptionWarning =>
+      'Only safe if all devices use isolated storage (e.g., iOS-only with iCloud container). Your notes will be stored unencrypted in the sync folder.';
+
+  @override
+  String get syncInitialize => 'Initialize Sync';
+
+  @override
+  String get syncInitializing => 'Initializing...';
+
+  @override
+  String get syncInitSuccess => 'Sync initialized successfully!';
+
+  @override
+  String syncInitFailed(String error) {
+    return 'Sync initialization failed: $error';
+  }
 }

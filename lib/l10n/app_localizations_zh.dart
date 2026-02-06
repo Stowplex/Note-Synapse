@@ -4073,4 +4073,96 @@ class AppLocalizationsZh extends AppLocalizations {
   String confirmDeleteBlocks(int count) {
     return '确定要删除 $count 个区块吗？';
   }
+
+  @override
+  String get syncSetupTitle => '设置云同步';
+
+  @override
+  String get syncSetupDescription => '配置云同步以在多设备之间保持笔记同步。';
+
+  @override
+  String get syncProviderSelection => '同步方式';
+
+  @override
+  String get syncProviderConfiguration => '配置';
+
+  @override
+  String get syncProviderFolder => '本地文件夹';
+
+  @override
+  String get syncProviderFolderDescription =>
+      '通过共享文件夹同步（iCloud Drive、Dropbox、FolderSync 等）';
+
+  @override
+  String get syncProviderWebDav => 'WebDAV 服务器';
+
+  @override
+  String get syncProviderWebDavDescription => '通过 WebDAV 兼容的服务器同步';
+
+  @override
+  String get syncFolderSelectDescription =>
+      '选择一个在设备间共享的文件夹（如 iCloud Drive、Dropbox 文件夹）。';
+
+  @override
+  String get syncFolderNotSelected => '未选择文件夹';
+
+  @override
+  String get syncSelectFolder => '选择文件夹';
+
+  @override
+  String get syncFolderRequired => '请选择同步文件夹';
+
+  @override
+  String get syncWebDavUrl => '服务器 URL';
+
+  @override
+  String get syncWebDavUrlRequired => '请输入 WebDAV 服务器 URL';
+
+  @override
+  String get syncWebDavUsername => '用户名';
+
+  @override
+  String get syncWebDavPassword => '密码';
+
+  @override
+  String get syncEncryption => '加密';
+
+  @override
+  String get syncEncryptionDescription => '设置密码短语以加密同步数据。即使存储被泄露，您的笔记也能保持私密。';
+
+  @override
+  String get syncPassphrase => '密码短语';
+
+  @override
+  String get syncConfirmPassphrase => '确认密码短语';
+
+  @override
+  String get syncPassphraseRequired => '请输入密码短语';
+
+  @override
+  String get syncPassphraseTooShort => '密码短语至少需要8个字符';
+
+  @override
+  String get syncPassphraseMismatch => '两次输入的密码短语不一致';
+
+  @override
+  String get syncSkipEncryption => '跳过加密';
+
+  @override
+  String get syncSkipEncryptionWarning =>
+      '仅在所有设备使用隔离存储时才安全（如仅 iOS 设备使用 iCloud 容器）。您的笔记将以未加密形式存储在同步文件夹中。';
+
+  @override
+  String get syncInitialize => '初始化同步';
+
+  @override
+  String get syncInitializing => '正在初始化...';
+
+  @override
+  String get syncInitSuccess => '同步初始化成功！';
+
+  @override
+  String syncInitFailed(String error) {
+    return '同步初始化失败：$error';
+  }
 }

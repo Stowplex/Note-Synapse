@@ -1664,5 +1664,41 @@
         "type": "int"
       }
     }
+  },
+  "syncSetupTitle": "设置云同步",
+  "syncSetupDescription": "配置云同步以在多设备之间保持笔记同步。",
+  "syncProviderSelection": "同步方式",
+  "syncProviderConfiguration": "配置",
+  "syncProviderFolder": "本地文件夹",
+  "syncProviderFolderDescription": "通过共享文件夹同步（iCloud Drive、Dropbox、FolderSync 等）",
+  "syncProviderWebDav": "WebDAV 服务器",
+  "syncProviderWebDavDescription": "通过 WebDAV 兼容的服务器同步",
+  "syncFolderSelectDescription": "选择一个在设备间共享的文件夹（如 iCloud Drive、Dropbox 文件夹）。",
+  "syncFolderNotSelected": "未选择文件夹",
+  "syncSelectFolder": "选择文件夹",
+  "syncFolderRequired": "请选择同步文件夹",
+  "syncWebDavUrl": "服务器 URL",
+  "syncWebDavUrlRequired": "请输入 WebDAV 服务器 URL",
+  "syncWebDavUsername": "用户名",
+  "syncWebDavPassword": "密码",
+  "syncEncryption": "加密",
+  "syncEncryptionDescription": "设置密码短语以加密同步数据。即使存储被泄露，您的笔记也能保持私密。",
+  "syncPassphrase": "密码短语",
+  "syncConfirmPassphrase": "确认密码短语",
+  "syncPassphraseRequired": "请输入密码短语",
+  "syncPassphraseTooShort": "密码短语至少需要8个字符",
+  "syncPassphraseMismatch": "两次输入的密码短语不一致",
+  "syncSkipEncryption": "跳过加密",
+  "syncSkipEncryptionWarning": "仅在所有设备使用隔离存储时才安全（如仅 iOS 设备使用 iCloud 容器）。您的笔记将以未加密形式存储在同步文件夹中。",
+  "syncInitialize": "初始化同步",
+  "syncInitializing": "正在初始化...",
+  "syncInitSuccess": "同步初始化成功！",
+  "syncInitFailed": "同步初始化失败：{error}",
+  "@syncInitFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }
