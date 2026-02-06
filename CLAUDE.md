@@ -117,6 +117,15 @@ When modifying tables, update `recovery_screen.dart` to ensure consistency durin
 ### Multi-functions Table
 Deliberately excluded from recovery operations.
 
+### Sync Field Version Registry
+When adding a database migration that introduces new columns on synced tables,
+update the field version registry in `lib/services/sync/field_version_registry.dart`.
+This is enforced by unit tests in `test/services/sync/field_version_registry_test.dart`.
+
+Synced tables: notes, subnotes, tags, note_tags, relationships, conversations,
+conversation_messages, conversation_message_mapping, message_parents,
+conversation_note_mapping, conversation_tags, attachments, conversation_attachments.
+
 ## Localization
 
 UI text changes must consider l10n. Localizations are in `lib/l10n/` (English and Chinese Simplified).
