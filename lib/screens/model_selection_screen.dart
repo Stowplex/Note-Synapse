@@ -77,7 +77,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         }
 
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/main');
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
         // Navigate to configuration screen
@@ -191,7 +193,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
                             .setOnboardingCompleted(true);
                       }
                       if (context.mounted) {
-                        Navigator.of(context).pushReplacementNamed('/main');
+                        Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil('/main', (route) => false);
                       }
                     },
                     child: Text(
