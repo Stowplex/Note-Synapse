@@ -13,6 +13,8 @@ import 'context_manager_service.dart';
 import 'ai_service.dart';
 import 'agent_service.dart';
 import 'mcp_service.dart';
+import 'package:note_synapse/services/sync/sync_service.dart';
+import 'package:note_synapse/services/sync/device_identity_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -64,6 +66,15 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ConversationService>()) {
     getIt.registerLazySingleton<ConversationService>(
       () => ConversationService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<SyncService>()) {
+    getIt.registerLazySingleton<SyncService>(
+      () => SyncService(
+        db: getIt<DatabaseService>(),
+        identity: DeviceIdentityService(),
+      ),
     );
   }
 
