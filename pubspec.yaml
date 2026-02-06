@@ -162,6 +162,7 @@ dependencies:
   flutter_painter_v2: ^2.1.0+1
   phosphor_flutter: ^2.1.0
   json_repair_flutter: ^2.0.2
+  package_info_plus: ^9.0.0
 
 
 dev_dependencies:
@@ -199,6 +200,8 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/LICENSE
+    - assets/PRIVACY.md
     - assets/scripts/Readability.min.js
     - assets/scripts/chart.min.js
     - assets/scripts/chartjs-adapter-date-fns.bundle.min.js

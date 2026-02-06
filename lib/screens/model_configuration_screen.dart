@@ -15,8 +15,14 @@ import '../l10n/app_localizations.dart';
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelConfig? config; // If provided, we are editing
   final ModelType? initialType; // If adding, start with this type
+  final bool isOnboarding;
 
-  const ModelConfigurationScreen({super.key, this.config, this.initialType});
+  const ModelConfigurationScreen({
+    super.key,
+    this.config,
+    this.initialType,
+    this.isOnboarding = false,
+  });
 
   @override
   State<ModelConfigurationScreen> createState() =>

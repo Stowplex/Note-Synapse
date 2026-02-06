@@ -1,0 +1,71 @@
+# Privacy Policy
+
+**Last Updated:** January 30, 2026
+
+This Privacy Policy ("Policy") governs the use of the Note Synapse software application ("the Application"). Please read this Policy carefully to understand our practices regarding your data and how we treat it.
+
+## 1. Introduction and Philosophy
+The Application is designed with a "Local-First" and "Privacy-First" architecture. This means that the developer of the Application ("the Developer") does not collect, process, or monetize your personal data. Your notes, intellectual property, and usage patterns remain exclusively under your control.
+
+## 2. No Data Collection by the Developer
+The Developer does not operate a centralized server, cloud storage, or backend service for the purpose of collecting user data.
+*   **No Telemetry:** We do not track your usage, behavior, or feature interaction.
+*   **No Cloud Sync:** We do not store copies of your notes or metadata on our servers.
+*   **No Account Required:** The Application functions entirely without a user account or login registration with the Developer.
+
+## 3. Local Data Storage
+All content created, imported, or managed within the Application ("User Data") is stored partially or wholly on the local storage medium of the device on which the Application is installed.
+*   **Data Sovereignty:** You retain full ownership and custody of your User Data.
+*   **Backup Responsibility:** Since the Developer does not maintain a copy of your data, you are solely responsible for backing up your data to prevent loss due to device failure or accidental deletion.
+
+## 4. Third-Party Artificial Intelligence Services
+The Application includes functionality that allows you to interact with third-party Artificial Intelligence platforms ("AI Providers"), such as OpenAI, Anthropic, or Google.
+
+### 4.1. Direct Interaction
+When you utilize AI-powered features, the Application functions as a client interface that transmits data **directly** from your device to the API of the selected AI Provider. This transmission does not pass through, and is not intercepted by, any server controlled by the Developer.
+
+### 4.2. API Keys and Credentials
+To access these services, you must provide your own API keys.
+*   **Storage:** API keys are encrypted or stored securely in your device's local keychain or configuration files.
+*   **Transmission:** API keys are transmitted only to the respective AI Provider for authentication purposes. They are never transmitted to the Developer.
+
+### 4.3. Third-Party Policies
+By choosing to use an AI Provider, you acknowledge that your data (including text prompts and file attachments) will be subject to the privacy policy and terms of service of that third-party provider. The Developer is not responsible for the data handling practices of these third parties.
+
+## 5. User-Created Extensions ("User Apps")
+
+### 5.1. Distribution and Third-Party Apps
+The Developer does **not** distribute, review, or verify User Apps created by the community, with the exception of the "Starter Apps" listed in Section 5.3. Users may install extensions from third-party sources or create their own.
+*   **User Responsibility:** You are solely responsible for reviewing the code and privacy policies of any User App you install or create. The Developer is not responsible for the data practices of third-party extensions.
+*   **Third-Party Integration:** User Apps may be designed to communicate with third-party services (e.g., weather services, productivity tools, databases) or use external software libraries. Data shared with these services is subject to their respective privacy policies.
+
+### 5.2. Bundled "Starter Apps"
+The Application includes a limited set of "Starter Apps" to demonstrate functionality. Their privacy characteristics are as follows:
+
+1.  **Knowledge Graph**
+    *   **Function:** Visualizes connections of concepts in notes.
+    *   **Privacy:** Data processing is determined by your selected AI Provider's policy.
+2.  **File Browser**
+    *   **Function:** Allows navigation of local files.
+    *   **Privacy:** Purely local. No data leaves your device.
+3.  **Mermaid**
+    *   **Function:** Renders diagrams from text.
+    *   **Privacy:** Purely local. No data leaves your device.
+4.  **Pop-Quiz**
+    *   **Function:** Generates quiz questions from your notes.
+    *   **Privacy:** Data processing is determined by your selected AI Provider's policy.
+5.  **Guided Learning**
+    *   **Function:** Creates interactive learning modules.
+    *   **Privacy:** Data processing is determined by your selected AI Provider's policy.
+6.  **WebScraper**
+    *   **Function:** A tool (similar to cURL) that enables your AI model to fetch public websites.
+    *   **Privacy:** Data processing is determined by your selected AI Provider's policy. Your IP address will be visible to the websites you choose to fetch.
+
+## 6. Children's Privacy
+The Application is not directed to individuals under the age of 13. As the content is generated by the user and stored locally, the Developer has no means of verifying the age of users or the nature of the content they create.
+
+## 7. Changes to This Policy
+We may update this Privacy Policy from time to time to reflect changes in our technical architecture or legal obligations. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last Updated" date.
+
+## 8. Contact Us
+If you have any questions about this Privacy Policy, please contact the maintainers via the project's official repository or support channels.

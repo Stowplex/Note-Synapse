@@ -39,6 +39,9 @@ class AppProvider extends ChangeNotifier {
   List<String> _multiFunctionApps = [];
   String? _currentMultiFunctionAppId;
   bool _isHierarchyEnabled = false;
+  bool _onboardingCompleted = false;
+
+  bool get onboardingCompleted => _onboardingCompleted;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -78,6 +81,7 @@ class AppProvider extends ChangeNotifier {
           .getMultiFunctionDefaultAppId();
 
       await _loadHierarchyPreference();
+      await _loadOnboardingStatus();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
@@ -626,6 +630,28 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       LoggerService.error('Error loading hierarchy preference: $e', error: e);
       _isHierarchyEnabled = false;
+    }
+  }
+
+  Future<void> _loadOnboardingStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+      notifyListeners();
+    } catch (e) {
+      LoggerService.error('Error loading onboarding status: $e', error: e);
+      _onboardingCompleted = false;
+    }
+  }
+
+  Future<void> setOnboardingCompleted(bool completed) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completed', completed);
+      _onboardingCompleted = completed;
+      notifyListeners();
+    } catch (e) {
+      LoggerService.error('Error saving onboarding status: $e', error: e);
     }
   }
 
