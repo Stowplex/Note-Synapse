@@ -9,6 +9,7 @@ import 'screens/setup_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/model_selection_screen.dart';
+import 'screens/onboarding/welcome_screen.dart';
 import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
@@ -152,10 +153,24 @@ class _AppWrapperState extends State<AppWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final appProvider = context.watch<AppProvider>();
+
+    // Only show onboarding if it's not completed AND we are not in a state where model is already configured
+    // (backward compatibility: if model is configured, we assume they are an existing user,
+    // BUT user asked for "show it once", so we primarily trust the flag.
+    // However, to be safe, if they have a model, we might want to auto-set the flag?
+    // Re-reading plan: "I will treat 'Model Configured' as a proxy... OR just show it once."
+    // User approval: "Show it once is OK."
+    // So we stricly check the flag.
+
+    if (!appProvider.onboardingCompleted) {
+      return const WelcomeScreen();
+    }
+
     if (_isModelConfigured) {
       return const MainScreen();
     } else {
-      return ModelSelectionScreen();
+      return const ModelSelectionScreen();
     }
   }
 }

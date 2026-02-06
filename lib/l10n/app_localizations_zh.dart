@@ -2464,6 +2464,78 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get onboardingWelcomeTitle => '欢迎使用笔记突触';
+
+  @override
+  String get onboardingWelcomeSubtitle => '您的AI第二大脑';
+
+  @override
+  String get onboardingChooseModelTitle => '选择您的AI模型';
+
+  @override
+  String get onboardingChooseModelSubtitle => '选择最适合您需求的AI模型';
+
+  @override
+  String get onboardingStart => '开始使用';
+
+  @override
+  String get onboardingNext => '下一步';
+
+  @override
+  String get onboardingSkip => '跳过';
+
+  @override
+  String get onboardingLicenseTitle => '许可协议';
+
+  @override
+  String get onboardingLicenseSubtitle => '请阅读并接受许可协议';
+
+  @override
+  String get onboardingPrivacyTitle => '隐私政策';
+
+  @override
+  String get onboardingPrivacySubtitle => '我们如何处理您的数据';
+
+  @override
+  String get onboardingAccept => '接受并继续';
+
+  @override
+  String get onboardingConfigLater => '稍后配置';
+
+  @override
+  String get about => '关于';
+
+  @override
+  String get aboutSubtitle => '许可证、隐私政策与版本信息';
+
+  @override
+  String get version => '版本';
+
+  @override
+  String get githubPage => 'GitHub 页面';
+
+  @override
+  String get viewLicense => '查看许可证';
+
+  @override
+  String get viewPrivacyPolicy => '查看隐私政策';
+
+  @override
+  String get stowplexCopyright => 'Stowplex LLC & Bruce Li 保留所有权利';
+
+  @override
+  String get noWarranty => '无担保声明';
+
+  @override
+  String get debugMenu => '调试菜单';
+
+  @override
+  String get resetOnboarding => '重置引导页标志';
+
+  @override
+  String get resetOnboardingSuccess => '引导页标志已重置';
+
+  @override
   String refreshedToolsFor(Object name) {
     return '已刷新$name的工具';
   }

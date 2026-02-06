@@ -2544,6 +2544,79 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get onboardingWelcomeTitle => 'Welcome to Note Synapse';
+
+  @override
+  String get onboardingWelcomeSubtitle => 'Your AI second brain';
+
+  @override
+  String get onboardingChooseModelTitle => 'Choose Your AI Model';
+
+  @override
+  String get onboardingChooseModelSubtitle =>
+      'Select the AI model that best fits your needs';
+
+  @override
+  String get onboardingStart => 'Get Started';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingLicenseTitle => 'License Agreement';
+
+  @override
+  String get onboardingLicenseSubtitle => 'Please read and accept the license';
+
+  @override
+  String get onboardingPrivacyTitle => 'Privacy Policy';
+
+  @override
+  String get onboardingPrivacySubtitle => 'How we handle your data';
+
+  @override
+  String get onboardingAccept => 'Accept & Continue';
+
+  @override
+  String get onboardingConfigLater => 'Config Later';
+
+  @override
+  String get about => 'About';
+
+  @override
+  String get aboutSubtitle => 'License, privacy, and version';
+
+  @override
+  String get version => 'Version';
+
+  @override
+  String get githubPage => 'GitHub Page';
+
+  @override
+  String get viewLicense => 'View License';
+
+  @override
+  String get viewPrivacyPolicy => 'View Privacy Policy';
+
+  @override
+  String get stowplexCopyright => 'Stowplex LLC & Bruce Li All Rights Reserved';
+
+  @override
+  String get noWarranty => 'NO WARRANTY';
+
+  @override
+  String get debugMenu => 'Debug Menu';
+
+  @override
+  String get resetOnboarding => 'Reset Onboarding Flag';
+
+  @override
+  String get resetOnboardingSuccess => 'Onboarding flag reset';
+
+  @override
   String refreshedToolsFor(Object name) {
     return 'Refreshed tools for $name';
   }

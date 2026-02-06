@@ -4550,6 +4550,150 @@ abstract class AppLocalizations {
   /// **'Error deleting endpoint: {error}'**
   String errorDeletingEndpoint(Object error);
 
+  /// No description provided for @onboardingWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Note Synapse'**
+  String get onboardingWelcomeTitle;
+
+  /// No description provided for @onboardingWelcomeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your AI second brain'**
+  String get onboardingWelcomeSubtitle;
+
+  /// No description provided for @onboardingChooseModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Your AI Model'**
+  String get onboardingChooseModelTitle;
+
+  /// No description provided for @onboardingChooseModelSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the AI model that best fits your needs'**
+  String get onboardingChooseModelSubtitle;
+
+  /// No description provided for @onboardingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Started'**
+  String get onboardingStart;
+
+  /// No description provided for @onboardingNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// No description provided for @onboardingSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// No description provided for @onboardingLicenseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'License Agreement'**
+  String get onboardingLicenseTitle;
+
+  /// No description provided for @onboardingLicenseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Please read and accept the license'**
+  String get onboardingLicenseSubtitle;
+
+  /// No description provided for @onboardingPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get onboardingPrivacyTitle;
+
+  /// No description provided for @onboardingPrivacySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How we handle your data'**
+  String get onboardingPrivacySubtitle;
+
+  /// No description provided for @onboardingAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept & Continue'**
+  String get onboardingAccept;
+
+  /// No description provided for @onboardingConfigLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Config Later'**
+  String get onboardingConfigLater;
+
+  /// No description provided for @about.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get about;
+
+  /// No description provided for @aboutSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'License, privacy, and version'**
+  String get aboutSubtitle;
+
+  /// No description provided for @version.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get version;
+
+  /// No description provided for @githubPage.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Page'**
+  String get githubPage;
+
+  /// No description provided for @viewLicense.
+  ///
+  /// In en, this message translates to:
+  /// **'View License'**
+  String get viewLicense;
+
+  /// No description provided for @viewPrivacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'View Privacy Policy'**
+  String get viewPrivacyPolicy;
+
+  /// No description provided for @stowplexCopyright.
+  ///
+  /// In en, this message translates to:
+  /// **'Stowplex LLC & Bruce Li All Rights Reserved'**
+  String get stowplexCopyright;
+
+  /// No description provided for @noWarranty.
+  ///
+  /// In en, this message translates to:
+  /// **'NO WARRANTY'**
+  String get noWarranty;
+
+  /// No description provided for @debugMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Menu'**
+  String get debugMenu;
+
+  /// No description provided for @resetOnboarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Onboarding Flag'**
+  String get resetOnboarding;
+
+  /// No description provided for @resetOnboardingSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Onboarding flag reset'**
+  String get resetOnboardingSuccess;
+
   /// No description provided for @refreshedToolsFor.
   ///
   /// In en, this message translates to:
