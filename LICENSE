@@ -3,22 +3,19 @@ Copyright (c) 2025, Bruce Li
 DUAL LICENSING NOTICE
 
 1. Open Source License (AGPL v3)
-   Code in this repository is free software: you can redistribute it and/or modify it under the terms of the
-   GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the
-   License, or (at your option) any later version.
-   The code in this repository follows the AGPL license terms.
+   Subject to the exceptions in Section 2, this software is released under the GNU Affero General Public License, version 3 (AGPL v3).
+   You are free to use, modify, and distribute this software in compliance with the AGPL v3 terms.
+   Specifically, if you modify the software and make it available over a network, you must provide the source code of your modified version to users.
 
-2. Private License for App Store Compliance
-   A private, non-AGPL license is available and applied for the versions of this software published
-   on the Apple App Store and Google Play Store. This private license is for compliance with Apple & Google
-   app store policies, which may be incompatible with the AGPL.
+2. Proprietary License for App Store Distribution
+   A restricted, proprietary license is granted exclusively to Stowplex LLC and Bruce Li for the purpose of compiling, signing, and releasing the software as a proprietary application on digital distribution platforms, including but not limited to the Apple App Store and Google Play Store.
+   This proprietary license permits the release of the software without the copyleft obligations of the AGPL v3, solely for the specified entities and purposes.
 
-3. Compilation Consistency
-   The released app store version compiles from the same base source code as this repository.
+3. Restrictions on Other Derivative Works
+   Any other application, derivative work, or commercial product built using this software, other than those released by Stowplex LLC or Bruce Li under the proprietary license described in Section 2, shall be subject to the terms of the GNU Affero General Public License, version 3 (AGPL v3). No other proprietary or closed-source use is permitted without a separate written commercial license agreement.
 
 4. Warranty & Liability
-   The warranty and liability in the app store version remains consistent with the AGPL terms provided below
-   (specifically Sections 15, 16, and 17).
+   The warranty and liability provisions for all versions of the software, including those released under the proprietary license, remain consistent with the AGPL v3 terms provided below (specifically Sections 15, 16, and 17).
 
 --------------------------------------------------------------------------------
 
