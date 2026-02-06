@@ -2593,6 +2593,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get version => 'Version';
 
   @override
+  String get info => 'Info';
+
+  @override
+  String get applicationInfo => 'Application Information';
+
+  @override
   String get githubPage => 'GitHub Page';
 
   @override
@@ -2615,6 +2621,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resetOnboardingSuccess => 'Onboarding flag reset';
+
+  @override
+  String get dependencyLicenses => 'Dependency Library Licenses';
 
   @override
   String refreshedToolsFor(Object name) {

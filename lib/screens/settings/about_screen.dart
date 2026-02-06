@@ -99,11 +99,29 @@ class _AboutScreenState extends State<AboutScreen> {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: Text(l10n.dependencyLicenses),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              showLicensePage(
+                context: context,
+                applicationName: 'Note Synapse',
+                applicationVersion: _version,
+                applicationIcon: Icon(
+                  Icons.auto_awesome,
+                  size: 50,
+                  color: Theme.of(context).primaryColor,
+                ),
+                applicationLegalese: l10n.stowplexCopyright,
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.code),
             title: Text(l10n.githubPage),
             trailing: const Icon(Icons.open_in_new),
             onTap: () =>
-                _launchUrl('https://github.com/Start-Context/Note-Synapse'),
+                _launchUrl('https://github.com/kkspeed/Note-Synapse'),
           ),
         ],
       ),

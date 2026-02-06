@@ -812,6 +812,8 @@
   "about": "关于",
   "aboutSubtitle": "许可证、隐私政策与版本信息",
   "version": "版本",
+  "info": "信息",
+  "applicationInfo": "应用信息",
   "githubPage": "GitHub 页面",
   "viewLicense": "查看许可证",
   "viewPrivacyPolicy": "查看隐私政策",
@@ -820,6 +822,7 @@
   "debugMenu": "调试菜单",
   "resetOnboarding": "重置引导页标志",
   "resetOnboardingSuccess": "引导页标志已重置",
+  "dependencyLicenses": "依赖库许可证",
 
   "deletedEndpoint": "已删除端点：{name}",
   "errorDeletingEndpoint": "删除端点时出错：{error}",

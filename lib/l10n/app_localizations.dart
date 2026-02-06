@@ -4646,6 +4646,18 @@ abstract class AppLocalizations {
   /// **'Version'**
   String get version;
 
+  /// No description provided for @info.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get info;
+
+  /// No description provided for @applicationInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Application Information'**
+  String get applicationInfo;
+
   /// No description provided for @githubPage.
   ///
   /// In en, this message translates to:
@@ -4693,6 +4705,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Onboarding flag reset'**
   String get resetOnboardingSuccess;
+
+  /// No description provided for @dependencyLicenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Dependency Library Licenses'**
+  String get dependencyLicenses;
 
   /// No description provided for @refreshedToolsFor.
   ///

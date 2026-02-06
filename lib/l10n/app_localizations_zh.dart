@@ -2512,6 +2512,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get version => '版本';
 
   @override
+  String get info => '信息';
+
+  @override
+  String get applicationInfo => '应用信息';
+
+  @override
   String get githubPage => 'GitHub 页面';
 
   @override
@@ -2534,6 +2540,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get resetOnboardingSuccess => '引导页标志已重置';
+
+  @override
+  String get dependencyLicenses => '依赖库许可证';
 
   @override
   String refreshedToolsFor(Object name) {

@@ -79,7 +79,7 @@ class BuiltInToolsService {
       color: Colors.amber,
     ),
     const BuiltInTool(
-      id: 'create_note',
+      id: 'create_notes',
       name: 'Create Note',
       description:
           'Create new notes with content, tags, and attachments. Requires approval.',
@@ -87,7 +87,7 @@ class BuiltInToolsService {
       color: Colors.indigo,
     ),
     const BuiltInTool(
-      id: 'delete_note',
+      id: 'delete_notes',
       name: 'Delete Note',
       description: 'Delete notes by ID. Requires approval.',
       icon: Icons.delete_outline,
