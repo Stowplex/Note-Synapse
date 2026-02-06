@@ -153,6 +153,28 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       );
 
       if (_importedApp != null) {
+        // Restore app_state if present in the YAML
+        if (appData.containsKey('app_state') && appData['app_state'] != null) {
+          try {
+            final appStateBase64 = appData['app_state'] as String;
+            final appStateJson = utf8.decode(base64Decode(appStateBase64));
+            final appState =
+                jsonDecode(appStateJson) as Map<String, dynamic>;
+            await databaseService.updateUserAppState(
+              _importedApp!.id,
+              appState,
+            );
+            setState(() {
+              _progressSteps.add('✓ App state restored');
+            });
+          } catch (e) {
+            LoggerService.error('Failed to restore app_state: $e', error: e);
+            setState(() {
+              _progressSteps.add('⚠ Failed to restore app state: $e');
+            });
+          }
+        }
+
         setState(() {
           _currentStatus = 'Downloading dependencies...';
           _progress = 0.6;
@@ -264,6 +286,8 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       'app_type': appType,
       'code': yamlData['code']?.toString() ?? '',
       'libraries': _convertLibraries(yamlData['libraries']),
+      if (yamlData.containsKey('app_state'))
+        'app_state': yamlData['app_state']?.toString(),
     };
   }
 
@@ -458,13 +482,16 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         usageInstructions: instructions,
       );
 
-      // Download dependencies
+      // Download dependencies (or use inline blob)
       for (int j = 0; j < dependencies.length; j++) {
         final dependency = dependencies[j];
         final link = dependency['link']?.toString() ?? '';
+        final inlineBlob = dependency['blob']?.toString();
 
         setState(() {
-          final fileName = Uri.parse(link).pathSegments.last;
+          final fileName = link.isNotEmpty
+              ? Uri.parse(link).pathSegments.last
+              : 'dependency_$j';
           _currentStatus = AppLocalizations.of(
             context,
           )!.downloadingDependency(fileName);
@@ -477,14 +504,16 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
           );
         });
 
-        try {
-          final response = await NetworkProvider.get(Uri.parse(link));
-          if (response.statusCode == 200) {
-            final bytes = response.bodyBytes;
-            final localPath = Uri.parse(link).path;
+        // Use inline blob if available, otherwise download from URL
+        if (inlineBlob != null && inlineBlob.isNotEmpty) {
+          try {
+            final bytes = base64Decode(inlineBlob);
+            final localPath = link.isNotEmpty
+                ? Uri.parse(link).path
+                : '/imported/$libraryName/dependency_$j';
 
             await databaseService.insertUserAppLibraryDependency(
-              originalUrl: link,
+              originalUrl: link.isNotEmpty ? link : null,
               localPath: localPath,
               bytes: bytes,
               libraryId: libraryId,
@@ -492,22 +521,49 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
 
             setState(() {
               _progressSteps.add(
-                '  ✓ ${AppLocalizations.of(context)!.downloaded(localPath)}',
+                '  ✓ Restored from inline blob: $localPath',
               );
             });
-          } else {
+          } catch (e) {
             setState(() {
               _progressSteps.add(
-                '  ✗ ${AppLocalizations.of(context)!.failedToDownload(link, response.statusCode.toString())}',
+                '  ✗ Failed to decode inline blob: $e',
               );
             });
           }
-        } catch (e) {
-          setState(() {
-            _progressSteps.add(
-              '  ✗ ${AppLocalizations.of(context)!.errorDownloading(link, e.toString())}',
-            );
-          });
+        } else if (link.isNotEmpty) {
+          try {
+            final response = await NetworkProvider.get(Uri.parse(link));
+            if (response.statusCode == 200) {
+              final bytes = response.bodyBytes;
+              final localPath = Uri.parse(link).path;
+
+              await databaseService.insertUserAppLibraryDependency(
+                originalUrl: link,
+                localPath: localPath,
+                bytes: bytes,
+                libraryId: libraryId,
+              );
+
+              setState(() {
+                _progressSteps.add(
+                  '  ✓ ${AppLocalizations.of(context)!.downloaded(localPath)}',
+                );
+              });
+            } else {
+              setState(() {
+                _progressSteps.add(
+                  '  ✗ ${AppLocalizations.of(context)!.failedToDownload(link, response.statusCode.toString())}',
+                );
+              });
+            }
+          } catch (e) {
+            setState(() {
+              _progressSteps.add(
+                '  ✗ ${AppLocalizations.of(context)!.errorDownloading(link, e.toString())}',
+              );
+            });
+          }
         }
       }
     }

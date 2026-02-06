@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 
 import '../models/user_app.dart';
 import '../services/database_service.dart';
+import '../services/logger_service.dart';
 
 class ExportAppScreen extends StatefulWidget {
   final UserApp app;
@@ -143,6 +144,19 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
 
       for (final dependency in dependencies) {
         dependenciesYaml.add('      - link: ${dependency['original_url']}');
+        // Include inline blob if bytes are available
+        try {
+          final bytes = dependency['bytes'];
+          if (bytes != null && bytes is List<int> && bytes.isNotEmpty) {
+            final base64Blob = base64Encode(Uint8List.fromList(bytes));
+            dependenciesYaml.add('        blob: $base64Blob');
+          }
+        } catch (e) {
+          LoggerService.error(
+            'Failed to encode dependency blob for ${dependency['original_url']}: $e',
+            error: e,
+          );
+        }
       }
 
       librariesYaml.add('  - name: ${library['name']}');
@@ -169,6 +183,14 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
     // Convert app type enum to string
     final appTypeString = _appTypeToString(app.type);
 
+    // Load app state (on-demand to avoid cursor window issues)
+    Map<String, dynamic>? appState;
+    try {
+      appState = await databaseService.getUserAppState(app.id);
+    } catch (e) {
+      LoggerService.error('Failed to load appState for export: $e', error: e);
+    }
+
     // Build the YAML content
     final yamlLines = <String>[
       'name: ${app.name}',
@@ -178,6 +200,13 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
       'author: ${app.author}',
       'license: ${app.license}',
     ];
+
+    // Include app_state if present
+    if (appState != null && appState.isNotEmpty) {
+      final appStateJson = jsonEncode(appState);
+      final appStateBase64 = base64Encode(utf8.encode(appStateJson));
+      yamlLines.add('app_state: $appStateBase64');
+    }
 
     if (librariesYaml.isNotEmpty) {
       yamlLines.add('libraries:');
