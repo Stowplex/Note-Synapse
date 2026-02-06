@@ -215,6 +215,9 @@ void main() {
           passphrase: 'test-passphrase',
           cipherId: 'aes-256-gcm',
           salt: 'dGVzdC1zYWx0LWZvci10ZXN0aW5n',
+          kdfMemory: 1024,
+          kdfIterations: 1,
+          kdfParallelism: 1,
         );
 
         final snapshotService = SnapshotService(
@@ -288,6 +291,9 @@ void main() {
           passphrase: 'test-passphrase',
           cipherId: 'aes-256-gcm',
           salt: 'dGVzdC1zYWx0LWZvci10ZXN0aW5n',
+          kdfMemory: 1024,
+          kdfIterations: 1,
+          kdfParallelism: 1,
         );
 
         final snapshotData = {

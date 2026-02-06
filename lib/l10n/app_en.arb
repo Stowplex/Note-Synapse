@@ -1788,6 +1788,7 @@
   },
 
   "syncSettingsTitle": "Sync Settings",
+  "syncSettingsSubtitle": "Set up or manage cloud sync across devices",
   "syncStatusSection": "Sync Status",
   "syncNow": "Sync Now",
   "syncSyncing": "Syncing...",

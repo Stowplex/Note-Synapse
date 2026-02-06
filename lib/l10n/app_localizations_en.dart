@@ -4440,6 +4440,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncSettingsTitle => 'Sync Settings';
 
   @override
+  String get syncSettingsSubtitle =>
+      'Set up or manage cloud sync across devices';
+
+  @override
   String get syncStatusSection => 'Sync Status';
 
   @override

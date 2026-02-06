@@ -100,6 +100,10 @@ dependencies:
   file_saver: ^0.3.1
   path_provider: ^2.1.1
   open_file: ^3.3.2
+
+  # Android SAF (Storage Access Framework) for scoped storage
+  saf_util: ^0.11.0
+  saf_stream: ^0.12.3
   
   # Wake lock to keep screen on
   wakelock_plus: ^1.2.8

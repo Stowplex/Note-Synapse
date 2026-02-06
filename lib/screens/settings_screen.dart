@@ -20,6 +20,9 @@ import 'model_preference_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
+import 'sync_setup_screen.dart';
+import 'sync_settings_screen.dart';
+import '../services/sync/sync_service.dart';
 import '../services/wake_lock_service.dart' as wake_lock;
 import '../services/network_settings_service.dart';
 import '../services/network_provider.dart';
@@ -99,6 +102,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   builder: (context) => const UserAppSettingsScreen(),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.cloud_sync),
+              title: Text(l10n.syncSettingsTitle),
+              subtitle: Text(l10n.syncSettingsSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                final syncService = getIt<SyncService>();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => syncService.isConfigured
+                        ? const SyncSettingsScreen()
+                        : const SyncSetupScreen(),
+                  ),
+                );
+              },
             ),
           ),
           const SizedBox(height: 8),

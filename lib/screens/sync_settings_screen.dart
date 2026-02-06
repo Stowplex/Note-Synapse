@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/service_locator.dart';
+import '../services/sync/android_saf_sync_provider.dart';
+import '../services/sync/folder_sync_provider.dart';
 import '../services/sync/sync_service.dart';
 import '../services/sync/device_identity_service.dart';
 import '../services/database_service.dart';
@@ -61,9 +63,35 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
     }
   }
 
+  /// Ensures the sync service has a configured provider by restoring
+  /// the persisted provider type and URI from secure storage.
+  Future<void> _ensureProviderConfigured() async {
+    final syncService = getIt<SyncService>();
+    if (syncService.isConfigured) return;
+
+    final identity = DeviceIdentityService();
+    final providerType = await identity.getSyncProviderType();
+    final providerUri = await identity.getSyncProviderUri();
+
+    if (providerType == null || providerUri == null) {
+      throw StateError('Sync provider not configured. Please set up sync first.');
+    }
+
+    if (providerType == 'saf') {
+      syncService.configure(
+        provider: AndroidSafSyncProvider(treeUri: providerUri),
+      );
+    } else {
+      syncService.configure(
+        provider: FolderSyncProvider(rootPath: providerUri),
+      );
+    }
+  }
+
   Future<void> _syncNow() async {
     setState(() => _isSyncing = true);
     try {
+      await _ensureProviderConfigured();
       final result = await getIt<SyncService>().sync();
       if (mounted) {
         setState(() {

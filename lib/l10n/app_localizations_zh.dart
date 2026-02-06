@@ -4242,6 +4242,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncSettingsTitle => '同步设置';
 
   @override
+  String get syncSettingsSubtitle => '设置或管理跨设备云同步';
+
+  @override
   String get syncStatusSection => '同步状态';
 
   @override

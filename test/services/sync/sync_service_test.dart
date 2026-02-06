@@ -141,6 +141,9 @@ void main() {
       await syncService.initializeSyncRoot(
         provider: provider,
         passphrase: 'my-secret-passphrase',
+        kdfMemory: 1024,
+        kdfIterations: 1,
+        kdfParallelism: 1,
       );
 
       final configBytes = await provider.readFile('sync-config.json');

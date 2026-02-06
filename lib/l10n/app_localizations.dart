@@ -7730,6 +7730,12 @@ abstract class AppLocalizations {
   /// **'Sync Settings'**
   String get syncSettingsTitle;
 
+  /// No description provided for @syncSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up or manage cloud sync across devices'**
+  String get syncSettingsSubtitle;
+
   /// No description provided for @syncStatusSection.
   ///
   /// In en, this message translates to:

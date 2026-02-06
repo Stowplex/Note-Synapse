@@ -59,6 +59,9 @@ class SyncService {
   })  : _db = db,
         _identity = identity;
 
+  /// Whether this service has been configured with a storage provider.
+  bool get isConfigured => _provider != null;
+
   /// Sets the storage provider and optional encryption service.
   ///
   /// Called after user completes sync setup or when reconnecting.
@@ -346,6 +349,9 @@ class SyncService {
   Future<void> initializeSyncRoot({
     required SyncStorageProvider provider,
     String? passphrase,
+    int kdfMemory = 65536,
+    int kdfIterations = 3,
+    int kdfParallelism = 4,
   }) async {
     final deviceId = await _identity.getDeviceId();
     final schemaVersion = DatabaseService.DATABASE_VERSION;
@@ -365,6 +371,9 @@ class SyncService {
         passphrase: passphrase,
         cipherId: encryptionCipher,
         salt: salt,
+        kdfMemory: kdfMemory,
+        kdfIterations: kdfIterations,
+        kdfParallelism: kdfParallelism,
       );
     }
 
@@ -374,9 +383,9 @@ class SyncService {
       encryption: encryptionCipher,
       kdf: 'argon2id',
       kdfParams: KdfParams(
-        memory: 65536,
-        iterations: 3,
-        parallelism: 4,
+        memory: kdfMemory,
+        iterations: kdfIterations,
+        parallelism: kdfParallelism,
       ),
       salt: salt,
       schemaVersion: schemaVersion,

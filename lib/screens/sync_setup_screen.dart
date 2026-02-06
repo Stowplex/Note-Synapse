@@ -1,9 +1,16 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:saf_util/saf_util.dart';
 import '../l10n/app_localizations.dart';
 import '../services/service_locator.dart';
+import '../services/sync/android_saf_sync_provider.dart';
+import '../services/sync/device_identity_service.dart';
 import '../services/sync/sync_service.dart';
+import '../services/sync/sync_storage_provider.dart';
 import '../services/sync/folder_sync_provider.dart';
+import 'sync_settings_screen.dart';
 
 class SyncSetupScreen extends StatefulWidget {
   const SyncSetupScreen({super.key});
@@ -18,6 +25,7 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
 
   // Folder provider
   String? _folderPath;
+  String? _safTreeUri;
 
   // WebDAV provider
   final _webdavUrlController = TextEditingController();
@@ -49,11 +57,24 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
   }
 
   Future<void> _selectFolder() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    if (result != null) {
-      setState(() {
-        _folderPath = result;
-      });
+    if (Platform.isAndroid) {
+      final result = await SafUtil().pickDirectory(
+        writePermission: true,
+        persistablePermission: true,
+      );
+      if (result != null) {
+        setState(() {
+          _safTreeUri = result.uri;
+          _folderPath = result.name;
+        });
+      }
+    } else {
+      final result = await FilePicker.platform.getDirectoryPath();
+      if (result != null) {
+        setState(() {
+          _folderPath = result;
+        });
+      }
     }
   }
 
@@ -72,9 +93,28 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
     });
 
     try {
-      final provider = _selectedProvider == 'folder'
-          ? FolderSyncProvider(rootPath: _folderPath!)
-          : throw UnimplementedError('WebDAV provider not yet implemented');
+      final SyncStorageProvider provider;
+      final String providerType;
+      final String providerUri;
+
+      if (_selectedProvider == 'folder') {
+        if (Platform.isAndroid && _safTreeUri != null) {
+          provider = AndroidSafSyncProvider(treeUri: _safTreeUri!);
+          providerType = 'saf';
+          providerUri = _safTreeUri!;
+        } else {
+          provider = FolderSyncProvider(rootPath: _folderPath!);
+          providerType = 'folder';
+          providerUri = _folderPath!;
+        }
+      } else {
+        throw UnimplementedError('WebDAV provider not yet implemented');
+      }
+
+      // Persist provider configuration for reconnecting on restart
+      final identity = DeviceIdentityService();
+      await identity.setSyncProviderType(providerType);
+      await identity.setSyncProviderUri(providerUri);
 
       final syncService = getIt<SyncService>();
       await syncService.initializeSyncRoot(
@@ -89,7 +129,12 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SyncSettingsScreen(),
+          ),
+        );
       }
     } catch (e) {
       setState(() => _error = e.toString());
