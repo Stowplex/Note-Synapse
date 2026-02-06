@@ -858,6 +858,8 @@
   "about": "About",
   "aboutSubtitle": "License, privacy, and version",
   "version": "Version",
+  "info": "Info",
+  "applicationInfo": "Application Information",
   "githubPage": "GitHub Page",
   "viewLicense": "View License",
   "viewPrivacyPolicy": "View Privacy Policy",
@@ -865,8 +867,9 @@
   "noWarranty": "NO WARRANTY",
   "debugMenu": "Debug Menu",
   "resetOnboarding": "Reset Onboarding Flag",
-  "resetOnboardingSuccess": "Onboarding flag reset"
-,
+  "resetOnboardingSuccess": "Onboarding flag reset",
+  "dependencyLicenses": "Dependency Library Licenses",
+
   "refreshedToolsFor": "Refreshed tools for {name}",
   "bookmarkPage": "Bookmark Page",
   "page": "Page",
