@@ -107,8 +107,8 @@ void main() {
       expect(toolIds, contains('run_sql'));
       expect(toolIds, contains('ls'));
       expect(toolIds, contains('modify_note'));
-      expect(toolIds, contains('create_note'));
-      expect(toolIds, contains('delete_note'));
+      expect(toolIds, contains('create_notes'));
+      expect(toolIds, contains('delete_notes'));
     });
 
     test('search_notes tool has correct properties', () {
@@ -120,9 +120,9 @@ void main() {
       expect(tool.color, equals(Colors.blue));
     });
 
-    test('delete_note tool has correct properties', () {
+    test('delete_notes tool has correct properties', () {
       final tool = BuiltInToolsService.systemTools.firstWhere(
-        (t) => t.id == 'delete_note',
+        (t) => t.id == 'delete_notes',
       );
       expect(tool.name, equals('Delete Note'));
       expect(tool.icon, equals(Icons.delete_outline));
@@ -172,8 +172,8 @@ void main() {
         'run_sql',
         'ls',
         'modify_note',
-        'create_note',
-        'delete_note',
+        'create_notes',
+        'delete_notes',
       ];
 
       for (final id in expectedIds) {
