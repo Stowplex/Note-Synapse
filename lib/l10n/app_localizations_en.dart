@@ -4362,4 +4362,106 @@ class AppLocalizationsEn extends AppLocalizations {
   String syncInitFailed(String error) {
     return 'Sync initialization failed: $error';
   }
+
+  @override
+  String get syncSettingsTitle => 'Sync Settings';
+
+  @override
+  String get syncStatusSection => 'Sync Status';
+
+  @override
+  String get syncNow => 'Sync Now';
+
+  @override
+  String get syncSyncing => 'Syncing...';
+
+  @override
+  String syncLastSynced(String timestamp) {
+    return 'Last synced: $timestamp';
+  }
+
+  @override
+  String get syncNeverSynced => 'Never synced';
+
+  @override
+  String syncPendingChanges(int count) {
+    return '$count pending local changes';
+  }
+
+  @override
+  String syncUnresolvedConflicts(int count) {
+    return '$count unresolved conflicts';
+  }
+
+  @override
+  String syncResultSummary(int pulled, int pushed, int conflicts) {
+    return 'Pulled $pulled, pushed $pushed, $conflicts conflicts';
+  }
+
+  @override
+  String syncCurrentCipher(String cipher) {
+    return 'Cipher: $cipher';
+  }
+
+  @override
+  String get syncEncryptionNone => 'None (unencrypted)';
+
+  @override
+  String get syncEncryptionUnknown => 'Unknown';
+
+  @override
+  String get syncDangerZone => 'Danger Zone';
+
+  @override
+  String get syncResetFromDevice => 'Reset Sync from This Device';
+
+  @override
+  String get syncResetFromDeviceDescription =>
+      'Replace all synced data with this device\'s current state.';
+
+  @override
+  String get syncResetTitle => 'Reset Sync?';
+
+  @override
+  String get syncResetBody =>
+      'This will replace all synced data with this device\'s current state. Unsynced changes on other devices will be lost.';
+
+  @override
+  String get syncResetConfirm => 'Reset';
+
+  @override
+  String get syncResetSuccess => 'Sync has been reset from this device.';
+
+  @override
+  String get syncDisable => 'Disable Sync';
+
+  @override
+  String get syncDisableDescription =>
+      'Remove sync triggers and clear local sync state.';
+
+  @override
+  String get syncDisableTitle => 'Disable Sync?';
+
+  @override
+  String get syncDisableBody =>
+      'This will drop sync triggers and clear local sync state. You will lose the ability to sync until you set up sync again.';
+
+  @override
+  String get syncDisableConfirm => 'Disable';
+
+  @override
+  String get syncDisableSuccess => 'Sync has been disabled.';
+
+  @override
+  String get syncJustNow => 'just now';
+
+  @override
+  String syncMinutesAgo(int count) {
+    return '$count minutes ago';
+  }
+
+  @override
+  String syncHoursAgo(int count) {
+    return '$count hours ago';
+  }
 }

@@ -1760,5 +1760,89 @@
         "type": "String"
       }
     }
+  },
+
+  "syncSettingsTitle": "Sync Settings",
+  "syncStatusSection": "Sync Status",
+  "syncNow": "Sync Now",
+  "syncSyncing": "Syncing...",
+  "syncLastSynced": "Last synced: {timestamp}",
+  "@syncLastSynced": {
+    "placeholders": {
+      "timestamp": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNeverSynced": "Never synced",
+  "syncPendingChanges": "{count} pending local changes",
+  "@syncPendingChanges": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncUnresolvedConflicts": "{count} unresolved conflicts",
+  "@syncUnresolvedConflicts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncResultSummary": "Pulled {pulled}, pushed {pushed}, {conflicts} conflicts",
+  "@syncResultSummary": {
+    "placeholders": {
+      "pulled": {
+        "type": "int"
+      },
+      "pushed": {
+        "type": "int"
+      },
+      "conflicts": {
+        "type": "int"
+      }
+    }
+  },
+  "syncCurrentCipher": "Cipher: {cipher}",
+  "@syncCurrentCipher": {
+    "placeholders": {
+      "cipher": {
+        "type": "String"
+      }
+    }
+  },
+  "syncEncryptionNone": "None (unencrypted)",
+  "syncEncryptionUnknown": "Unknown",
+  "syncDangerZone": "Danger Zone",
+  "syncResetFromDevice": "Reset Sync from This Device",
+  "syncResetFromDeviceDescription": "Replace all synced data with this device's current state.",
+  "syncResetTitle": "Reset Sync?",
+  "syncResetBody": "This will replace all synced data with this device's current state. Unsynced changes on other devices will be lost.",
+  "syncResetConfirm": "Reset",
+  "syncResetSuccess": "Sync has been reset from this device.",
+  "syncDisable": "Disable Sync",
+  "syncDisableDescription": "Remove sync triggers and clear local sync state.",
+  "syncDisableTitle": "Disable Sync?",
+  "syncDisableBody": "This will drop sync triggers and clear local sync state. You will lose the ability to sync until you set up sync again.",
+  "syncDisableConfirm": "Disable",
+  "syncDisableSuccess": "Sync has been disabled.",
+  "syncJustNow": "just now",
+  "syncMinutesAgo": "{count} minutes ago",
+  "@syncMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncHoursAgo": "{count} hours ago",
+  "@syncHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

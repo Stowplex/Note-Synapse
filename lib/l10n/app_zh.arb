@@ -1700,5 +1700,89 @@
         "type": "String"
       }
     }
+  },
+
+  "syncSettingsTitle": "同步设置",
+  "syncStatusSection": "同步状态",
+  "syncNow": "立即同步",
+  "syncSyncing": "正在同步...",
+  "syncLastSynced": "上次同步：{timestamp}",
+  "@syncLastSynced": {
+    "placeholders": {
+      "timestamp": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNeverSynced": "从未同步",
+  "syncPendingChanges": "{count} 个待同步的本地更改",
+  "@syncPendingChanges": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncUnresolvedConflicts": "{count} 个未解决的冲突",
+  "@syncUnresolvedConflicts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncResultSummary": "拉取 {pulled} 项，推送 {pushed} 项，{conflicts} 个冲突",
+  "@syncResultSummary": {
+    "placeholders": {
+      "pulled": {
+        "type": "int"
+      },
+      "pushed": {
+        "type": "int"
+      },
+      "conflicts": {
+        "type": "int"
+      }
+    }
+  },
+  "syncCurrentCipher": "加密算法：{cipher}",
+  "@syncCurrentCipher": {
+    "placeholders": {
+      "cipher": {
+        "type": "String"
+      }
+    }
+  },
+  "syncEncryptionNone": "无（未加密）",
+  "syncEncryptionUnknown": "未知",
+  "syncDangerZone": "危险操作",
+  "syncResetFromDevice": "从此设备重置同步",
+  "syncResetFromDeviceDescription": "用此设备的当前数据替换所有同步数据。",
+  "syncResetTitle": "重置同步？",
+  "syncResetBody": "这将用此设备的当前数据替换所有同步数据。其他设备上未同步的更改将丢失。",
+  "syncResetConfirm": "重置",
+  "syncResetSuccess": "已从此设备重置同步。",
+  "syncDisable": "禁用同步",
+  "syncDisableDescription": "移除同步触发器并清除本地同步状态。",
+  "syncDisableTitle": "禁用同步？",
+  "syncDisableBody": "这将移除同步触发器并清除本地同步状态。在重新设置同步之前，您将无法进行同步。",
+  "syncDisableConfirm": "禁用",
+  "syncDisableSuccess": "同步已禁用。",
+  "syncJustNow": "刚刚",
+  "syncMinutesAgo": "{count} 分钟前",
+  "@syncMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncHoursAgo": "{count} 小时前",
+  "@syncHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

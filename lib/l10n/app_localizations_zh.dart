@@ -4165,4 +4165,102 @@ class AppLocalizationsZh extends AppLocalizations {
   String syncInitFailed(String error) {
     return '同步初始化失败：$error';
   }
+
+  @override
+  String get syncSettingsTitle => '同步设置';
+
+  @override
+  String get syncStatusSection => '同步状态';
+
+  @override
+  String get syncNow => '立即同步';
+
+  @override
+  String get syncSyncing => '正在同步...';
+
+  @override
+  String syncLastSynced(String timestamp) {
+    return '上次同步：$timestamp';
+  }
+
+  @override
+  String get syncNeverSynced => '从未同步';
+
+  @override
+  String syncPendingChanges(int count) {
+    return '$count 个待同步的本地更改';
+  }
+
+  @override
+  String syncUnresolvedConflicts(int count) {
+    return '$count 个未解决的冲突';
+  }
+
+  @override
+  String syncResultSummary(int pulled, int pushed, int conflicts) {
+    return '拉取 $pulled 项，推送 $pushed 项，$conflicts 个冲突';
+  }
+
+  @override
+  String syncCurrentCipher(String cipher) {
+    return '加密算法：$cipher';
+  }
+
+  @override
+  String get syncEncryptionNone => '无（未加密）';
+
+  @override
+  String get syncEncryptionUnknown => '未知';
+
+  @override
+  String get syncDangerZone => '危险操作';
+
+  @override
+  String get syncResetFromDevice => '从此设备重置同步';
+
+  @override
+  String get syncResetFromDeviceDescription => '用此设备的当前数据替换所有同步数据。';
+
+  @override
+  String get syncResetTitle => '重置同步？';
+
+  @override
+  String get syncResetBody => '这将用此设备的当前数据替换所有同步数据。其他设备上未同步的更改将丢失。';
+
+  @override
+  String get syncResetConfirm => '重置';
+
+  @override
+  String get syncResetSuccess => '已从此设备重置同步。';
+
+  @override
+  String get syncDisable => '禁用同步';
+
+  @override
+  String get syncDisableDescription => '移除同步触发器并清除本地同步状态。';
+
+  @override
+  String get syncDisableTitle => '禁用同步？';
+
+  @override
+  String get syncDisableBody => '这将移除同步触发器并清除本地同步状态。在重新设置同步之前，您将无法进行同步。';
+
+  @override
+  String get syncDisableConfirm => '禁用';
+
+  @override
+  String get syncDisableSuccess => '同步已禁用。';
+
+  @override
+  String get syncJustNow => '刚刚';
+
+  @override
+  String syncMinutesAgo(int count) {
+    return '$count 分钟前';
+  }
+
+  @override
+  String syncHoursAgo(int count) {
+    return '$count 小时前';
+  }
 }

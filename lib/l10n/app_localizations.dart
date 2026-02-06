@@ -7579,6 +7579,174 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync initialization failed: {error}'**
   String syncInitFailed(String error);
+
+  /// No description provided for @syncSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Settings'**
+  String get syncSettingsTitle;
+
+  /// No description provided for @syncStatusSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Status'**
+  String get syncStatusSection;
+
+  /// No description provided for @syncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Now'**
+  String get syncNow;
+
+  /// No description provided for @syncSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing...'**
+  String get syncSyncing;
+
+  /// No description provided for @syncLastSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Last synced: {timestamp}'**
+  String syncLastSynced(String timestamp);
+
+  /// No description provided for @syncNeverSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Never synced'**
+  String get syncNeverSynced;
+
+  /// No description provided for @syncPendingChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} pending local changes'**
+  String syncPendingChanges(int count);
+
+  /// No description provided for @syncUnresolvedConflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unresolved conflicts'**
+  String syncUnresolvedConflicts(int count);
+
+  /// No description provided for @syncResultSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulled {pulled}, pushed {pushed}, {conflicts} conflicts'**
+  String syncResultSummary(int pulled, int pushed, int conflicts);
+
+  /// No description provided for @syncCurrentCipher.
+  ///
+  /// In en, this message translates to:
+  /// **'Cipher: {cipher}'**
+  String syncCurrentCipher(String cipher);
+
+  /// No description provided for @syncEncryptionNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None (unencrypted)'**
+  String get syncEncryptionNone;
+
+  /// No description provided for @syncEncryptionUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get syncEncryptionUnknown;
+
+  /// No description provided for @syncDangerZone.
+  ///
+  /// In en, this message translates to:
+  /// **'Danger Zone'**
+  String get syncDangerZone;
+
+  /// No description provided for @syncResetFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Sync from This Device'**
+  String get syncResetFromDevice;
+
+  /// No description provided for @syncResetFromDeviceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace all synced data with this device\'s current state.'**
+  String get syncResetFromDeviceDescription;
+
+  /// No description provided for @syncResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Sync?'**
+  String get syncResetTitle;
+
+  /// No description provided for @syncResetBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace all synced data with this device\'s current state. Unsynced changes on other devices will be lost.'**
+  String get syncResetBody;
+
+  /// No description provided for @syncResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get syncResetConfirm;
+
+  /// No description provided for @syncResetSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync has been reset from this device.'**
+  String get syncResetSuccess;
+
+  /// No description provided for @syncDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable Sync'**
+  String get syncDisable;
+
+  /// No description provided for @syncDisableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove sync triggers and clear local sync state.'**
+  String get syncDisableDescription;
+
+  /// No description provided for @syncDisableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable Sync?'**
+  String get syncDisableTitle;
+
+  /// No description provided for @syncDisableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will drop sync triggers and clear local sync state. You will lose the ability to sync until you set up sync again.'**
+  String get syncDisableBody;
+
+  /// No description provided for @syncDisableConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get syncDisableConfirm;
+
+  /// No description provided for @syncDisableSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync has been disabled.'**
+  String get syncDisableSuccess;
+
+  /// No description provided for @syncJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get syncJustNow;
+
+  /// No description provided for @syncMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} minutes ago'**
+  String syncMinutesAgo(int count);
+
+  /// No description provided for @syncHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hours ago'**
+  String syncHoursAgo(int count);
 }
 
 class _AppLocalizationsDelegate
