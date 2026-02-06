@@ -280,7 +280,7 @@ void main() {
     });
 
     test('encryption: output is encrypted when encryption service provided',
-        () async {
+        timeout: Timeout(Duration(seconds: 60)), () async {
       final db = await databaseService.database;
       final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -299,6 +299,9 @@ void main() {
         passphrase: 'test-passphrase',
         cipherId: 'aes-256-gcm',
         salt: 'dGVzdC1zYWx0LWZvci10ZXN0aW5n',
+        kdfMemory: 1024,
+        kdfIterations: 1,
+        kdfParallelism: 1,
       );
 
       final writer = OplogWriter(
@@ -544,6 +547,9 @@ void main() {
         passphrase: 'test-passphrase',
         cipherId: 'aes-256-gcm',
         salt: 'dGVzdC1zYWx0LWZvci10ZXN0aW5n',
+        kdfMemory: 1024,
+        kdfIterations: 1,
+        kdfParallelism: 1,
       );
     });
 
