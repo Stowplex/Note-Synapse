@@ -1784,5 +1784,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "syncConflictsTitle": "同步冲突",
+  "syncConflictsEmpty": "没有需要解决的冲突",
+  "syncConflictRowId": "行 ID",
+  "syncConflictLocalValue": "本地值",
+  "syncConflictRemoteValue": "远程值",
+  "syncConflictKeepLocal": "保留本地",
+  "syncConflictKeepRemote": "保留远程",
+  "syncConflictResolvedLocal": "冲突已解决 — 保留了本地值。",
+  "syncConflictResolvedRemote": "冲突已解决 — 已应用远程值。",
+  "syncConflictValueEmpty": "（空）",
+  "syncConflictTapToExpand": "点击展开"
 }

@@ -4,6 +4,7 @@ import '../services/service_locator.dart';
 import '../services/sync/sync_service.dart';
 import '../services/sync/device_identity_service.dart';
 import '../services/database_service.dart';
+import 'sync_conflicts_screen.dart';
 
 class SyncSettingsScreen extends StatefulWidget {
   const SyncSettingsScreen({super.key});
@@ -313,7 +314,12 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
             InkWell(
               onTap: _unresolvedConflictsCount > 0
                   ? () {
-                      // TODO: Navigate to conflicts screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SyncConflictsScreen(),
+                        ),
+                      ).then((_) => _loadStatus());
                     }
                   : null,
               borderRadius: BorderRadius.circular(8),

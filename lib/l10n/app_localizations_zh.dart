@@ -4263,4 +4263,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String syncHoursAgo(int count) {
     return '$count 小时前';
   }
+
+  @override
+  String get syncConflictsTitle => '同步冲突';
+
+  @override
+  String get syncConflictsEmpty => '没有需要解决的冲突';
+
+  @override
+  String get syncConflictRowId => '行 ID';
+
+  @override
+  String get syncConflictLocalValue => '本地值';
+
+  @override
+  String get syncConflictRemoteValue => '远程值';
+
+  @override
+  String get syncConflictKeepLocal => '保留本地';
+
+  @override
+  String get syncConflictKeepRemote => '保留远程';
+
+  @override
+  String get syncConflictResolvedLocal => '冲突已解决 — 保留了本地值。';
+
+  @override
+  String get syncConflictResolvedRemote => '冲突已解决 — 已应用远程值。';
+
+  @override
+  String get syncConflictValueEmpty => '（空）';
+
+  @override
+  String get syncConflictTapToExpand => '点击展开';
 }

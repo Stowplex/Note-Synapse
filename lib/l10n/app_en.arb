@@ -1844,5 +1844,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "syncConflictsTitle": "Sync Conflicts",
+  "syncConflictsEmpty": "No conflicts to resolve",
+  "syncConflictRowId": "Row ID",
+  "syncConflictLocalValue": "Local value",
+  "syncConflictRemoteValue": "Remote value",
+  "syncConflictKeepLocal": "Keep Local",
+  "syncConflictKeepRemote": "Keep Remote",
+  "syncConflictResolvedLocal": "Conflict resolved — kept local value.",
+  "syncConflictResolvedRemote": "Conflict resolved — applied remote value.",
+  "syncConflictValueEmpty": "(empty)",
+  "syncConflictTapToExpand": "Tap to expand"
 }

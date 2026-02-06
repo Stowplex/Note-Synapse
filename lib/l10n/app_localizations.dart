@@ -7747,6 +7747,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} hours ago'**
   String syncHoursAgo(int count);
+
+  /// No description provided for @syncConflictsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Conflicts'**
+  String get syncConflictsTitle;
+
+  /// No description provided for @syncConflictsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No conflicts to resolve'**
+  String get syncConflictsEmpty;
+
+  /// No description provided for @syncConflictRowId.
+  ///
+  /// In en, this message translates to:
+  /// **'Row ID'**
+  String get syncConflictRowId;
+
+  /// No description provided for @syncConflictLocalValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Local value'**
+  String get syncConflictLocalValue;
+
+  /// No description provided for @syncConflictRemoteValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote value'**
+  String get syncConflictRemoteValue;
+
+  /// No description provided for @syncConflictKeepLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Local'**
+  String get syncConflictKeepLocal;
+
+  /// No description provided for @syncConflictKeepRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Remote'**
+  String get syncConflictKeepRemote;
+
+  /// No description provided for @syncConflictResolvedLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflict resolved — kept local value.'**
+  String get syncConflictResolvedLocal;
+
+  /// No description provided for @syncConflictResolvedRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflict resolved — applied remote value.'**
+  String get syncConflictResolvedRemote;
+
+  /// No description provided for @syncConflictValueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'(empty)'**
+  String get syncConflictValueEmpty;
+
+  /// No description provided for @syncConflictTapToExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to expand'**
+  String get syncConflictTapToExpand;
 }
 
 class _AppLocalizationsDelegate

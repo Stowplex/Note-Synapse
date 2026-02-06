@@ -4464,4 +4464,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String syncHoursAgo(int count) {
     return '$count hours ago';
   }
+
+  @override
+  String get syncConflictsTitle => 'Sync Conflicts';
+
+  @override
+  String get syncConflictsEmpty => 'No conflicts to resolve';
+
+  @override
+  String get syncConflictRowId => 'Row ID';
+
+  @override
+  String get syncConflictLocalValue => 'Local value';
+
+  @override
+  String get syncConflictRemoteValue => 'Remote value';
+
+  @override
+  String get syncConflictKeepLocal => 'Keep Local';
+
+  @override
+  String get syncConflictKeepRemote => 'Keep Remote';
+
+  @override
+  String get syncConflictResolvedLocal =>
+      'Conflict resolved — kept local value.';
+
+  @override
+  String get syncConflictResolvedRemote =>
+      'Conflict resolved — applied remote value.';
+
+  @override
+  String get syncConflictValueEmpty => '(empty)';
+
+  @override
+  String get syncConflictTapToExpand => 'Tap to expand';
 }
