@@ -1058,19 +1058,52 @@ class ShareService {
     // Add note metadata
     if (forExport) {
       buffer.writeln('**ID:** ${note.id}');
-    }
-    buffer.writeln('**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}');
-    if (note.isTask && note.status != null) {
+      // Use standard English for export
+      buffer.writeln('**Type:** ${note.isTask ? 'Task' : 'Note'}');
+      if (note.isTask && note.status != null) {
+        String statusText;
+        switch (note.status!) {
+          case TaskStatus.todo:
+            statusText = 'Todo';
+            break;
+          case TaskStatus.inProgress:
+            statusText = 'In Progress';
+            break;
+          case TaskStatus.complete:
+            statusText = 'Done';
+            break;
+          case TaskStatus.abandoned:
+            statusText = 'Abandoned';
+            break;
+        }
+        buffer.writeln('**Status:** $statusText');
+      }
+      if (note.tags.isNotEmpty) {
+        buffer.writeln('**Tags:** ${note.tags.join(', ')}');
+      }
+      buffer.writeln('**Created:** ${_formatDateTime(note.createdAt)}');
+      if (note.updatedAt != note.createdAt) {
+        buffer.writeln('**Updated:** ${_formatDateTime(note.updatedAt)}');
+      }
+    } else {
+      // Use localized strings for display/copy
       buffer.writeln(
-        '**${l10n.status}:** ${_getStatusText(note.status!, l10n)}',
+        '**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}',
       );
-    }
-    if (note.tags.isNotEmpty) {
-      buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
-    }
-    buffer.writeln('**${l10n.created}:** ${_formatDateTime(note.createdAt)}');
-    if (note.updatedAt != note.createdAt) {
-      buffer.writeln('**${l10n.updated}:** ${_formatDateTime(note.updatedAt)}');
+      if (note.isTask && note.status != null) {
+        buffer.writeln(
+          '**${l10n.status}:** ${_getStatusText(note.status!, l10n)}',
+        );
+      }
+      if (note.tags.isNotEmpty) {
+        buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
+      }
+      buffer.writeln('**${l10n.created}:** ${_formatDateTime(note.createdAt)}');
+      if (note.updatedAt != note.createdAt) {
+        buffer.writeln(
+          '**${l10n.updated}:** ${_formatDateTime(note.updatedAt)}',
+        );
+      }
     }
     buffer.writeln();
 
@@ -1085,45 +1118,41 @@ class ShareService {
       buffer.writeln('## Attachments');
       buffer.writeln();
 
-      // Need to fetch attachment details to get original filename/mime if possible,
-      // but note.attachmentPaths only has IDs or paths?
-      // Let's assume paths for now as Note model defines List<String> attachmentPaths.
-      // Ideally we should lookup in Attachment table, but that requires async DB call which we might avoid if just paths needed.
-      // However user asked for "name, mimetype, path".
-      // We can get name/mime from path extension.
-
       for (final path in note.attachmentPaths) {
         final fileName = path.split('/').last;
         final ext = fileName.split('.').lastOrNull ?? 'unknown';
-        // Simple mime guess or just extension
         buffer.writeln('- **Name:** $fileName');
-        buffer.writeln(
-          '  - **Path:** $path',
-        ); // This might be internal path, need to ensure import handles it.
-        // For export, we are copying files to 'attachments/' folder in Zip.
-        // So maybe we should list the RELATIVE path in the zip? "attachments/$fileName"?
+        buffer.writeln('  - **Path:** $path');
         buffer.writeln('  - **Type:** $ext');
         buffer.writeln();
       }
     }
 
     // Add sub-notes if requested
-
     if (includeSubNotesAndLinkedNotes && note.subNotes.isNotEmpty) {
-      buffer.writeln('## ${l10n.subNotes}');
+      if (forExport) {
+        buffer.writeln('## Sub-notes');
+      } else {
+        buffer.writeln('## ${l10n.subNotes}');
+      }
       buffer.writeln();
 
       for (final subNote in note.subNotes) {
         buffer.writeln('### ${subNote.name}');
         if (forExport) {
           buffer.writeln('**ID:** ${subNote.id}');
+          if (subNote.isCompleted) {
+            buffer.writeln('✅ **Completed**');
+          }
+          buffer.writeln('**Created:** ${_formatDateTime(subNote.createdAt)}');
+        } else {
+          if (subNote.isCompleted) {
+            buffer.writeln('✅ **${l10n.completed}**');
+          }
+          buffer.writeln(
+            '**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}',
+          );
         }
-        if (subNote.isCompleted) {
-          buffer.writeln('✅ **${l10n.completed}**');
-        }
-        buffer.writeln(
-          '**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}',
-        );
         buffer.writeln();
         if (subNote.content.isNotEmpty) {
           buffer.writeln(subNote.content);
