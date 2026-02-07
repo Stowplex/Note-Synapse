@@ -12,6 +12,8 @@ import 'package:path/path.dart' as p;
 
 import 'attachment_sync_service.dart';
 import 'device_identity_service.dart';
+import 'folder_sync_provider.dart';
+import 'android_saf_sync_provider.dart';
 import 'merge_engine.dart';
 import 'oplog_service.dart';
 import 'snapshot_service.dart';
@@ -84,6 +86,38 @@ class SyncService {
   void resetConfiguration() {
     _provider = null;
     _encryption = null;
+  }
+
+  /// Restores configuration from persistent storage.
+  ///
+  /// Should be called on app startup.
+  Future<void> restoreConfiguration() async {
+    try {
+      final providerType = await _identity.getSyncProviderType();
+      final providerUri = await _identity.getSyncProviderUri();
+
+      if (providerType != null && providerUri != null) {
+        SyncStorageProvider? provider;
+        if (providerType == 'saf') {
+          provider = AndroidSafSyncProvider(treeUri: providerUri);
+        } else if (providerType == 'folder') {
+          provider = FolderSyncProvider(rootPath: providerUri);
+        }
+
+        if (provider != null) {
+          configure(provider: provider);
+          LoggerService.info(
+            'Restored sync provider: $providerType at $providerUri',
+          );
+        }
+      }
+    } catch (e, stack) {
+      LoggerService.error(
+        'Failed to restore sync configuration',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   /// Main sync method. Performs pull then push, returns a [SyncResult].

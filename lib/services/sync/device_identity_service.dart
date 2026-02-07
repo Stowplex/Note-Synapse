@@ -5,7 +5,18 @@ class DeviceIdentityService {
   final FlutterSecureStorage _secureStorage;
 
   DeviceIdentityService({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage =
+          secureStorage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(
+              encryptedSharedPreferences: true,
+              sharedPreferencesName: 'note_synapse_secure',
+              preferencesKeyPrefix: 'note_synapse_',
+            ),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   static const _deviceIdKey = 'sync_device_id';
   static const _lastSequenceKey = 'sync_last_sequence';
@@ -34,7 +45,9 @@ class DeviceIdentityService {
   /// Stores the last pushed sequence number.
   Future<void> setLastSequence(int sequence) async {
     await _secureStorage.write(
-        key: _lastSequenceKey, value: sequence.toString());
+      key: _lastSequenceKey,
+      value: sequence.toString(),
+    );
   }
 
   /// Returns whether encryption is enabled, defaulting to false.
@@ -46,7 +59,9 @@ class DeviceIdentityService {
   /// Stores the encryption enabled flag.
   Future<void> setEncryptionEnabled(bool enabled) async {
     await _secureStorage.write(
-        key: _encryptionEnabledKey, value: enabled.toString());
+      key: _encryptionEnabledKey,
+      value: enabled.toString(),
+    );
   }
 
   /// Returns the cipher ID, or null if not set.

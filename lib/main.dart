@@ -12,6 +12,7 @@ import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/model_selection_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
+import 'services/logger_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
@@ -20,6 +21,7 @@ import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/service_locator.dart';
+import 'package:note_synapse/services/sync/sync_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
@@ -139,6 +141,13 @@ class _AppWrapperState extends State<AppWrapper> {
 
     // Initialize wake lock if it was enabled in settings
     await wake_lock.initializeWakeLock();
+
+    // Restore sync configuration
+    try {
+      await getIt<SyncService>().restoreConfiguration();
+    } catch (e) {
+      LoggerService.error('Failed to restore sync config', error: e);
+    }
 
     final modelConfig = appProvider.modelConfig;
     final isConfigured = modelConfig?.isConfigured ?? false;
