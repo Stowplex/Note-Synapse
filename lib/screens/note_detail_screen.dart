@@ -591,6 +591,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         ),
                       ),
                       PopupMenuItem(
+                        value: 'force_fetch_images',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.cloud_sync),
+                            const SizedBox(width: 8),
+                            Text(l10n.forceRefetchImages),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
                         value: 'delete',
                         child: Row(
                           children: [
@@ -657,6 +667,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         _shareNote();
                       } else if (value == 'fetch_images') {
                         _fetchRemoteImages();
+                      } else if (value == 'force_fetch_images') {
+                        _fetchRemoteImages(force: true);
                       } else if (value == 'delete') {
                         _deleteNote();
                       } else if (value == 'convert') {
@@ -918,6 +930,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     selectedBlockIndices: _selectedBlockIndices,
                     onBlocksParsed: _handleBlocksParsed,
                     onBlockDropped: _handleBlockDropped,
+                    onFetchImage: _handleImageFetch,
                   ),
                 ),
                 if (currentNote.subNotes.isNotEmpty) ...[
@@ -2126,7 +2139,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     return path;
   }
 
-  Future<void> _fetchRemoteImages() async {
+  Future<void> _fetchRemoteImages({bool force = false}) async {
     final l10n = AppLocalizations.of(context)!;
     final remoteUrls = RemoteImageUtils.extractRemoteImages(
       _codeController.text,
@@ -2151,6 +2164,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final report = await MediaAttachmentService.downloadRemoteImages(
         noteId: widget.note.id,
         imageUrls: remoteUrls,
+        force: force,
       );
 
       if (report.downloadedRelativePaths.isEmpty && report.failedUrls.isEmpty) {
@@ -2217,6 +2231,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
+    }
+  }
+
+  Future<void> _handleImageFetch(String url) async {
+    final l10n = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.fetchingImage ?? 'Fetching image...'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      final report = await MediaAttachmentService.downloadRemoteImages(
+        noteId: widget.note.id,
+        imageUrls: [url],
+        force: true,
+      );
+
+      if (report.downloadedRelativePaths.isNotEmpty) {
+        final appProvider = context.read<AppProvider>();
+        final currentNote = appProvider.notes.firstWhere(
+          (note) => note.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+
+        final updatedNote = currentNote.copyWith(
+          attachmentPaths: _mergeAttachmentPaths(
+            currentNote.attachmentPaths,
+            report.urlToRelativePath.values,
+          ),
+          updatedAt: DateTime.now(),
+        );
+
+        await appProvider.updateNote(updatedNote);
+        setState(() {}); // Rebuild to show the fetched image
+      } else if (report.failedUrls.isNotEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.mediaDownloadFailed(1))));
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Error fetching single image: $e', error: e);
     }
   }
 

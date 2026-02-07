@@ -1754,5 +1754,7 @@
         "type": "int"
       }
     }
-  }
+  },
+  "forceRefetchImages": "Force Refetch Images",
+  "fetchingImage": "Fetching image..."
 }
