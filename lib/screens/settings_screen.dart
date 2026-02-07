@@ -27,6 +27,8 @@ import '../services/wake_lock_service.dart' as wake_lock;
 import '../services/network_settings_service.dart';
 import '../services/network_provider.dart';
 import 'settings/about_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'settings/debug_menu_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -152,46 +154,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.bug_report),
-              title: Text(l10n.debugMenu),
-              subtitle: Text(l10n.resetOnboarding),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text(l10n.debugMenu),
-                    content: Text(l10n.resetOnboarding),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(l10n.cancel),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          await context
-                              .read<AppProvider>()
-                              .setOnboardingCompleted(false);
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(l10n.resetOnboardingSuccess),
-                              ),
-                            );
-                          }
-                        },
-                        child: Text(l10n.reset),
-                      ),
-                    ],
+          if (kDebugMode) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: Text(l10n.debugMenu),
+                subtitle: Text(l10n.debugMenuSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DebugMenuScreen(),
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

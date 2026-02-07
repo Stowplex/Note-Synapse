@@ -820,7 +820,9 @@
   "stowplexCopyright": "Stowplex LLC & Bruce Li 保留所有权利",
   "noWarranty": "无担保声明",
   "debugMenu": "调试菜单",
-  "resetOnboarding": "重置引导页标志",
+  "debugMenuSubtitle": "开发者选项",
+  "resetOnboarding": "重置引导标志",
+  "resetOnboardingTitle": "重置引导标志",
   "resetOnboardingSuccess": "引导页标志已重置",
   "dependencyLicenses": "依赖库许可证",
 

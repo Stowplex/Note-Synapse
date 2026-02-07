@@ -2617,7 +2617,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get debugMenu => 'Debug Menu';
 
   @override
+  String get debugMenuSubtitle => 'Developer options';
+
+  @override
   String get resetOnboarding => 'Reset Onboarding Flag';
+
+  @override
+  String get resetOnboardingTitle => 'Reset Onboarding Flag';
 
   @override
   String get resetOnboardingSuccess => 'Onboarding flag reset';

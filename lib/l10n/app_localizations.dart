@@ -4694,11 +4694,23 @@ abstract class AppLocalizations {
   /// **'Debug Menu'**
   String get debugMenu;
 
+  /// No description provided for @debugMenuSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer options'**
+  String get debugMenuSubtitle;
+
   /// No description provided for @resetOnboarding.
   ///
   /// In en, this message translates to:
   /// **'Reset Onboarding Flag'**
   String get resetOnboarding;
+
+  /// No description provided for @resetOnboardingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Onboarding Flag'**
+  String get resetOnboardingTitle;
 
   /// No description provided for @resetOnboardingSuccess.
   ///

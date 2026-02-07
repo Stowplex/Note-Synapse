@@ -2536,7 +2536,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get debugMenu => '调试菜单';
 
   @override
-  String get resetOnboarding => '重置引导页标志';
+  String get debugMenuSubtitle => '开发者选项';
+
+  @override
+  String get resetOnboarding => '重置引导标志';
+
+  @override
+  String get resetOnboardingTitle => '重置引导标志';
 
   @override
   String get resetOnboardingSuccess => '引导页标志已重置';
