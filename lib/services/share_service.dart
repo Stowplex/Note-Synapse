@@ -1078,6 +1078,24 @@ class ShareService {
         }
         buffer.writeln('**Status:** $statusText');
       }
+      if (note.isTask) {
+        if (note.scheduledAt != null) {
+          try {
+            final date = DateTime.parse(note.scheduledAt!);
+            buffer.writeln('**Scheduled:** ${_formatDateTime(date)}');
+          } catch (_) {
+            buffer.writeln('**Scheduled:** ${note.scheduledAt}');
+          }
+        }
+        if (note.completeBy != null) {
+          try {
+            final date = DateTime.parse(note.completeBy!);
+            buffer.writeln('**Due:** ${_formatDateTime(date)}');
+          } catch (_) {
+            buffer.writeln('**Due:** ${note.completeBy}');
+          }
+        }
+      }
       if (note.tags.isNotEmpty) {
         buffer.writeln('**Tags:** ${note.tags.join(', ')}');
       }
