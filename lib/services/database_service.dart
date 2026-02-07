@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 36; // Target schema version
+  static const int DATABASE_VERSION = 37; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -307,10 +307,25 @@ class DatabaseService {
   ''';
   static const String _createMultiFunctionAppsTable = '''
       CREATE TABLE multi_function_apps(
-        appId TEXT PRIMARY KEY, -- App ID
+        appId TEXT PRIMARY KEY,
         isDefault INTEGER NOT NULL DEFAULT 0, -- Whether it is the default app
         addedAt INTEGER NOT NULL, -- Timestamp added
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
+      )
+  ''';
+
+  static const String _createSyncConflictsTable = '''
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        local_value TEXT,
+        remote_value TEXT,
+        remote_device_id TEXT NOT NULL,
+        remote_timestamp TEXT NOT NULL,
+        resolved INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
       )
   ''';
 
@@ -531,6 +546,7 @@ class DatabaseService {
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
     await db.execute(_createMultiFunctionAppsTable);
+    await db.execute(_createSyncConflictsTable);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -708,6 +724,10 @@ class DatabaseService {
           'Fix notes_fts FTS5 table by removing incorrect content_rowid option',
       execute: _migrateToVersion36,
     ),
+    37: MigrationStep(
+      description: 'Create sync_conflicts table for sync conflict resolution',
+      execute: _migrateToVersion37,
+    ),
   };
 
   static Future<void> _migrateToVersion28(
@@ -777,7 +797,6 @@ class DatabaseService {
       END;
     ''');
 
-    // 4. Create tag_ai_configs table
     await db.execute('''
       CREATE TABLE tag_ai_configs (
         tagId TEXT PRIMARY KEY,
@@ -785,6 +804,14 @@ class DatabaseService {
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  static Future<void> _migrateToVersion37(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // Create sync_conflicts table
+    await db.execute(_createSyncConflictsTable);
   }
 
   // Individual migration methods
@@ -4747,8 +4774,7 @@ class DatabaseService {
     ''');
 
     // UPDATE trigger with changed_fields and old_values
-    final changedFieldsExpr =
-        'json_array(${changedFieldsCases.join(', ')})';
+    final changedFieldsExpr = 'json_array(${changedFieldsCases.join(', ')})';
     final oldValuesExpr = 'json_object(${oldValuesPairs.join(', ')})';
 
     await db.execute('''
@@ -4805,11 +4831,7 @@ class DatabaseService {
   /// Get all pending (unpushed) sync changes, ordered by id.
   Future<List<Map<String, dynamic>>> getPendingSyncChanges() async {
     final db = await database;
-    return await db.query(
-      'sync_changelog',
-      where: 'pushed = 0',
-      orderBy: 'id',
-    );
+    return await db.query('sync_changelog', where: 'pushed = 0', orderBy: 'id');
   }
 
   /// Mark the specified sync changelog entries as pushed.
@@ -4839,20 +4861,7 @@ class DatabaseService {
   /// allowing the user to review and resolve them later.
   Future<void> ensureSyncConflictsTable() async {
     final db = await database;
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS sync_conflicts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_name TEXT NOT NULL,
-        row_id TEXT NOT NULL,
-        field_name TEXT NOT NULL,
-        local_value TEXT,
-        remote_value TEXT,
-        remote_device_id TEXT NOT NULL,
-        remote_timestamp TEXT NOT NULL,
-        resolved INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL
-      )
-    ''');
+    await db.execute(_createSyncConflictsTable);
   }
 
   /// Returns all unresolved sync conflicts, ordered by most recent first.

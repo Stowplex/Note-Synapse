@@ -2,14 +2,21 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:path_provider/path_provider.dart';
+
 import '../../models/sync_config.dart';
+import '../../models/sync_operation.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
+import 'package:path/path.dart' as p;
+
+import 'attachment_sync_service.dart';
 import 'device_identity_service.dart';
 import 'merge_engine.dart';
 import 'oplog_service.dart';
 import 'snapshot_service.dart';
 import 'sync_encryption_service.dart';
+import 'sync_spec_generator.dart';
 import 'sync_staging.dart';
 import 'sync_storage_provider.dart';
 
@@ -56,8 +63,8 @@ class SyncService {
   SyncService({
     required DatabaseService db,
     required DeviceIdentityService identity,
-  })  : _db = db,
-        _identity = identity;
+  }) : _db = db,
+       _identity = identity;
 
   /// Whether this service has been configured with a storage provider.
   bool get isConfigured => _provider != null;
@@ -196,8 +203,9 @@ class SyncService {
           db: stagingDb,
           currentSchemaVersion: schemaVersion,
         );
-        final mergeResult =
-            await mergeEngine.applyOperations(readResult.applicableOps);
+        final mergeResult = await mergeEngine.applyOperations(
+          readResult.applicableOps,
+        );
 
         if (mergeResult.errors.isNotEmpty) {
           warnings.addAll(mergeResult.errors);
@@ -220,8 +228,10 @@ class SyncService {
         for (final entry in readResult.newLastSeenSequences.entries) {
           if (entry.key != deviceId &&
               updatedRegistry.devices.containsKey(entry.key)) {
-            updatedRegistry =
-                updatedRegistry.updateSequence(entry.key, entry.value);
+            updatedRegistry = updatedRegistry.updateSequence(
+              entry.key,
+              entry.value,
+            );
           }
         }
         await _writeDeviceRegistry(updatedRegistry);
@@ -336,7 +346,9 @@ class SyncService {
         await provider.deleteFile(file.path);
       }
 
-      LoggerService.info('Compaction complete: deleted ${oplogFiles.length} oplog files');
+      LoggerService.info(
+        'Compaction complete: deleted ${oplogFiles.length} oplog files',
+      );
     } catch (e) {
       warnings.add('Compaction failed (non-fatal): $e');
     }
@@ -405,10 +417,7 @@ class SyncService {
 
     // Create device registry with this device
     var registry = DeviceRegistry(devices: {});
-    registry = registry.registerDevice(
-      deviceId,
-      schemaVersion: schemaVersion,
-    );
+    registry = registry.registerDevice(deviceId, schemaVersion: schemaVersion);
     await _writeDeviceRegistryTo(provider, registry);
 
     // Create directories with .keep files
@@ -418,6 +427,16 @@ class SyncService {
     await provider.writeFile('attachments/.keep', keepContent);
     await provider.writeFile('apps/.keep', keepContent);
 
+    // Write SYNC_SPEC.md
+    final specGenerator = SyncSpecGenerator(db: _db);
+    final specContent = await specGenerator.generate(
+      schemaVersion: schemaVersion,
+    );
+    await provider.writeFile(
+      'SYNC_SPEC.md',
+      Uint8List.fromList(utf8.encode(specContent)),
+    );
+
     // Write initial snapshot
     final snapshotService = SnapshotService(
       db: _db,
@@ -425,6 +444,11 @@ class SyncService {
       encryption: encryption,
     );
     await snapshotService.writeSnapshot(schemaVersion);
+
+    // Identify and upload referenced attachments
+    // We read the snapshot we just wrote (or just re-query) to find attachments.
+    // Efficient way: re-query just the attachment paths from DB since we are local.
+    await _uploadInitialAttachments(provider, encryption);
 
     // Store encryption config locally
     await _identity.setEncryptionEnabled(encryption != null);
@@ -474,10 +498,7 @@ class SyncService {
 
     // Reset device registry (only this device, sequence 0)
     var registry = DeviceRegistry(devices: {});
-    registry = registry.registerDevice(
-      deviceId,
-      schemaVersion: schemaVersion,
-    );
+    registry = registry.registerDevice(deviceId, schemaVersion: schemaVersion);
     await _writeDeviceRegistry(registry);
 
     // Reset local sequence
@@ -537,7 +558,9 @@ class SyncService {
 
     final Uint8List data;
     if (_encryption != null) {
-      data = await _encryption!.encrypt(Uint8List.fromList(utf8.encode(jsonStr)));
+      data = await _encryption!.encrypt(
+        Uint8List.fromList(utf8.encode(jsonStr)),
+      );
     } else {
       data = Uint8List.fromList(utf8.encode(jsonStr));
     }
@@ -570,6 +593,82 @@ class SyncService {
       'sync-config.json',
       Uint8List.fromList(utf8.encode(jsonStr)),
     );
+  }
+
+  /// Uploads all attachments currently in the database to the remote provider.
+  /// Used during initialization.
+  Future<void> _uploadInitialAttachments(
+    SyncStorageProvider provider,
+    SyncEncryptionService? encryption,
+  ) async {
+    final db = await _db.database;
+    final attachmentPaths = <String>{};
+
+    // Query standard attachments
+    final attachments = await db.query('attachments', columns: ['filePath']);
+    for (final row in attachments) {
+      final path = row['filePath'] as String?;
+      if (path != null && path.isNotEmpty) {
+        attachmentPaths.add(path);
+      }
+    }
+
+    // Query conversation attachments
+    final convAttachments = await db.query(
+      'conversation_attachments',
+      columns: ['filePath'],
+    );
+    for (final row in convAttachments) {
+      final path = row['filePath'] as String?;
+      if (path != null && path.isNotEmpty) {
+        attachmentPaths.add(path);
+      }
+    }
+
+    if (attachmentPaths.isEmpty) return;
+
+    final attachmentService = AttachmentSyncService(
+      provider: provider,
+      encryption: encryption,
+    );
+
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+
+      // Create synthetic ops to reuse AttachmentSyncService logic
+      final ops = <SyncOperation>[];
+      final timestamp = DateTime.now().toUtc();
+
+      for (final path in attachmentPaths) {
+        ops.add(
+          SyncOperation(
+            id: 'init-upload-${path.hashCode}', // dummy ID
+            deviceId: 'init',
+            sequence: 0,
+            timestamp: timestamp,
+            table: 'attachments',
+            rowId: 'init',
+            action: SyncAction.insert,
+            fields: {'filePath': SyncFieldValue(value: path, minVersion: 1)},
+            schemaVersion: 1,
+          ),
+        );
+      }
+
+      final count = await attachmentService.uploadNewAttachments(
+        ops,
+        appDocDir.path,
+      );
+
+      LoggerService.info('Uploaded $count initial attachments');
+    } catch (e, stack) {
+      LoggerService.error(
+        'Failed to upload initial attachments',
+        error: e,
+        stackTrace: stack,
+      );
+      // Non-fatal, user can sync later.
+    }
   }
 
   /// Generates random bytes using Dart's secure random.
