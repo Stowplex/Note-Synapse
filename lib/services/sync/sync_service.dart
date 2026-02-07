@@ -261,15 +261,8 @@ class SyncService {
     required int schemaVersion,
     required List<String> warnings,
   }) async {
-    // Check if sync triggers are enabled (changelog table exists)
-    final database = await _db.database;
-    final tables = await database.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_changelog'",
-    );
-    if (tables.isEmpty) {
-      // No sync changelog table, nothing to push
-      return 0;
-    }
+    // We trust OplogWriter to handle the case where sync_changelog is missing
+    // (it will throw keys/table missing error which is caught and reported)
 
     final writer = OplogWriter(
       db: _db,

@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/sync_operation.dart';
 import '../database_service.dart';
+import '../logger_service.dart';
 import 'field_version_registry.dart';
 import 'sync_encryption_service.dart';
 import 'sync_storage_provider.dart';
@@ -42,6 +43,12 @@ class OplogWriter {
   /// If there are no pending changes, returns [startSequence] unchanged.
   Future<int> writeOplogBatch(int startSequence) async {
     final pending = await _db.getPendingSyncChanges();
+
+    if (pending.isNotEmpty) {
+      LoggerService.debug(
+        'OplogWriter found ${pending.length} pending changes',
+      );
+    }
 
     if (pending.isEmpty) {
       return startSequence;
