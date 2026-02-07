@@ -1794,6 +1794,7 @@
   "syncSettingsSubtitle": "Set up or manage cloud sync across devices",
   "syncStatusSection": "Sync Status",
   "syncNow": "Sync Now",
+  "syncNotConfigured": "Not configured",
   "syncSyncing": "Syncing...",
   "syncLastSynced": "Last synced: {timestamp}",
   "@syncLastSynced": {

@@ -80,6 +80,12 @@ class SyncService {
     _encryption = encryption;
   }
 
+  /// Resets the configuration, effectively disabling sync in memory.
+  void resetConfiguration() {
+    _provider = null;
+    _encryption = null;
+  }
+
   /// Main sync method. Performs pull then push, returns a [SyncResult].
   ///
   /// Throws [StateError] if no provider has been configured.

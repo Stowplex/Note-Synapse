@@ -4260,6 +4260,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNow => '立即同步';
 
   @override
+  String get syncNotConfigured => '未配置';
+
+  @override
   String get syncSyncing => '正在同步...';
 
   @override

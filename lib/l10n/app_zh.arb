@@ -1734,6 +1734,7 @@
   "syncSettingsSubtitle": "设置或管理跨设备云同步",
   "syncStatusSection": "同步状态",
   "syncNow": "立即同步",
+  "syncNotConfigured": "未配置",
   "syncSyncing": "正在同步...",
   "syncLastSynced": "上次同步：{timestamp}",
   "@syncLastSynced": {

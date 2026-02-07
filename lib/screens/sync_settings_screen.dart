@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import 'sync_setup_screen.dart';
 import '../services/service_locator.dart';
 import '../services/sync/android_saf_sync_provider.dart';
 import '../services/sync/folder_sync_provider.dart';
@@ -23,6 +24,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   int _unresolvedConflictsCount = 0;
   String? _currentCipher;
   bool _isEncrypted = false;
+  bool _isConfigured = false;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
       final identity = DeviceIdentityService();
       final isEncrypted = await identity.isEncryptionEnabled();
       final cipherId = await identity.getCipherId();
+      final providerType = await identity.getSyncProviderType();
 
       int pendingCount = 0;
       int conflictsCount = 0;
@@ -56,6 +59,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
           _currentCipher = cipherId;
           _pendingChangesCount = pendingCount;
           _unresolvedConflictsCount = conflictsCount;
+          _isConfigured = providerType != null;
         });
       }
     } catch (_) {
@@ -74,7 +78,9 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
     final providerUri = await identity.getSyncProviderUri();
 
     if (providerType == null || providerUri == null) {
-      throw StateError('Sync provider not configured. Please set up sync first.');
+      throw StateError(
+        'Sync provider not configured. Please set up sync first.',
+      );
     }
 
     if (providerType == 'saf') {
@@ -195,6 +201,9 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
         final identity = DeviceIdentityService();
         await identity.clearSyncIdentity();
 
+        // Reset in-memory service state
+        getIt<SyncService>().resetConfiguration();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -202,7 +211,8 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context);
+          // Stay on screen, just reload status to unlock "Set Up Sync" UI
+          await _loadStatus();
         }
       } catch (e) {
         if (mounted) {
@@ -239,25 +249,38 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
               _buildStatusCard(l10n, theme),
               const SizedBox(height: 16),
 
-              // Section 2: Sync Now
+              // Section 2: Sync Action (Sync Now OR Set Up)
               SizedBox(
                 height: 48,
-                child: FilledButton.icon(
-                  onPressed: _isSyncing ? null : _syncNow,
-                  icon: _isSyncing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.sync),
-                  label: Text(
-                    _isSyncing ? l10n.syncSyncing : l10n.syncNow,
-                  ),
-                ),
+                child: _isConfigured
+                    ? FilledButton.icon(
+                        onPressed: _isSyncing ? null : _syncNow,
+                        icon: _isSyncing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.sync),
+                        label: Text(
+                          _isSyncing ? l10n.syncSyncing : l10n.syncNow,
+                        ),
+                      )
+                    : FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SyncSetupScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings_suggest),
+                        label: Text(l10n.syncSetupTitle),
+                      ),
               ),
 
               // Sync result summary
@@ -274,10 +297,12 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
               const SizedBox(height: 24),
 
               // Section 4: Danger Zone
-              _buildSectionTitle(l10n.syncDangerZone),
-              const SizedBox(height: 8),
-              _buildDangerCard(l10n, theme),
-              const SizedBox(height: 16),
+              if (_isConfigured) ...[
+                _buildSectionTitle(l10n.syncDangerZone),
+                const SizedBox(height: 8),
+                _buildDangerCard(l10n, theme),
+                const SizedBox(height: 16),
+              ],
             ],
           ),
         ),
@@ -288,10 +313,9 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: Theme.of(context)
-          .textTheme
-          .titleMedium
-          ?.copyWith(fontWeight: FontWeight.bold),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
@@ -423,13 +447,15 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   }
 
   Widget _buildEncryptionCard(AppLocalizations l10n, ThemeData theme) {
-    final cipherDisplay = _isEncrypted
-        ? (_currentCipher == 'aes-256-gcm'
-            ? 'AES-256-GCM'
-            : _currentCipher == 'xchacha20-poly1305'
-                ? 'XChaCha20-Poly1305'
-                : _currentCipher ?? l10n.syncEncryptionUnknown)
-        : l10n.syncEncryptionNone;
+    final cipherDisplay = _isConfigured
+        ? (_isEncrypted
+              ? (_currentCipher == 'aes-256-gcm'
+                    ? 'AES-256-GCM'
+                    : _currentCipher == 'xchacha20-poly1305'
+                    ? 'XChaCha20-Poly1305'
+                    : _currentCipher ?? l10n.syncEncryptionUnknown)
+              : l10n.syncEncryptionNone)
+        : l10n.syncNotConfigured;
 
     return Card(
       child: Padding(
@@ -463,9 +489,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: theme.colorScheme.error.withValues(alpha: 0.3),
-        ),
+        side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -475,10 +499,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
             // Reset Sync
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                Icons.restart_alt,
-                color: theme.colorScheme.error,
-              ),
+              leading: Icon(Icons.restart_alt, color: theme.colorScheme.error),
               title: Text(
                 l10n.syncResetFromDevice,
                 style: theme.textTheme.bodyLarge?.copyWith(
@@ -493,9 +514,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
               ),
               onTap: _resetSync,
             ),
-            Divider(
-              color: theme.colorScheme.error.withValues(alpha: 0.2),
-            ),
+            Divider(color: theme.colorScheme.error.withValues(alpha: 0.2)),
             // Disable Sync
             ListTile(
               contentPadding: EdgeInsets.zero,

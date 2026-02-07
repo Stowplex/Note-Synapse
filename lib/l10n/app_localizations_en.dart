@@ -4459,6 +4459,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNow => 'Sync Now';
 
   @override
+  String get syncNotConfigured => 'Not configured';
+
+  @override
   String get syncSyncing => 'Syncing...';
 
   @override

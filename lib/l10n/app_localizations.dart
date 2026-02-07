@@ -7766,6 +7766,12 @@ abstract class AppLocalizations {
   /// **'Sync Now'**
   String get syncNow;
 
+  /// No description provided for @syncNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get syncNotConfigured;
+
   /// No description provided for @syncSyncing.
   ///
   /// In en, this message translates to:
