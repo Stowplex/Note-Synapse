@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'package:sqflite/sqflite.dart';
 
@@ -161,16 +163,15 @@ class SnapshotService {
       referencedAttachments: attachmentPaths.toList(),
     );
 
-    // Serialize to JSON
-    final jsonBytes = utf8.encode(jsonEncode(snapshot.toJson()));
+    // Offload serialization and encryption to isolate
+    final keyBytes = await _encryption?.getDerivedKeyBytes();
+    final cipherId = _encryption?.getCipherId();
 
-    // Encrypt if encryption service is provided
-    final Uint8List dataToWrite;
-    if (_encryption != null) {
-      dataToWrite = await _encryption.encrypt(Uint8List.fromList(jsonBytes));
-    } else {
-      dataToWrite = Uint8List.fromList(jsonBytes);
-    }
+    final dataToWrite = await compute(_serializeAndEncryptSnapshot, {
+      'snapshotJson': snapshot.toJson(),
+      'keyBytes': keyBytes,
+      'cipherId': cipherId,
+    });
 
     // Write to storage
     await _provider.writeFile(_snapshotPath, dataToWrite);
@@ -225,5 +226,49 @@ class SnapshotService {
         }
       }
     });
+  }
+
+  /// execution in isolate
+  static Future<Uint8List> _serializeAndEncryptSnapshot(
+    Map<String, dynamic> args,
+  ) async {
+    final snapshotJson = args['snapshotJson'] as Map<String, dynamic>;
+    final keyBytes = args['keyBytes'] as List<int>?;
+    final cipherId = args['cipherId'] as String?;
+
+    // 1. Encode JSON
+    final jsonBytes = utf8.encode(jsonEncode(snapshotJson));
+
+    // 2. Encrypt if needed
+    if (keyBytes != null && cipherId != null) {
+      final Cipher cipher;
+      if (cipherId == 'aes-256-gcm') {
+        cipher = AesGcm.with256bits();
+      } else if (cipherId == 'xchacha20-poly1305') {
+        cipher = Xchacha20.poly1305Aead();
+      } else {
+        throw StateError('Unsupported cipher: $cipherId');
+      }
+
+      final secretBox = await cipher.encrypt(
+        jsonBytes,
+        secretKey: SecretKey(keyBytes),
+      );
+
+      final nonce = secretBox.nonce;
+      final mac = secretBox.mac.bytes;
+      final ciphertext = secretBox.cipherText;
+
+      final result = BytesBuilder(copy: false);
+      result.addByte(nonce.length);
+      result.add(nonce);
+      result.add(mac);
+      result.add(ciphertext);
+
+      return result.toBytes();
+    }
+
+    // Return plain bytes if not encrypted
+    return Uint8List.fromList(jsonBytes);
   }
 }

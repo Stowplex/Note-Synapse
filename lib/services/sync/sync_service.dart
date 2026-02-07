@@ -417,7 +417,7 @@ class SyncService {
     // Create device registry with this device
     var registry = DeviceRegistry(devices: {});
     registry = registry.registerDevice(deviceId, schemaVersion: schemaVersion);
-    await _writeDeviceRegistryTo(provider, registry);
+    await _writeDeviceRegistryTo(provider, registry, encryption: encryption);
 
     // Create directories with .keep files
     final keepContent = Uint8List(0);
@@ -528,9 +528,28 @@ class SyncService {
     final bytes = await provider.readFile(path);
 
     // If encrypted, decrypt first
-    final Uint8List jsonBytes;
+    // If encrypted, decrypt first
+    Uint8List jsonBytes;
     if (_encryption != null) {
-      jsonBytes = await _encryption!.decrypt(bytes);
+      try {
+        jsonBytes = await _encryption!.decrypt(bytes);
+      } catch (e) {
+        // If decryption fails (e.g. unencrypted file), try to parse as plain JSON
+        // If it looks like valid JSON, we assume it's an unencrypted file from before
+        try {
+          // Verify it's valid UTF-8 and JSON
+          final decoded = utf8.decode(bytes);
+          jsonDecode(decoded);
+          // If successful, use raw bytes
+          jsonBytes = bytes;
+          LoggerService.warning(
+            'Read unencrypted device registry while encryption enabled - migrating.',
+          );
+        } catch (_) {
+          // If fallback fails, rethrow original error
+          rethrow;
+        }
+      }
     } else {
       jsonBytes = bytes;
     }
@@ -551,15 +570,15 @@ class SyncService {
   /// Writes the device registry to a specific provider.
   Future<void> _writeDeviceRegistryTo(
     SyncStorageProvider provider,
-    DeviceRegistry registry,
-  ) async {
+    DeviceRegistry registry, {
+    SyncEncryptionService? encryption,
+  }) async {
     final jsonStr = jsonEncode(registry.toJson());
+    final enc = encryption ?? _encryption;
 
     final Uint8List data;
-    if (_encryption != null) {
-      data = await _encryption!.encrypt(
-        Uint8List.fromList(utf8.encode(jsonStr)),
-      );
+    if (enc != null) {
+      data = await enc.encrypt(Uint8List.fromList(utf8.encode(jsonStr)));
     } else {
       data = Uint8List.fromList(utf8.encode(jsonStr));
     }
@@ -638,17 +657,38 @@ class SyncService {
       final ops = <SyncOperation>[];
       final timestamp = DateTime.now().toUtc();
 
-      for (final path in attachmentPaths) {
+      for (final rawPath in attachmentPaths) {
+        String relativePath = rawPath;
+        if (p.isAbsolute(rawPath)) {
+          // Try to make it relative to appDocDir
+          if (rawPath.startsWith(appDocDir.path)) {
+            relativePath = p.relative(rawPath, from: appDocDir.path);
+          } else {
+            // Fallback: just use the filename in attachments/ folder
+            // This handles cases where file might be in a different absolute path
+            // but we want to sync it to standard location.
+            // CAUTION: This assumes the file effectively lives in "attachments/" logically.
+            relativePath = p.join('attachments', p.basename(rawPath));
+          }
+        }
+
+        // Ensure we don't start with / even if p.relative failed or behaved weirdly
+        if (p.isAbsolute(relativePath)) {
+          relativePath = p.join('attachments', p.basename(relativePath));
+        }
+
         ops.add(
           SyncOperation(
-            id: 'init-upload-${path.hashCode}', // dummy ID
+            id: 'init-upload-${rawPath.hashCode}', // dummy ID
             deviceId: 'init',
             sequence: 0,
             timestamp: timestamp,
             table: 'attachments',
             rowId: 'init',
             action: SyncAction.insert,
-            fields: {'filePath': SyncFieldValue(value: path, minVersion: 1)},
+            fields: {
+              'filePath': SyncFieldValue(value: relativePath, minVersion: 1),
+            },
             schemaVersion: 1,
           ),
         );

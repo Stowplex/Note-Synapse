@@ -19,14 +19,17 @@ class AndroidSafSyncProvider implements SyncStorageProvider {
     required this.treeUri,
     SafUtil? safUtil,
     SafStream? safStream,
-  })  : _safUtil = safUtil ?? SafUtil(),
-        _safStream = safStream ?? SafStream();
+  }) : _safUtil = safUtil ?? SafUtil(),
+       _safStream = safStream ?? SafStream();
 
   /// Splits a sync path like "oplog/device-abc_seq42.json" into
   /// directory segments and a filename.
   /// Returns (dirSegments, fileName).
   (List<String>, String) _parsePath(String path) {
-    final parts = path.split('/');
+    final parts = path.split('/').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return ([], '');
+    }
     final fileName = parts.last;
     final dirSegments = parts.sublist(0, parts.length - 1);
     return (dirSegments, fileName);
@@ -48,12 +51,13 @@ class AndroidSafSyncProvider implements SyncStorageProvider {
     final entries = await _safUtil.list(subdir.uri);
     return entries
         .where((e) => !e.isDir)
-        .map((e) => SyncFileInfo(
-              path: '$path/${e.name}',
-              sizeBytes: e.length,
-              lastModified:
-                  DateTime.fromMillisecondsSinceEpoch(e.lastModified),
-            ))
+        .map(
+          (e) => SyncFileInfo(
+            path: '$path/${e.name}',
+            sizeBytes: e.length,
+            lastModified: DateTime.fromMillisecondsSinceEpoch(e.lastModified),
+          ),
+        )
         .toList();
   }
 

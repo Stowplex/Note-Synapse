@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 
 /// Handles all encryption/decryption for the sync layer.
 ///
@@ -32,19 +33,38 @@ class SyncEncryptionService {
       'cipherId must be "aes-256-gcm" or "xchacha20-poly1305"',
     );
 
+    final derivedKeyBytes = await compute(_deriveKey, {
+      'passphrase': passphrase,
+      'salt': salt,
+      'memory': kdfMemory,
+      'iterations': kdfIterations,
+      'parallelism': kdfParallelism,
+    });
+
+    return SyncEncryptionService._(SecretKey(derivedKeyBytes), cipherId);
+  }
+
+  /// execution in isolate
+  static Future<List<int>> _deriveKey(Map<String, dynamic> args) async {
+    final passphrase = args['passphrase'] as String;
+    final salt = args['salt'] as String;
+    final memory = args['memory'] as int;
+    final iterations = args['iterations'] as int;
+    final parallelism = args['parallelism'] as int;
+
     final argon2 = Argon2id(
-      memory: kdfMemory,
-      iterations: kdfIterations,
-      parallelism: kdfParallelism,
+      memory: memory,
+      iterations: iterations,
+      parallelism: parallelism,
       hashLength: 32,
     );
 
-    final derivedKey = await argon2.deriveKey(
+    final secretKey = await argon2.deriveKey(
       secretKey: SecretKey(utf8.encode(passphrase)),
       nonce: base64Decode(salt),
     );
 
-    return SyncEncryptionService._(derivedKey, cipherId);
+    return secretKey.extractBytes();
   }
 
   /// Returns the cipher instance based on the configured [_cipherId].
@@ -65,10 +85,7 @@ class SyncEncryptionService {
   /// `[1 byte nonce length][nonce bytes][16 bytes MAC][ciphertext bytes]`
   Future<Uint8List> encrypt(Uint8List plaintext) async {
     final cipher = _getCipher();
-    final secretBox = await cipher.encrypt(
-      plaintext,
-      secretKey: _derivedKey,
-    );
+    final secretBox = await cipher.encrypt(plaintext, secretKey: _derivedKey);
 
     final nonce = secretBox.nonce;
     final mac = secretBox.mac.bytes;
@@ -92,21 +109,26 @@ class SyncEncryptionService {
     final cipher = _getCipher();
 
     // Unpack
+    if (packed.isEmpty) {
+      throw const FormatException('Cannot decrypt empty data');
+    }
+
     final nonceLength = packed[0];
+    // Min length: 1 (length byte) + nonceLength + 16 (MAC)
+    final minLength = 1 + nonceLength + 16;
+    if (packed.length < minLength) {
+      throw FormatException(
+        'Invalid packed data length: ${packed.length}, expected at least $minLength',
+      );
+    }
+
     final nonce = packed.sublist(1, 1 + nonceLength);
     final mac = packed.sublist(1 + nonceLength, 1 + nonceLength + 16);
     final ciphertext = packed.sublist(1 + nonceLength + 16);
 
-    final secretBox = SecretBox(
-      ciphertext,
-      nonce: nonce,
-      mac: Mac(mac),
-    );
+    final secretBox = SecretBox(ciphertext, nonce: nonce, mac: Mac(mac));
 
-    final decrypted = await cipher.decrypt(
-      secretBox,
-      secretKey: _derivedKey,
-    );
+    final decrypted = await cipher.decrypt(secretBox, secretKey: _derivedKey);
 
     return Uint8List.fromList(decrypted);
   }
@@ -128,4 +150,14 @@ class SyncEncryptionService {
     final computed = await computeHmac(data);
     return computed == expectedHmac;
   }
+
+  /// Helper to get raw key bytes for passing to isolates.
+  Future<List<int>> getDerivedKeyBytes() async {
+    return _derivedKey.extractBytes();
+  }
+
+  String getCipherId() => _cipherId;
+
+  // Placeholder - current implementation doesn't store salt on instance
+  Future<String?> getSalt() async => null;
 }

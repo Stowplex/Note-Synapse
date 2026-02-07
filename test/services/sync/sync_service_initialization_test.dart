@@ -230,4 +230,94 @@ void main() {
       expect(utf8.decode(decryptedBytes), 'Secret Data');
     },
   );
+
+  test(
+    'initializeSyncRoot encrypts device registry when encryption is enabled',
+    () async {
+      await syncService.initializeSyncRoot(
+        provider: provider,
+        passphrase: 'password123',
+      );
+
+      final registryPath = 'meta/device-registry.json';
+      expect(await provider.exists(registryPath), isTrue);
+
+      final remoteBytes = await provider.readFile(registryPath);
+
+      // Attempt to decode as plain UTF8/JSON - should fail or look like garbage
+      try {
+        final text = utf8.decode(remoteBytes);
+        final json = jsonDecode(text);
+        if (json is Map && json.containsKey('devices')) {
+          fail('Device registry was stored as plain text JSON');
+        }
+      } catch (_) {
+        // Expected
+      }
+
+      // Decrypt and verify
+      final salt = (await syncService.readSyncConfig()).salt;
+      final encryption = await SyncEncryptionService.create(
+        passphrase: 'password123',
+        cipherId: 'aes-256-gcm',
+        salt: salt,
+      );
+      final decryptedBytes = await encryption.decrypt(remoteBytes);
+      final json = jsonDecode(utf8.decode(decryptedBytes));
+      expect(json, isA<Map>());
+      expect(json['devices'], isNotEmpty); // Current device should be there
+    },
+  );
+
+  test('initializeSyncRoot handles absolute attachment paths', () async {
+    // Setup: Create a dummy attachment file
+    final attachmentName = 'test-absolute.txt';
+    final attachmentPath = '${appDocDir.path}/attachments';
+    Directory(attachmentPath).createSync(recursive: true);
+    final absoluteFilePath = '$attachmentPath/test-absolute-uuid.txt';
+    File(absoluteFilePath).writeAsStringSync('Absolute Path Content');
+
+    // Setup: Insert dummy note
+    final database = await db.database;
+    await database.insert('notes', {
+      'id': 'note-abs-1',
+      'title': 'Absolute Path Note',
+      'content': 'Content',
+      'type': 'note',
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      'pinned': 0,
+      'isArchived': 0,
+    });
+
+    // Setup: Insert attachment record into DB with ABSOLUTE path
+    await database.insert('attachments', {
+      'id': 'att-abs-1',
+      'noteId': 'note-abs-1',
+      // Simulate absolute path stored in DB
+      'filePath': absoluteFilePath,
+      'fileName': attachmentName,
+      'fileType': 'txt',
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    });
+
+    // Run initialization
+    await syncService.initializeSyncRoot(provider: provider);
+
+    // Verify attachment file exists in provider at relative location
+    // Should be under 'attachments/test-absolute-uuid.txt'
+    // Since we sanitized the path to be relative
+    final expectedRelativePath = 'attachments/test-absolute-uuid.txt';
+
+    expect(
+      await provider.exists(expectedRelativePath),
+      isTrue,
+      reason: 'Should have uploaded to relative path $expectedRelativePath',
+    );
+
+    final remoteContent = utf8.decode(
+      await provider.readFile(expectedRelativePath),
+    );
+    expect(remoteContent, 'Absolute Path Content');
+  });
 }
