@@ -1082,7 +1082,7 @@ class ShareService {
         if (note.scheduledAt != null) {
           try {
             final date = DateTime.parse(note.scheduledAt!);
-            buffer.writeln('**Scheduled:** ${_formatDateTime(date)}');
+            buffer.writeln('**Scheduled:** ${date.toIso8601String()}');
           } catch (_) {
             buffer.writeln('**Scheduled:** ${note.scheduledAt}');
           }
@@ -1090,7 +1090,7 @@ class ShareService {
         if (note.completeBy != null) {
           try {
             final date = DateTime.parse(note.completeBy!);
-            buffer.writeln('**Due:** ${_formatDateTime(date)}');
+            buffer.writeln('**Due:** ${date.toIso8601String()}');
           } catch (_) {
             buffer.writeln('**Due:** ${note.completeBy}');
           }
@@ -1099,9 +1099,9 @@ class ShareService {
       if (note.tags.isNotEmpty) {
         buffer.writeln('**Tags:** ${note.tags.join(', ')}');
       }
-      buffer.writeln('**Created:** ${_formatDateTime(note.createdAt)}');
+      buffer.writeln('**Created:** ${note.createdAt.toIso8601String()}');
       if (note.updatedAt != note.createdAt) {
-        buffer.writeln('**Updated:** ${_formatDateTime(note.updatedAt)}');
+        buffer.writeln('**Updated:** ${note.updatedAt.toIso8601String()}');
       }
     } else {
       // Use localized strings for display/copy

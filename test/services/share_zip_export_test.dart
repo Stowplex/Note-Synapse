@@ -118,14 +118,22 @@ void main() {
 
     // 5. Assert missing fields
     // We expect these to BE present after the fix.
-    // For now, this test should FAIL if the fields are missing.
+    // We also expect them to be in ISO format as per user request.
     expect(
       content,
       contains('**Scheduled:**'),
       reason: 'Missing Scheduled field',
     );
-    expect(content, contains('03/01/2026'), reason: 'Missing Scheduled date');
+    expect(
+      content,
+      contains('2026-03-01T10:00:00.000'),
+      reason: 'Scheduled date should be ISO',
+    );
     expect(content, contains('**Due:**'), reason: 'Missing Due field');
-    expect(content, contains('03/05/2026'), reason: 'Missing Due date');
+    expect(
+      content,
+      contains('2026-03-05T17:00:00.000'),
+      reason: 'Due date should be ISO',
+    );
   });
 }

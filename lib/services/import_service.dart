@@ -181,6 +181,8 @@ class ImportService {
       createdAt: data.createdAt ?? DateTime.now(),
       updatedAt: data.updatedAt ?? DateTime.now(),
       tags: data.tags,
+      scheduledAt: data.scheduledAt,
+      completeBy: data.completeBy,
       subNotes: data.subNotes
           .map(
             (sn) => sn.copyWith(id: generateNewId ? const Uuid().v4() : sn.id),
@@ -220,6 +222,8 @@ class ImportService {
       status: data.status, // Update status
       updatedAt: data.updatedAt,
       tags: data.tags,
+      scheduledAt: data.scheduledAt,
+      completeBy: data.completeBy,
       subNotes: data.subNotes,
       attachmentPaths: currentPaths,
     );
@@ -251,6 +255,8 @@ class ImportService {
     TaskStatus? status;
     DateTime? createdAt;
     DateTime? updatedAt;
+    String? scheduledAt;
+    String? completeBy;
     List<String> tags = [];
     List<SubNote> subNotes = [];
     List<_ParsedAttachment> attachments = [];
@@ -300,28 +306,76 @@ class ImportService {
             .toList();
       } else if (line.startsWith('**Created:**')) {
         final val = line.split(':**').last.trim();
-        try {
-          final parts = val.split('/');
-          if (parts.length == 3) {
-            createdAt = DateTime(
-              int.parse(parts[2]),
-              int.parse(parts[0]),
-              int.parse(parts[1]),
-            );
-          }
-        } catch (_) {}
+        createdAt = DateTime.tryParse(val);
+        if (createdAt == null) {
+          try {
+            final parts = val.split('/');
+            if (parts.length == 3) {
+              createdAt = DateTime(
+                int.parse(parts[2]),
+                int.parse(parts[0]),
+                int.parse(parts[1]),
+              );
+            }
+          } catch (_) {}
+        }
       } else if (line.startsWith('**Updated:**')) {
         final val = line.split(':**').last.trim();
-        try {
-          final parts = val.split('/');
-          if (parts.length == 3) {
-            updatedAt = DateTime(
-              int.parse(parts[2]),
-              int.parse(parts[0]),
-              int.parse(parts[1]),
-            );
+        updatedAt = DateTime.tryParse(val);
+        if (updatedAt == null) {
+          try {
+            final parts = val.split('/');
+            if (parts.length == 3) {
+              updatedAt = DateTime(
+                int.parse(parts[2]),
+                int.parse(parts[0]),
+                int.parse(parts[1]),
+              );
+            }
+          } catch (_) {}
+        }
+      } else if (line.startsWith('**Scheduled:**')) {
+        final val = line.split(':**').last.trim();
+        final date = DateTime.tryParse(val);
+        if (date != null) {
+          scheduledAt = date.toIso8601String();
+        } else {
+          try {
+            final parts = val.split('/');
+            if (parts.length == 3) {
+              scheduledAt = DateTime(
+                int.parse(parts[2]),
+                int.parse(parts[0]),
+                int.parse(parts[1]),
+              ).toIso8601String();
+            } else {
+              scheduledAt = val;
+            }
+          } catch (_) {
+            scheduledAt = val;
           }
-        } catch (_) {}
+        }
+      } else if (line.startsWith('**Due:**')) {
+        final val = line.split(':**').last.trim();
+        final date = DateTime.tryParse(val);
+        if (date != null) {
+          completeBy = date.toIso8601String();
+        } else {
+          try {
+            final parts = val.split('/');
+            if (parts.length == 3) {
+              completeBy = DateTime(
+                int.parse(parts[2]),
+                int.parse(parts[0]),
+                int.parse(parts[1]),
+              ).toIso8601String();
+            } else {
+              completeBy = val;
+            }
+          } catch (_) {
+            completeBy = val;
+          }
+        }
       } else {
         // Stop if not a metadata line
         if (!line.startsWith('**')) break;
@@ -436,6 +490,8 @@ class ImportService {
       createdAt: createdAt,
       updatedAt: updatedAt,
       tags: tags,
+      scheduledAt: scheduledAt,
+      completeBy: completeBy,
       subNotes: subNotes,
       attachments: attachments,
     );
@@ -450,6 +506,8 @@ class _ParsedNoteData {
   final TaskStatus? status;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? scheduledAt;
+  final String? completeBy;
   final List<String> tags;
   final List<SubNote> subNotes;
   final List<_ParsedAttachment> attachments;
@@ -462,6 +520,8 @@ class _ParsedNoteData {
     this.status,
     this.createdAt,
     this.updatedAt,
+    this.scheduledAt,
+    this.completeBy,
     this.tags = const [],
     this.subNotes = const [],
     this.attachments = const [],
