@@ -8,6 +8,7 @@ import '../database_service.dart';
 import 'field_version_registry.dart';
 import 'sync_encryption_service.dart';
 import 'sync_storage_provider.dart';
+import 'sync_utils.dart';
 
 /// Writes local database changes to oplog files for cloud sync.
 ///
@@ -29,11 +30,11 @@ class OplogWriter {
     SyncEncryptionService? encryption,
     required String deviceId,
     required int schemaVersion,
-  })  : _db = db,
-        _provider = provider,
-        _encryption = encryption,
-        _deviceId = deviceId,
-        _schemaVersion = schemaVersion;
+  }) : _db = db,
+       _provider = provider,
+       _encryption = encryption,
+       _deviceId = deviceId,
+       _schemaVersion = schemaVersion;
 
   /// Writes pending changelog entries as a batch oplog file.
   ///
@@ -61,17 +62,19 @@ class OplogWriter {
           ? <String, SyncFieldValue>{}
           : await _buildFieldsFromRow(table, rowId);
 
-      operations.add(SyncOperation(
-        id: _uuid.v4(),
-        deviceId: _deviceId,
-        sequence: startSequence + i,
-        timestamp: DateTime.parse(timestamp),
-        table: table,
-        rowId: rowId,
-        action: action,
-        fields: fields,
-        schemaVersion: _schemaVersion,
-      ));
+      operations.add(
+        SyncOperation(
+          id: _uuid.v4(),
+          deviceId: _deviceId,
+          sequence: startSequence + i,
+          timestamp: DateTime.parse(timestamp),
+          table: table,
+          rowId: rowId,
+          action: action,
+          fields: fields,
+          schemaVersion: _schemaVersion,
+        ),
+      );
 
       changelogIds.add(entry['id'] as int);
     }
@@ -119,6 +122,7 @@ class OplogWriter {
   /// Builds a map of field name to [SyncFieldValue] from the current row data.
   ///
   /// For each column, looks up the minVersion from [fieldVersionRegistry].
+  /// Uses chunked reads for large columns to avoid Android CursorWindow overflow.
   Future<Map<String, SyncFieldValue>> _buildFieldsFromRow(
     String table,
     String rowId,
@@ -131,20 +135,48 @@ class OplogWriter {
     // Build WHERE clause for the query
     final whereClause = _buildWhereClause(pkColumns, rowId);
 
-    // Query the row
-    final rows = await db.query(
-      table,
-      where: whereClause.where,
-      whereArgs: whereClause.args,
-    );
+    // Check for large columns that need chunked reads
+    final largeCols = largeColumnsByTable[table];
+
+    // Query the row, excluding large columns if any
+    final List<Map<String, dynamic>> rows;
+    if (largeCols != null) {
+      final allColumns = fieldVersionRegistry[table]!.keys.toList();
+      final safeColumns = allColumns
+          .where((c) => !largeCols.contains(c))
+          .toList();
+      rows = await db.query(
+        table,
+        columns: safeColumns,
+        where: whereClause.where,
+        whereArgs: whereClause.args,
+      );
+    } else {
+      rows = await db.query(
+        table,
+        where: whereClause.where,
+        whereArgs: whereClause.args,
+      );
+    }
 
     if (rows.isEmpty) {
       // Row might have been deleted since changelog was created
       return {};
     }
 
-    final row = rows.first;
+    final row = Map<String, dynamic>.from(rows.first);
     final tableRegistry = fieldVersionRegistry[table] ?? {};
+
+    // Read large columns separately via chunked substr
+    if (largeCols != null) {
+      // Get the row id for chunked reads (assumes 'id' column for single-key tables)
+      final idForChunked = pkColumns.length == 1 ? rowId : row['id'] as String?;
+      if (idForChunked != null) {
+        for (final col in largeCols) {
+          row[col] = await readLargeColumn(db, table, col, idForChunked);
+        }
+      }
+    }
 
     final fields = <String, SyncFieldValue>{};
     for (final entry in row.entries) {
@@ -152,10 +184,7 @@ class OplogWriter {
       final value = entry.value;
       final minVersion = tableRegistry[columnName] ?? 1;
 
-      fields[columnName] = SyncFieldValue(
-        value: value,
-        minVersion: minVersion,
-      );
+      fields[columnName] = SyncFieldValue(value: value, minVersion: minVersion);
     }
 
     return fields;
@@ -188,10 +217,7 @@ class OplogWriter {
   /// For composite keys, row_id is key1-key2 (concatenated with '-').
   _WhereClause _buildWhereClause(List<String> pkColumns, String rowId) {
     if (pkColumns.length == 1) {
-      return _WhereClause(
-        where: '${pkColumns.first} = ?',
-        args: [rowId],
-      );
+      return _WhereClause(where: '${pkColumns.first} = ?', args: [rowId]);
     }
 
     // Composite key: split by '-'
@@ -216,10 +242,7 @@ class OplogWriter {
         conditions.add('${pkColumns[i]} = ?');
       }
 
-      return _WhereClause(
-        where: conditions.join(' AND '),
-        args: args,
-      );
+      return _WhereClause(where: conditions.join(' AND '), args: args);
     }
 
     // Fallback: shouldn't happen if row_id was constructed correctly
@@ -291,10 +314,10 @@ class OplogReader {
     SyncEncryptionService? encryption,
     required String ownDeviceId,
     required int currentSchemaVersion,
-  })  : _provider = provider,
-        _encryption = encryption,
-        _ownDeviceId = ownDeviceId,
-        _currentSchemaVersion = currentSchemaVersion;
+  }) : _provider = provider,
+       _encryption = encryption,
+       _ownDeviceId = ownDeviceId,
+       _currentSchemaVersion = currentSchemaVersion;
 
   /// Lists all oplog files and parses their filenames.
   ///

@@ -36,28 +36,30 @@ void main() {
     });
 
     group('writeSnapshot', () {
-      test('creates correct structure with schemaVersion, timestamp, tables, referencedAttachments',
-          () async {
-        final snapshotService = SnapshotService(
-          db: databaseService,
-          provider: provider,
-        );
+      test(
+        'creates correct structure with schemaVersion, timestamp, tables, referencedAttachments',
+        () async {
+          final snapshotService = SnapshotService(
+            db: databaseService,
+            provider: provider,
+          );
 
-        await snapshotService.writeSnapshot(36);
+          await snapshotService.writeSnapshot(36);
 
-        // Verify file was written
-        expect(await provider.exists('snapshots/latest.json'), isTrue);
+          // Verify file was written
+          expect(await provider.exists('snapshots/latest.json'), isTrue);
 
-        // Read and parse the snapshot
-        final bytes = await provider.readFile('snapshots/latest.json');
-        final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+          // Read and parse the snapshot
+          final bytes = await provider.readFile('snapshots/latest.json');
+          final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
 
-        expect(json['schemaVersion'], 36);
-        expect(json['timestamp'], isNotNull);
-        expect(DateTime.tryParse(json['timestamp'] as String), isNotNull);
-        expect(json['tables'], isA<Map<String, dynamic>>());
-        expect(json['referencedAttachments'], isA<List>());
-      });
+          expect(json['schemaVersion'], 36);
+          expect(json['timestamp'], isNotNull);
+          expect(DateTime.tryParse(json['timestamp'] as String), isNotNull);
+          expect(json['tables'], isA<Map<String, dynamic>>());
+          expect(json['referencedAttachments'], isA<List>());
+        },
+      );
 
       test('includes all synced tables even when empty', () async {
         final snapshotService = SnapshotService(
@@ -73,8 +75,11 @@ void main() {
 
         // All synced tables should be present
         for (final tableName in syncedTables) {
-          expect(tables.containsKey(tableName), isTrue,
-              reason: 'Expected table $tableName to be in snapshot');
+          expect(
+            tables.containsKey(tableName),
+            isTrue,
+            reason: 'Expected table $tableName to be in snapshot',
+          );
           expect(tables[tableName], isA<List>());
         }
       });
@@ -124,91 +129,93 @@ void main() {
         expect((tags[0] as Map<String, dynamic>)['name'], 'Test Tag');
       });
 
-      test('collects referenced attachments from both attachments and conversation_attachments tables',
-          () async {
-        final db = await databaseService.database;
-        final now = DateTime.now().millisecondsSinceEpoch;
+      test(
+        'collects referenced attachments from both attachments and conversation_attachments tables',
+        () async {
+          final db = await databaseService.database;
+          final now = DateTime.now().millisecondsSinceEpoch;
 
-        // Create a note for attachments
-        await db.insert('notes', {
-          'id': 'note-1',
-          'title': 'Note',
-          'content': 'Content',
-          'type': 'note',
-          'createdAt': now,
-          'updatedAt': now,
-          'pinned': 0,
-          'isArchived': 0,
-        });
+          // Create a note for attachments
+          await db.insert('notes', {
+            'id': 'note-1',
+            'title': 'Note',
+            'content': 'Content',
+            'type': 'note',
+            'createdAt': now,
+            'updatedAt': now,
+            'pinned': 0,
+            'isArchived': 0,
+          });
 
-        // Create a message for conversation_attachments
-        await db.insert('conversation_messages', {
-          'id': 'msg-1',
-          'type': 'user',
-          'content': 'Hello',
-          'timestamp': now,
-        });
+          // Create a message for conversation_attachments
+          await db.insert('conversation_messages', {
+            'id': 'msg-1',
+            'type': 'user',
+            'content': 'Hello',
+            'timestamp': now,
+          });
 
-        // Insert attachments
-        await db.insert('attachments', {
-          'id': 'att-1',
-          'noteId': 'note-1',
-          'filePath': 'attachments/uuid1.pdf',
-          'fileName': 'doc.pdf',
-          'fileType': 'application/pdf',
-          'isRelativePath': 1,
-          'createdAt': now,
-        });
-        await db.insert('attachments', {
-          'id': 'att-2',
-          'noteId': 'note-1',
-          'filePath': 'attachments/uuid2.png',
-          'fileName': 'image.png',
-          'fileType': 'image/png',
-          'isRelativePath': 1,
-          'createdAt': now,
-        });
+          // Insert attachments
+          await db.insert('attachments', {
+            'id': 'att-1',
+            'noteId': 'note-1',
+            'filePath': 'attachments/uuid1.pdf',
+            'fileName': 'doc.pdf',
+            'fileType': 'application/pdf',
+            'isRelativePath': 1,
+            'createdAt': now,
+          });
+          await db.insert('attachments', {
+            'id': 'att-2',
+            'noteId': 'note-1',
+            'filePath': 'attachments/uuid2.png',
+            'fileName': 'image.png',
+            'fileType': 'image/png',
+            'isRelativePath': 1,
+            'createdAt': now,
+          });
 
-        // Insert conversation attachments
-        await db.insert('conversation_attachments', {
-          'id': 'conv-att-1',
-          'messageId': 'msg-1',
-          'filePath': 'attachments/uuid3.jpg',
-          'fileName': 'photo.jpg',
-          'fileType': 'image/jpeg',
-          'isRelativePath': 1,
-          'createdAt': now,
-        });
-        // Duplicate path to test deduplication
-        await db.insert('conversation_attachments', {
-          'id': 'conv-att-2',
-          'messageId': 'msg-1',
-          'filePath': 'attachments/uuid1.pdf', // same as att-1
-          'fileName': 'doc.pdf',
-          'fileType': 'application/pdf',
-          'isRelativePath': 1,
-          'createdAt': now,
-        });
+          // Insert conversation attachments
+          await db.insert('conversation_attachments', {
+            'id': 'conv-att-1',
+            'messageId': 'msg-1',
+            'filePath': 'attachments/uuid3.jpg',
+            'fileName': 'photo.jpg',
+            'fileType': 'image/jpeg',
+            'isRelativePath': 1,
+            'createdAt': now,
+          });
+          // Duplicate path to test deduplication
+          await db.insert('conversation_attachments', {
+            'id': 'conv-att-2',
+            'messageId': 'msg-1',
+            'filePath': 'attachments/uuid1.pdf', // same as att-1
+            'fileName': 'doc.pdf',
+            'fileType': 'application/pdf',
+            'isRelativePath': 1,
+            'createdAt': now,
+          });
 
-        final snapshotService = SnapshotService(
-          db: databaseService,
-          provider: provider,
-        );
+          final snapshotService = SnapshotService(
+            db: databaseService,
+            provider: provider,
+          );
 
-        await snapshotService.writeSnapshot(36);
+          await snapshotService.writeSnapshot(36);
 
-        final bytes = await provider.readFile('snapshots/latest.json');
-        final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-        final attachments = (json['referencedAttachments'] as List<dynamic>)
-            .cast<String>()
-            .toSet();
+          final bytes = await provider.readFile('snapshots/latest.json');
+          final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+          final attachments = (json['referencedAttachments'] as List<dynamic>)
+              .cast<String>()
+              .toSet();
 
-        // Should have deduplicated list
-        expect(attachments.length, 3);
-        expect(attachments.contains('attachments/uuid1.pdf'), isTrue);
-        expect(attachments.contains('attachments/uuid2.png'), isTrue);
-        expect(attachments.contains('attachments/uuid3.jpg'), isTrue);
-      });
+          // Should have deduplicated list
+          expect(attachments.length, 3);
+          expect(attachments.contains('attachments/uuid1.pdf'), isTrue);
+          expect(attachments.contains('attachments/uuid2.png'), isTrue);
+          expect(attachments.contains('attachments/uuid3.jpg'), isTrue);
+        },
+      );
 
       test('encrypts when encryption service provided', () async {
         final encryption = await SyncEncryptionService.create(
@@ -239,6 +246,43 @@ void main() {
         final json = jsonDecode(utf8.decode(decrypted)) as Map<String, dynamic>;
         expect(json['schemaVersion'], 36);
       });
+
+      test(
+        'handles large conversation_messages.metadata via chunked reads',
+        () async {
+          final db = await databaseService.database;
+          final now = DateTime.now().millisecondsSinceEpoch;
+
+          // Create a large metadata string (simulating 500KB+ data)
+          // Note: We use a smaller size in tests since FFI doesn't have CursorWindow limit
+          // but this verifies the chunked read pathway works correctly
+          final largeMetadata = '{"data": "${'x' * 100000}"}'; // 100KB
+
+          await db.insert('conversation_messages', {
+            'id': 'msg-large-metadata',
+            'type': 'assistant',
+            'content': 'Hello',
+            'timestamp': now,
+            'metadata': largeMetadata,
+          });
+
+          final snapshotService = SnapshotService(
+            db: databaseService,
+            provider: provider,
+          );
+
+          await snapshotService.writeSnapshot(36);
+
+          // Verify snapshot was written and can be read back
+          final snapshot = await snapshotService.readSnapshot();
+          expect(snapshot, isNotNull);
+
+          final messages = snapshot!.tables['conversation_messages']!;
+          expect(messages.length, 1);
+          expect(messages[0]['id'], 'msg-large-metadata');
+          expect(messages[0]['metadata'], largeMetadata);
+        },
+      );
     });
 
     group('readSnapshot', () {

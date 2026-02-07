@@ -7,6 +7,7 @@ import '../database_service.dart';
 import 'field_version_registry.dart';
 import 'sync_encryption_service.dart';
 import 'sync_storage_provider.dart';
+import 'sync_utils.dart';
 
 /// Represents a full database snapshot for sync initialization or compaction.
 ///
@@ -52,8 +53,8 @@ class Snapshot {
       schemaVersion: json['schemaVersion'] as int,
       timestamp: DateTime.parse(json['timestamp'] as String),
       tables: tables,
-      referencedAttachments:
-          (json['referencedAttachments'] as List<dynamic>).cast<String>(),
+      referencedAttachments: (json['referencedAttachments'] as List<dynamic>)
+          .cast<String>(),
     );
   }
 
@@ -85,9 +86,9 @@ class SnapshotService {
     required DatabaseService db,
     required SyncStorageProvider provider,
     SyncEncryptionService? encryption,
-  })  : _db = db,
-        _provider = provider,
-        _encryption = encryption;
+  }) : _db = db,
+       _provider = provider,
+       _encryption = encryption;
 
   /// Creates a snapshot of the current database state and writes it to storage.
   ///
@@ -102,8 +103,32 @@ class SnapshotService {
     // Collect all table data
     final tables = <String, List<Map<String, dynamic>>>{};
     for (final tableName in syncedTables) {
-      final rows = await db.query(tableName);
-      tables[tableName] = rows;
+      final largeCols = largeColumnsByTable[tableName];
+      if (largeCols == null) {
+        // No large columns — safe to SELECT *
+        tables[tableName] = await db.query(tableName);
+      } else {
+        // Get all column names from fieldVersionRegistry
+        final allColumns = fieldVersionRegistry[tableName]!.keys.toList();
+        final safeColumns = allColumns
+            .where((c) => !largeCols.contains(c))
+            .toList();
+
+        // Query only safe (small) columns
+        final rows = await db.query(tableName, columns: safeColumns);
+
+        // For each row, read large columns via chunked substr()
+        final enrichedRows = <Map<String, dynamic>>[];
+        for (final row in rows) {
+          final mutableRow = Map<String, dynamic>.from(row);
+          final rowId = row['id'] as String;
+          for (final col in largeCols) {
+            mutableRow[col] = await readLargeColumn(db, tableName, col, rowId);
+          }
+          enrichedRows.add(mutableRow);
+        }
+        tables[tableName] = enrichedRows;
+      }
     }
 
     // Collect referenced attachments from both tables
@@ -117,8 +142,10 @@ class SnapshotService {
       }
     }
 
-    final convAttachments =
-        await db.query('conversation_attachments', columns: ['filePath']);
+    final convAttachments = await db.query(
+      'conversation_attachments',
+      columns: ['filePath'],
+    );
     for (final row in convAttachments) {
       final path = row['filePath'] as String?;
       if (path != null && path.isNotEmpty) {
