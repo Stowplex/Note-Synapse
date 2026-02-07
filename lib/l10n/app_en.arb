@@ -866,7 +866,9 @@
   "stowplexCopyright": "Stowplex LLC & Bruce Li All Rights Reserved",
   "noWarranty": "NO WARRANTY",
   "debugMenu": "Debug Menu",
+  "debugMenuSubtitle": "Developer options",
   "resetOnboarding": "Reset Onboarding Flag",
+  "resetOnboardingTitle": "Reset Onboarding Flag",
   "resetOnboardingSuccess": "Onboarding flag reset",
   "dependencyLicenses": "Dependency Library Licenses",
 
