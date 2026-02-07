@@ -44,6 +44,16 @@ class SyncEncryptionService {
     return SyncEncryptionService._(SecretKey(derivedKeyBytes), cipherId);
   }
 
+  /// Creates a [SyncEncryptionService] from an existing raw key.
+  ///
+  /// Used when restoring the key from secure storage.
+  static Future<SyncEncryptionService> createFromKey({
+    required List<int> keyBytes,
+    required String cipherId,
+  }) async {
+    return SyncEncryptionService._(SecretKey(keyBytes), cipherId);
+  }
+
   /// execution in isolate
   static Future<List<int>> _deriveKey(Map<String, dynamic> args) async {
     final passphrase = args['passphrase'] as String;

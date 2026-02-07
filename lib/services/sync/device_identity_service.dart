@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
@@ -67,6 +68,27 @@ class DeviceIdentityService {
   /// Returns the cipher ID, or null if not set.
   Future<String?> getCipherId() async {
     return await _secureStorage.read(key: _cipherIdKey);
+  }
+
+  static const _encryptionKeyKey = 'sync_encryption_key';
+
+  /// Returns the stored encryption key bytes, or null if not set.
+  Future<List<int>?> getEncryptionKey() async {
+    final base64Key = await _secureStorage.read(key: _encryptionKeyKey);
+    if (base64Key == null) return null;
+    try {
+      return base64Decode(base64Key);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stores the encryption key bytes.
+  Future<void> setEncryptionKey(List<int> keyBytes) async {
+    await _secureStorage.write(
+      key: _encryptionKeyKey,
+      value: base64Encode(keyBytes),
+    );
   }
 
   /// Stores the cipher ID.

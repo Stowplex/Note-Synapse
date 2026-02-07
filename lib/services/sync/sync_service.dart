@@ -105,7 +105,35 @@ class SyncService {
         }
 
         if (provider != null) {
-          configure(provider: provider);
+          // Restore encryption if enabled
+          if (await _identity.isEncryptionEnabled()) {
+            final keyBytes = await _identity.getEncryptionKey();
+            final cipherId = await _identity.getCipherId();
+
+            if (keyBytes != null && cipherId != null) {
+              _encryption = await SyncEncryptionService.createFromKey(
+                keyBytes: keyBytes,
+                cipherId: cipherId,
+              );
+            } else {
+              LoggerService.warning(
+                'Encryption enabled but key/cipher missing. Sync locked.',
+              );
+            }
+          }
+
+          configure(provider: provider, encryption: _encryption);
+
+          // Ensure sync triggers and changelog table exist
+          try {
+            await _db.enableSyncTriggers();
+          } catch (e) {
+            LoggerService.error(
+              'Failed to enable sync triggers during restoration',
+              error: e,
+            );
+          }
+
           LoggerService.info(
             'Restored sync provider: $providerType at $providerUri',
           );
@@ -137,6 +165,14 @@ class SyncService {
     try {
       final deviceId = await _identity.getDeviceId();
       final schemaVersion = DatabaseService.DATABASE_VERSION;
+
+      // Check if encryption is enabled but we don't have the key
+      if (await _identity.isEncryptionEnabled() && _encryption == null) {
+        throw StateError(
+          'Encrypted sync is enabled but no passphrase provided. '
+          'Please unlock sync in settings.',
+        );
+      }
 
       // ---- Pull phase ----
       final pullResult = await _pull(
@@ -420,6 +456,10 @@ class SyncService {
         kdfIterations: kdfIterations,
         kdfParallelism: kdfParallelism,
       );
+
+      // Store the derived key in secure storage so we don't need passphrase on restart
+      final keyBytes = await encryption.getDerivedKeyBytes();
+      await _identity.setEncryptionKey(keyBytes);
     }
 
     // Create SyncConfig
